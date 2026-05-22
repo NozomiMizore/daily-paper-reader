@@ -106,7 +106,7 @@ class MainPipelineTest(unittest.TestCase):
                 self.mod.main()
 
             labels = [item[0] for item in calls]
-            self.assertIn("Step 3 - Local Rerank", labels)
+            self.assertIn("Step 3 - Rerank", labels)
             self.assertIn("Step 4 - LLM refine", labels)
 
     def test_main_keeps_local_rerank_in_deepseek_mode(self):
@@ -141,7 +141,7 @@ class MainPipelineTest(unittest.TestCase):
                 self.mod.main()
 
             labels = [item[0] for item in calls]
-            self.assertIn("Step 3 - Local Rerank", labels)
+            self.assertIn("Step 3 - Rerank", labels)
 
 
 if __name__ == "__main__":

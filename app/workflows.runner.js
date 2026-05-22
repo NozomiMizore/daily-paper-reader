@@ -117,9 +117,12 @@ window.DPRWorkflowRunner = (function () {
     try {
       const secret = window.decoded_secret_private || {};
       const reranker = secret.rerankerLLM || {};
-      return String(reranker.profile || '').trim();
-    } catch {
+      const profile = String(reranker.profile || '').trim();
+      if (profile) return profile;
+      if (isLocalDebugPage()) return 'public-zwwen-rerank';
       return '';
+    } catch {
+      return isLocalDebugPage() ? 'public-zwwen-rerank' : '';
     }
   };
 

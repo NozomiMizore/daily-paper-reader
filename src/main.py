@@ -676,7 +676,7 @@ def main() -> None:
     if trace_ids:
         print_trace_retrieval("RRF", rrf_path, trace_ids)
     run_step(
-        "Step 3 - Local Rerank",
+        "Step 3 - Rerank",
         [python, os.path.join(SRC_DIR, "3.rank_papers.py")],
     )
     if trace_ids:
