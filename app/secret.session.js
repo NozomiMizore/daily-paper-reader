@@ -57,7 +57,7 @@
   async function loadLocalSecretPayloadFromDisk() {
     if (!isLocalDebugHost()) return null;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const timeout = setTimeout(() => controller.abort(), 1200);
     try {
       const res = await fetch(getLocalApiUrl('/api/local/secret'), {
         cache: 'no-store',
@@ -1982,6 +1982,12 @@
       // 初始化早期兜底入口失败时，后续 setupOverlay 仍会尝试注册正式入口。
     }
 
+    const savedPwdAtInit = loadSavedPassword();
+    if (!savedPwdAtInit) {
+      setupOverlay(true);
+      openSecretOverlay(overlay);
+    }
+
     // 检查是否已经存在 secret.private（用于区分“解锁”与“初始化”）
     (async () => {
       try {
@@ -2009,7 +2015,7 @@
         if (hasSecret) {
           // 已存在 secret.private：若浏览器保存了密码，先尝试自动解锁；
           // 成功则直接进入页面；失败或无密码则展示解锁/游客界面。
-          const savedPwd = loadSavedPassword();
+          const savedPwd = savedPwdAtInit || loadSavedPassword();
           if (savedPwd) {
             try {
               const payload = localPayload || (await (async () => {
