@@ -1,0 +1,911 @@
+Title: Modeling Cell-Cycle-Aware Single-Cell Drug Perturbation Responses
+
+URL Source: https://arxiv.org/pdf/2606.30695v2
+
+Published Time: Tue, 07 Jul 2026 00:37:31 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# scCycleMol: Modeling Cell-Cycle-Aware Single-Cell Drug Perturbation Responses 
+
+Dingping Zhao *
+
+Division of Pharmacognosy, School of Pharmaceutical Sciences, State Key Laboratory of Natural and Biomimetic Drugs, Peking University, Beijing, China 
+
+Jie Lin *
+
+Department of Computer Science at School of Informatics, Xiamen University, Xiamen, China 
+
+Feng Xu †
+
+Division of Pharmacognosy, School of Pharmaceutical Sciences, State Key Laboratory of Natural and Biomimetic Drugs, Peking University, Beijing, China 
+
+Zhengwei Xie †
+
+Peking University Health Science Center, Peking University, Beijing, China 
+
+> *
+
+Equal contribution. †Corresponding authors: xufeng76@hsc.pku.edu.cn, xiezhengwei@hsc.pku.edu.cn 
+
+Abstract 
+
+Single-cell drug perturbation models should capture transcriptional response magnitude and whether a treatment changes the proliferative state of the cell. This is difficult because cell-cycle variation is often treated as a nuisance factor, and benchmark processing rarely makes drug-induced phase changes a first-class prediction target. We introduce scCycleMol, a cell-cycle-aware perturbation prediction frame-work built on a curated 24-hour SciPlex3 benchmark with standardized molecule identities, dose and cell-line metadata, modeled genes, and expression-derived cell-cycle supervision. scCycleMol derives cell-cycle supervision from the treated state and applies it to the predicted treated expression without using phase as an input covariate. The main model uses a learnable full-expression cell-cycle head with circular G1/S/G2M phase targets, and we evaluate both readout-only supervision with stop-gradient and closed-loop supervision that backpropagates through the decoder, dose-response module, and molecular drug representation. We also evaluate molecular representation choices and pretraining sources to sepa-rate cell-cycle objective effects from representation and preprocessing effects. On a processed 24-hour SciPlex3 benchmark with 635,541 cells, 186 non-control molecule-level perturbation units, 188 valid label-level compound embeddings, three cancer cell lines, four nonzero treatment doses plus DMSO control, and 5,080 modeled genes, the best LINCS-pretrained circular variant reaches 0.9093 mean all-gene r2 and 0.6843 mean DE-gene r2. Under matched preprocessing, closed-loop cell-cycle supervision raises phase accuracy by 0.54–0.62 absolute points while keeping mean all-gene r2 within 0.003 of matched chemCPA no-cell-cycle models; Tahoe-pretrained readout-only circular supervision gives the strongest supervised phase readout, reaching 0.9609 phase accuracy. 
+
+1 Introduction 
+
+Drug perturbations do not merely shift average gene expression. They can arrest cells, accelerate transitions, or redistribute a population across cell-cycle phases. Live-cell studies of anti-cancer agents show drug- and dose-specific changes in cell-cycle phasing [6], while long-term single-cell imaging under cisplatin shows 1
+
+> arXiv:2606.30695v2 [q-bio.QM] 3 Jul 2026
+
+that proliferation status can shape arrest-versus-death outcomes [5]. For single-cell perturbation prediction, this matters: a model can reconstruct a plausible mean transcriptome while missing whether a drug pushes cells toward S phase, G2/M, or another proliferative state. Such errors directly affect how we interpret drug mechanism, response heterogeneity, and out-of-distribution response. Recent single-cell perturbation models, including conditional autoencoder and compositional perturba-tion frameworks, have made substantial progress in predicting transcriptional responses from cell state, drug identity, dose, and covariates [7, 11, 12]. At the same time, recent benchmarks caution that perturbation-effect prediction remains difficult: gene-perturbation models do not always outperform simple linear base-lines, and broad single-cell benchmarks emphasize generalization across unseen contexts and perturbation settings [1, 23]. Two limitations are especially important for drug response modeling. First, cell-cycle vari-ation is often left implicit, treated as an ordinary covariate, or removed as unwanted variation, even when drug-induced phase changes are part of the biological response to be predicted. Second, benchmark prepro-cessing often emphasizes expression reconstruction while leaving cell-cycle labels, molecule identities, and pretraining resources weakly connected. This makes it difficult to ask whether a perturbation model predicts drug-induced proliferation state rather than only a plausible transcriptome. We propose scCycleMol, a cell-cycle-aware framework for single-cell drug perturbation prediction. The model builds on a ComPert/chemCPA-style conditional autoencoder, but changes the learning signal around the predicted treated state. Instead of feeding cell-cycle phase to the model as an input covariate, scCycleMol derives supervision from treated single-cell profiles and applies it to the predicted treated expression. This design asks the model to explain drug-induced proliferation changes through its predicted response rather than by conditioning on the observed phase label. To make this supervision dense and differentiable, sc-CycleMol attaches a lightweight cell-cycle head to the full predicted expression vector and trains it with circular G1/S/G2M phase targets. We evaluate this head as a readout-only module with stop-gradient and as a closed-loop module whose loss updates the upstream decoder, dose-response module, and molecular drug encoder. In the closed-loop setting, the molecular representation predicts a perturbation response, and the predicted biological state gives feedback on whether that response is cell-cycle consistent. scCycleMol also studies how drug representation and pretraining interact with this biological super-vision. The drug representation can use SMILES language embeddings, molecular graph embeddings, or their projected combination, but we treat these choices as empirical components within the cell-cycle-aware prediction task. Our embedding ablations show that the proposed embedding improves LINCS-pretrained OOD expression metrics over the chemCPA embedding, while SciPlex-pretrained embeddings are nearly tied and differ mainly in variance preservation. This motivates joint reporting of expression response, DE-gene response, variance preservation, and phase accuracy. Our contributions are: 1. We organize a cell-cycle-aware drug perturbation benchmark from 24-hour SciPlex3, with standard-ized molecule identities, dose and cell-line metadata, modeled genes, phase labels, and compatible LINCS and Tahoe pretraining resources. 2. We formulate treated-state cell-cycle supervision for single-cell drug perturbation prediction, using a learnable full-expression head and circular G1/S/G2M phase targets with readout-only and closed-loop variants while withholding phase from the input covariates. 3. We separate preprocessing and objective effects by reporting raw CPA/chemCPA reference rows, matched chemCPA no-cell-cycle baselines under our processed contract, and cell-cycle-aware scCy-cleMol variants. Under matched preprocessing, closed-loop supervision raises phase accuracy by 0.54–0.62 absolute points, while the readout-only circular variant gives a stronger supervised phase readout. 22 Related Work 
+
+2.1 Single-Cell Perturbation Prediction 
+
+Single-cell perturbation models seek to predict the transcriptional response of a cell under genetic, chemi-cal, or environmental interventions [8, 29, 30]. Latent translation methods such as scGen model perturbation effects as transformations in a learned expression space [11]. Compositional perturbation models and CPA-style approaches extend this idea by separating basal cell state, perturbation identity, dose, and covariates, often using adversarial objectives to encourage disentanglement [12]. chemCPA further incorporates chem-ical representations to support drug generalization [7]. Related approaches address complementary regimes. GEARS models combinatorial genetic perturbations with graph priors [17], CellOT learns perturbation re-sponses as neural optimal transport between single-cell distributions [2, 3], and PRnet and PerturbNet target chemical or mixed chemical/genetic generalization to unseen perturbations [10, 14, 26]. Recent diffusion-based models further frame single-cell drug-response and perturbation prediction as conditional generative modeling of treated cell states [9, 19]. scCycleMol builds on this family of conditional response predictors, but differs in the target of supervision: instead of optimizing only expression reconstruction and disentan-glement, it requires predicted treated expression to preserve a specific biological state axis, namely cell cycle. Chemical representation remains important for drug generalization [13]. SMILES language mod-els, molecular graph neural networks, and multi-view molecular learning capture complementary chemical information [4, 16, 25, 28]. In this work, these representations are evaluated as components of a cell-cycle-aware perturbation model rather than as the central object of study. 
+
+2.2 Cell-Cycle State Modeling and Perturbation Resources 
+
+Cell cycle is a central source of variation in single-cell transcriptomics. Standard workflows often score cells using curated S and G2/M cell-cycle gene sets from prior single-cell studies and assign coarse G1/S/G2M labels, with implementations in Seurat and Scanpy [18, 22, 24]. Depending on the scientific question, cell cycle may be corrected as a confounder or retained as a biological signal. In drug perturbation response, the latter is often crucial: many compounds alter proliferation, arrest, and phase distributions. scCycleMol therefore reframes cell cycle as a prediction target. This differs from using phase labels as covariates, because the model cannot explain away drug-induced state changes by conditioning on the answer. Large-scale resources such as LINCS L1000, SciPlex, and more recent high-throughput single-cell drug screens provide complementary regimes of scale, modality, and biological resolution [20, 21, 27]. Bulk or reduced-gene resources offer broad chemical coverage, while single-cell resources expose heterogeneity and state redistribution. For cell-cycle-aware perturbation modeling, these resources must be connected through consistent molecule identities, gene vocabularies, treatment metadata, and phase annotations. Accordingly, scCycleMol uses processed SciPlex3 as the primary OOD benchmark and uses L1000 and Tahoe-100M as broader resources for pretraining and cross-resource analysis where compatibility supports direct compari-son. 
+
+3 Method 
+
+3.1 Problem Setup 
+
+Let xi ∈ RG denote the basal or control gene-expression profile of cell i over G genes. Each training example is associated with a drug di ∈ D , dose ui, and biological covariates such as cell type ci. The target is treated expression yi ∈ RG. Unlike standard perturbation prediction, we also observe or derive cell-cycle supervision from the treated cell, denoted si. In the current model, si is a phase label in {G1 , S, G2M }
+
+3A Input & Baseline Comparison 
+
+Baseline: ComPert / 
+
+ChemCPA (gray) 
+
+Control scRNA -seq 
+
+> Cells
+
+Genes 
+
+Drug 
+
+identity 
+
+Dose 
+
+embedding 
+
+Cell -type 
+
+embedding 
+
+Standard Perturbation 
+
+Prediction Model 
+
+Predicted Treated 
+
+Expression 
+
+> Cells
+
+Genes 
+
+No explicit modeling of 
+
+cell -cycle state 
+
+scCycleMol (ours) 
+
+Control scRNA -seq 
+
+> Cells
+
+Genes 
+
+Cell -type 
+
+embedding 
+
+Dose 
+
+embedding 
+
+Molecular 
+
+Representation 
+
+(Panel B) 
+
+Perturbation Prediction 
+
+Backbone (Panel C) 
+
+Predicted Treated 
+
+Transcriptome 
+
+> Cells
+
+Genes 
+
+Cell -Cycle 
+
+Prediction 
+
+Auxiliary 
+
+(cell -cycle) 
+
+Cell cycle is 
+
+NOT used as 
+
+an input 
+
+covariate 
+
+Cell -cycle 
+
+state is 
+
+enforced as 
+
+biological 
+
+supervision 
+
+Dual Molecular Encoder 
+
+1D SMILES Language Encoder 
+
+SMILES 
+
+(Chemical language) 
+
+CN(C)C(=N)N=C(N)N 
+
+Token 
+
+Embeddings 
+
+Transformer Encoder 
+
+(Pre -trained) 
+
+Chemical Syntax 
+
+Patterns 
+
+N–C–N
+
+Functional -Group 
+
+Semantics 
+
+(CH 3)2N–R
+
+–NH ₂
+
+2D Molecular Graph Encoder 
+
+Molecular Graph (Topology) 
+
+Graph Neural Network (Pre -trained) 
+
+Global Topology 
+
+& Scaffold 
+
+Neighborhood 
+
+Aggregation 
+
+Multimodal Molecular Fusion 
+
+(i) Concatenation Fusion (ii) Gated Fusion (Attention -style) 
+
+Concat 
+
+α
+
+1− α
+
+α = Gate (balances 1D and 2D 
+
+information) 
+
+Unified Drug Embedding hdrug 
+
+B
+
+Cell -type 
+
+embedding 
+
+Predicted 
+
+Treated 
+
+Expression 
+
+!𝑿 trt 
+
+Medium dose 
+
+C Perturbation Prediction Backbone 
+
+Dose 
+
+embedding 
+
+Drug embedding 
+
+(from Panel B) 
+
+Latent 
+
+Conditioning 
+
+Encoded 
+
+qΦz(z|xctrl ,c)
+
+Control 
+
+Expression 
+
+Xctrl 
+
+Latent State z
+
+𝒩 (μ, σ²) 
+
+Perturbation Injection 
+
+(Drug effect) 
+
+Latent Perturbation Trajectory 
+
+Control ( zctrl )
+
+Treated ( ztrt )
+
+Drug -induced Shift 
+
+Dose -response 
+
+Modulation 
+
+Low dose 
+
+High dose 
+
+Effect magnitude 
+
+Model learns drug -induced biological trajectory 
+
+conditioned on dose and cell type 
+
+D Cell -Cycle -Aware Supervision 
+
+1 Marker -Score Supervision 
+
+(Gene -set Level) 
+
+Predicted 
+
+Expression !𝑿 trt 
+
+> Cells
+
+Genes 
+
+S-phase Markers 
+
+(Top genes) 
+
+MCM2 
+
+PCNA 
+
+TYMS 
+
+MCM5 
+
+... 
+
+G2/M Markers 
+
+(Top genes) 
+
+TOP2A 
+
+CDC20 
+
+MKI67 
+
+CCNB1 
+
+... 
+
+Marker Scores 
+
+(per cell) 
+
+S-score 
+
+G2/M -score 
+
+Consistency 
+
+Loss 
+
+2 Circular Phase Supervision 
+
+(Continuous Unit -Cycle) 
+
+Predicted 
+
+Expression !𝑿 trt 
+
+Genes 
+
+G1 
+
+S
+
+G2/M 
+
+G1 (0 °)
+
+S (120 °)
+
+G2/M (240 °)
+
+Circular Consistency 
+
+Loss 
+
+(1 − cos( !𝜽 − θtrue )) 
+
+Preserve drug -induced cell -cycle redistribution 
+
+h1D 
+
+E Objective Function 
+
+ℒ =
+
+ℒ𝐞𝐱𝐩𝐫 + λ𝐜𝐜 
+
+ℒ𝐜𝐜 − λ𝐝𝐫𝐮𝐠 
+
+ℒ𝐚𝐝𝐯 
+
+𝐝𝐫𝐮𝐠 − λ𝐜𝐨𝐯 
+
+ℒ𝐚𝐝𝐯 
+
+𝐜𝐨𝐯 
+
+Expression Reconstruction 
+
+(Primary Objective) 
+
+ℒ𝐞𝐱𝐩𝐫 
+
+Reconstruct treated 
+
+transcriptome 
+
+(MSE / Negative Log 
+
+Likelihood) 
+
+Cell -Cycle Consistency 
+
+(Biological Supervision) 
+
+ℒ𝐜𝐜 =
+
+ℒ𝐜𝐜 
+
+𝐜𝐢𝐫𝐜𝐥𝐞 
+
+Preserve cell -cycle 
+
+state & redistribution 
+
+Adversarial 
+
+Disentanglement 
+
+(Drug Invariance) 
+
+ℒ𝐚𝐝𝐯 
+
+𝐝𝐫𝐮𝐠 
+
+Remove drug identity 
+
+information from latent z
+
+(Gradient Reversal )
+
+Adversarial 
+
+Disentanglement 
+
+(Covariate Invariance) 
+
+ℒ𝐚𝐝𝐯 
+
+𝐜𝐨𝐯 
+
+Remove batch / donor / library 
+
+covariate information 
+
+(Gradient Reversal) 
+
+Adversarial Heads 
+
+(Gradient Reversal )
+
+Drug 
+
+Classifier 
+
+(predict 
+
+drug ID) 
+
+Covariate 
+
+Classifier 
+
+(batch / donor 
+
+/ library) 
+
+Superior Prediction & Cell -Cycle Fidelity 
+
+Cell -Cycle Redistribution (Unit -Cycle) Overall Prediction Accuracy 
+
+Baseline scCycleMol 
+
+(ours) 
+
+G1 S G2/M 
+
+Better preservation of 
+
+cell -cycle state transitions 
+
+Gene -wise Pearson r 
+
+Baseline scCycleMol 
+
+(ours) 
+
+0.0 
+
+0.3 
+
+0.6 
+
+0.9 
+
+1.2 
+
+Higher accuracy across 
+
+perturbation magnitudes 
+
+Data flow Element -wise add 
+
+Element -wise multiply Sigmoid (gate) 
+
+Blue: Molecular (language) 
+
+Green: Molecular (topology) 
+
+Purple: Transcriptomics / Modeling 
+
+Orange/Red: Cell -cycle Biology & Supervision 
+
+…
+
+σ
+
+σ
+
+…
+
+G1 
+
+SG2/M 
+
+NA 
+
+NA NA 
+
+C–N–C
+
+…
+
+–C(=NH) –
+
+h2D 
+
+MLP Head 
+
+0°
+
+120 °
+
+240 °
+
+𝓛 𝐜𝐜 
+
+𝐜𝐢𝐫𝐜𝐥𝐞 
+
+𝓛 𝐜𝐜 
+
+𝐦𝐚𝐫𝐤𝐞𝐫 
+
+> Median Pearson r
+
+Drug 
+
+identity 
+
+Closed -loop Gradient Feedback 
+
+h1D h1D 
+
+h2D h2D 
+
+chemCPA (gray) Figure 1: Overview of scCycleMol. The model encodes basal single-cell expression, conditions on drug and dose, and applies closed-loop cell-cycle supervision to the predicted treated state. represented through a circular encoding. The goal is to learn a predictor 
+
+ˆyi = fθ(xi, d i, u i, ci) (1) that accurately predicts treated expression while preserving the cell-cycle state of the treated population. Cell-cycle information is used only as supervision on the predicted treated state, not as an input covariate. This prevents the model from conditioning on the observed phase label and instead requires drug-induced proliferation or phase changes to be represented through the predicted expression profile. 
+
+3.2 Base Perturbation Model 
+
+scCycleMol follows the conditional autoencoder design used in ComPert/chemCPA-style models [7, 12]. An encoder maps control expression into a latent basal state, 
+
+zi = Eθ(xi). (2) A drug encoder maps drug identity and molecular representation into a perturbation vector, optionally mod-ulated by a dose-response function. Cell-type or other covariate embeddings are added in the latent space. The decoder then produces predicted treated expression: 
+
+ˆyi = Dθ(zi + rθ(di, u i) + qθ(ci)) . (3) The expression loss is 
+
+Lexpr = 1
+
+N
+
+NX
+
+i=1 
+
+ℓexpr (ˆ yi, yi), (4) 4where ℓexpr can be mean squared error or the reconstruction objective used by the base model. When inherited from ComPert/chemCPA, adversarial objectives are used to discourage unwanted leakage of drug or covariate information into the basal latent representation. 
+
+3.3 Cell-Cycle-Aware Treated-State Supervision 
+
+Earlier score-extraction variants computed cell-cycle supervision from a small fixed subset of S and G2/M genes. That route made the auxiliary gradient sparse and tied the loss to a hand-defined scoring rule. To provide a denser and more flexible supervisory signal, scCycleMol uses a learnable cell-cycle head that operates on the full predicted treated expression profile. 
+
+Cell-cycle prediction head. The main model replaces fixed score extraction with a lightweight learnable head. Given the predicted treated expression ˆyi ∈ RG, the head 
+
+ˆpi = Hθ(ˆ yi) (5) maps the full expression vector to a two-dimensional phase representation. We implement Hθ as a small multilayer perceptron with a 64-dimensional hidden layer. Because the head receives all predicted genes rather than a fixed gene subset, it provides a dense phase readout of the predicted treated profile while adding only a small parameter overhead. 
+
+Circular phase encoding. Discrete phase labels impose an artificial ordering if treated as class indices. We therefore map the three coarse phases to equally spaced prototypes on the unit circle: 
+
+G1 7 → (1 , 0) , S 7 →
+
+
+
+cos 2π
+
+3 , sin 2π
+
+3
+
+
+
+, G2M 7 →
+
+
+
+cos 4π
+
+3 , sin 4π
+
+3
+
+
+
+. (6) The circular loss is 
+
+Lcirc cc = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+∥ˆpi − pi∥22 , (7) where pi is the unit-circle target. At evaluation time, the predicted phase is obtained by nearest prototype on the circle. 
+
+Readout-only and closed-loop supervision. The readout-only circular variant attaches the cell-cycle head to a stop-gradient copy of the predicted treated expression, Hθ(sg(ˆ yi)) . In this setting, the circular phase loss trains the phase readout but does not update the decoder, dose-response module, or drug-conditioned perturbation pathway. The closed-loop circular variant removes this stop-gradient operation. Therefore, the circular phase loss backpropagates through the decoder, dose-response module, and drug-conditioned perturbation pathway. This creates a closed-loop training signal: the drug-conditioned perturbation pathway determines the predicted response, and the predicted biological state provides feedback on whether that response is cell-cycle consistent: 
+
+(di, u i) → hd → rθ(di, u i) → ˆyi → Hθ(ˆ yi) → ˆpi. (8) 
+
+3.4 Drug Representation and Pretraining Variants 
+
+The drug encoder is trained in the context of treated-state prediction rather than standalone molecular prop-erty prediction. Its representation must support both expression reconstruction and cell-cycle-consistent 5state prediction. We therefore evaluate molecular views before passing the drug embedding into the pertur-bation predictor. The 1D branch encodes the SMILES string with a chemical language model: 
+
+z1dd = LM ϕ(SMILES d). (9) This representation captures token context, substructure syntax, and chemical language regularities. The 2D branch constructs a molecular graph Gd from the same molecule and encodes it with a graph neural network: 
+
+z2dd = GNN ψ(Gd), (10) capturing atom-bond neighborhoods and topology. Both representations are projected into the perturbation model’s drug space: 
+
+h1dd = W1dz1dd , h2dd = W2dz2dd . (11) We consider two fusion strategies. Static concatenation forms 
+
+hcat  
+
+> d
+
+= Wf concat( h1dd , h 2dd ). (12) Gated fusion learns a molecule-specific gate, 
+
+gd = σ
+
+
+
+MLP g(concat( h1dd , h 2dd )) 
+
+
+
+, (13) and combines views as 
+
+hgate  
+
+> d
+
+= gd ⊙ h1dd + (1 − gd) ⊙ h2dd . (14) Let hd denote the selected drug representation, which may be a single projected view or a combined rep-resentation. This drug embedding is passed to the dose-response module and downstream perturbation predictor. Because the downstream losses are applied to both predicted expression and predicted cell-cycle phase, the gate is optimized to select molecular views that are useful for biological perturbation response rather than molecule-only objectives. 
+
+3.5 Training Objective 
+
+The full objective is 
+
+L = Lexpr + λcc Lcc − λdrug Ldrug adv − λcov Lcov adv , (15) Here, Ldrug adv is the loss of a drug adversary that predicts perturbation identity from the basal latent state zi
+
+using multi-label binary cross-entropy. The term Lcov adv sums covariate-adversary losses that predict nuisance covariates such as cell type from zi using cross-entropy. The adversary networks are optimized to minimize these prediction losses, whereas the encoder-side objective includes them with negative signs, making zi
+
+less informative about drug and covariate labels. In the circular variants, Lcc = Lcirc cc . The readout-only cir-cular variant applies this loss after stop-gradient and isolates the value of the full-expression circular phase head as a supervised readout. The closed-loop circular variant allows gradients from the same loss to update the upstream perturbation pathway, isolating the value of biological-state feedback. Thus, scCycleMol cou-ples drug-conditioned perturbation prediction with treated-state cell-cycle supervision: the drug embedding predicts the expression shift, while the circular phase head either reads out or feeds back whether that shift induces the correct cell-cycle state. 64 Experiments 
+
+Our experiments establish three findings. First, we separate raw CPA/chemCPA reference rows from models evaluated under our processed molecule-aware SciPlex3 contract. Second, closed-loop cell-cycle supervi-sion adds a targeted phase-consistency signal: it raises phase accuracy by 0.54–0.62 absolute points rela-tive to matched chemCPA no-cell-cycle models while keeping expression reconstruction nearly unchanged. Third, readout-only circular supervision and pretraining source control complementary parts of the trade-off: LINCS pretraining favors expression metrics, whereas Tahoe pretraining gives the highest supervised phase readout. 
+
+4.1 Datasets and Splits 
+
+SciPlex3. SciPlex3 is the primary single-cell drug perturbation benchmark [20]. We use a processed 24-hour benchmark with 635,541 cells, 186 non-control molecule-level perturbation units, 188 valid label-level compound embeddings, three cancer cell lines, four nonzero treatment doses plus DMSO control, and 5,080 modeled genes to evaluate expression prediction, DE-gene response prediction, phase accuracy, and out-of-distribution generalization. The split and evaluation units are molecule-level identities, whereas label-level compound embeddings are retained as molecular representation inputs and traceability entries. The preprocessing contract defines model-facing perturbation identities at the molecule level from RDKit-standardized SMILES [15]; original product labels are retained as traceability metadata rather than used as drug identities. Following the chemCPA SciPlex3 convention [7], we use a chemCPA-compatible OOD fine-tuning split. The train and test partitions support internal validation and model selection, whereas the OOD partition is reserved for formal unseen-molecule evaluation. 
+
+LINCS pretraining. LINCS L1000 provides broader chemical coverage and is used as a pretraining source for compatible perturbation representations [21]. We evaluate whether LINCS initialization improves the downstream SciPlex3 expression and cell-cycle metrics after fine-tuning. Before formal SciPlex3 OOD evaluation, the L1000 pretraining input is filtered to remove molecules held out in the SciPlex3 OOD parti-tion, while source perturbation identifiers are retained only for traceability. 
+
+Tahoe pretraining. Tahoe-100M is used as a large-scale single-cell pretraining source [27]. It provides a complementary pretraining regime with substantially larger single-cell context, allowing us to compare whether large-scale single-cell pretraining emphasizes the same metrics as LINCS pretraining. The Tahoe training input follows the same OOD holdout policy: source compound identifiers remain available for au-dit, but molecule-level identities control training identity and leakage checks. For both external resources, holdout filtering is performed against standardized molecule-level identities rather than source-specific com-pound labels. 
+
+4.2 Baselines and Model Variants 
+
+We compare against reference rows for CPA, chemCPA, and LINCS-pretrained chemCPA under the raw chemCPA preprocessing contract. We also run the chemCPA-style backbone on our processed SciPlex3 benchmark without cell-cycle supervision. These rows are denoted as chemCPA, no cell-cycle loss and serve as matched no-supervision baselines for the scCycleMol variants. For scCycleMol, we evaluate variants that isolate the main design choices: • Readout-only circular phase supervision : the model uses the learnable cell-cycle head and circular phase loss on a stop-gradient copy of predicted treated expression. 7Model Pretraining Preprocess Mean r2 all Mean r2 DEGs ∆ DEGs Median r2 all Median r2 DEGs Phase acc. ∆ phase CPA – Raw 0.5000 0.2900 – 0.4900 0.1200 – –chemCPA – Raw 0.5100 0.3200 – 0.4700 0.2400 – –chemCPA LINCS Raw 0.6800 0.5400 – 0.7500 0.6400 – –chemCPA, no cell-cycle loss – Ours 0.8819 0.6315 0.0000 0.9294 0.7405 0.1918 0.0000 scCycleMol, closed-loop circular – Ours 0.8806 0.6318 +0.0003 0.9308 0.7449 0.7349 +0.5431                                                                
+
+> scCycleMol, readout-only circular –Ours 0.8829 0.6516 +0.0201 0.9164 0.7080 0.8872 +0.6954
+> chemCPA, no cell-cycle loss LINCS Ours 0.9065 0.6695 0.0000 0.9369 0.7609 0.1928 0.0000 scCycleMol, closed-loop circular LINCS Ours 0.9085 0.6808 +0.0113 0.9375 0.7774 0.8098 +0.6170
+> scCycleMol, readout-only circular LINCS Ours 0.9093 0.6843 +0.0148 0.9369 0.7595 0.9006 +0.7078
+> chemCPA, no cell-cycle loss Tahoe Ours 0.8801 0.6255 0.0000 0.9281 0.7293 0.1965 0.0000 scCycleMol, closed-loop circular Tahoe Ours 0.8824 0.6348 +0.0093 0.9309 0.7439 0.8122 +0.6157
+> scCycleMol, readout-only circular Tahoe Ours 0.8807 0.6312 +0.0057 0.9315 0.7344 0.9609 +0.7644
+
+Table 1: Out-of-distribution expression and cell-cycle results on SciPlex3. The first three rows are CPA/chemCPA reference baselines under the raw chemCPA preprocessing contract. The remaining rows use our processed molecule-aware SciPlex3 contract. ∆ DEGs and ∆ phase are computed relative to the matched chemCPA no-cell-cycle-loss row within the same pretraining group. Positive deltas are colored green. The no-cell-cycle rows are scored post hoc for phase accuracy, while closed-loop supervision up-dates the perturbation pathway and readout-only supervision trains a stop-gradient phase readout. • Closed-loop circular supervision : circular phase loss is allowed to update the upstream perturbation pathway. We also evaluate embedding-source variants in the ablation section, comparing chemCPA embeddings with our molecular embeddings under LINCS and SciPlex pretraining. 
+
+4.3 Evaluation Metrics 
+
+Expression fidelity is measured with mean-expression r2 over all modeled genes and over differentially ex-pressed genes, averaged across perturbation conditions. We also report the corresponding median r2 values across conditions. The DE-gene metric is important because it focuses evaluation on genes most responsive to the perturbation. Phase accuracy is measured by phase classification accuracy from the predicted circular phase representation. Models trained without Lcc receive no phase-supervision gradient, and their predicted treated expression is scored post hoc by the same circular readout rule. Their low phase accuracy reflects a chemCPA backbone evaluated without an explicit cell-cycle objective, so we interpret the phase score as a post hoc diagnostic. Unless otherwise stated, the main tables report OOD results because this partition tests generalization to held-out molecules absent from SciPlex3 train/test and from the external pretraining inputs. 
+
+4.4 Main Results 
+
+Table 1 separates preprocessing contracts from the cell-cycle objective. The raw reference rows report CPA/chemCPA results under the original chemCPA preprocessing contract. Under our processed molecule-aware contract, the matched chemCPA no-cell-cycle rows already achieve stronger expression metrics, with the LINCS-pretrained row reaching 0.9065 mean all-gene r2 and 0.6695 mean DE-gene r2. The remaining comparisons isolate the added cell-cycle objective within the same processed-data setting. Closed-loop circular supervision raises phase accuracy from about 0.19 to 0.73–0.81 while keeping mean all-gene r2
+
+within 0.003 of the corresponding chemCPA no-cell-cycle row. Readout-only circular supervision reaches as high as 0.9609 phase accuracy, which indicates the strongest supervised phase readout from predicted expression. 84.5 Dose-Resolved OOD Performance 0.850          
+
+> 0.875
+> 0.900
+> 0.925
+> 0.950
+> 0.975
+> 1.000
+> E[r2] on  all  genes
+> 0.01 μM
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> E[r2] on  DEGs
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> E[r2] on  all  genes
+> 0.1 μM
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> E[r2] on  DEGs
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> E[r2] on  all  genes
+> 1μM
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> E[r2] on  DEGs
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> E[r2] on  all  genes
+> 10 μM
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> E[r2] on  DEGs
+> chemCPA-lincs-pretrained chemCPA-tahoe-pretrained ours-lincs-pretrained ours-tahoe-pretrained zero dose
+
+Figure 2: Dose-resolved OOD r2 distributions on SciPlex3. Each box summarizes cell-line–molecule com-binations at one treatment dose for all modeled genes or DE genes. The zero-dose baseline predicts treated expression from matched DMSO controls. Figure 2 complements the aggregate OOD results by showing how performance varies across doses. Across the all-gene panels, pretrained models and the zero-dose control have high median r2 at low doses, indicat-ing that much of the transcriptome remains close to the control state when perturbation effects are weak. The DE-gene panels are more discriminative: their wider boxes and lower tails expose cell-line–molecule combi-nations where drug-responsive genes are substantially harder to predict. Within matched pretraining settings, scCycleMol remains competitive with the processed-data chemCPA no-cell-cycle rows across doses, and the LINCS-pretrained scCycleMol variant has especially strong DE-gene medians in the mid-dose panels. The dose-resolved view therefore supports the conclusion that the processed-data OOD expression performance is high on average and stable across the dose range where perturbation signal strength changes. 94.6 Pretraining Effects 0.60 0.62 0.64 0.66 0.68  
+
+> E[ r2] on DE genes
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Phase accuracy
+> None LINCS
+> Tahoe
+> Pretraining
+> None
+> LINCS
+> Tahoe
+> Objective
+> No CC
+> Closed-loop
+> Circular
+
+Figure 3: Expression–cell-cycle trade-off across objectives and pretraining sources. Points farther right have better DE-gene expression prediction, while points higher have higher phase accuracy under the circular readout. LINCS pretraining moves models toward stronger expression metrics, while Tahoe pretraining gives the highest phase accuracy. As shown in Figure 3, pretraining source changes the expression–cell-cycle trade-off. LINCS pretraining gives the highest expression metrics, especially on DE genes, while Tahoe pretraining gives the highest phase accuracy. We therefore treat pretraining source as an experimental factor rather than a universally dominant choice. 
+
+4.7 Implementation Details 
+
+All model variants use the same chemCPA-compatible train/test/OOD partitioning policy and the same evaluation protocol. For fair comparison, the cell-cycle objective weight λcc is fixed within each ablation group before OOD evaluation. The readout-only circular and closed-loop circular variants isolate whether the cell-cycle loss is used only to train a phase readout or is also allowed to update the upstream perturbation pathway. 
+
+5 Analysis and Ablations 
+
+The main results separate expression prediction, closed-loop phase consistency, and supervised phase read-out. We next isolate which design choices support these outcomes under the processed-data contract. 
+
+5.1 Closed-Loop Cell-Cycle Supervision 
+
+Closed-loop supervision tests whether cell-cycle loss provides useful feedback to the perturbation pathway beyond a supervised phase readout. We compare each matched chemCPA no-cell-cycle model with its closed-loop counterpart, where the circular phase loss backpropagates through the predicted treated expres-sion into the upstream decoder and drug-conditioned perturbation pathway. 10 None LINCS Tahoe  
+
+> Pretraining source
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Phase accuracy
+> +0.543
+> +0.617 +0.616
+> No cell-cycle loss
+> Closed-loop
+
+(a) Closed-loop supervision. None LINCS Tahoe    
+
+> Pretraining source
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Phase accuracy
+> +0.152 +0.091 +0.149
+> Closed-loop
+> Direct circular
+
+(b) Closed-loop versus readout-only circular phase su-pervision. 
+
+Figure 4: Cell-cycle supervision ablations on the OOD split. (a) Allowing the circular phase loss to update the perturbation pathway improves phase accuracy by 0.54–0.62 absolute points across pretraining settings. (b) Readout-only circular phase supervision reaches the highest supervised phase readout accuracy, espe-cially with LINCS or Tahoe pretraining. Figure 4a supports the closed-loop design. Across all three pretraining settings, phase accuracy increases sharply: from 0.1918 to 0.7349 without pretraining, from 0.1928 to 0.8098 with LINCS pretraining, and from 0.1965 to 0.8122 with Tahoe pretraining. The corresponding changes in mean all-gene r2 are small, ranging from -0.0013 to +0.0023. Thus, the biological-state feedback improves phase consistency under the circular readout without introducing a large reconstruction penalty. 
+
+5.2 Closed-Loop and Readout-Only Circular Phase Supervision 
+
+Both circular variants use the learnable full-expression cell-cycle head. They differ in whether the auxiliary signal is used only to train the phase readout or is also allowed to shape the perturbation pathway. Figure 4b compares these alternatives. Readout-only circular phase supervision gives the highest phase readout accuracy in all three pretraining settings. It increases phase accuracy over the closed-loop variant from 0.7349 to 0.8872 without external pretraining, from 0.8098 to 0.9006 with LINCS pretraining, and from 0.8122 to 0.9609 with Tahoe pre-training. This shows that the learnable full-expression head can extract phase information from predicted expression, while the feedback path and objective weight control the expression-versus-phase trade-off. 
+
+5.3 Embedding Source Ablation 
+
+We also examine whether the learned drug embedding improves OOD perturbation prediction beyond the corresponding chemCPA embedding. Table 2 compares chemCPA and scCycleMol embeddings under LINCS and SciPlex pretraining. 11 Embedding setting Mean r2 all Mean r2 DEGs Var. r2 all Var. r2 DEGs LINCS + chemCPA embedding 0.8756 0.5869 0.0361 0.0201 LINCS + Ours embedding 0.8841 0.6245 0.0510 0.0220 SciPlex + chemCPA embedding 0.8375 0.8011 0.7249 0.7230 SciPlex + Ours embedding 0.8386 0.8011 0.7257 0.7255 
+
+Table 2: Embedding-source ablation on the OOD split. Under LINCS pretraining, our embedding improves mean all-gene and DE-gene r2 over the chemCPA embedding. Under SciPlex pretraining, the two embed-dings are nearly tied on mean DE-gene r2, while our embedding slightly improves variance preservation. The embedding ablation shows that representation gains depend on the pretraining source. With LINCS pretraining, our embedding improves mean all-gene r2 by 0.0085 and mean DE-gene r2 by 0.0376 over the chemCPA embedding, with modest gains in both variance metrics. With SciPlex pretraining, the two embedding choices are effectively tied on DE-gene response, while our embedding slightly improves all-gene mean r2 and both variance metrics. These results support using the proposed molecular embedding, but they also indicate that embedding choice should be interpreted together with the pretraining regime and the expression-versus-variance trade-off. 
+
+5.4 Expression–Cell-Cycle Trade-Off 
+
+The combined results suggest that expression reconstruction and phase accuracy should be reported to-gether. LINCS pretraining gives the strongest expression reconstruction, while Tahoe pretraining gives the highest phase accuracy. Closed-loop supervision improves phase accuracy with little change in expression 
+
+r2, whereas readout-only circular supervision can maximize the supervised phase readout. This trade-off motivates reporting both DE-gene r2 and phase accuracy as primary metrics rather than optimizing only one of them. 
+
+6 Conclusion 
+
+We presented scCycleMol, a cell-cycle-aware framework for single-cell drug perturbation prediction. The central idea is to use treated-state phase supervision as a biological-state signal: scCycleMol trains pre-dicted treated expression to preserve circular G1/S/G2M phase targets through a learnable full-expression cell-cycle head. This framing is supported by a processed cell-cycle-aware SciPlex3 benchmark and by molecular representation and pretraining ablations within the same prediction task. Experiments on the processed SciPlex3 benchmark show strong OOD expression metrics under the molecule-aware preprocessing contract and separate these effects from the added cell-cycle objective. Closed-loop circular supervision raises phase accuracy by 0.54–0.62 absolute points with little change in expression 
+
+r2, while readout-only circular phase supervision reaches the strongest supervised phase readout under Tahoe pretraining. The embedding ablations show that drug representation gains depend on pretraining source, reinforcing the need to report expression response, variance preservation, and phase accuracy to-gether. Limitations include reliance on reliable phase labels, the coarse three-phase circular encoding, and the need to validate whether cell-cycle-aware supervision generalizes across broader perturbation datasets. Future work should extend the framework to continuous cell-cycle trajectories and broader cellular state variables beyond cell cycle. 12 References 
+
+[1] Constantin Ahlmann-Eltze, Wolfgang Huber, and Simon Anders. Deep-learning-based gene perturba-tion effect prediction does not yet outperform simple linear baselines. Nature Methods , 22(8):1657– 1661, 2025. [2] Charlotte Bunne, Stefan G Stark, Gabriele Gut, Jacobo Sarabia Del Castillo, Mitch Levesque, Kjong-Van Lehmann, Lucas Pelkmans, Andreas Krause, and Gunnar R¨ atsch. Learning single-cell perturba-tion responses using neural optimal transport. Nature methods , 20(11):1759–1768, 2023. [3] Yanshuo Chen, Zhengmian Hu, Wei Chen, and Heng Huang. Fast and scalable wasserstein-1 neural optimal transport solver for single-cell perturbation prediction. Bioinformatics , 41(Supplement 1): i513–i522, 2025. [4] S Chithrananda, G Grand, and B Ramsundar. Large-scale self-supervised pretraining for molecular property prediction, 2020. [5] Adri´ an E Granada, Alba Jim´ enez, Jacob Stewart-Ornstein, Nils Bl¨ uthgen, Simone Reber, Ashwini Jambhekar, and Galit Lahav. The effects of proliferation status and cell cycle phase on the responses of single cells to chemotherapy. Molecular Biology of the Cell , 31(8):845–857, 2020. [6] Sean M Gross, Farnaz Mohammadi, Crystal Sanchez-Aguila, Paulina J Zhan, Tiera A Liby, Mark A Dane, Aaron S Meyer, and Laura M Heiser. Analysis and modeling of cancer drug responses using cell cycle phase-specific rate effects. Nature communications , 14(1):3450, 2023. [7] Leon Hetzel, Simon Boehm, Niki Kilbertus, Stephan G¨ unnemann, Fabian Theis, et al. Predicting cellular responses to novel drug perturbations at a single-cell resolution. volume 35, pages 26711– 26722, 2022. [8] Wenkang Jiang, Yuhang Liu, Erdun Gao, Ehsan Abbasnejad, Lina Yao, and Javen Qinfeng Shi. Learning latent dynamical causal processes for single-cell perturbation prediction. arXiv preprint arXiv:2605.25581 , 2026. [9] Zhaokang Liang, Shuyang Zhuang, Xiaoran Jiao, Weian Mao, Hao Chen, and Chunhua Shen. scppdm: A diffusion model for single-cell drug-response prediction. arXiv preprint arXiv:2510.11726 , 2025. [10] Hui Liu and Shikai Jin. Learning cross-domain representations for transferable drug perturbations on single-cell transcriptional responses. In Proceedings of the AAAI Conference on Artificial Intelligence ,volume 39, pages 18834–18842, 2025. [11] Mohammad Lotfollahi, F Alexander Wolf, and Fabian J Theis. scgen predicts single-cell perturbation responses. Nature methods , 16(8):715–721, 2019. [12] Mohammad Lotfollahi, Anna Klimovskaia Susmelj, Carlo De Donno, Leon Hetzel, Yuge Ji, Ignacio L Ibarra, Sanjay R Srivatsan, Mohsen Naghipourfar, Riza M Daza, Beth Martin, et al. Predicting cellular responses to complex perturbations in high-throughput screens. Molecular systems biology , 19(6): MSB202211517, 2023. [13] Marco Pegoraro, Sanketh Vedula, Lion Halika, Michael M Danziger, Alexander Bronstein, and Michal Rosen-Zvi. On the role of drug representations for single-cell perturbation modeling. In Learning Meaningful Representations of Life (LMRL) Workshop at ICLR 2026 .13 [14] Xiaoning Qi, Lianhe Zhao, Chenyu Tian, Yueyue Li, Zhen-Lin Chen, Peipei Huo, Runsheng Chen, Xiaodong Liu, Baoping Wan, Shengyong Yang, et al. Predicting transcriptional responses to novel chemical perturbations using deep generative model for drug discovery. Nature Communications , 15 (1):9256, 2024. [15] RDKit Developers. RDKit: Open-source cheminformatics, 2026. URL https://www.rdkit. org . Accessed: 2026-05-16. [16] Yu Rong, Yatao Bian, Tingyang Xu, Weiyang Xie, Ying Wei, Wenbing Huang, and Junzhou Huang. Self-supervised graph transformer on large-scale molecular data. volume 33, pages 12559–12571, 2020. [17] Yusuf Roohani, Kexin Huang, and Jure Leskovec. Predicting transcriptional outcomes of novel multi-gene perturbations with gears. Nature Biotechnology , 42(6):927–935, 2024. [18] Rahul Satija, Jeffrey A Farrell, David Gennert, Alexander F Schier, and Aviv Regev. Spatial recon-struction of single-cell gene expression data. Nature biotechnology , 33(5):495–502, 2015. [19] Peiting Shi, Ningfeng Que, Xianzhe Huang, Xiaofei Wang, and Jianzhong Jeff Xi. Statexdiff: Cell state-contextualized multimodal diffusion for single-cell perturbation prediction. arXiv preprint arXiv:2605.16104 , 2026. [20] Sanjay R Srivatsan, Jos´ e L McFaline-Figueroa, Vijay Ramani, Lauren Saunders, Junyue Cao, Jonathan Packer, Hannah A Pliner, Dana L Jackson, Riza M Daza, Lena Christiansen, et al. Massively multiplex chemical transcriptomics at single-cell resolution. Science , 367(6473):45–51, 2020. [21] Aravind Subramanian, Rajiv Narayan, Steven M Corsello, David D Peck, Ted E Natoli, Xiaodong Lu, Joshua Gould, John F Davis, Andrew A Tubelli, Jacob K Asiedu, et al. A next generation connectivity map: L1000 platform and the first 1,000,000 profiles. Cell , 171(6):1437–1452, 2017. [22] Itay Tirosh, Benjamin Izar, Sanjay M Prakadan, Marc H Wadsworth, Daniel Treacy, John J Trombetta, Asaf Rotem, Christopher Rodman, Christine Lian, George Murphy, et al. Dissecting the multicellular ecosystem of metastatic melanoma by single-cell rna-seq. Science , 352(6282):189–196, 2016. [23] Zhiting Wei, Yiheng Wang, Yicheng Gao, Shuguang Wang, Ping Li, Duanmiao Si, Yuli Gao, Siqi Wu, Danlu Li, Kejing Dong, et al. Benchmarking algorithms for generalizable single-cell perturbation response prediction. Nature Methods , 23(2):451–464, 2026. [24] F Alexander Wolf, Philipp Angerer, and Fabian J Theis. Scanpy: large-scale single-cell gene expres-sion data analysis. Genome biology , 19(1):15, 2018. [25] Keyulu Xu, Weihua Hu, Jure Leskovec, and Stefanie Jegelka. How powerful are graph neural net-works? 2018. [26] Hengshi Yu, Weizhou Qian, Yuxuan Song, and Joshua D Welch. Perturbnet predicts single-cell re-sponses to unseen chemical and genetic perturbations. Molecular Systems Biology , 21(8):960, 2025. [27] Jesse Zhang, Airol A Ubas, Richard De Borja, Valentine Svensson, Nicole Thomas, Neha Thakar, Ian Lai, Aidan Winters, Umair Khan, Matthew G Jones, et al. Tahoe-100m: A giga-scale single-cell perturbation atlas for context-dependent gene function and cellular modeling. BioRxiv , pages 2025–02, 2025. 14 [28] Ru Zhang, Yanmei Lin, Yijia Wu, Lei Deng, Hao Zhang, Mingzhi Liao, and Yuzhong Peng. Mvmrl: a multi-view molecular representation learning method for molecular property prediction. Briefings in Bioinformatics , 25(4):bbae298, 2024. [29] Wei Zhang, Xun Jiang, Yuesi Xi, and Ming Tang. Cistranscell: Single-cell perturbation prediction via gene function, regulatory control, and cellular context. arXiv preprint arXiv:2606.13713 , 2026. [30] Yongqing Zhang, Chenpeng Wu, Tianhao Li, Zhigan Zhou, Zhengxiao Huang, Aochen Zhang, and Zixuan Wang. Deep generative framework for modeling single-cell drug perturbation response. Neural Networks , page 109005, 2026. 
+
+A Additional Experimental Details 
+
+A.1 Preprocessing Overview 
+
+We provide a reproducible Stage 1–2 preprocessing package for the three data resources used in this work: SciPlex3 [20], LINCS L1000 [21], and Tahoe-100M [27]. Stage 1 prepares dataset-specific expression matrices, metadata, feature vocabularies, and quality-control outputs. Stage 2 converts these outputs into model-ready training data, including compact expression matrices, cell and compound metadata, Chem-BERTa drug embeddings, molecule-level perturbation identities, OOD holdout filtering, Top50 DEG anno-tations for SciPlex3, and validation manifests. The migrated preprocessing code preserves the legacy trans-formation logic where appropriate, while updating the formal data contract to use standardized-molecule identities rather than source-specific compound labels. Legacy-compatible outputs may be retained for au-ditability, but the formal paper protocol uses the molecule-aware, Top50-DEG, OOD-holdout-filtered assets described below. For model-facing identities, each dataset uses the standardized molecule SMILES emit-ted by its preprocessing path; external L1000 and Tahoe assets additionally use the shared molecule-identity helper, where the model SMILES is RDKit canonical isomeric SMILES. For cross-resource leakage control, the held-out SciPlex3 OOD molecules are matched more broadly using audit keys that include canonical and non-stereo SMILES, fragment/charge/tautomer parent SMILES, and InChIKey or connectivity keys. This broader audit matching is used only to remove potentially overlapping compounds from external pretraining inputs; source compound identifiers remain traceability fields. The public release boundary is the preprocessing code, configuration files, lightweight documentation, and static manifest summaries. Raw datasets, third-party pretrained model weights, large processed outputs, local run directories, and per-run manifest JSON files are not redistributed. Users are expected to download raw datasets from the official sources and regenerate processed outputs locally. ChemBERTa embedding steps use a local copy of seyonec/ChemBERTa-zinc-base-v1 ; model weights are not included in the repository. 15 A.2 Dataset Statistics After Preprocessing                     
+
+> Dataset Cells / samples Model perturbation identities Genes Cell lines Formal asset SciPlex3 635,541 cells 186 non-control molecule units 5,080 3molecule-aware Top50-DEG AnnData Tahoe-100M 92,670,735 cells 351 non-control molecule units 5,037 49 OOD-holdout-filtered training shards LINCS L1000 157,927 signatures 20,388 molecule IDs 978 21 OOD-holdout-filtered Stage-0 dataset
+
+Table 3: Formal model-ready assets generated by the Stage 1–2 preprocessing pipelines. The perturbation-identity column reports model-facing molecule-level units rather than source compound labels; source iden-tifiers are retained separately for traceability. SciPlex3 has 186 non-control molecule units, and Tahoe has 351 non-control molecule units, or 352 molecule identities when the control identity is included. The exter-nal L1000 and Tahoe assets are filtered against the SciPlex3 OOD molecule list using molecule audit keys. 
+
+A.3 SciPlex3 Processing 
+
+SciPlex3 processing starts from the decompressed GEO large-screen files for A549, MCF7, and K562. The required Stage 1 path performs basic quality control, hash-based doublet removal, highly variable gene selection, and cell-cycle scoring. The required Stage 2 path extracts training features, computes Chem-BERTa embeddings for standardized SMILES strings, writes the compact training AnnData object, assigns molecule-aware splits, and annotates Top50 perturbation-responsive genes for formal DE-gene evaluation. 16 Step Input Output Main operation Basic filtering 799,317 cells, 58,347 genes 661,596 cells, 57,591 genes Remove incomplete metadata, non-target time points, low UMI/gene cells, high mitochon-drial fraction, and cleaned-up genes. Doublet filtering 661,596 cells 635,541 cells Remove 26,055 hash doublets. HVG selection 57,591 genes 5,080 genes Select HVGs with legacy-equivalent settings and force-include cell-cycle genes. Cell-cycle scoring 635,541 cells 635,541 cells Add S score, G2/M score, phase label, phase ID, and proliferation score. Feature extraction 635,541 cells 186 molecule-level canonical SMILES Add standardized SMILES, dose, cell-line, time, and control indicators. ChemBERTa embedding 189 compound labels 188 valid embeddings + 1 control sentinel Encode valid label-level com-pounds with 768-dimensional ChemBERTa CLS embeddings; write a zero-vector sentinel for the control/invalid placeholder and attach the resulting per-cell matrix. Training object 635,541 cells, 5,080 genes 635,541 cells, 5,080 genes Write compact AnnData with 9 obs columns,              
+
+> counts ,log1p norm ,
+> compound chemberta ,and unified gene token IDs. Molecule-aware split assignment 635,541 cells 564,501/45,862/25,178 train/test/OOD cells Add the chemCPA-compatible OOD split over 186 non-control molecule units and an optional molecule-strict split for sensitiv-ity analysis. Top50 DEG annotation 635,541 cells, 5,080 genes 2,232 non-control groups Compute the Top50 perturbation-responsive genes for each non-control cell-line– molecule–dose group.
+
+Table 4: SciPlex3 preprocessing path under the molecule-aware Top50-DEG contract. The model-facing perturbation identity is the molecule-level condition; label-level embedding entries are retained only as molecular representation inputs and traceability links. Cell-cycle scores matched the legacy output within 
+
+2.9 × 10 −7 maximum absolute difference, and phase labels matched exactly. 
+
+Molecule identity and repeated structures. Standardized SMILES define the molecule-level perturba-tion identities used for training and split assignment. Original SciPlex3 product labels, LINCS perturba-tion identifiers, and Tahoe compound identifiers are retained as traceability metadata rather than used as canonical drug identities. Repeated standardized structures are not averaged or dropped: sample rows re-main distinct observations across cell line, dose, batch, and replicate, while shared structures map to the same molecule-level identity. For external leakage checks, the molecule-level identity is supplemented with broader parent, tautomer, stereochemistry-insensitive, and InChIKey-based audit keys before filtering L1000 or Tahoe. 
+
+Top50 DEG contract. SciPlex3 DE-gene evaluation uses the top 50 perturbation-responsive genes for each non-control cell-line–molecule–dose group, producing 2,232 groups with 50 genes each. Control ref-erence groups are excluded from the DEG dictionary. Legacy full-gene DEG annotations are retained only for compatibility and are not used for paper-style DE-gene evaluation. 17 A.4 Tahoe-100M Processing 
+
+Tahoe-100M processing starts from public expression parquet shards and metadata tables. The pipeline vali-dates shard continuity and metadata, computes gene statistics, selects HVGs, extracts sample/compound/cell-line/dose/phase features, creates training-ready expression shards, embeds compounds with ChemBERTa, and validates the resulting package. Normal cell lines are excluded from tumor-only statistics and train-ing data. Compounds without a compatible single-compound SMILES representation are removed from the feature and training outputs. The formal Tahoe asset additionally removes cells whose compound rows match the SciPlex3 OOD molecule audit-key set; source compound identifiers remain available for audit, but molecule-level conditions control training identity and split assignment. The Tahoe HVG step uses a scalable Seurat-v3-inspired mean/variance procedure with forced cell-cycle genes rather than a full official Scanpy seurat v3 run on all cells.                                                              
+
+> Step Input Output Main operation Data validation 3,388 shards; 100,648,790 metadata rows Validation reports Check parquet continuity, meta-data readability, barcode cov-erage, and sampled expression rows. Gene statistics 62,710 genes 54,877 detected genes Compute gene-level detection and expression statistics after ex-cluding normal-cell summaries. HVG selection 62,710 genes 5,037 HVGs Use ascalable Seurat-v3-inspired HVG procedure, remove 40,337 genes by HVG prefilter, and force-add 37 cell-cycle genes. Input features 1,344 samples 1,341 samples; 379 source compounds; 354 molecule identities; 49 cell lines Remove three samples from an incompatible multi-compound drug representation and build feature vocabularies. Training data 95,624,334 cells 93,698,301 cells Remove normal-cell-line cells after prior incompatible-drug/sample filtering; write HVG shards and cell metadata. OOD holdout filtering 93,698,301 cells; 379 source compounds 92,670,735 cells; 376 source compounds; 351 non-control molecule units Remove cells from compound rows matching the SciPlex3 OOD molecule audit-key set. ChemBERTa embedding 379 source compounds 376 embedding entries (375 filtered + 1 control sentinel) Encode compatible source com-pounds before holdout filtering; copy the filtered embedding side-car, retaining one zero-vector sentinel in the formal asset. Validation training-ready outputs 50/50 passed checks Validate required fields, vocab-ularies, metadata, embeddings, expression shards, excluded-compound removal, and training manifest.
+
+Table 5: Tahoe-100M preprocessing path. The formal OOD-holdout-filtered asset contains 92,670,735 cell metadata rows after removing 1,027,566 cells from three Tahoe compound IDs matched to SciPlex3 OOD molecules. After source-compound filtering, 376 Tahoe compound rows map to 351 non-control molecule-level split units, or 352 molecule identities when the control identity is included; molecule split counts are 281 train, 35 test, and 35 OOD non-control units. 
+
+A.5 LINCS L1000 Processing 
+
+L1000 processing creates a Stage 0 VAE dataset from treatment and control signatures. The pipeline filters signatures by perturbation type, tumor sample type, treatment duration, usable canonical SMILES, quality metrics, and required Stage 0 fields. It then extracts landmark-gene expression matrices for treatment and control signatures, computes ChemBERTa embeddings for compounds, and joins treatment signatures with matched expression, compound embeddings, and cell-line vehicle controls. The formal Stage 0 asset is fil-tered against the SciPlex3 OOD molecule audit-key set before pretraining. After filtering, it retains 20,714 source perturbation identifiers corresponding to 20,388 molecule-level identities. LINCS source perturba-tion identifiers are retained for traceability, while molecule-level identifiers define condition identity, split units, and repeated-structure weighting. 18 Step Input Output Main operation Load and filter 591,697 signatures 158,151 treatment signatures; 8,444 controls Remove non-trt cp , non-tumor, incompatible dura-tion, unusable SMILES, low-quality, or incomplete signatures. Treatment expression 158,151 signatures 158 ,151 × 978 matrix Extract L1000 landmark-gene expression for treatment sig-natures. Control expression 8,444 signatures 8,444 × 978 matrix Extract matched control ex-pression for vehicle signa-tures. ChemBERTa embedding 20,721 source perturbation IDs 20 ,721 × 768 matrix Standardize SMILES and compute source-level com-pound embeddings before OOD holdout filtering. Stage 0 dataset 158,151 treatment signatures 158,151 samples Join expression, compound embeddings, metadata, control means, genes, condition sum-maries, and split units. OOD holdout filtering 158,151 samples 157,927 samples; 20,388 molecule IDs Remove 224 signatures from seven source perturbation identifiers matching the SciPlex3 OOD molecule audit-key set; split molecule IDs into 16,310 train, 2,039 test, and 2,039 OOD units. 
+
+Table 6: LINCS L1000 preprocessing path. The formal OOD-holdout-filtered Stage-0 asset contains 157,927 samples and 20,388 molecule-level identities; 20,714 source perturbation identifiers are retained only for traceability. 
+
+A.6 Gene Vocabulary and Manifests 
+
+All datasets use a shared lightweight gene vocabulary for stable token joins. The public key table contains stable Ensembl-to-token mappings, final-dataset membership flags, retired-ID replacement fields, and trace-ability annotations. Only Unified ENSG and Unified Token ID are stable join keys; gene symbols are annotations and may reflect dataset-original, alias, or retired-ID names. Rows marked as traceability-only are retained for auditability and are not additional training genes. Each accepted preprocessing step writes a machine-readable manifest recording inputs, outputs, filtering decisions, counts, configuration values, runtime, and hashes where practical. The public documentation includes a static cross-dataset manifest summary generated from the accepted manifests. The manuscript reports the corresponding data contracts rather than local run commands or site-specific paths. 19

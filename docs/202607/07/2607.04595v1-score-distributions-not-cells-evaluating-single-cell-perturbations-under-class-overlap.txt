@@ -1,0 +1,272 @@
+Title: Score Distributions, Not Cells: Evaluating Single-Cell Perturbations Under Class Overlap
+
+URL Source: https://arxiv.org/pdf/2607.04595v1
+
+Published Time: Tue, 07 Jul 2026 03:05:03 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Score Distributions, Not Cells: Evaluating Single-Cell Perturbations Under Class Overlap 
+
+Youssef Marrakchi *,1 
+
+youss24@mit.edu 
+
+Davide D’Ascenzo *,2,3 
+
+davide.dascenzo@unimi.it 
+
+Sebastiano Cultrera di Montesano 4
+
+scultrer@broadinstitute.org 
+
+Abstract 
+
+Most classification problems assume the classes are roughly separable, so that an individual sample can usually be assigned to one class. Single-cell perturbation data violates this assumption: two perturbations can produce different populations of cells while overlapping so much that an individual cell could belong to either. Per-cell accuracy then measures this overlap rather than model quality. We see this on Tahoe-100M and the Virtual Cell Challenge, where a linear classifier, an MLP, and a Transformer all plateau near macro-F1 0.2–0.3 even though almost every pair of perturbations is statistically distinguishable. The fix is to score perturbations across the whole population rather than cell by cell. We average a classifier’s per-cell probability vectors over all cells of a perturbation to form a population profile, then rank candidate perturbations by this profile; we call the resulting score the Classifier Discrimination Score (CDS). Taking the top-ranked class recovers the winning perturbation. It needs no retraining, costs linear time in the number of cells, and recovers near-perfect identification from the same weak models. CDS differs from the pseudobulk-based Perturbation Discrimination Score (PDS) used in recent benchmarks only in where the average is taken, raw gene expression for PDS versus a learned discriminative space for CDS, and identifies the true perturbation more reliably on both datasets, with the gap widening as cells grow scarce. Because a metric that misranks the ground truth will misrank the models scored against it, per-cell accuracy and raw-pseudobulk scores should be used with caution when comparing perturbation models. 
+
+# 1 Introduction 
+
+Perturbation experiments read out by single-cell RNA sequencing have become a cornerstone of modern biology. Rather than measuring one average response per condition, they return a whole distribution of responses, one transcriptomic profile per cell (Luecken and Theis, 2019). The same drug or genetic intervention, applied to a population of otherwise similar cells, produces a spread of outcomes. Some of that spread is biological, since cells differ in cell-cycle stage and recent history when the perturbation arrives (Elowitz et al., 2002). Some of it is technical, since sequencing captures only a noisy sample of each cell’s transcripts (Kharchenko et al., 2014). Atlases like Tahoe-100M now hold hundreds of millions of these profiles across thousands of perturbations and cell lines (Zhang et al., 2025). These atlases have spurred a wave of computational models. Most tackle the forward problem: given control cells and the name of a perturbation, predict the distribution of cells it would produce 
+
+> *
+
+Equal contribution. 1Department of Electrical Engineering and Computer Science, Massachusetts Institute of Technology, Cambridge, MA, USA. 2Department of Computer Science, University of Milan, Milan, Italy. 
+
+> 3
+
+Department of Control and Computer Engineering, Politecnico di Torino, Torino, Italy. 4Eric and Wendy Schmidt Center, Broad Institute of MIT and Harvard, Cambridge, MA, USA. 
+
+1
+
+> arXiv:2607.04595v1 [cs.LG] 6 Jul 2026
+
+(Lotfollahi et al., 2019, 2023; Roohani et al., 2024; Adduri et al., 2025). This paper is about the reverse. Given a population of cells, which perturbation produced them? The question matters on its own, for example in working out a drug’s mechanism of action (Haber et al., 2025). But it also sits inside every discrimination-based evaluation metric. To score a model’s prediction, you ask whether its cells match the intended perturbation and not some other one (Wu et al., 2024; Roohani et al., 2025b). We study that question on real cells, where the true label is known. This lets us measure how well a score discriminates perturbations, without folding in the quality of any single prediction model, as in recent analyses of these metrics (Liu et al., 2025). The most natural way to approach this is by training a classifier. Show it labeled cells, let it learn to name the perturbation behind each one, and evaluate it by its cell-level accuracy (Wu et al., 2024; Ahlmann-Eltze et al., 2025). The habit of judging classifiers by per-sample accuracy comes from problems where the classes are approximately separable: a picture is a cat or a dog, a digit is a seven or a two, and a good model puts almost every example on the right side of the line. Single-cell perturbation data does not satisfy this assumption. Two perturbations can be easy to tell apart as distributions yet impossible to tell apart cell by cell. Given enough cells, a statistical test will confidently report that their distributions differ, even when their responses overlap heavily in expression space. These are two different properties. Distinguishability improves as you collect more cells, because more of them land where only one perturbation has any mass. Separability does not improve with more data, because the region where the two distributions genuinely overlap does not shrink. So however distinguishable the perturbations are, accuracy measured one cell at a time is capped by that overlap. We make this concrete on Tahoe-100M. A linear model, an MLP, and a Transformer all plateau at the same modest cell-level accuracy, with macro-F1 between 0.18 and 0.31. They do so despite millions of training cells and a 380-way problem that ought to reward capacity. The extra capacity does not help, because the bottleneck is the data and not the model. We then compare all pairs of perturbations as distributions, and almost every pair turns out to be distinguishable. So the signal is present. It does not show up in any single cell, only across the population. The fix follows from the diagnosis. The signal is in the population, so we score the population instead of the cell. We train a standard single-cell classifier exactly as before and change only how we read it out at evaluation time. Instead of taking the argmax cell by cell, we average the classifier’s output probabilities across all cells of a perturbation and take the argmax of that average. We call the resulting score the Classifier Discrimination Score (CDS). Nothing about training changes, and the cost stays linear in the number of cells. The same models now recover the true perturbation with rank-1 accuracy between 0.976 and 1.000. The classifier is scored on the same perturbations it was trained on, so this number shows the metric recognizes known perturbations reliably, not that perturbation prediction is solved. CDS is one step away from the Perturbation Discrimination Score (PDS), the pseudobulk metric used in recent benchmarks (Wu et al., 2024; Viñas Torné et al., 2025; Roohani et al., 2025b). The two run the same averaging and differ only in the space they average in. PDS collapses each perturbation to a mean expression vector before measuring distances; CDS averages in the space of classifier probabilities, which the model has been trained to make discriminative. The space matters for how reliably each metric identifies the true perturbation from real cells, and PDS is the less reliable of the two. On the Virtual Cell Challenge, which scores predictions with PDS, CDS wins even with every cell in hand (Roohani et al., 2025b). On Tahoe the gap opens up as cells grow scarce, the regime real experiments face. A ruler that misranks the ground truth will misrank the models measured against it, so a gap here translates directly into unreliable model comparisons. 22 Background and related work 
+
+Metrics for perturbation responses. Most metrics fall into one of two categories. The cheap ones work on pseudobulk profiles, the mean expression vector of a perturbation, and compare them with errors or correlations (Squair et al., 2021). They are fast, but averaging throws away the cell-to-cell variation that single-cell measurement was meant to capture. The expensive ones compare full distributions. Maximum Mean Discrepancy (Gretton et al., 2012) and energy distance (Székely and Rizzo, 2013; Peidli et al., 2024) do this directly, but their cost grows with the square of the number of cells, which is computationally prohibitive at atlas scale. The Perturbation Discrimination Score tries to land in between (Wu et al., 2024; Viñas Torné et al., 2025; Roohani et al., 2025b). It ranks perturbations by the distance between their pseudobulk profiles, so it stays cheap, but it inherits pseudobulk’s blindness to within-perturbation structure. Recent work shows that PDS is touchy in its own right, since its value moves with the choice of distance and with a simple rescaling of the predictions (Liu et al., 2025). 
+
+Classifiers as distribution comparisons. Using a classifier to compare distributions is an old idea. A classifier two-sample test trains a model to tell two samples apart and reads its held-out accuracy as evidence that the samples differ, an approach that has been used to judge how realistic a generative model’s samples are (Lopez-Paz and Oquab, 2017). Learned kernels sharpen these tests and tie them back to MMD (Liu et al., 2020). What we do is the supervised, many-class version of the same move. In place of a yes-or-no accuracy for a hypothesis test, we use the classifier’s averaged probabilities to pick which of many perturbations a population came from. 
+
+Population labels and overlap. Multiple-instance learning also turns a bag of cells into one label, but it solves a harder supervision problem. It knows the label of the bag and not of the individual cells, so it has to learn which cells matter, usually with attention (Ilse et al., 2018). Our cells come labeled, so we train on them directly and pool only at the end. The overlap we rely on is not a new observation, and it has a biological reading. A perturbed population is rarely uniform: some cells respond and some look untouched, so the population is a mixture rather than a shifted copy of the control. Mixscape makes exactly this assumption in the simpler task of telling perturbed cells from controls, modeling the perturbed population as a blend of responders and non-responders (Papalexi et al., 2021). That mixture structure is why a single cell can be uninformative while the population is not. It is the biological counterpart of the distinguishable-but-not-separable gap we exploit. We carry this observation into the many-perturbation setting and build a metric on it. 
+
+# 3 Distinguishability is not separability 
+
+We treat the cells of a perturbation p as independent draws from a distribution Dp over Rd, where d
+
+is the number of genes we keep. We will use two terms repeatedly, so we define them now. 
+
+• Call p and q distinguishable if a two-sample test, run on cells from each, rejects the idea that Dp and Dq are the same distribution. This depends on how many cells you have. With enough of them, even a small real difference will register (Lin et al., 2013). 
+
+• Call p and q separable if you can look at a single cell and reliably say which of the two it came from. This depends on how much the two distributions overlap in space, and collecting more cells does nothing to change it. 3In the benchmarks that taught us to trust accuracy, these two properties travel together. Classes that differ also sit apart, so a model that can draw the boundary gets most cells right. For single-cell perturbations, the two come apart. 
+
+A one-dimensional example. A simple example shows how far apart they can be. Let Dp =
+
+N (0 , 1) and Dq = N (μ, 1) . Distinguishability grows quickly with μ and with the number of samples. With a thousand cells per group, the average two-sample p-value is already near zero by μ ≈ 0.2 (Figure 1, left). Separability does not move at all. At μ = 0 .2 the best possible classifier draws its boundary at x = 0 .1 and still gets the cell wrong almost half the time, since 
+
+P(X > 0.1) = 1 − Φ(0 .1) ≈ 0.46 (Figure 1, right). The best accuracy anyone can reach is about 54% ,no matter how much data or how large the model. The two distributions are clearly different, yet a single draw can rarely say which one it came from. 
+
+Figure 1: Distinguishable but not separable. Left: average two-sample p-value between N (0 , 1) 
+
+and N (μ, 1) as a function of μ, with 1000 samples per group averaged over 1000 simulations. The two distributions become statistically distinguishable well before μ = 0 .2. Right: at μ = 0 .2 the densities overlap so heavily that the best possible cell-level classifier still errs about 46% of the time. Distinguishability is a statistical property that grows with sample size. Separability is a geometric property that does not. This is only the one-dimensional picture. In high dimensions the overlap can occur in some directions while the distributions stay apart in others, and the accounting is more involved. Even so, distinguishable does not imply separable, so a classifier can hit a hard floor on cell-level accuracy that comes from the data itself, even while the perturbations stay perfectly distinguishable as distributions. 
+
+# 4 A case study on Tahoe-100M 
+
+Single-cell perturbation data lives in exactly this regime, and Tahoe-100M lets us see both sides of it. Our main testbed is the A549 cancer line from Tahoe-100M (Zhang et al., 2025). We keep to one cell line, so that differences between perturbations are not confounded by cell-line identity. We work at two doses, 0.05 and 5.00 μM. Each setting pairs 379 chemical perturbations with a control, for 
+
+380 classes, over millions of cells. We vary the gene panel across d ∈ { 512 , 1024 , 2048 , 4096 } highly variable genes. We split cells 70 /15 /15 within each perturbation, so every perturbation appears in every split (full dataset details in Appendix A). The job is to recognize a perturbation we have 4already seen, from new cells, not to predict one we have never met. A good metric should be able to tell, from real cells, which known perturbation produced them. We train three classifiers that differ mainly in capacity: a linear model, an MLP, and a Transformer that treats each gene as a token (Vaswani et al., 2017). All three use class-weighted cross-entropy (Cui et al., 2019) and are selected on validation macro-F1 (architecture and training details in Appendix B). The first two numeric columns of Table 1 give their cell-level test scores. Accuracy is low everywhere. More tellingly, it barely improves as the model grows. Macro-F1 goes from 0.18 to 
+
+0.22 at the low dose and from 0.24 to 0.31 at the high dose as we move from the linear model to the Transformer. A 380 -way problem with millions of training cells should give a flexible model plenty to work with, yet the Transformer is barely ahead of a linear baseline. When extra capacity buys almost nothing, the problem usually lies in the data and not the model. This is the behavior the Gaussian example predicts when classes overlap. As a metric, cell-level accuracy is uninformative here. It rates three very different models within a few points of each other. The plateau could mean two things. Maybe the perturbations are not actually different. Or maybe they are different, but a single cell does not carry enough of that difference. We can settle the first reading directly with a test on distributions. For two samples X and Y , the energy distance (Székely and Rizzo, 2013) is 
+
+E(X, Y ) = 2
+
+nm 
+
+X
+
+> i,j
+
+∥xi − yj ∥ − 1
+
+n2
+
+X
+
+> i,i ′
+
+∥xi − xi′ ∥ − 1
+
+m2
+
+X
+
+> j,j ′
+
+∥yj − yj′ ∥,
+
+which is zero exactly when the two distributions match. A permutation test turns it into a p-value by shuffling the pooled cells and seeing how often a random split looks as separated as the real one. Across all of the roughly 72 ,000 perturbation pairs at the high dose, fewer than twenty fail to register a difference at p < 0.05 (see Appendix C for full details). For all practical purposes, every pair of perturbations is distinguishable. The two results point in opposite directions, but they do not conflict. The perturbations are clearly different as distributions, while a classifier reading one cell at a time cannot separate them, because the distributions overlap. The way out is to score the whole population rather than one cell. 
+
+# 5 The Classifier Discrimination Score 
+
+The classifier from the previous section already holds the information we need, and the only change is to read it out over a population rather than a single cell. Given a perturbation p with evaluation cells 
+
+x1, . . . , x n, the model maps each cell to a vector of class probabilities πi = softmax (f (xi)) ∈ ∆K−1.We average these vectors across the population and take the top class, 
+
+¯πp = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+πi, ˆp = arg max  
+
+> k
+
+[¯ πp]k.
+
+We call this pooled vector ¯πp the CDS profile of the population, and the readout built on it the Classifier Discrimination Score (CDS). Its entries are indexed by the candidate perturbations, so the profile already ranks them: each entry scores how much the classifier attributes the population to that perturbation, and the top entry, arg max k[ ¯πp]k, is the predicted one. The readout reuses the trained classifier unchanged and takes a single pass over the cells, so its cost is linear in n.Averaging is what turns a weak cell-level classifier into a reliable population-level one. Each πi
+
+is noisy, and a cell drawn from the region where two perturbations overlap yields an ambiguous prediction that no model can resolve from that cell alone. Across many cells of the same perturbation 5these errors are unsystematic and largely cancel, while the consistent population-level difference that the classifier learned from large training sets survives the average. The pooled vector ¯πp therefore reflects the perturbation far more sharply than any individual prediction. This averaging also makes the relationship to PDS exact. Write a perturbation’s summary as 
+
+ϕ(p) = 1
+
+> n
+
+P 
+
+> i
+
+ψ(xi) for a feature map ψ. With ψ the identity, after subtracting a control, ϕ(p) is the pseudobulk profile that PDS compares. With ψ = softmax ◦ f , ϕ(p) is the CDS vector. The two are the same average and differ only in the space it is taken in, raw gene expression for PDS and a learned, discriminative probability space for CDS (Liu et al., 2020). In this sense CDS is the many-class, identification form of a classifier two-sample test (Lopez-Paz and Oquab, 2017). Because the output is an average, CDS does not preserve the within-perturbation spread; it uses that spread during training and reads it out through a map built to separate perturbations. 
+
+CDS recovers perturbation identity. Table 1 places cell-level accuracy next to the perturbation-level accuracy of CDS for the same trained models. Cell-level accuracy stays between 0.18 and 0.31 ,while CDS runs from 0.976 to 1.000 . The capacity gap seen cell by cell closes, and the linear model, the MLP, and the Transformer reach nearly the same accuracy once their predictions are pooled. The model that scored 0.31 per cell scores 0.997 per perturbation, with nothing else changed. What held the numbers down was the unit of evaluation, not the model. The same experiment on the Virtual Cell Challenge data follows the same pattern, which we report in Appendix E. Table 1: The bottleneck is the unit of evaluation. Tahoe-100M at both doses, best configuration per architecture. Cell-level accuracy and macro-F1 are modest and barely move with capacity. Averaging the same model’s cell-level probabilities across a perturbation’s cells (rightmost column) recovers near-perfect perturbation-level accuracy. 
+
+Dose ( μM) Model Cell-level accuracy Cell-level macro-F1 Pert.-level accuracy 
+
+0.05 Linear 0.185 0.182 0.976 
+
+0.05 MLP 0.205 0.211 0.995 
+
+0.05 Transformer 0.218 0.215 0.990 
+
+5.00 Linear 0.239 0.239 0.992 
+
+5.00 MLP 0.281 0.288 1.000 
+
+5.00 Transformer 0.310 0.313 0.997 
+
+# 6 CDS is a more reliable discriminator than PDS 
+
+Forward models are ranked by scores like these, so a metric that misorders the true perturbation will misorder the models built to predict it. Near-perfect accuracy on the full test set is not, on its own, impressive: with thousands of cells in hand, even a raw pseudobulk centroid will recognize a perturbation it has seen before. The sharper question is what happens when cells run short, and whether averaging in a learned space buys anything over averaging raw expression. 
+
+CDS and PDS as retrieval. We evaluate both scores the same way, as retrieval on the 70 /15 /15 
+
+split. For each perturbation we build a reference from its training cells and a query from its held-out test cells, rank all reference perturbations against the query, and record the rank of the true match. PDS works in gene-expression space. Its profile for a perturbation is the differential pseudobulk 6∆p = ¯xp − ¯xctrl , the mean expression of the perturbation minus the mean of all control cells; the reference and query ∆p are formed from the training and test halves respectively, and references are ranked by their Euclidean, Manhattan, or cosine distance to the query (Wu et al., 2024; Roohani et al., 2025b). CDS works in the classifier’s label space. Its reference is the trained model and its query is the pooled profile ¯πp over the test cells; because the classifier’s outputs are indexed by the candidate perturbations, ¯πp already ranks them, and the true match’s rank is the position of its own label. Both build the reference from the full training split and vary only the query. We shrink that query from 100% down to 10% of a perturbation’s test cells and report the rank-1 fraction, the share of perturbations whose true match ranks first, together with the mean true-match rank. 
+
+Results on Tahoe-100M. CDS is far more sample-efficient (Figure 2). The MLP and the Transformer stay near-perfect down to a tenth of the cells, while the PDS curves sag as cells decrease. The drop is worst under the Manhattan distance and gentlest under cosine, which lines up with the scale-sensitivity of ℓ1/ℓ 2 PDS reported by Liu et al. (2025). When only a few cells per perturbation are available, it pays to push the average through a trained model rather than average raw expression. 
+
+Figure 2: Tahoe-100M at 5.00 μM: rank-1 fraction against the fraction of evaluation cells used. CDS (linear, MLP, and Transformer) stays near-perfect as cells become scarce, while the PDS variants drop, most of all under the Manhattan distance. The axis starts at 0.84 , and every method sits above it. 
+
+Results on the Virtual Cell Challenge dataset. A fair worry is that Tahoe is unusually generous, with millions of cells and a strong dose signal. The Virtual Cell Challenge (VCC) data is a useful contrast (Roohani et al., 2025b). It is about an order of magnitude smaller, it uses genetic rather than chemical perturbations, and it is measured in human embryonic stem cells instead of a cancer line, across 301 classes. We build our own stratified splits, so these numbers should not be read against the public challenge leaderboard (see Appendix A). Here the advantage no longer needs scarce cells to appear (Figure 3). With every cell in hand, CDS reaches rank-1 of 0.86 while the best PDS variant stalls near 0.70 , and CDS beats all three PDS variants at every gene-panel size. The gap grows as the panel grows and the underlying classifier gets stronger. Since VCC is a real benchmark that scores predictions with PDS, this full-sample gap is direct evidence that PDS leaves usable discriminative signal unmeasured. CDS does not reach its near-perfect Tahoe numbers here, which marks VCC as the harder, weaker-signal case of the two. 7Figure 3: VCC at d = 2048 . Mean true-match rank (left, lower is better) and rank-1 fraction (right) against the fraction of evaluation cells used. CDS (linear and MLP) beats all three PDS variants across fractions, and stays ahead even at full sample size. 
+
+# 7 Discussion 
+
+Perturbation biology is moving toward large atlases and virtual-cell models trained on them. As those models improve, deciding which one is better depends on the metric used to compare them, which makes evaluation as consequential as modeling. This paper is about one part of that: how perturbation responses are scored. Cell-level accuracy conflates two questions. The first is whether perturbations differ at all, and on Tahoe they almost always do. The second is whether a single cell gives the difference away, and it usually does not, because the response distributions overlap. A metric built on single cells therefore reports the overlap in the data as much as the quality of the model. Ranked this way, the better model goes unrewarded: the score tracks how separable the data happens to be, not how good the model is. CDS is the smallest change that fixes this. Training stays on single cells, but we move the decision to after a population-level average. It shares its averaging with PDS and its classifier with the two-sample test, and sits between them by averaging predictions rather than raw expression. It recovers the right perturbation from real cells more reliably than PDS: on Tahoe as cells grow scarce, and on VCC even at full sample. Two points are worth being plain about. First, CDS is scored on the perturbations its classifier was trained to recognize, and that is by design. A discrimination metric only has to know the perturbations in the benchmark, so near-perfect accuracy shows it recognizes them reliably, not that we can predict unseen perturbations. Second, we measure the metric on real cells whose labels are known, and we do not benchmark prediction models. That choice is what makes the comparison clean. Which perturbation a population came from has a ground-truth answer only because the cells are real and labeled, not generated by a model. Benchmarking predictors is a separate question, in the spirit of recent metric analyses (Liu et al., 2025), that we leave aside. What stays open is the floor and the reach of the metric. We do not estimate the Bayes error directly. We read a cell-level floor off its fingerprint instead: the way accuracy refuses to climb with capacity. And CDS recognizes only the perturbations in its training set, so a metric that scores genuinely novel perturbations, or combinatorial ones where a cell carries several labels, is the natural next step. 8References 
+
+Abhinav K Adduri, Dhruv Gautam, Beatrice Bevilacqua, Alishba Imran, Rohan Shah, Mohsen Naghipourfar, Noam Teyssier, Rajesh Ilango, Sanjay Nagaraj, Mingze Dong, et al. Predicting cellular responses to perturbation across diverse contexts with state. BioRxiv , pages 2025–06, 2025. Constantin Ahlmann-Eltze, Wolfgang Huber, and Simon Anders. Deep-learning-based gene perturbation effect prediction does not yet outperform simple linear baselines. Nature Methods , 22(8):1657–1661, 2025. Yin Cui, Menglin Jia, Tsung-Yi Lin, Yang Song, and Serge Belongie. Class-balanced loss based on effective number of samples. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pages 9268–9277, 2019. Michael B Elowitz, Arnold J Levine, Eric D Siggia, and Peter S Swain. Stochastic gene expression in a single cell. Science , 297(5584):1183–1186, 2002. Arthur Gretton, Karsten M Borgwardt, Malte J Rasch, Bernhard Schölkopf, and Alexander Smola. A kernel two-sample test. The journal of machine learning research , 13(1):723–773, 2012. Ellie Haber, Shahul Alam, Nicholas Ho, Renming Liu, Evan Trop, Shaoheng Liang, Muyu Yang, Spencer Krieger, and Jian Ma. Heimdall: Disentangling tokenizer design for robust transfer in single-cell foundation models. bioRxiv , pages 2025–11, 2025. Maximilian Ilse, Jakub Tomczak, and Max Welling. Attention-based deep multiple instance learning. In 
+
+International Conference on Machine Learning (ICML) , pages 2127–2136. PMLR, 2018. Peter V Kharchenko, Lev Silberstein, and David T Scadden. Bayesian approach to single-cell differential expression analysis. Nature methods , 11(7):740–742, 2014. Mingfeng Lin, Henry C Lucas Jr, and Galit Shmueli. Research commentary—too big to fail: large samples and the p-value problem. Information systems research , 24(4):906–917, 2013. Feng Liu, Wenkai Xu, Jie Lu, Guangquan Zhang, Arthur Gretton, and Danica J Sutherland. Learning deep kernels for non-parametric two-sample tests. In International conference on machine learning , pages 6316–6326. PMLR, 2020. Qiyuan Liu, Qirui Zhang, Jinhong Du, Siming Zhao, and Jingshu Wang. Effects of distance metrics and scaling on the perturbation discrimination score. arXiv preprint arXiv:2511.16954 , 2025. David Lopez-Paz and Maxime Oquab. Revisiting classifier two-sample tests. In International Conference on Learning Representations (ICLR) , 2017. Mohammad Lotfollahi, F Alexander Wolf, and Fabian J Theis. scgen predicts single-cell perturbation responses. Nature methods , 16(8):715–721, 2019. Mohammad Lotfollahi, Anna Klimovskaia Susmelj, Carlo De Donno, Leon Hetzel, Yuge Ji, Ignacio L Ibarra, Sanjay R Srivatsan, Mohsen Naghipourfar, Riza M Daza, Beth Martin, et al. Predicting cellular responses to complex perturbations in high-throughput screens. Molecular systems biology , 19(6):MSB202211517, 2023. Malte D Luecken and Fabian J Theis. Current best practices in single-cell rna-seq analysis: a tutorial. 
+
+Molecular systems biology , 15(6):MSB188746, 2019. Efthymia Papalexi, Eleni P Mimitou, Andrew W Butler, Samantha Foster, Bernadette Bracken, William M Mauck III, Hans-Hermann Wessels, Yuhan Hao, Bertrand Z Yeung, Peter Smibert, and Rahul Satija. Characterizing the molecular regulation of inhibitory immune checkpoints with multimodal single-cell screens. Nature Genetics , 53(3):322–331, 2021. 
+
+9Stefan Peidli, Tessa D Green, Ciyue Shen, Torsten Gross, Joseph Min, Samuele Garda, Bo Yuan, Linus J Schumacher, Jake P Taylor-King, Debora S Marks, et al. scperturb: harmonized single-cell perturbation data. Nature Methods , 21(3):531–540, 2024. Yusuf Roohani, Kexin Huang, and Jure Leskovec. Predicting transcriptional outcomes of novel multigene perturbations with gears. Nature Biotechnology , 42(6):927–935, 2024. Yusuf H. Roohani, Alexander Dobin, Noam Teyssier, et al. Behind the data of the vir-tual cell challenge. Arc Institute, August 2025a. URL https://arcinstitute.org/news/ behind-the-data-virtual-cell-challenge .Yusuf H Roohani, Tony J Hua, Po-Yuan Tung, Lexi R Bounds, Feiqiao B Yu, Alexander Dobin, Noam Teyssier, Abhinav Adduri, Alden Woodrow, Brian S Plosky, et al. Virtual cell challenge: Toward a turing test for the virtual cell. Cell , 188(13):3370–3374, 2025b. Jordan W Squair, Matthieu Gautier, Claudia Kathe, Mark A Anderson, Nicholas D James, Thomas H Hutson, Rémi Hudelle, Taha Qaiser, Kaya JE Matson, Quentin Barraud, et al. Confronting false discoveries in single-cell differential expression. Nature communications , 12(1):5692, 2021. Tim Stuart, Andrew Butler, Paul Hoffman, Christoph Hafemeister, Efthymia Papalexi, William M Mauck III, Yuhan Hao, Marlon Stoeckius, Peter Smibert, and Rahul Satija. Comprehensive integration of single-cell data. Cell , 177(7):1888–1902, 2019. doi: 10.1016/j.cell.2019.05.031. Gábor J Székely and Maria L Rizzo. Energy statistics: A class of statistics based on distances. Journal of statistical planning and inference , 143(8):1249–1272, 2013. Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. Advances in neural information processing systems , 30, 2017. Ramon Viñas Torné, Maciej Wiatrak, Zoe Piran, Shuyang Fan, Liangze Jiang, Sarah A Teichmann, Mor Nitzan, and Maria Brbić. Systema: a framework for evaluating genetic perturbation response prediction beyond systematic variation. Nature Biotechnology , pages 1–10, 2025. Yan Wu, Esther Wershof, Sebastian M Schmon, Marcel Nassar, Błażej Osiński, Ridvan Eksi, Zichao Yan, Rory Stark, Kun Zhang, and Thore Graepel. Perturbench: Benchmarking machine learning models for cellular perturbation analysis. arXiv preprint arXiv:2408.10609 , 2024. Jesse Zhang, Airol A Ubas, Richard De Borja, Valentine Svensson, Nicole Thomas, Neha Thakar, Ian Lai, Aidan Winters, Umair Khan, Matthew G Jones, et al. Tahoe-100m: A giga-scale single-cell perturbation atlas for context-dependent gene function and cellular modeling. BioRxiv , pages 2025–02, 2025. 
+
+10 A Datasets description 
+
+We evaluate our methods on two large-scale single-cell perturbation datasets. 
+
+Tahoe-100M. Tahoe-100M (Zhang et al., 2025) is a large chemical perturbation atlas containing approxi-mately 100 million single-cell transcriptomes collected across multiple human cancer cell lines, compounds, and doses. Throughout this work we restrict attention to the most represented cell line, the A549 cell line, which contains ∼6.4 × 10 6 cells and consider two dosage settings, 0.05 μM and 5.00 μM, each together with the control condition. Both settings contain 380 perturbation labels (379 compounds plus control). We report results using subsets of highly variable genes (HVGs) of size d ∈ { 512 , 1024 , 2048 , 4096 }.
+
+Virtual Cell Challenge (VCC). The Virtual Cell Challenge dataset (Roohani et al., 2025b,a) contains CRISPR-based genetic perturbations measured in human embryonic stem cells. After combining the official train, validation, and test partitions, the dataset contains 491,046 cells, 18,080 genes, and 301 perturbation labels (300 perturbations and one non-targeting control). Unlike Tahoe-100M, the dataset does not include multiple dosage levels. To keep the protocol aligned across datasets, we discard all-zero genes, then form new splits with the same rule used elsewhere in this project; for each target_gene , cells are assigned 70%/15%/15% to train/validation/test (stratified by cell, seed 42). HVGs are recomputed on training cells only using Seurat v3(Stuart et al., 2019) (raw counts, up to 4,096 genes), after which all splits are subset to the selected HVG panel and transformed with log (1 + x). We train the same linear and MLP classifiers under this preprocessing; the appendix additionally reports results for d ∈ { 512 , 1024 , 2048 , 4096 }.
+
+# B Models description 
+
+We compare three supervised classifiers that predict perturbation identity from single-cell expression pro-files. All models are trained with weighted cross-entropy (sklearn balanced class weights), optimized with Adam/AdamW, and selected by validation macro-F1 with early stopping (max 2,000 epochs). Unless noted otherwise, batch size is 128 and random seed is 42. Main Tahoe runs use d = 2048 HVGs and learning rate 
+
+5 × 10 −5 with patience 30; VCC runs use patience 50 (linear at 10 −4, MLP at 5 × 10 −5). 
+
+Linear. A single affine map Rd → RC , where C is the number of perturbation classes (380 for Tahoe, 301 for VCC). This is the lowest-capacity baseline. 
+
+MLP. A fully connected network with ReLU activations and dropout ( p = 0 .2) between hidden layers. For Tahoe we use four hidden layers of width 1,024; for VCC we use hidden sizes (1024 , 512) .
+
+Transformer. Each gene is a token: a learned gene embedding plus a two-layer MLP projection of its expression value. Four class tokens are prepended and processed by a 4-layer Transformer encoder (dmodel = 256 , 4 heads, feedforward width 1,024, GELU, dropout 0 in our main runs). Token outputs are concatenated and passed to a linear classification head. This model is included as a high-capacity reference to test whether classifier performance is limited by expressivity rather than separability. 
+
+# C Are perturbations distinguishable as distributions? 
+
+We assess whether perturbations are distinguishable at the distribution level using pairwise two-sample testing based on the energy distance (Székely and Rizzo, 2013). For each pair of perturbations p and q, we compare the corresponding empirical samples Xp and Xq .
+
+C.1 Two-sample testing procedure 
+
+We compute the energy distance E(Xp, X q ) between perturbation samples. Statistical significance is evaluated using a permutation test under the null hypothesis that Xp and Xq are drawn from the same distribution. 
+
+11 We form the pooled set Z = Xp ∪ Xq and repeatedly permute it into two subsets of sizes |Xp| and |Xq |.For each permutation, we compute the energy distance, yielding a null distribution. The p-value is defined as p-value (Xp, X q ) = P E(X′
+
+> p
+
+, X ′ 
+
+> q
+
+) ≥ E (Xp, X q ),
+
+where (X′
+
+> p
+
+, X ′ 
+
+> q
+
+) denotes a permutation-based split of Z.
+
+C.2 Hierarchical reordering 
+
+To visualize global structure, we construct a hierarchical ordering of perturbations from the p-value matrix. We iteratively merge the pair of perturbations with the largest p-value (least distinguishable pair). After each merge, we recompute pairwise p-values from the merged sample sets. This produces an ordering in which perturbations with higher distributional similarity are grouped earlier in the hierarchy. 
+
+C.3 Global structure 
+
+Figure 4 shows the resulting pairwise p-value matrix for Tahoe-100M at dosage 5.00 μM and d = 2048 ,reordered using the procedure above. 
+
+Figure 4: Almost everything is distinguishable. Pairwise distribution-level p-values on Tahoe-100M ( 5.00 μM, d = 2048 ), with perturbations reordered by hierarchical clustering. Left: − log 10 p,capped at 50 . Right: the same matrix thresholded at p < 0.05 , where black marks a rejected pair. Off the diagonal, fewer than twenty of about 72 ,000 pairs fail to reject. With thousands of cells per perturbation this is a low statistical bar, as one would expect (Lin et al., 2013). Its only job here is to rule out the trivial reading, that the classifier plateau reflects perturbations which are genuinely identical. 
+
+# D Tahoe-100M dosage 0.05 results 
+
+At 0.05 μM, the same qualitative pattern holds as at 5.00 μM: pairwise distributional tests reject almost all perturbation pairs, yet per-cell classifiers remain far from perfect. Under scarce evaluation cells, aggregation-based retrieval stays near-perfect while PDS distances degrade, especially under Manhattan distance (Figure 5). 
+
+12 Figure 5: Tahoe-100M at 0.05 μM: rank-1 fraction against the fraction of evaluation cells used. CDS (linear, MLP, and Transformer) stays near-perfect as cells become scarce, while the PDS variants drop, most of all under the Manhattan distance. The axis starts at 0.75 , and every method sits above it. 
+
+# E VCC datasaest results 
+
+> Table 2 reports CDS on the Virtual Cell Challenge dataset across gene-panel sizes. The pattern matches Tahoe-100M: cell-level accuracy and macro-F1 stay low and flat as model capacity grows, while pooling the same model’s predictions into CDS lifts perturbation-level accuracy well above the cell-level numbers, though not to the near-perfect values seen on Tahoe-100M. As on Tahoe-100M, the advantage grows with the gene panel, since a larger panel gives the classifier more signal to pool.
+
+Table 2: VCC results follow the same pattern as those of Tahoe-100M. Per-cell accuracy and macro-F1 seem to be capped by the data and do not benefit from increasing model capacity. While aggregation does not recover perfect accuracy like with Tahoe-100M we see that the results are much better 
+
+HVG Model Cell-level accuracy Cell-level macro-F1 Pert.-level accuracy 
+
+512 Linear 0.176 0.193 0.615 
+
+1024 Linear 0.246 0.295 0.704 
+
+2048 Linear 0.313 0.403 0.787 
+
+4096 Linear 0.352 0.477 0.860 
+
+512 MLP 0.170 0.207 0.621 
+
+1024 MLP 0.230 0.295 0.737 
+
+2048 MLP 0.293 0.369 0.804 
+
+4096 MLP 0.310 0.402 0.844 13

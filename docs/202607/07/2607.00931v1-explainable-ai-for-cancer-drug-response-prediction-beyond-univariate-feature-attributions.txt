@@ -1,0 +1,1590 @@
+Title: Explainable AI for Cancer Drug Response Prediction: Beyond Univariate Feature Attributions
+
+URL Source: https://arxiv.org/pdf/2607.00931v1
+
+Published Time: Thu, 02 Jul 2026 01:05:09 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Explainable AI for Cancer Drug Response Prediction: Beyond Univariate Feature Attributions 
+
+## Martino Ciaperoni ∗
+
+KDD Lab, Scuola Normale Superiore Pisa, Italy martino.ciaperoni@sns.it 
+
+## Margherita Lalli ∗
+
+KDD Lab, Scuola Normale Superiore Pisa, Italy margherita.lalli@sns.it 
+
+## Simone Piaggesi ∗
+
+KDD Lab, University of Pisa Pisa, Italy simone.piaggesi@di.unipi.it 
+
+## Martina Varisco 
+
+Bio@SNS, Scuola Normale Superiore Pisa, Italy martina.varisco@sns.it 
+
+## Francesco Carli 
+
+EMBL-EBI Hinxton, United Kingdom carli@ebi.ac.uk 
+
+## Riccardo Guidotti 
+
+KDD Lab, University of Pisa, and ISTI-CNR Pisa, Italy riccardo.guidotti@unipi.it 
+
+## Dino Pedreschi 
+
+KDD Lab, University of Pisa Pisa, Italy dino.pedreschi@unipi.it 
+
+## Francesco Raimondi 
+
+Bio@SNS, Scuola Normale Superiore Pisa, Italy francesco.raimondi@sns.it 
+
+## Fosca Giannotti 
+
+KDD Lab, Scuola Normale Superiore Pisa, Italy fosca.giannotti@sns.it 
+
+Abstract 
+
+Predicting cancer drug response from transcriptomic profiles is a cornerstone of precision oncology, yet the scientific value of ma-chine learning models hinges not solely on predictive accuracy, but also on their capacity to generate reliable biological insights. Current explainability approaches in this setting are computation-ally costly, lack robustness, and reduce complex drug response to univariate gene importance scores, overlooking the coordinated gene activity that drives sensitivity and resistance. In this work, we present ILLUME+, a scalable post-hoc explain-ability framework that moves beyond single-gene assessments to capture multiple, complementary forms of explanation. Integrated into our end-to-end pipeline, ILLUME+ produces more stable gene importance scores than existing baselines, recovers established drug-gene associations and mechanisms of action, and enables AI-assisted hypothesis generation to uncover novel interaction-driven molecular signals in cancer biology. 
+
+CCS Concepts 
+
+• Computing methodologies → Supervised learning ; Classifi-cation ; • Applied computing → Bioinformatics .
+
+Keywords 
+
+Drug sensitivity prediction, transcriptomics, explainable AI 
+
+ACM Reference Format: 
+
+Martino Ciaperoni, Margherita Lalli, Simone Piaggesi, Martina Varisco, Francesco Carli, Riccardo Guidotti, Dino Pedreschi, Francesco Raimondi,  
+
+> ∗Equal contribution.
+> This work is licensed under a Creative Commons Attribution 4.0 International License.
+> KDD ’26, Jeju Island, Republic of Korea
+> ©2026 Copyright held by the owner/author(s). ACM ISBN 979-8-4007-2259-2/2026/08 https://doi.org/10.1145/3770855.3819010
+
+and Fosca Giannotti. 2026. Explainable AI for Cancer Drug Response Pre-diction: Beyond Univariate Feature Attributions. In Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2 (KDD ’26), August 09–13, 2026, Jeju Island, Republic of Korea. ACM, New York, NY, USA, 17 pages. https://doi.org/10.1145/3770855.3819010 
+
+1 Introduction 
+
+Cancer remains a major cause of mortality worldwide, and the substantial variability in response to anticancer therapies due to molecular heterogeneity makes treatment selection a persistent challenge [ 60 ]. The growing availability of large-scale pharmacoge-nomic resources, such as the Genomics of Drug Sensitivity in Cancer 
+
+database (GDSC) [ 25 ], enables systematic investigation of the rela-tionship between tumor molecular profiles and drug response. In this context, machine learning has become a central analytical tool, allowing the modeling of high-dimensional, nonlinear dependen-cies and achieving strong predictive performance across diverse cancer cell lines [11, 32]. However, predictive performance alone is insufficient to drive scientific progress. To inform biological understanding, models must also be amenable to explanation, enabling the identification of molecular mechanisms underlying drug sensitivity and resis-tance [ 49 ]. Approaches that embed prior biological knowledge into models aim to address this limitation [ 55 , 62 ], but may bias discov-ery toward established mechanisms and limit genuinely data-driven insights [ 54 ]. It remains an open question whether high-performing drug response models can uncover biologically meaningful struc-ture without relying on predefined assumptions. Explainable Artificial Intelligence (XAI) provides a natural frame-work for addressing this challenge [ 19 ]. Yet, existing XAI studies in drug response prediction rely primarily on univariate feature attribution methods, particularly SHAP [ 39 ] which, however, suffer from two major limitations. First, SHAP-based explanations exhibit limited robustness and scalability to high-dimensional settings [ 46 ].  
+
+> arXiv:2607.00931v1 [cs.LG] 1 Jul 2026 KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Martino Ciaperoni, Margherita Lalli, Simone Piaggesi, et al. 0.999 0.763 0.716 0.831 0.819 0.863 0.878 0.771 0.912 0.771 0.999 0.721 0.999 0.957 0.999 0.997 0.999 0.999 0.921 0.999 0.981 0.999 0.999 0.999 0.993 0.943 0.999 0.952 0.966 0.998 0.927 0.946 0.999 ELMO1 DOCK1 CD53 GMFG NCKAP1L ARPC2 ARPC4 ARPC5 WAS WASF2 ARPC3 ARPC1A
+
+Figure 1: Example gene graph for Venetoclax -sensitive cell lines. Strongly interacting genes identified by our approach are in red, neighboring genes from the STRING database in grey. Solid edges indicate high-confidence interactions from STRING, dashed links are inferred by our approach. 
+
+More fundamentally, univariate explanations assess genes indepen-dently, whereas cellular response to treatment arises from coor-dinated activity among multiple genes and pathways. As a result, interactions and higher-order biological mechanisms contributing to drug response remain hidden. To address this, we build on ILLUME [46 ], a post-hoc XAI frame-work that learns faithful local approximations of black-box pre-dictors and supports multiple explanation modalities — feature attributions, decision rules, and counterfactual explanations — bet-ter reflecting the multivariate nature of biological systems. Yet its direct application to transcriptomic data is impractical, as the computational cost scales poorly with input dimensionality. We therefore introduce ILLUME+, an extension of ILLUME designed for high-dimensional data that retains its rich explanatory objects capturing more-than-univariate gene signals. Figure 1 shows an example of pairwise gene-gene interactions retrieved by ILLUME+. With no biological prior, it can partially recapitulate high-confidence interaction graphs from STRING, a re-source for functional protein networks integrating curated databases, experiments, co-expression, gene context and text mining [ 61 ]. IL-LUME+ captures long-range signaling coordination in immunity and cell shape remodeling [ 51 ], suggesting potential new gene con-nections. Moreover, four of the five missing STRING nodes result from prior feature selection rather than limitations of ILLUME+, while the remaining node was absent from the original database. 
+
+Contributions. Our contributions can be summarized as follows: 
+
+• We introduce ILLUME+, a scalable extension of ILLUME that enables the extraction of robust, structured explanations from high-dimensional data, addressing key scalability limitations of existing post-hoc XAI methods. 
+
+• We design a fully data-driven, end-to-end pipeline based on IL-LUME+ to move beyond univariate feature attributions and re-cover explanations that capture gene-gene mechanisms underly-ing drug sensitivity and resistance. 
+
+• We demonstrate how our method can confirm known biological associations and reveal gene interactions to generate testable hypotheses that can support AI-assisted biological discovery without relying on prior knowledge. We made our source code and artifacts publicly available at: https://github.com/simonepiaggesi/illume-plus/. 
+
+Roadmap. The paper is organized as follows. Section 2 reviews related work on explainability methods and drug sensitivity predic-tion. Section 3 introduces the preliminaries, and Section 4 describes our methodology. In Section 5 and Section 6 we present quantitative and qualitative results and further discuss them. 
+
+2 Related Work 
+
+Explainable AI for science. The growing emphasis on Explain-able Artificial Intelligence (XAI) reflects its emerging role as a prerequisite for scientific discovery across disciplines, including healthcare [ 13 ], material science [ 71 ], climatology [ 5], and biol-ogy [ 9]. Beyond improving model transparency, XAI has enabled mechanistic insights from complex predictive systems, particularly in biomedical settings. For instance, tools like DeepSHAP have been successfully applied to AlphaFold2 models to understand their rea-soning and detect the role of specific amino acids in different protein structures [ 57 ]. In transcriptomics and drug discovery, SHAP-based approaches have been widely employed to identify relevant genes as well as predicting synergies between drugs and between drugs and cell lines [ 10 , 26 , 30 ]. However, these methods are typically restricted to univariate explanations and, in high-dimensional set-tings, often rely on model-specific implementations tailored to tree-based predictors (e.g., TreeSHAP [38]). 
+
+Drug response prediction. Drug response prediction has evolved from linear and sparsity-inducing models [ 25 , 49 ], interpretable but poorly accurate, toward more expressive nonlinear approaches, including gradient-boosting and deep neural networks [ 11 , 32 ]. To improve interpretability, biological priors such as pathways, gene networks, or drug targets have been incorporated into the model architecture [ 10 , 55 , 62 ]. While these approaches can improve both performance and interpretability, they also shape the conclusions that can be drawn from the data, making it difficult to disentangle learned biological structure from assumptions imposed a priori, and failing to provide an unbiased view of the spectrum of associations and patterns present in the data [54]. 
+
+3 Preliminaries 
+
+This section introduces the setting needed to understand our con-tributions at the intersection of transcriptomics and XAI. 
+
+Pharmacogenomic and transcriptomic context. Effective can-cer treatment requires drugs that selectively target molecular vul-nerabilities in the patient’s cancer cells. Large-scale pharmacoge-nomic resources have become central to this effort by systematically measuring the relationship between tumor molecular profiles and drug response. We use transcriptomic data from the Cancer Cell Line Encyclopedia (CCLE) [ 4] to learn drug response from GDSC database. Drugs exert their action by interacting with specific pro-teins, which are encoded by their corresponding genes; we refer to these genes as putative targets . Their biochemical interaction with the drug and its effect define the mechanism-of-action (MoA) Explainable AI for Cancer Drug Response Prediction: Beyond Univariate Feature Attributions KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea 
+
+of the drug. However, drug response is not determined solely by the presence or activity of individual targets or MoA-related genes. Instead, it emerges from the broader cellular state. This global con-text can be approximated through the activity of gene pathways , i.e., sets of genes that act in a coordinated manner to carry out shared cellular processes. Gene enrichment analysis [ 59 ] has traditionally been used to assess whether selected gene sets show overrepresen-tation of known pathways or functional categories, thereby linking predictive signals to established cellular processes and facilitating mechanistic insights. However, this technique is limited to project-ing genes in known pathways, and it does not allow the discovery of new gene relationships. In this study, we validate our approach at three levels of drug action previously mentioned: recognition of putative targets, MoA, and global pathway-level effects. 
+
+Explainable AI. In this work, we consider tabular datasets defined as D = {( x𝑖 , 𝑦 𝑖 )} 𝑁 𝑖 =1, where x𝑖 ∈ X denotes the feature set of the 𝑖 -th instance, belonging to the feature space X ⊆ R𝑚 , and 𝑦 𝑖 ∈ Y is the label to be predicted. Data instances represent cell lines, and features correspond to expression measurements of genes 𝑔 1, . . . 𝑔 𝑚 . Given a trained predictive model 𝑓 : X → Y learned from D, we broadly define an explainer as a mapping: E :  𝑓 , x ↦ → 𝑒 (x), where 𝑒 (x)
+
+denotes a local explanatory object describing the model’s behavior in the neighborhood of x. Depending on the explainer, 𝑒 (x) may take different forms, including feature attribution vectors, local surrogate models, logical decision rules, or higher-order structures capturing dependencies among input features. Our approach to constructing 𝑒 (x) builds upon ILLUME [ 46 ], which we adopt as a starting point and extend. ILLUME is a post-hoc expla-nation framework recently introduced to extract robust, instance-level explanations for black-box predictive models. Given an in-put x ∈ R𝑚 and a trained black-box model 𝑓 , ILLUME learns a 
+
+meta-encoder that maps each input to a low-dimensional latent representation z ∈ R𝑣 while preserving the local decision structure of the black-box. Specifically, ILLUME learns an instance-specific linear map 𝑊 (x) ∈ R𝑣 ×𝑚 with a multi-layered hypernetwork [ 21 ]. This locally-linear projection transforms input instances into com-pact latent representations z = 𝑊 (x)x, where each row of 𝑊 (x)
+
+is normalized to unit ℓ2 norm. The latent space is optimized using similarity-preserving KL divergence losses, alongside regulariza-tion promoting orthogonality, decorrelation, and smoothness via a Jacobian penalty. This design makes ILLUME a meta-explainer : a global ILLUME is trained once, yet it can generate instance-specific explanations on demand by fitting an interpretable surrogate (e.g., logistic regression or a shallow decision tree) in the locally-linear latent space. Explanations are obtained by decoding surrogate deci-sions back to the input space through 𝑊 (x), yielding, e.g., feature attributions, decision rules, and counterfactual explanations. 
+
+4 Methodology 
+
+This section describes our methodology for identifying genes and gene groups that drive drug response predictions. 
+
+4.1 ILLUME+: scalable post-hoc explanations 
+
+As discussed in Sections 1 and 3, while related work hinges upon SHAP for extracting explanations, our work identifies the ILLUME meta-explainer [ 46 ] as a more promising method to extract ex-planation objects that are not limited to (unstable) univariate fea-ture attributions. However, like SHAP-based approaches, ILLUME 
+
+faces practical challenges when applied to complex domains char-acterized by high-dimensional tabular data, such as drug response prediction. To handle the dimensionality typical of transcriptomic data while preserving the key advantages of ILLUME and remaining fully model-agnostic with respect to the black-box predictive model, we introduce ILLUME+, a scalable extension of ILLUME designed to operate effectively on tabular datasets with large feature spaces. As depicted in Figure 2 ( a), ILLUME+ preserves the same objective and explanation semantics as ILLUME while substantially reducing computational cost by targeting the two main scalability bottle-necks: the prohibitive amount of parameters of the hypernetwork and the Jacobian penalty computation. To reduce the parameters count of ILLUME , ILLUME+ employs a simpler 1-layer hypernet-work [ 21 ] whose weights are compressed via low-rank factorization. In particular, ILLUME+ replaces the full hypernetwork used to pre-dict 𝑊 (x) ∈ R𝑣 ×𝑚 with a 1-layer low-rank decomposition of rank 
+
+𝑟 ≪ 𝑚 . Rather than optimizing the full (𝑣 ×𝑚 ) × 𝑚 parameters of the 1-layer architecture, for each latent component 𝑙 ∈ { 1, . . . , 𝑣 }, we train low-rank weights {𝑈 𝑙 ∈ R𝑟 ×𝑚 }𝑙 =1...𝑣 , 𝐵 ∈ R𝑟 ×𝑚 and b ∈ R𝑚 
+
+such that 
+
+𝑢 𝑙 (x) = 𝑈 𝑙 x ∈ R𝑟 , 𝑤 𝑙 (x) = 𝐵 ⊤ 𝑢 𝑙 (x) + b ∈ R𝑚 ,
+
+and stack the resulting 𝑤 𝑙 (x) to form 𝑊 (x). This parameteriza-tion dramatically reduces the order of the trainable parameters to 
+
+(𝑣 × 𝑚 ) × 𝑟 , allowing scaling to transcriptomic settings that involve thousands of genes. Secondly, to tackle the computational cost of the Jacobian regularizer while retaining the robustness it guaran-tees, ILLUME+ replaces the full Jacobian penalty with an efficient stochastic estimator based on Jacobian–vector products [ 22 ]. The regularizer is applied to the residual z − 𝑊 (x)x, enforcing local lin-earity without incurring the cost of explicit Jacobian construction. All other components of ILLUME remain unchanged in ILLUME+, including similarity-preserving losses, orthogonality and decorre-lation regularization, surrogate training, and rule decoding. As a result, ILLUME+ does not compromise the performance of 
+
+ILLUME , enabling scalable, stable, and biologically interpretable explanations for high-dimensional transcriptomic models. 
+
+4.2 End-to-end XAI pipeline 
+
+We design a multi-stage framework that combines data-driven pre-diction with post-hoc explainability to characterize the molecular determinants of drug response. Figure 2 ( b) summarizes the pipeline. First, we preprocess continuous drug response data to define a clas-sification task for each drug by discretizing the values into three ordered bins, corresponding to sensitive , intermediate , and resistant 
+
+cell lines. Then, we perform an all-relevant feature selection [ 34 ] to identify an informative subset of genes for each drug without im-posing arbitrary thresholds and train a gradient-boosting predictive model [ 29 ] on the selected features. Finally, we resort to ILLUME+ to interpret the obtained predictions and extract biological insights. 
+
+Stage 0: Target discretization. Drug response is commonly mea-sured by the half-maximal inhibitory concentration ( 𝐼𝐶 50 ), i.e., the KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Martino Ciaperoni, Margherita Lalli, Simone Piaggesi, et al.              
+
+> ÛILLUME
+> 1-layer low-rank hypernetwork Stochastic Jacobian penalty
+> ÛILLUME+
+> Label preprocessing
+> ZFeature selection
+> ¢ML classifier ÛILLUME+ úDecision rules
+> Gene importance
+> ¨Gene-gene interactions
+> Stage 0-1: Data preparation
+> Stage 2: Predictive modeling Stage 3: Meta-explainer training
+> Insights extraction
+
+(a) From ILLUME to ILLUME+ (b) Pipeline Overview 
+
+Figure 2: (a) ILLUME+ extends ILLUME through a 1-layer low-rank hypernetwork and a stochastic Jacobian penalty, improving scalability. (b) Schematic overview of our pipeline. Stages 0-1 preprocess data to feed to the black-box predictive model (Stage 2), which outputs predictions that are fed to ILLUME+ (Stage 3). ILLUME+ produces different explanatory objects: gene attributions and decision rules, from which gene–gene relevance are extracted. 
+
+drug concentration required to inhibit a biological process by 50%. While 𝐼𝐶 50 is traditionally modeled as a continuous outcome us-ing regression [ 10 , 25 ], we recast drug response prediction as a classification task to obtain more interpretable explanations. In par-ticular, classification enables the extraction of simple decision rules (e.g., “if gene A expression exceeds 𝑐 and gene B expression exceeds 𝑑 ,then the model predicts sensitivity” ), whereas regression explana-tions are typically tied to specific numerical predictions rather than broad regimes and are therefore less intuitive. From a biomedical perspective, this discretization is not restrictive, as the primary goal is often to distinguish sensitive from resistant cell lines rather than to estimate exact response values and it can, in fact, reduce sensitivity to experimental noise in 𝐼𝐶 50 measurements. Thus, for each drug 𝑑 , we discretize response values into 𝑦 (𝑑 ) 
+
+> 𝑖
+
+∈ { 1, 2, 3} us-ing tertile-based binning, yielding three ordered classes: sensitive ,
+
+intermediate , and resistant . Class boundaries are computed exclu-sively on the training data and then applied to evaluation data to prevent information leakage. By construction, this procedure pro-duces approximately balanced classes, promoting stable training and more reliable evaluation across response classes. Alternative discretization strategies such as equal-width or clustering-based binning produce highly imbalanced class distributions, resulting in less stable models and degraded explanations. Moreover, compared to alternative quantile-based splits, we observed that tertile-based binning overall provides the best balance between performance and stability (see Appendix C for additional details). The procedure yields the drug-specific classification datasets D (𝑑 ) =
+
+{( x(𝑑 ) 
+
+> 𝑖
+
+, 𝑦 (𝑑 ) 
+
+> 𝑖
+
+)} 𝑁 𝑑 
+
+> 𝑖 =1
+
+, where x(𝑑 ) 
+
+> 𝑖
+
+∈ R𝑝 𝑑 denotes the gene expression profile of the 𝑖 -th cancer cell line and 𝑦 (𝑑 ) 
+
+> 𝑖
+
+its sensitivity class. 
+
+Stage 1: Feature selection. Transcriptomic datasets contain mea-surements for approximately 𝑝 𝑑 ≈ 18 ,000 genes, many of which are irrelevant for drug response. Considering all such genes can degrade predictive performance and reduce the stability and relia-bility of model explanations. Thus, feature selection is crucial. To limit user-injected bias, we adopt a fully data-driven strategy that automatically identifies features carrying predictive signal without predefining the number of selected genes or imposing user-defined thresholds. Specifically, we leverage Boruta [ 34 ], a feature selec-tion algorithm designed to identify all features that are relevant to the prediction task. Unlike minimal-optimal methods that seek the smallest predictive subset, Boruta retains all features that pro-vide useful information for the task, which is a desirable property in transcriptomic settings, where drug response may arise from partially redundant or correlated pathways. 
+
+Stage 2: Black-box predictor training. Using the drug-specific gene set selected by Boruta and the corresponding response labels, we train a black-box classifier aimed at capturing complex nonlin-ear relationships between gene expression of cancer cell lines and drug sensitivity. More formally, after preprocessing, the dataset is ˜D (𝑑 ) = {( ˜x(𝑑 ) 
+
+> 𝑖
+
+, 𝑦 (𝑑 ) 
+
+> 𝑖
+
+)} 𝑁 𝑑 
+
+> 𝑖 =1
+
+, where ˜x(𝑑 ) 
+
+> 𝑖
+
+∈ R𝑚 𝑑 has a reduced set of features ( 𝑚 𝑑 < 𝑝 𝑑 ) and 𝑦 (𝑑 ) 
+
+> 𝑖
+
+∈ { 1, 2, 3} denotes the class label. Given these inputs, for each drug 𝑑 , we learn a three-class pre-dictive model 𝑓 (𝑑 ) from ˜D (𝑑 ) . For each class 𝑐 , the model learns scoring functions 𝑓 (𝑑 ) 
+
+> 𝑐
+
+: R𝑚 𝑑 → R, which assign a real-valued score to each class given an input ˜x. At inference time, predictions for ˜x are obtained by selecting the class with the highest score: 
+
+ˆ𝑦 (𝑑 ) ( ˜x) = arg max 𝑐 ∈ { 1,2,3} 𝑓 (𝑑 ) 
+
+> 𝑐
+
+( ˜x).
+
+We instantiate 𝑓 (𝑑 ) as a gradient-boosting ensemble of decision trees [ 29 ], selected for its ability to capture nonlinear relationships and feature interactions, but also for practical considerations. Tree ensembles allow the use of TreeSHAP [ 38 ], the only SHAP imple-mentation that scales to feature spaces with thousands of genes, allowing a comparison of our approach with a widely adopted XAI baseline. 
+
+Stage 3: ILLUME+ meta-explainer training. This stage aims to characterize the predictive behavior of the black-box model through structured, biologically interpretable explanations. Given a trained model 𝑓 (𝑑 ) learned from ˜D (𝑑 ) , ILLUME+ learns a drug-specific explainer E (𝑑 ) :  𝑓 (𝑑 ) , ˜x ↦ → 𝑒 (𝑑 ) ( ˜x), where ˜x ∈ R𝑚 𝑑 
+
+denotes the (filtered) transcriptomic profile and 𝑒 (𝑑 ) ( ˜x) is a local explanatory object that describes the decision of the model. Once trained, ILLUME+ can provide multiple complementary forms of explanations, including feature attributions and decision rules. The three stages of the pipeline deliver locally faithful surrogate models that approximate the behavior of the black-box predictor in the neighborhood of individual samples. These surrogates are then analyzed to derive actionable insights and reveal the biological mechanisms driving the model’s predictions. Explainable AI for Cancer Drug Response Prediction: Beyond Univariate Feature Attributions KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea 
+
+4.3 Univariate explanations: gene-level feature attribution 
+
+Gene-specific importance scores are derived from the parameters of the surrogate model learned in ILLUME+ latent space, which provides a locally interpretable approximation of the black-box predictor. In this work, the surrogate is instantiated as a linear logistic regression classifier or as a decision tree. In the case of the logistic regression classifier, the relevance 𝜓 𝑖 of gene 𝑔 𝑖 can be quantified directly by combining model coefficients with the local linear mappings 𝜓 𝑖 (x) = Í𝑣 𝑙 =1 𝛽 𝑙 𝑊 𝑙𝑖 (x), where the coefficients 
+
+𝛽 𝑙 capture feature attribution in the latent space surrogate and the weights 𝑊 𝑙𝑖 (x) project it back onto the original gene features. This formulation yields a transparent estimate of the influence of each gene on the predicted drug response, allowing us to identify genes that systematically promote sensitivity or resistance across samples. 
+
+Evaluation. To assess biological grounding and technical quality of the feature attributions, we use the following standard metrics: 
+
+• Putative target recovery. We evaluate the capability to recover the putative target of the drugs in the induced feature ranking through the binary normalized discounted cumulative gain [ 27 ]: 
+
+NDCG@ 𝑘 =
+
+> 𝑘
+
+∑︁ 
+
+> 𝑗 =1
+
+rel 𝑔 𝑗 
+
+log 2 ( 𝑗 + 1)
+
+"min (𝑘,𝜌 )∑︁ 
+
+> 𝑗 =1
+
+1log 2 ( 𝑗 + 1)
+
+# −1
+
+,
+
+where 𝑔 𝑗 is the gene ranked at position 𝑗 , 𝜌 is the number of putative genes and rel 𝑔 𝑗 ∈ { 0, 1}.
+
+• Gene set enrichment. Gene enrichment analysis [ 59 ] supports biological interpretation by assessing whether selected gene sets show overrepresentation of known pathways. In particular, the unweighted gene enrichment score of pathway S is defined by 
+
+ES S = max  
+
+> 1≤ℓ≤𝑚
+> ℓ
+
+∑︁ 
+
+> 𝑗 =1
+
+ ⊮[𝑔 𝑗 ∈ S] |S| − ⊮[𝑔 𝑗 ∉ S] 
+
+𝑚 − |S| 
+
+
+
+,
+
+where 𝑚 is the number of ranked genes. 
+
+• Explanation robustness. We evaluate the robustness of feature attribution as the minimum cosine similarity between importance vectors within a local neighborhood of a given instance x𝑖 [46]: 
+
+Robu 𝑘 (𝑒 (x𝑖 )) = min 𝑗 ∈ N =   
+
+> 𝑘 (𝑖 )
+
+cos  𝑒 (x𝑖 ), 𝑒 (x𝑗 ),
+
+where N = 
+
+> 𝐾
+
+(𝑖 ) denotes the set of 𝑘 nearest neighbors of x𝑖 with the same predicted label. 
+
+4.4 Beyond univariate explanations: from rules to gene-gene interactions 
+
+To derive higher-order, human-interpretable explanations, we ex-tract for each cell line factual decision rules using tree-based sur-rogate models within ILLUME+. Each rule corresponds to a root-to-leaf path in a decision tree trained to locally approximate the black-box behavior in the latent space [ 46 ], and takes the form of a conjunction of threshold conditions on gene expression val-ues, 𝑥 𝑗 ∈ [ 𝑥 (𝑙𝑜𝑤 ) 
+
+> 𝑗
+
+, 𝑥 (𝑢𝑝 ) 
+
+> 𝑗
+
+], where bounds are defined over the do-main of 𝑥 𝑗 , extended with ±∞ [ 20 ]. For example, a rule may be 
+
+𝑥 𝑖 > 0.5 ∧ 𝑥 𝑗 < 1 ⇒ Sensitive . By combining multiple constraints, this representation naturally captures joint expression patterns and potential interaction effects driving the surrogate’s predictions. To systematically identify gene interactions within each sensitiv-ity class, we analyze gene co-occurrence across the extracted rule set using the lift measure [ 64 ]. Let 𝑃 (𝑔 𝑖 ) and 𝑃 (𝑔 𝑗 ) denote the mar-ginal frequencies of genes 𝑔 𝑖 and 𝑔 𝑗 across rules, and 𝑃 (𝑔 𝑖 , 𝑔 𝑗 ) their joint frequency of co-occurrence; lift is then defined as: lift (𝑔 𝑖 , 𝑔 𝑗 ) =         
+
+> 𝑃 (𝑔 𝑖 ,𝑔 𝑗 )
+> 𝑃 (𝑔 𝑖 )𝑃 (𝑔 𝑗 )
+
+. Values exceeding 1 indicate that the two genes co-occur more often than expected under independence, suggesting that their joint presence carries complementary predictive information not reducible to either gene alone. Ranking gene pairs by lift en-ables efficient identification of the most relevant interactions among the O( 𝑚 2) candidates. Importantly, these interactions are model-derived explanatory signals rather than ground-truth biological associations. Our framework deliberately refrains from imposing a priori biological assumptions precisely to prevent biasing the discovery process. Biological validity is instead assessed a posteri-ori: extracted interactions are treated as testable hypotheses to be evaluated against independent experimental evidence. To characterize the global structure induced by the recovered pairwise interactions among genes, we construct the gene-gene interaction graph G = (𝑉 , 𝐸, 𝑤 ), where nodes correspond to genes, and each edge (𝑔 𝑖 , 𝑔 𝑗 ) ∈ 𝐸 is assigned a weight 𝑤 (𝑔 𝑖 , 𝑔 𝑗 ) equal to the lift of the corresponding gene pair. This graph-based representation naturally supports a range of informative analyses. 
+
+Evaluation. We use multiple approaches to evaluate the technical quality and biological grounding of gene–gene explanations. 
+
+• Pathway overlap (PO). To test whether the pairs of genes with highest lift capture established biological mechanisms, we quan-tify their functional proximity through the overlap of the associ-ated pathways. Formally, let Π denote a collection of annotated pathways, each represented as a set of genes. For a gene 𝑔 , de-fine then the aggregated pathway gene set Γ(𝑔 ) = ℎ | ∃ 𝜋 ∈
+
+Π such that 𝑔 ∈ 𝜋, ℎ ∈ 𝜋 , i.e., the set of all genes that belong to at least one pathway containing 𝑔 . For a pair of genes (𝑔 𝑖 , 𝑔 𝑗 ),we define the pathway overlap as the Jaccard similarity between their aggregated pathway gene sets PO (𝑔 𝑖 , 𝑔 𝑗 ) = |Γ (𝑔 𝑖 )∩ Γ (𝑔 𝑗 ) | |Γ (𝑔 𝑖 )∪ Γ (𝑔 𝑗 ) | .
+
+• Putative target centrality. In the gene-gene interaction graph, we evaluate whether drug putative targets hold a central position in the graph using different node centrality measures [17]. 
+
+• Pathway conductance. In the gene-gene interaction graph, we also assess whether broader biologically connected sets of genes form cohesive substructures within this graph by measuring the weighted conductance. Formally, given the gene set S ⊆ 𝑉 and its complement ¯S = 𝑉 \ S , we evaluate the conductance score 
+
+𝜙 (S) = 𝑤 (𝜕 S) 
+
+> min
+
+ vol ( S) , vol ( ¯S) 
+
+ , where 𝑤 (𝜕 S) = Í𝑔 𝑖 ∈ S ,𝑔 𝑗 ∉S 𝑤 (𝑔 𝑖 , 𝑔 𝑗 ),
+
+and vol (S) = Í𝑔 𝑖 ∈ S ,𝑔 𝑗 ∈𝑉 𝑤 (𝑔 𝑖 , 𝑔 𝑗 ). Low conductance indicates that the gene set is more tightly connected internally than exter-nally, reflecting a cohesive substructure in the interaction graph. 
+
+5 Results 
+
+In the following, we focus on the evaluation and interpretation of explanations for the sensitive and resistant classes, whose biological signatures are more clearly defined than those of the intermediate class. Moreover, we analyze the scalability of the proposed ILLUME+ against the baseline ILLUME . To ensure biological validity, we KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Martino Ciaperoni, Margherita Lalli, Simone Piaggesi, et al. 15  20  25  30        
+
+> Position k
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> NDCG@k
+> Sensitive
+> ILLUME+ SHAP LIME 15 20 25 30
+> Position k
+> 0.000
+> 0.015
+> 0.030
+> 0.045
+> 0.060
+> NDCG@k
+> Resistant
+> ILLUME+ SHAP LIME
+
+Figure 3: Putative gene recovery (measured via NDCG@k) across different values of 𝑘 for sensitive and resistant classes. 
+
+restrict the analysis to drugs whose annotated putative targets are recovered by the feature-selection process, yielding 20 datasets with transcriptomic profiles for around 500 cell lines each. Descriptions of data sources are provided in Appendix A, while preprocessing procedures used for model training and validation are detailed in Appendix B. In addition, Appendix C reports an ablation study of the proposed XAI pipeline, assessing the effects of substituting its main components with alternative methods. Furthermore, Appendix E-F report supplemental experiments on the evaluation of bivariate explanations. Finally, Appendix G demonstrates the applicability of our approach across additional drug datasets. 
+
+5.1 Single-gene attribution analysis 
+
+As discussed in Section 1, prior XAI studies for drug response pre-diction mainly rely on univariate attribution methods such as SHAP. Therefore, we start by comparing the biological grounding as well as internal robustness of univariate feature attributions from IL-LUME+ with those from SHAP, and include as additional baseline LIME [ 50 ], an alternative popular post-hoc explainer. Figure 3 re-ports NDCG@ 𝑘 values across drugs as a function of 𝑘 , indicating that ILLUME+ more effectively ranks putative targets among the top genes. We further evaluate biological relevance through enrich-ment of MoA-related pathways derived from Reactome [ 41 ], i.e., all pathways including the drug or its putative targets. As shown in Fig-ure 4, which aggregates scores across drugs and pathways, ILLUME+ prioritizes MoA-related genes more effectively than SHAP (paired Wilcoxon signed-rank test; 𝑝 -value = 0.046 ) and yields results com-parable to LIME ( 𝑝 -value > 0.1). To illustrate the models’ internal consistency, we report the values of the cosine-similarity-based robustness metric as the number of neighbors varies in Figure 5, demonstrating that ILLUME+ yields more robust explanations than both SHAP and LIME across the entire range of neighborhood sizes. Overall, ILLUME+ offers the best trade-off between biological rele-vance and robustness: LIME attains similar enrichment but lower robustness and target recovery, while SHAP performs significantly worse across all metrics. To provide a more concrete illustration, in Figure 6 we illustrate the top-20 ranked genes for three representa-tive drugs, with each gene annotated by its associated pathway. 
+
+5.2 Rules and gene-gene interaction analysis 
+
+In this section, we report results of our investigation of the interac-tions between genes based on the rules extracted by ILLUME+. 
+
+Visualization of decision rules. Interpretable decision rules pro-vide an intuitive description of how transcriptomic patterns drive ILLUME+  SHAP  LIME   
+
+> 0.00
+> 0.15
+> 0.30
+> 0.45
+> 0.60
+> Gene enrichment score
+> Sensitive ILLUME+ SHAP LIME
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Gene enrichment score
+> Resistant
+
+Figure 4: Gene enrichment scores across pathways and drugs for sensitive and resistant classes. 5 10  15  20        
+
+> Number of neighbors
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Robustness
+> Sensitive
+> ILLUME+ SHAP LIME 510 15 20
+> Number of neighbors
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Robustness
+> Resistant
+> ILLUME+ SHAP LIME
+
+Figure 5: Robustness (measured via cosine similarity) across different values of 𝑘 for sensitive and resistant classes. 
+
+the predicted cancer drug response, combining genes from estab-lished biological pathways with additional data-driven associations that extend beyond existing knowledge. Importantly, for extracted rules to be actionable and cognitively interpretable, they must re-main sufficiently concise. To this end, ILLUME+ explicitly enforces sparsity during training by constraining each latent feature to be a linear combination of at most 2 input attributes (gene expres-sions). This design naturally yields concise and interpretable rules. Figure 7 illustrates a representative rule containing broadly prog-nostic genes (e.g., DDIT4 [47 ], E2F1 [ 35 ], KLK7 [ 31 ]), tissue-specific markers such as P4HTM [ 16 ], and genes functionally linked to MoA-related pathways (e.g., DDIT4 , E2F1 , ESRRG ). The distribu-tion of rule lengths and more example rules are reported in the Appendix D. In addition, ILLUME+ extracts concise counterfactual rules determining which changes in gene expressions would modify the predicted class. The recurrence of E2F1 across both factual and counterfactual rules suggests a context-dependent role, depending on the expression state of accompanying genes. To the best of our knowledge, the combined association with drug response of multi-ple retrieved genes has not been previously reported, pointing to testable biological hypotheses. Inspection of other extracted rules revealed the recurrent involvement of genes with documented roles in cancer prognosis. For instance, for the drug Erlotinib , a receptor tyrosine kinase inhibitor (RTKI) targeting the Epidermal Growth Factor Receptor (EGFR), we found the following rule: 
+
+CNTNAP1 > −0.891 ∧ EVL ≤ − 1.395 ∧ FAM214B ≤ 0.212 ∧
+
+IL13RA1 ≤ 0.976 ∧ IRF6 > 0.390 ∧ PSEN2 > 0.133 ⇒ Resistant 
+
+High levels of PSEN2, a core component of the 𝛾 -secretase com-plex required for Notch activation, is consistent with established Notch-mediated Erlotinib resistance [ 43 ]. Similarly, reduced EVL levels have been associated to colorectal cancer [ 69 ] and increased metastasis in breast cancer [ 45 ]. Other contributions are more nu-anced: IRF6 [ 7, 44 ] and IL13RA1 [ 6, 56 ] have tumor-dependent roles. Other genes have not been thoroughly investigated in cancer, but Explainable AI for Cancer Drug Response Prediction: Beyond Univariate Feature Attributions KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea POTEB2          
+
+> OR10G2
+> IFNA2
+> ADAD1
+> FSHB
+> TRIM60
+> DEFB104A
+> OR51G2
+> OR10R2
+> ARGFX
+> OR5AK2
+> LELP1
+> SMIM23
+> IL12B
+> LCE1A
+> ODF1
+> OR4N4
+> PSMB11
+> LCE6A
+> ARL5C
+> 0.000
+> 0.005
+> 0.010
+> 0.015
+> 0.020
+> 0.025
+> 0.030
+> Average importance  *
+> *
+> **
+> Venetoclax Resistant
+> ZNF705D
+> DEFB114
+> EPHA1
+> CSN2
+> A2ML1
+> OR10G2
+> LAX1
+> PRR32
+> KRTAP24-1
+> ETV5
+> TMPRSS13
+> TLR10
+> MYL1
+> LYVE1
+> CERS3
+> AGTR2
+> GALR1
+> FAM83B
+> CD19
+> GRHL2
+> 0.000
+> 0.002
+> 0.004
+> 0.006
+> 0.008
+> 0.010
+> Average importance
+> *
+> **
+> ****
+> Gefitinib Resistant
+> USP17L19
+> IFNA2
+> IFNA14
+> MRGPRG
+> IL9
+> MS4A5
+> PSKH2
+> KRTAP17-1
+> C7orf33
+> CLRN2
+> FSHB
+> STATH
+> CSHL1
+> KRT82
+> IFNA7
+> CA6
+> NAT8
+> OR2Z1
+> SLC22A9
+> ISG20L2
+> 0.000
+> 0.005
+> 0.010
+> 0.015
+> 0.020
+> Average importance  **
+> *
+> *
+> Navitoclax Resistant
+> Amyloid fiber formation
+> Cytokine Signaling in Immune system
+> Innate Immune System
+> Keratinization
+> Metabolism of carbohydrates
+> Metabolism of lipids
+> Olfactory Signaling Pathway
+> Post-translational protein modification
+> RNA Polymerase II Transcription
+> Reversible hydration of carbon dioxide
+> Signaling by GPCR
+> Signaling by Receptor Tyrosine Kinases
+> Striated Muscle Contraction
+> rRNA processing
+> Multiple pathways
+
+Figure 6: Pathway-colored top-20 gene importance profiles for three example drugs for the resistant class. Genes associated with known mechanisms of action are marked with a star sign. 
+
+IF DDIT4 ≤ − 0.672 ∧ E2F1 > −0.008 ∧ ESRRG > −0.223 
+
+∧ KLK7 ≤ 2.568 ∧ KRT27 > −0.205 ∧ P4HTM > −0.277 ⇒ Resistant 
+
+IF CLCA1 ≤ 0.099 ∧ SHD ≤ − 0.086 ∧ CXCL13 ≤ 1.742 
+
+∧ G6PD ≤ − 0.857 ⇒ not Resistant 
+
+OR IF GABRB1 ≤ − 0.027 ∧ E2F1 > 0.294 ⇒ not Resistant 
+
+OR IF SHD ≤ 0.807 ∧ MMP26 > 1.043 ⇒ not Resistant 
+
+Figure 7: Examples of factual (top) and counterfactual (bot-tom) rules for Alisertib . Genes in red belong to the RNA Polymerase II Transcription pathway. 
+
+could be potential biomarkers: among them, CTNAP1 has been sug-gested as a clear cell renal cell carcinoma marker in an independent bioinformatic analysis [36]. While counterfactual rules provide complementary insights into transcriptomic patterns associated with drug sensitivity, we leave their systematic characterization to a future work and focus, in this paper, on the analysis of factual rules. 
+
+Gene-gene interaction ranking analysis. To assess the biologi-cal relevance of the interaction ranking, we computed the pathway overlap (PO) of top-ranked gene pairs and compared it against that of the bottom 1,000 pairs. Figure 8 reports the distribution of PO values across drugs, revealing a clear separation between highly ranked and low-ranked interactions. Because PO values are broadly dispersed and include several extreme observations, they are omitted from the figure for readability. Our approach yields significantly higher pathway overlap for top-ranked than for bottom-ranked gene pairs for all drugs (Mann–Whitney U test, 
+
+𝑝 -value < 0.05 ). In contrast, the same analysis reaches significance for only 40% of drugs when rankings are obtained with SHAP’s in-teraction values [ 38 ], suggesting weaker biological coherence of its pairwise rankings (see Appendix E for additional details). Figure 9 illustrates, for an exemplifying drug, the PO scores of the 20 pairs with largest pathway overlap, among the 50 pairs with largest lift. Here, we see that gene pairs with large PO and large importance value point to different cancer-related pathways in sensitive and resistant cells. In particular, interactions in Venetoclax -sensitive cells involve genes in inflammatory response and neutrophil chemo-taxis, pointing to exposure of cancer cells to the immune system (which increases susceptibility). On the other hand, important pairs in resistant cells are involved in angiogenesis and in cell adhesion, pathways that support tumor viability and invasion. In Appendix E, we complement the main analysis with further evidence consider-ing additional drugs as well as alternative measures of relevance for pairwise rankings. Overall, top-ranked gene pairs identified by our method re-cover well-established cancer-related pathways, despite the absence of any explicit knowledge-grounded supervision during training, demonstrating that biologically meaningful signals emerge as a by-product of the model’s predictive reasoning. 
+
+Gene-gene interaction graph analysis. Given the gene–gene interaction graph G, we investigate the extent to which putative drug targets occupy systematically central positions within the constructed network. Formally, we test whether target genes ex-hibit higher centrality than expected under an appropriate null model. Therefore we compute complementary weighted centrality measures for all nodes: (i) strength 𝑠 (𝑢 ) = Í𝑣 𝑤 (𝑢, 𝑣 ), (ii) PageR-ank , and (iii) path-based metrics ( closeness and betweenness ), where stronger interactions correspond to shorter paths [ 17 ]. Statistical significance is assessed via one-sided empirical tests tailored to the hypothesis that target genes may be more central than expected un-der a null model. Because centrality measures are often correlated with node strength, we adopt a strength-matched null model: genes are first grouped into quantile bins based on their strength, and 
+
+1000 null genes are then generated by uniformly sampling from the same bin as the target gene. We apply this strength-matched null to closeness, betweenness and PageRank centrality. For strength itself, we instead sample nodes uniformly at random. In all cases, the empirical right-tailed 𝑝 -value is computed as the proportion of null genes whose centrality is greater than or equal to that of the target gene. Results in Figure 10 indicate that various putative targets occupy prominent network positions according to their role. For instance, targets involved in chromatin remodeling and global tran-scriptional regulation (e.g., BRD4 , DOT1L ) display high strength in sensitive lines, consistent with hub-like behavior, whereas their KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Martino Ciaperoni, Margherita Lalli, Simone Piaggesi, et al. ABT737 
+
+> AZD3759
+> Alisertib
+> BMS-536924
+> BMS-754807
+> Daporinad
+> EPZ5676
+> Erlotinib
+> Gefitinib
+> Ibrutinib
+> LMB_AB3
+> Linsitinib
+> NVP-ADW742
+> Navitoclax
+> Nutlin-3a (-)
+> RVX-208
+> SGC0946
+> Sepan. bromide
+> Venetoclax
+> WIKI4
+> Drug
+> 0.00
+> 0.05
+> 0.10
+> Pathway overlap  Sensitive
+> Top 1000
+> Bottom 1000 ABT737
+> AZD3759
+> Alisertib
+> BMS-536924
+> BMS-754807
+> Daporinad
+> EPZ5676
+> Erlotinib
+> Gefitinib
+> Ibrutinib
+> LMB_AB3
+> Linsitinib
+> NVP-ADW742
+> Navitoclax
+> Nutlin-3a (-)
+> RVX-208
+> SGC0946
+> Sepan. bromide
+> Venetoclax
+> WIKI4
+> Drug
+> 0.00
+> 0.05
+> 0.10
+> Pathway overlap  Resistant
+> Top 1000
+> Bottom 1000
+
+Figure 8: Distribution of pathway overlap across drugs for the top (left box plot) and bottom (right box plot) 1,000 ranked pairs. CEACAM3-LYZ 
+
+> ARPC1A-TUBA4A
+> ENAH-YAP1
+> EPGN-IRAK2
+> TAF11-TNFAIP6
+> GLS2-ORAI2
+> LYZ-POLE3
+> CEACAM3-POLE3
+> ACSM6-RPS25
+> CYP11B1-MMP3
+> LTB4R-MED14
+> B4GALNT1-LAT2
+> DPPA4-UBE2C
+> CXCL11-SETD1B
+> PLXNA3-SLC25A11
+> KRTAP11-1-NLRP4
+> CXCR1-LELP1
+> CALD1-CLEC4M
+> GNG8-LCE3D
+> SETD1B-SMIM23
+> Gene pair
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Pathway overlap fraction  Drug: Venetoclax | Sensitive ATP8B4-LAT2
+> GPR39-ITGA5
+> CREG1-TJP1
+> DSG1-LCE3A
+> LTBP1-ZNF583
+> CDC42BPA-LTBP1
+> CDC42BPA-ZNF583
+> CYP11B1-DSG1
+> ATP2B4-OR9Q1
+> EMILIN1-SPRR2G
+> SLC39A2-TPGS1
+> CNGB1-PIWIL4
+> PES1-TRIM37
+> OR4N4-TGIF2
+> GXYLT1-TSPY3
+> ANHX-CXCR1
+> CCDC141-RTP3
+> KRTAP11-1-MOB3B
+> CDY2A-IL6
+> C3orf38-IL6
+> Gene pair
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Pathway overlap fraction  Drug: Venetoclax | Resistant
+
+Figure 9: Pathway overlap for the top-20 gene pairs in Vene-toclax sensitive (top) and resistant (bottom) classes. 
+
+reduced strength in resistant lines suggests extensive chromatin deregulation, a hallmark of aggressive cancers. Targets in signalling pathways such as BCL2 and EGFR show elevated betweenness for drugs with a single target ( Venetoclax , Erlotinib ), consistent with them being a key information transfer node; this applies to sensitive but not resistant lines, which may have bypassed the signalling cascade. We next examine whether biologically related gene sets form cohesive substructures within the interaction graph. To this end, we evaluate the conductance of genes from MoA-related pathways, which quantifies how much genes involved in the drug mechanism of action preferentially interact with one another rather than with the rest of the graph. Because conductance depends on node de-gree, we assess significance using a degree-adjusted null model. In 
+
+Table 1: Average peak GPU memory usage (GB), during meta-explainer training by number of input features. 
+
+Method 100 features 250 features 500 features ILLUME 0.88 2.22 4.50 ILLUME+ 0.39 0.56 1.14 No low-rank 0.40 0.62 1.37 No Jacobian approx. 1.05 2.18 4.32 practice, genes are binned by strength in 30 bins, and 1000 degree-matched gene sets are generated by sampling replacements from the same strength bins, preserving pathway size and approximate total strength. For each pathway with at least five genes present in G, we compute a one-sided empirical 𝑝 -value by comparing the observed pathway score to a null distribution obtained from degree-matched random gene sets. The 𝑝 -value is defined as the proportion of random sets whose score is less than or equal to that observed for the pathway. Across drugs and pathways, for the sensitive (resis-tant) class, approximately 9.5% (14% ) of pathways exhibit empirical p-value lower than 0.1 and around 8% (6.5% ) lower than 0.05 . Exam-ples are shown in Figure 11. Strong interactions are not expected to be confined to annotated pathways, since cross-pathway edges may arise from shared upstream regulation or signaling crosstalk. In fact, this framework enables the identification of previously un-characterized cohesive subgraphs, generating testable biological hypotheses. In Appendix F, we also provide interaction analyses based on different definitions of graph structure. 
+
+5.3 Scalability analysis 
+
+Considering the Gefitinib , Navitoclax and Venetoclax drugs, we evaluate the scalability of ILLUME+ and quantify the contribu-tion of its two optimized components: low-rank parameterization and stochastic approximation of the Jacobian regularizer. To as-sess their impact, Table 1 reports the average peak GPU memory required during meta-explainer training as the number of input features increases. Explainable AI for Cancer Drug Response Prediction: Beyond Univariate Feature Attributions KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Gefi tinib (EGFR)                                                      
+
+> Navitoclax(BCL2)
+> Nutlin-3a(-)(MDM2)
+> BM S-536 924 (IGF1R)
+> Er lotinib(EGFR)
+> Daporinad(NAMPT)
+> Linsitinib(IGF 1R )
+> EPZ 5676 (DOT1L)
+> RVX-20 8(BR D4)
+> LMB_ AB3 (PPP1R 15 B)
+> Ibrutinib(BTK)
+> Venetoclax(BCL2)
+> AZD3759(EG FR)
+> NVP-ADW742 (IGF 1R )
+> WIKI4(TNKS2)
+> Sepan.bromide(BI RC5)
+> BM S-754 807 (IGF1R)
+> SGC0946(DOT1L)
+> Drug (target)
+> strength
+> betweenness
+> closeness
+> pagerank
+> Centrality metric  ●**
+> **
+> ●●
+> ●*●
+> Sensitive
+> 0.25
+> 0.50
+> 0.75
+> P(C null  > C obs  )Gefit inib(EGFR)
+> Navitocl ax(BCL2)
+> Nutlin-3a(-)(MDM2)
+> BM S-536924 (IGF 1R)
+> Erl otinib(EGFR)
+> Daporinad(NAMPT)
+> Linsitinib(IGF1R )
+> EP Z5676 (DOT1L)
+> RVX-20 8(BR D4)
+> LMB_ AB3 (PPP1R 15 B)
+> Ibrut inib(BTK)
+> Venet oclax(BCL2)
+> AZD3 759(EG FR)
+> NVP-ADW742 (IGF1R)
+> WIKI4(TNKS2)
+> Sepan.bromide(BI RC5)
+> BM S-754807 (IGF 1R)
+> SGC0946(DOT1L)
+> Drug (target)
+> strength
+> betweenness
+> closeness
+> pagerank
+> Centrality metric  *●
+> ●●**●
+> ●●●
+> ●●●
+> Resistant
+> 0.25
+> 0.50
+> 0.75
+> P(C null  > C  obs  )
+
+Figure 10: Empirical p-values for centrality measures of the putative target. A dot marks results significant at 10% level, while an asterisk marks results significant at the 5% level. 0.90 0.92 0.94 0.96 0.98 1.00         
+
+> Conductance Á
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Null density
+> P(Ánull < Á obs ) = 0 :056
+> Signaling by Receptor Tyrosine Kinases 0.88 0.90 0.92 0.94 0.96
+> Conductance Á
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> Null density
+> P(Ánull < Á obs ) = 0 :1
+> Innate Immune System
+
+Figure 11: Null distribution of conductance and empirical conductance of the pathway specified above for the sensitive class to the drug Navitoclax (left) and the resistant class to 
+
+Erlotinib (right). 
+
+The results show that ILLUME+ substantially reduces memory consumption compared with ILLUME , with the advantage becom-ing more pronounced as dimensionality increases, and the ablation analysis identifies in the stochastic Jacobian approximation the main driver of these savings. Regarding runtime, both ILLUME and ILLUME+ require a one-time training phase for the meta-explainer. Once training is completed, explanations are generated through lightweight local surrogate models and incur negligible computa-tional overhead. Consequently, training-time memory rather than explanation-time latency constitutes the main practical bottleneck. To verify that the scalability improvements do not compromise explanation quality, we compared the full ILLUME+ model with the two ablated variants on reduced-scale datasets where all con-figurations remain computationally feasible (i.e., for subsets of 500 
+
+features selected by Boruta ), evaluating explanation robustness, putative-target recovery (NDCG@30), and surrogate fidelity. Over-all, the three variants exhibit similar performance across all metrics. Relative to the full model, the largest observed decreases are approx-imately 17% in robustness (computed using 20 nearest neighbors) and at most 14% in surrogate fidelity, measured by the average 
+
+𝐹 1 score of decision tree and logistic regression surrogate models across the training, validation, and test sets, while NDCG@30 re-mains comparable across configurations. These results indicate that the low-rank parameterization and stochastic Jacobian approxi-mation primarily improve scalability, with only limited impact on explanation quality and surrogate fidelity. 
+
+6 Discussion and Conclusions 
+
+We have presented an end-to-end data-driven pipeline based on XAI to uncover the decision logic learned by nonlinear models in high-dimensional transcriptomic settings. While previous studies [ 10 ]have shown that SHAP-based explanations can recover known drug-associated genes, our results indicate that such explanations can be unstable and miss important genes. Most importantly, uni-variate explanations provide an incomplete view of the underlying mechanisms driving drug response. The gene–gene interaction analyses that we carry out show that the learned interaction struc-ture exhibits pathway-consistent organization and coherent shifts between sensitive and resistant phenotypes. More broadly, this work demonstrates that principled explainabil-ity can shift predictive modeling from a purely performance-driven exercise toward an hypothesis-generating tool for AI-assisted scien-tific discovery. By enabling robust, scalable, and pairwise gene ex-planations, our framework supports more faithful auditing of black-box models and provides a foundation for generating biologically-grounded hypotheses. These insights are relevant not only for drug response prediction, but for a wide range of applications at the intersection of machine learning and the life sciences. Future work may extend our approach to other applications, while also explor-ing higher-order gene interactions and distilling explanations into minimal, biologically meaningful marker sets for robust patient and sample stratification. 
+
+Acknowledgments 
+
+This work has been partially supported by the European Com-munity programme under the funding schemes: G.A. 101286379 “ILLUME-4-Science”, and G.A. 101120763 “TANGO” and by the Ital-ian Project Fondo Italiano per la Scienza FIS00001966 “MIMOSA”. Authors also acknowledge the European Project ERC-2018-ADG G.A. 834756 “XAI- Science and technology for the explanation of AI decision making”, and PNRR - M4C2 - Investimento 1.3, Partenariato Esteso (grant No. PE00000013) - “FAIR - Future Artificial Intelli-gence Research” - Spoke 1 “Human-centered AI”, funded by the European Commission under the Next Generation EU programme. 
+
+Limitations and Ethical Considerations 
+
+This work is based on publicly available pharmacogenomic data derived from cancer cell lines, and therefore raises no additional concerns regarding data privacy or informed consent beyond those addressed by the original data providers. Predictive signals and ex-planations may reflect dataset-specific biases related to experimen-tal conditions, tissue composition, or feature selection procedures. The extracted explanations capture statistical associations learned by the model and require independent experimental validation before being considered indicative of causal biological mechanisms. KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Martino Ciaperoni, Margherita Lalli, Simone Piaggesi, et al. 
+
+GenAI Disclosure 
+
+A large language model–based chatbot was used for language edit-ing to improve clarity, grammar, and readability of the manuscript. The tool did not contribute to the study design, data analysis, inter-pretation of results, or generation of scientific content. All method-ological decisions, analyses, and conclusions were developed and verified by the authors. 
+
+References 
+
+[1] Alan Agresti. 2015. Foundations of linear and generalized linear models . John Wiley & Sons. [2] Takuya Akiba et al . 2019. Optuna: A next-generation hyperparameter optimiza-tion framework. In ACM SIGKDD international conference on knowledge discovery & data mining . 2623–2631. [3] Aoula Al-Zebeeby et al . 2018. Targeting intermediary metabolism enhances the efficacy of BH3 mimetic therapy in hematologic malignancies. Haematologica 
+
+104, 5 (2018), 1016. [4] Jordi Barretina et al . 2012. The Cancer Cell Line Encyclopedia enables predictive modelling of anticancer drug sensitivity. Nature 483, 7391 (2012), 603–607. [5] H Can Barutcu et al . 2025. Explainable artificial intelligence-based approaches for climate change: a review. International Journal of Global Warming 35, 2-4 (2025), 244–260. [6] Iwona Bednarz-Misa et al . 2020. Interleukins 4 and 13 and their receptors are differently expressed in gastrointestinal tract cancers, depending on the anatomi-cal site and disease advancement, and improve colon cancer cell viability and motility. Cancers 12, 6 (2020), 1463. [7] Elisabetta Botti et al . 2011. Developmental factor IRF6 exhibits tumor suppressor activity in squamous cell carcinomas. Proceedings of the National Academy of Sciences 108, 33 (2011), 13710–13715. [8] Leo Breiman. 2001. Random Forests. Mach. Learn. 45, 1 (2001), 5–32. [9] Aishwarya Budhkar et al . 2025. Demystifying the black box: A survey on explain-able artificial intelligence (XAI) in bioinformatics. Computational and Structural Biotechnology Journal (2025). [10] Francesco Carli et al. 2025. Learning and actioning general principles of cancer cell drug sensitivity. 16, 1 (2025), 1654. [11] Jinyu Chen and Louxin Zhang. 2021. A survey and systematic assessment of computational methods for drug response prediction. Briefings in bioinformatics 
+
+22, 1 (2021), 232–246. [12] Steven M Corsello et al . 2020. Discovering the anticancer potential of non-oncology drugs by systematic viability profiling. Nature cancer 1, 2 (2020), 235–248. [13] Beatriz Costa and Petia Georgieva. 2023. Explainable Artificial Intelligence in Healthcare Applications: A Systematic Review. In 2023 International Scientific Conference on Computer Science (COMSCI) . 1–8. [14] Liyuan Cui et al . 2024. GIMAP7 inhibits epithelial-mesenchymal transition and glycolysis in lung adenocarcinoma cells via regulating the Smo/AMPK signaling pathway. Thoracic Cancer 15, 4 (2024), 286–298. [15] Janez Demsar. 2006. Statistical Comparisons of Classifiers over Multiple Data Sets. J. Mach. Learn. Res. 7 (2006), 1–30. [16] Sarah C DiDonna et al . 2023. P4HTM: a novel downstream target of GATA3 in breast cancer. Research Square (2023), rs–3. [17] Linton C Freeman. 1978. Centrality in social networks conceptual clarification. 
+
+Social networks 1, 3 (1978), 215–239. [18] Judyta Gorka et al . 2021. MCPIP1 inhibits Wnt/ 𝛽 -catenin signaling pathway activity and modulates epithelial-mesenchymal transition during clear cell renal cell carcinoma progression by targeting miRNAs. Oncogene 40, 50 (2021), 6720– 6735. [19] Riccardo Guidotti et al . 2018. A survey of methods for explaining black box models. ACM computing surveys 51, 5 (2018), 1–42. [20] Riccardo Guidotti et al . 2024. Stable and actionable explanations of black-box models through factual and counterfactual rules. Data Min. Knowl. Discov. 38, 5 (2024), 2825–2862. [21] David Ha et al. 2017. HyperNetworks. In ICLR (Poster) . OpenReview.net. [22] Judy Hoffman et al . 2019. Robust Learning with Jacobian Regularization. CoRR 
+
+abs/1908.02729 (2019). [23] Noah Hollmann, Samuel Müller, Lennart Purucker, Arjun Krishnakumar, Max Körfer, Shi Bin Hoo, Robin Tibor Schirrmeister, and Frank Hutter. 2025. Accurate predictions on small data with a tabular foundation model. Nat. 637, 8044 (2025), 319–326. [24] Wen Hwang et al . 2017. Expression of neuroendocrine factor VGF in lung cancer cells confers resistance to EGFR kinase inhibitors and triggers epithelial-to-mesenchymal transition. Cancer research 77, 11 (2017), 3013–3026. [25] Francesco Iorio et al . 2016. A landscape of pharmacogenomic interactions in cancer. Cell 166, 3 (2016), 740–754. [26] Joseph D. Janizek et al . 2023. Uncovering expression signatures of synergistic drug responses via ensembles of explainable machine-learning models. Nature Biomedical Engineering 7, 6 (2023), 811–829. [27] Kalervo Järvelin and Jaana Kekäläinen. 2002. Cumulated gain-based evaluation of IR techniques. ACM Transactions on Information Systems 20, 4 (2002), 422–446. [28] Tasnuva D Kabir et al . 2025. Inhibition of the Caveolin-1 pathway promotes apop-tosis and overcomes pan-tyrosine kinase inhibitor resistance in hepatocellular carcinoma. Cell Death & Disease 16, 1 (2025), 561. [29] Guolin Ke et al . 2017. LightGBM: A Highly Efficient Gradient Boosting Decision Tree. In NIPS . 3146–3154. [30] Philip Keyl et al . 2025. Neural interaction explainable AI predicts drug response across cancers. NAR cancer 7, 3 (2025), zcaf029. [31] Simon Kind et al . 2024. KLK7 expression in human tumors: a tissue microarray study on 13,447 tumors. BMC cancer 24, 1 (2024), 794. [32] Brent M Kuenzi et al . 2020. Predicting drug response and synergy using a deep learning model of human cancer cells. Cancer cell 38, 5 (2020), 672–684. [33] Ritika Kundra et al . 2021. OncoTree: a cancer classification system for precision oncology. JCO clinical cancer informatics 5 (2021), 221–230. [34] Miron B Kursa and Witold R Rudnicki. 2010. Feature selection with the Boruta package. Journal of statistical software 36 (2010), 1–13. [35] Jingjing Li et al . 2023. Prognostic role of E2F1 gene expression in human cancer: a meta-analysis. BMC cancer 23, 1 (2023), 509. [36] Weiquan Li et al . 2022. M2-polarization-related CNTNAP1 gene might be a novel immunotherapeutic target and biomarker for clear cell renal cell carcinoma. 
+
+IUBMB life 74, 5 (2022), 391–407. [37] Yang Lu et al . 2007. Epidermal growth factor receptor (EGFR) ubiquitination as a mechanism of acquired resistance escaping treatment by the anti-EGFR monoclonal antibody cetuximab. Cancer research 67, 17 (2007), 8240–8247. [38] Scott M Lundberg et al . 2020. From local explanations to global understanding with explainable AI for trees. Nature machine intelligence 2, 1 (2020), 56–67. [39] Scott M. Lundberg and Su-In Lee. 2017. A Unified Approach to Interpreting Model Predictions. In NIPS . 4765–4774. [40] Selma El Messaoudi-Aubert et al . 2010. Role for the MOV10 RNA helicase in polycomb-mediated repression of the INK4a tumor suppressor. Nature structural & molecular biology 17, 7 (2010), 862–868. [41] Marija Milacic et al . 2024. The reactome pathway knowledgebase 2024. Nucleic acids research 52, D1 (2024), D672–D678. [42] Patrick Mucka et al . 2023. CLK2 and CLK4 are regulators of DNA damage-induced NF-kB targeted by novel small molecule inhibitors. Cell Chemical Biology 30, 10 (2023). [43] Emilie Bousquet Mur et al . 2020. Notch inhibition overcomes resistance to tyrosine kinase inhibitors in EGFR-driven lung adenocarcinoma. The Journal of Clinical Investigation 130, 2 (2020), 612–624. [44] Harshini Muralidharan et al . 2024. Breast Cancer stem cells upregulate IRF6 in stromal fibroblasts to induce stromagenesis. Cells 13, 17 (2024), 1466. [45] Marco Padilla-Rodriguez et al . 2018. The actin cytoskeletal architecture of estro-gen receptor positive breast cancer cells suppresses invasion. Nature communi-cations 9, 1 (2018), 2980. [46] Simone Piaggesi et al . 2025. Explanations Go Linear: Post-Hoc Explainability for Tabular Data with Interpretable Meta-Encoding. In ICDM . IEEE, 663–672. [47] Joseph A Pinto et al . 2017. In silico evaluation of DNA Damage Inducible Tran-script 4 gene (DDIT4) as prognostic biomarker in several malignancies. Scientific reports 7, 1 (2017), 1526. [48] Yan Qin et al . 2022. GIMAP7 as a potential predictive marker for pan-cancer prognosis and immunotherapy efficacy. Journal of inflammation research (2022), 1047–1061. [49] Matthew G Rees et al . 2016. Correlating chemical sensitivity and basal gene expression reveals mechanism of action. Nature chemical biology 12, 2 (2016), 109–116. [50] Marco Tulio Ribeiro et al . 2016. " Why should i trust you?" Explaining the pre-dictions of any classifier. In ACM SIGKDD international conference on knowledge discovery and data mining . 1135–1144. [51] Rajat Rohatgi et al . 1999. The interaction between N-WASP and the Arp2/3 complex links Cdc42-dependent signals to actin assembly. Cell 97, 2 (1999), 221–231. [52] Alejandro Roisman et al . 2023. B4galt1 Regulates the WNT-𝛽 -Catenin Axis to Control Hematopoietic Stem and Progenitor Cells (HSPCs) Fitness. Blood 142 (2023), 398. [53] Tetsuroh Saitoh et al . 2001. Molecular cloning and characterization of FRAT2, encoding a positive regulator of the WNT signaling pathway. Biochemical and Biophysical Research Communications 281, 3 (2001), 815–820. [54] Bikash Ranjan Samal et al . 2022. Opportunities and challenges in interpretable deep learning for drug sensitivity prediction of cancer cells. Frontiers in Bioinfor-matics 2 (2022), 1036963. [55] Haoyuan Shi et al . 2025. DRExplainer: Quantifiable interpretability in drug response prediction with directed graph convolutional network. Artificial Intelli-gence in Medicine 163 (2025), 103101. Explainable AI for Cancer Drug Response Prediction: Beyond Univariate Feature Attributions KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea                                                                           
+
+> [56] Jingwei Shi et al .2022. Loss of interleukin-13-receptor-alpha-1 induces apoptosis and promotes EMT in pancreatic cancer. International Journal of Molecular Sciences 23, 7 (2022), 3659. [57] Sabbir Ahmed Sibli et al .2025. Enhancing protein structure predictions: DeepSHAP as a tool for understanding AlphaFold2. Expert Systems with Applica-tions (2025), 127853. [58] Hongbin Su et al .2021. Ubiquitin-like protein UBD promotes cell proliferation in colorectal cancer by facilitating p53 degradation. Frontiers in oncology 11 (2021), 691347. [59] Aravind Subramanian et al .2005. Gene set enrichment analysis: a knowledge-based approach for interpreting genome-wide expression profiles. Proceedings of the National Academy of Sciences 102, 43 (2005), 15545–15550. [60] Hyuna Sung et al .2021. Global cancer statistics 2020: GLOBOCAN estimates of incidence and mortality worldwide for 36 cancers in 185 countries. CA: a cancer journal for clinicians 71, 3 (2021), 209–249. [61] Damian Szklarczyk et al .2023. The STRING database in 2023: protein–protein association networks and functional enrichment analyses for any sequenced genome of interest. Nucleic acids research 51, D1 (2023), D638–D646. [62] Yi-Ching Tang and Assaf Gottlieb. 2021. Explainable drug sensitivity prediction through cancer pathway enrichment. Scientific reports 11, 1 (2021), 3128. [63] Christin Tse et al .2008. ABT-263: a potent and orally bioavailable Bcl-2 family inhibitor. Cancer research 68, 9 (2008), 3421–3428. [64] Stéphane Tufféry. 2011. Data mining and statistics for decision making . John Wiley & Sons. [65] Mathias Uhlén et al .2015. Tissue-based map of the human proteome. Science
+> 347, 6220 (2015), 1260419. [66] Mian Xie et al .2013. Notch-1 contributes to epidermal growth factor receptor tyrosine kinase inhibitor acquired resistance in non-small cell lung cancer in vitro and in vivo. European journal of cancer 49, 16 (2013), 3559–3572. [67] Li-Hao Yang et al .2022. Neuronal survival factor VGF promotes chemoresis-tance and predicts poor prognosis in lung cancers with neuroendocrine feature.
+> International Journal of Cancer 151, 9 (2022), 1611–1625. [68] Jun Yin et al .2019. let-7 and miR-17 promote self-renewal and drive gefitinib resistance in non-small cell lung cancer. Oncology Reports 42, 2 (2019), 495–508. [69] Ming Yu et al .2023. Elevated EVL methylation level in the normal colon mu-cosa is a potential risk biomarker for developing recurrent adenomas. Cancer Epidemiology, Biomarkers & Prevention 32, 9 (2023), 1146–1152. [70] Qingbei Zeng et al .2015. Discovery and evaluation of clinical candidate AZD3759, a potent, oral active, central nervous system-penetrant, epidermal growth factor receptor tyrosine kinase inhibitor. Journal of medicinal chemistry 58, 20 (2015), 8200–8215. [71] Xiaoting Zhong et al .2022. Explainable machine learning in materials science.
+> npj computational materials 8, 1 (2022), 204. [72] Jinfeng Zhu et al .2022. FAT10 promotes chemotherapeutic resistance in pancre-atic cancer by inducing epithelial-mesenchymal transition via stabilization of FOXM1 expression. Cell death & disease 13, 5 (2022), 497.
+
+APPENDIX A Data sources 
+
+Transcriptomic data are derived from the Cancer Cell Line Ency-clopedia (CCLE) [ 4 ], a collection of bulk RNA-seq data from 1699 cancer cell lines. We use log2-transformed transcripts per million plus one (TPM+1) RNA-seq data for 18,174 protein-coding genes. Drug response data are obtained from the Genomics of Drug Sensi-tivity in Cancer (GDSC) [ 25 ], a large-scale drug perturbation dataset which provides drug efficacy measurements for 286 cancer drugs tested across 969 cancer cell lines. Drug effectiveness in reducing cell viability is evaluated by half-maximal inhibitory concentration (𝐼𝐶 50 ) measurements, i.e., the drug concentration required to kill 
+
+50% of the cells. Here we treat the 𝐼𝐶 50 measurements associated with each drug as defining a separate dataset; accordingly, whenever we refer to a dataset, we mean the collection of 𝐼𝐶 50 responses observed across cell lines for a specific drug and the associated gene expression values. GDSC provides extensive metadata including the tissue of origin for each cancer cell line as defined by Oncotree [ 33 ], and the putative targets and MoA for each drug. Throughout this study, we restricted our analysis to drugs whose targets correspond to genes available in the CCLE dataset. This allowed us to later check whether our results were biologically consistent, and resulted in a set of 151 drugs. To define pathways associated to drug response, we employ the Reactome pathway database [ 41 ], a curated database of human biological pathways and reactions. We define as MoA-related path-ways all the pathways including the drug or its putative targets. Throughout our analysis, we use 1st-layer Reactome pathways as in prior work [10]. To support our discussion on the gene–gene interaction graph, we also leverage the STRING database, a resource for functional protein networks integrating curated databases, experiments, co-expression, gene context and text mining [ 61 ] (see Figure 1 in Section 1). STRING includes both known and predicted interactions and aggregates evidence from multiple knowledge sources, offering higher coverage than curated databases and a unified interaction confidence score. We consider only high-confidence interactions (confidence score > 0.7) between genes with high interaction score from ILLUME+. For each gene, we include up to 5 direct interactors from STRING which are not in our high-interaction list, to allow for long-distance connections. In the example graph in Figure 1, 4/5 interactors in STRING not retrieved by ILLUME+ are genes removed by Boruta . Thus, missing interactions reflect prior feature filtering rather than limitations of ILLUME+. 
+
+B Data pipeline 
+
+Data preprocessing. Each drug dataset is split with approximately 90/10 proportion, with 90% used for training models, and the re-maining 10% reserved for testing. To control for tissue-specific confounding effects and ensure fair evaluation, following prior work [ 10 ], data splits are stratified with respect to the tissue of origin. Drug response, originally measured as continuous ( ln 𝐼𝐶 50 )values, is discretized into three classes ( sensitive , intermediate , resis-tant ) using tertile-based binning computed over training data. As an illustration, on the top panel of Figure A1 we show the distribu-tion of ( ln 𝐼𝐶 50 ) values across data splits for a representative drug, together with the thresholds used to define the three classes. 
+
+Feature selection. All-relevant feature selection is performed us-ing the Boruta algorithm [ 34 ] on each drug training set. Boruta 1
+
+operates by augmenting the original dataset with shadow features, generated by randomly permuting the values of each feature across samples. A Random Forest model [ 8] is then trained on the ex-tended dataset, and feature importance scores are computed. For each iteration, the importance of every real feature is statistically compared to the maximum importance achieved by the shadow features. Features that consistently outperform the shadow features are labeled as confirmed , those performing consistently worse are 
+
+rejected , and ambiguous features are classified as tentative until a decision can be reached through repeated iterations until early stopping is activated. This approach provides several advantages in the context of cancer transcriptomics as it reduces dimensionality while limiting the removal of possibly relevant genes and accommo-dates nonlinear relationships and interactions, which are common in gene expression data. We rely on a class-balanced Random Forest classifier for 3-class       
+
+> 1https://github.com/scikit-learn-contrib/boruta_py KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Martino Ciaperoni, Margherita Lalli, Simone Piaggesi, et al. −3−2−1012
+
+ln IC 50 
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Density
+
+Gefitinib         
+
+> Train (n=586)
+> Test (n=48)
+> Valid (n=44) 750 1000 1250 1500 1750 2000 2250 2500 2750
+
+Number of selected genes 
+
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> Count
+> Mean = 1477.45
+
+Figure A1: Label preprocessing and Feature selection. Top: distribution of the target variable ( ln 𝐼𝐶 50 ) across data splits and label boundaries for the three classes as dotted vertical lines in the Gefitinib drug. Bottom: distribution of the num-ber of genes selected by Boruta across the analyzed drugs. 
+
+prediction of drug sensitivity levels, and adopt a percentile-based acceptance criterion: a gene is selected if its importance exceeds the 
+
+90 th percentile of the shadow feature importances. This conserva-tive strategy favors the retention of potentially informative genes while limiting the inclusion of spurious predictors. Analogously, we retained confirmed as well as tentative features for downstream modeling and analysis. We then restrict the analysis to those drugs (20 out of 151) for which the putative targets annotated in the GDSC dataset are fully recovered by this selection procedure. Each selected drug is associated with approximately 500 profiled cell lines. The bottom panel of Figure A1 shows the distribution of the selected feature set sizes, which range from roughly 700 to 2,700 genes. 
+
+Drug response classification. We employ gradient-boosting en-sembles as our primary black-box predictor model: XGBoost , Cat-Boost , and LightGBM . These methods are well-suited to highly dimensional tabular data and can capture nonlinear effects and higher-order feature interactions, both of which are common in transcriptomic settings. Given the high dimensionality of transcrip-tomic data and the moderate sample size, we mitigate overfitting and ensure robust predictive performance by optimizing hyperpa-rameters via stratified cross-validation on the training split, with particular emphasis on regularization and subsampling parame-ters, including the learning rate, tree depth, number of leaves, ℓ1/ℓ2
+
+penalties, and feature and bagging fractions. Hyperparameter opti-mization is performed using Optuna [ 2], an automatic hyperparam-eter search framework that employs adaptive sampling strategies to efficiently explore the parameter space. After optimization, the model is retrained on the full training data with the best parameters and evaluated on the held-out test set. Predictive performance is assessed through macro-F1 scores to account for the multiclass structure of the task. The top panel of Figure A2 reports the distri-bution of test scores across drugs. Among the evaluated models, we selected LightGBM for subse-quent analyses because it exhibits the most stable performance across drugs and offers high computational efficiency and scalabil-ity, enabling rapid and consistent evaluation across multiple drugs. Moreover, there is a strong agreement among the three consid-ered model predictions, suggesting that all methods capture similar underlying structures in the data. To quantify the prediction agree-ment rate between model outputs, we evaluated the fraction of instances for which each pair of models predicted the same class. Specifically, the similarity between two classifiers 𝐴 and 𝐵 is given by 1
+
+> 𝑁
+
+Í𝑁 𝑖 =1 ⊮[𝐴 (𝑥 𝑖 ) = 𝐵 (𝑥 𝑖 )] . As shown at the bottom of Figure A2, the substantial agreement between all models indicates consistent predictions despite minor differences in classification performance. 0.35  0.40  0.45  0.50  0.55  0.60  0.65        
+
+> Macro-F1score
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> Count
+> XGBoost
+> LightGBM
+> CatBoost XGBoost
+> LightGBM
+> CatBoost
+> XGBoost
+> LightGBM
+> CatBoost
+> 1.00 0.85 0.90
+> 0.85 1.00 0.87
+> 0.90 0.87 1.00
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Similarity
+
+Figure A2: Drug response classification. Top: Macro-𝐹 1 scores across all drugs for different classifiers. Bottom: Prediction agreement rate between considered models. Surrogate explainers training. ILLUME+ is implemented with low-rank linear layers, where the rank 𝑟 ≪ 𝑚 is fixed as the square Explainable AI for Cancer Drug Response Prediction: Beyond Univariate Feature Attributions KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea 
+
+root of the input dimensionality, i.e. 𝑟 = √𝑚 . The latent space di-mensionality is fixed to 96. For Jacobian penalty estimation [ 22 ], we employ 15 random projections. Training is done with Adam optimizer, fixing the learning rate to 10 −3, with early stopping tech-nique (patience of 30 epochs) to prevent overfitting. To compute the loss functions, for input gene expressions and the projected latent vectors we use the cosine distance 𝑑 cos (u, v) = 1 − u·v 
+
+> | | u| | | | v| |
+
+. For the black-box score vectors, we employ the Euclidean distance. We con-sider as surrogate models: Logistic Regression to generate feature importance, and CART Decision Tree to derive rules. For training the latter, we employ sparsity scheduling during training ILLUME+, to reduce the number of input attributes (gene expressions) linearly combined in each latent feature to 2.Further details about the described steps are reported in Ta-ble A1. Since the surrogate models are trained using a one-vs-rest approach for the multi-class setting, the final fidelity is obtained by assigning the highest probability prediction across the class-specific surrogates. 
+
+C Ablation study on target discretization, feature selection, and black-box predictor 
+
+We evaluated the robustness of the proposed pipeline on eight rep-resentative GDSC drugs ( Gefitinib , Venetoclax , Navitoclax ,
+
+Erlotinib , Daporinad , WIKI4 , BMS-536924 , and EPZ5676 ) by vary-ing one component at a time while keeping all others fixed. Specifi-cally, we considered the following alternatives: 
+
+Label discretization. We replaced the balanced tertile partition-ing used in the main pipeline (33-33-33) with a more conservative quantile-based discretization, resulting in narrower extreme classes (25-50-25). 
+
+Regression objective. We replaced the classification objective with a regression objective. To enable direct comparison with the main pipeline, predicted continuous values were subsequently dis-cretized into tertiles using post-hoc binning. 
+
+Gradient-boosting (GB) feature selection. We replaced Boruta -based feature selection with gradient-boosting feature ranking, se-lecting the same number of top-ranked features as identified by 
+
+Boruta in the main pipeline. 
+
+Deep-learning predictor. We replaced the proposed predictor with the state-of-the-art black-box classifier TabPFN [23]. Results are reported in Figure A3, where statistical significance is assessed using the Friedman test with Nemenyi post-hoc anal-ysis [ 15 ] at 𝛼 = 0.05 . The analysis show that our pipeline with tertile-based splits (33-33-33) provides the best balance between performance and stability, suggesting that the preservation of bal-anced bins is more critical than the underlying training strategy. Moving to (25-50-25) splits reduces predictor performance and sur-rogate fidelity, confirming the importance of balanced classes for stable learning. The regression setting achieves marginally higher predictive accuracy and surrogate fidelity, but hinders interpretabil-ity. Replacing Boruta with GB feature selection, or LightGBM 
+
+with TabPFN as black-box classifier, yields similar black-box predic-tive accuracy but reduces surrogate fidelity and feature importance robustness. Biological grounding is more sensitive: GB feature se-lection slightly favors (univariate) gene enrichment but degrades pathway overlap, while TabPFN shows reduced performance in both metrics. 
+
+D Decision rules: lengths and biological grounding 
+
+In Figure A4, we show the distribution of rule lengths. Moreover, in addition to the example rule reported in Section 5, Table A2 presents other example rules involving genes from MoA-related pathways for remaining drugs. ILLUME+ rules include genes directly associated to cancer resistance and tissue-specific phenotypes, some of which have been proposed as prognostic markers. Here we report some examples of how our rules connect to known and potential cancer markers. 
+
+Erlotinib is a receptor tyrosine kinase inhibitor (RTKI) tar-geting the Epidermal Growth Factor Receptor (EGFR). Increased Notch signalling has been implicated in Erlotinib resistance [ 43 , 66 ]. Accordingly, high levels of PSEN2, a core component of the 𝛾 -secretase complex required for Notch activation, were associated with resistance in our model. Other contributions are more nuanced: IRF6 [ 7, 44 ] and IL13RA1 [ 6, 56 ] have tumor-dependent roles. Con-sistent with our rule, reduced EVL levels have been associated to colorectal cancer [ 69 ] and increased metastasis in breast cancer [ 45 ]. Other genes have not been thoroughly investigated in cancer, but could be potential biomarkers: among them, CTNAP1 has been sug-gested as a clear cell renal cell carcinoma marker in an independent bioinformatic analysis [36]. 
+
+Gefitinib is also a EGR-RTKI. Among the genes associated to Gefitinib resistance, GIMAP7 is significantly reduced across cancers, specifically at advanced stages [ 48 ], and low levels sustains cell pro-liferation and reduce apoptosis in lung adenocarcinoma [ 14 ]. GBF1, FGFBP1, RPS12 have cancer type-specific effects on survival [ 65 ], and their interactions have not been addressed to the best of our knowledge. The rule also include new genes such as DEFB114. 
+
+Navitoclax triggers apoptosis by inhibiting BCL-2, BCL-xL and BCL-w [ 63 ]. Lower CAV1 is consistent with reduced survival sig-naling and increased apoptotic susceptibility [ 28 ], consistent with our predicted higher susceptibility to Navitoclax. MOV10 downreg-ulation increases levels of the INK4a tumor suppressor [ 40 ], and CLK2 inhibition increases apoptosis [ 42 ], consistent with their as-sociation to sensitivity. Other genes are involved in stress response and calcium influx, both linked to apoptosis. Overall, our rules identify cancer-associated and additional genes, generating quantitative hypotheses for experimental validation. 
+
+E Gene-gene ranking: supplementary results 
+
+Biological relevance. Extending the analysis presented in the main text, in Figure A5 we illustrate the 20 gene pairs with the largest PO among the 50 with the largest lift in four exemplify-ing drugs. For Navitoclax -sensitive cell lines, highly ranked gene pairs are enriched in pathways related to immune processes and carbon metabolism in cancer, the latter being a known determinant of response [ 3]. In Gefitinib , top interactions encompass more general signal transduction and cell-cell communication pathways, which are significantly enriched among gene pairs associated with resistance. For WIKI4 , a potent inhibitor of Wnt signalling (it hinders tankyrase, KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Martino Ciaperoni, Margherita Lalli, Simone Piaggesi, et al. 
+
+Table A1: Per-drug dataset statistics after Boruta feature selection, with performance metrics for LGBM (Macro-𝐹 1) and surrogate explainers (fidelity). Gefitinib 
+
+> Navitoclax
+> Nutlin-3a (-)
+> Alisertib
+> BMS-536924
+> Erlotinib
+> Daporinad
+> Linsitinib
+> EPZ5676
+> RVX-208
+> LMB_AB3
+> Ibrutinib
+> Venetoclax
+> ABT737
+> AZD3759
+> NVP-ADW742
+> WIKI4
+> Sepan.bromide
+> BMS-754807
+> SGC0946
+
+Dataset statistics 
+
+# Features 1337 1404 2774 2013 1250 1134 1408 2081 1767 1152 1447 1276 1305 1620 1197 1280 776 1452 1568 1308 # Instances 586 591 592 579 586 583 321 591 587 546 454 543 586 585 590 586 585 586 578 580 
+
+Black-box model LGBM Macro-𝐹 1 0.556 0.466 0.581 0.538 0.397 0.424 0.490 0.482 0.409 0.476 0.430 0.493 0.480 0.576 0.421 0.361 0.442 0.515 0.520 0.347 
+
+Surrogates fidelity 
+
+Logistic Regression 0.885 0.891 1.000 0.930 0.966 0.900 0.924 0.922 0.919 0.953 0.927 0.911 0.930 0.971 0.914 1.000 0.878 1.000 0.926 0.901 Decision Tree 0.861 0.932 0.980 0.911 0.744 0.832 0.909 0.907 0.763 0.922 0.894 0.775 0.889 0.792 0.756 0.929 0.975 0.815 0.848 0.814 12345 
+
+> Q25-50-25
+> TABPFN
+> OURs GB-FS
+> REGRES
+> CD
+
+Black-box macro-F1 12345 
+
+> Q25-50-25
+> GB-FS
+> TABPFN OURs
+> REGRES
+> CD
+
+Surrogate fidelity 12345
+
+> GB-FS
+> REGRES
+> OURs
+> Q25-50-25
+> TABPFN
+> CD
+
+NDCG@30 12345 
+
+> TABPFN
+> GB-FS
+> REGRES OURs
+> Q25-50-25
+> CD
+
+Robustness@10 12345 
+
+> TABPFN
+> REGRES
+> OURs GB-FS
+> Q25-50-25
+> CD
+
+Gene enrichment score 12345 
+
+> TABPFN
+> REGRES
+> GB-FS Q25-50-25
+> OURs
+> CD
+
+Top-1000 pathway overlap 
+
+Figure A3: Pipeline sensitivity analysis. Aggregated performance of alternative end-to-end pipelines, assessed using CD diagram with Nemenyi at 𝛼 = 0.05 of average ranks across eight GDSC drugs. Table A2: Complete set of pathway-aligned rules (labels restricted to low and high 𝐼𝐶 50 ). For each drug, we report the pathway whose genes most strongly align with the rule conditions. The rule implication indicates the predicted response regime (Sensitive = low 𝐼𝐶 50 , Resistant = high 𝐼𝐶 50 ). Pathway genes are highlighted in color. 
+
+Drug Pathway Rule (pathway genes in color) 
+
+Alisertib RNA Polymerase II Transcription DDIT4 ≤ − 0.672 ∧ E2F1 > −0.008 ∧ ESRRG > −0.223 ∧ KLK7 ≤ 2.568 ∧ KRT27 > −0.205 ∧ P4HTM > −0.277 ⇒ Resistant Erlotinib Nervous system development CNTNAP1 > −0.891 ∧ EVL ≤ − 1.395 ∧ FAM214B ≤ 0.212 ∧ IL13RA1 ≤ 0.976 ∧ IRF6 > 0.390 ∧ PSEN2 > 0.133 ⇒ Resistant Linsitinib Signaling by Receptor Tyrosine Kinases CGN ≤ 0.913 ∧ FAM83C > −0.733 ∧ GALNT3 > 1.121 ∧ GRAP2 > −1.437 ∧ LYPD1 > −2.418 ∧ POLR2D ≤ 0.297 ∧ SLC10A6 >
+
+−0.530 ∧ TNS4 ≤ 3.993 ⇒ Sensitive NVP-ADW742 Infectious disease CD8B ≤ − 0.891 ∧ DOCK1 ≤ 3.386 ∧ GHRH > −2.722 ∧ LHX2 ≤ 2.241 ∧ PPIC ≤ 4.478 ∧ UBE2J1 > 0.824 ∧ WAS ≤ 3.977 ∧ ZNF629 ≤
+
+1.287 ⇒ Resistant Daporinad RNA Polymerase II Transcription APMAP > −1.699 ∧ AURKA ≤ 5.094 ∧ KIFC1 ≤ 3.194 ∧ KRT1 ≤ 0.645 ∧ LCE3E ≤ 0.344 ∧ MAF ≤ 2.123 ∧ MUC6 ≤ 1.270 ∧ RHEB >
+
+−0.258 ∧ RNMT ≤ 0.862 ∧ THAP11 ≤ 1.177 ∧ UPF3B ≤ 1.168 ∧ VSIG8 ≤ 0.635 ⇒ Resistant Ibrutinib Cytokine Signaling in Immune system ANXA2 > −3.612 ∧ CD8B ≤ 4.818 ∧ CDH3 > 0.633 ∧ FASLG ≤ 0.551 ∧ FCRL6 ≤ 0.838 ∧ IRF6 ≤ 7.289 ∧ LAG3 > −3.951 ∧ LTA ≤
+
+2.004 ∧ PSMB11 > −0.076 ∧ SLAMF8 > −2.508 ∧ SPRR1A > −0.505 ∧ WDR91 > −2.491 ∧ WSB2 > −2.868 ⇒ Sensitive Navitoclax Signaling by Nuclear Receptors CAV1 ≤ 1.255 ∧ CLEC17A ≤ 0.214 ∧ CLK2 ≤ 0.570 ∧ FBF1 ≤ 1.463 ∧ HBB > −4.392 ∧ MOV10 ≤ 0.973 ∧ S100G > −0.180 ∧ ZDHHC7 ≤
+
+1.426 ⇒ Sensitive Sepan. bromide Cell Cycle Checkpoints BIRC5 > −0.159 ∧ CXorf21 ≤ − 0.244 ∧ GLYATL3 ≤ 0.492 ∧ MSH6 > −0.062 ∧ PCBP4 ≤ − 0.349 ∧ ST8SIA3 ≤ 0.673 ⇒ Sensitive WIKI4 Intracellular signaling by second mes-sengers 
+
+LCE1A ≤ − 0.097 ∧ NFKB2 ≤ 1.117 ∧ PHC2 > −0.791 ∧ PSMB11 ≤ 0.058 ∧ TMEM102 > −1.832 ∧ TSACC ≤ 0.410 ⇒ Sensitive BMS-754807 Signaling by Nuclear Receptors ANKRD66 > −0.017 ∧ ARSH ≤ 0.098 ∧ CYB5R4 > 0.337 ∧ PCK1 > −0.567 ∧ PRKCZ ≤ 1.330 ∧ RPS8 ≤ 0.706 ∧ SMC3 ≤ − 0.298 ∧ UQCRH >
+
+−0.263 ∧ WDR26 > −0.844 ∧ ZNF567 ≤ 0.113 ⇒ Resistant RVX-208 Infectious disease CD28 > −0.781 ∧ EXPH5 ≤ − 0.265 ∧ GNG8 ≤ − 0.226 ∧ GNG8 > −0.949 ∧ IL21R ≤ 1.123 ∧ KIR3DL2 > −0.498 ∧ NAV1 >
+
+−3.954 ∧ PSME3 > −0.498 ∧ STATH ≤ 0.453 ∧ STATH > −0.029 ⇒ Sensitive Nutlin-3a (-) Cellular responses to stress BOD1 ≤ 3.477 ∧ CDKN1A ≤ 8.755 ∧ ETV3 > −2.026 ∧ HOXD13 ≤ 2.154 ∧ ITPRIPL1 ≤ 2.021 ∧ OR5H14 > −0.012 ∧ OR9Q1 >
+
+−0.010 ∧ PDE1B > −0.391 ∧ PPIL1 > −1.377 ∧ SH3BP4 > −0.076 ∧ TBC1D31 ≤ 1.742 ∧ TERF2IP ≤ 2.249 ∧ TUBA4B ≤
+
+0.373 ∧ ZNF705G > −0.149 ⇒ Sensitive BMS-536924 Infectious disease CEBPD > 0.120 ∧ CPNE5 > −0.712 ∧ GNRH2 > −0.830 ∧ HMGB1 ≤ 0.924 ∧ KRTAP22-1 > −0.008 ∧ LCK > −2.916 ∧ MAPK6 ≤
+
+0.491 ∧ NMS ≤ 0.103 ∧ OR51D1 ≤ 0.009 ∧ POLR2J ≤ 0.015 ∧ RASAL3 ≤ 1.308 ⇒ Sensitive ABT737 Signaling by Nuclear Receptors EPHA2 ≤ 1.960 ∧ GNG12 ≤ 3.080 ∧ IL21 ≤ 0.286 ∧ RILPL1 ≤ 0.702 ⇒ Sensitive Gefitinib Signaling by Receptor Tyrosine Kinases DEFB114 ≤ 0.061 ∧ FGF16 ≤ 0.548 ∧ FGFBP1 ≤ 6.297 ∧ GBF1 > −1.653 ∧ GDF10 > −2.337 ∧ GIMAP7 ≤ − 0.128 ∧ RPS12 >
+
+−1.344 ∧ ZNF705D ≤ 0.141 ⇒ Resistant Venetoclax Apoptosis BOD1L2 > 0.144 ∧CAPNS2 ≤ 1.990 ∧CDKN3 ≤ 1.766 ∧CPOX > −2.232 ∧DNAJB5 ≤ 1.264 ∧MOB3B ≤ 0.058 ∧MOB3B > −5.296 ∧PSMA8 ≤
+
+0.556 ∧ TJP1 > −0.689 ∧ UBA1 > −0.100 ⇒ Sensitive AZD3759 MAPK family signaling cascades ADAT3 ≤ 0.679 ∧ CD226 > 0.058 ∧ CUEDC1 ≤ 1.029 ∧ CUEDC1 > −5.662 ∧ DPYSL3 > −6.229 ∧ EGFR ≤ − 0.968 ∧ EPPK1 ≤
+
+3.159 ∧ OR6K3 ≤ − 0.009 ∧ OR6K3 > −0.068 ∧ PLEC ≤ 0.413 ∧ PLEC > −1.351 ∧ PTPN7 ≤ − 0.127 ∧ RGL3 ≤ 0.241 ∧ RGL3 >
+
+−2.799 ∧ SOX15 > −1.880 ∧ ZNF80 ≤ 0.080 ⇒ Resistant SGC0946 Chromatin modifying enzymes CASP14 ≤ 2.049 ∧ CBR3 > 0.624 ∧ CXCR6 > −2.422 ∧ GGCT > 0.017 ∧ PAX3 ≤ 1.078 ∧ PLA2G7 > 0.192 ⇒ Sensitive EPZ5676 Chromatin modifying enzymes GGT6 ≤ 3.291 ∧ GGT6 > −1.992 ∧ HOXD10 ≤ 8.914 ∧ IFNA2 > −0.130 ∧ IL1F10 ≤ 0.403 ∧ IL1F10 > −0.177 ∧ KDM2B >
+
+−4.287 ∧ KRT25 ≤ 0.282 ∧ LALBA ≤ 0.572 ∧ LALBA > −2.288 ∧ MCEMP1 ≤ 0.319 ∧ OR2T35 ≤ 0.047 ∧ OR2Z1 ≤ 0.075 ∧ OR2Z1 >
+
+−0.460 ∧ OR51D1 > −0.012 ∧ PSMB11 > −0.169 ∧ RPF1 ≤ 3.205 ∧ SMARCA2 ≤ 0.828 ∧ SSTR3 ≤ 0.761 ∧ TEX37 ≤ 0.483 ∧ TIMD4 >
+
+−2.673 ∧ TRIM26 ≤ − 0.245 ∧ ZNF440 ≤ 0.564 ∧ ZNF705D > −0.256 ∧ ZP2 > −0.935 ⇒ Sensitive 
+
+leading to inhibition of AXIN degradation and suppression of Wnt-activated transcription), among the top 10 most important gene pairs associated to sensitive cell lines, the 3 genes with the largest number of interactions (4-6) have strong links to Wnt signaling: FRAT2 promotes Wnt activity and cell sensitization [ 53 ], B4GALT1 regulates the Wnt axis [ 52 ], and ZC3H12A negatively modulates Wnt signalling [ 18 ]. The ZC3H12A-FRAT2 pair would thus lead to Explainable AI for Cancer Drug Response Prediction: Beyond Univariate Feature Attributions KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea 2 15 29 42 56 69 
+
+> # conditions
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> Density
+
+Figure A4: Decision rules. Distribution of the length (i.e., number of conditions) of factual rules extracted via IL-LUME+. 
+
+higher Wnt dependence, consistent with increased WIKI4 sensitiv-ity, while B4GALT interactions further modulate Wnt activity and responsiveness. In AZD3759 , a reversible EGFR tyrosine kinase inhibitor effective in cell lines with strong EGFR activation [ 70 ], top pairs include: (a) LIN28A-UBD, which suppresses let-7 miRNA biogenesis, leading to EGFR upregulation [ 68 ] and UBD promotes tumor progression and invasion [ 58 , 72 ], and can induce resistance by EGFR ubiquiti-nation [ 37 ]; and (b) RASSF9-REG4, both central to EGFR signalling: RASSF9 activation leads to upregulation of the MEK-ERK pathway downstream of EGFR, while REG4 acts as an upstream EGFR acti-vator. Moreover, VGF (in 2 pairs) has been directly linked to EGFR inhibitor resistance in lung cancer [24, 67]. These observations further suggest that highly ranked gene pairs consistently recover biologically grounded processes across drugs, supporting the robustness of our approach and reducing the like-lihood that the observed associations arise from spurious correla-tions. 
+
+Task-based relevance. To ensure that highly ranked gene pairs capture task-relevant signals, we test whether the interaction rank-ing produced by ILLUME+ is consistent with statistical evidence derived from the same prediction task, as described in section 4.4. Specifically, in this analysis we compare the top 1,000 ranked gene pairs with the bottom 1,000; additional random samples are then compared to the top 1,000 as a robustness check, yielding consistent results. For each pair of genes (𝑔 𝑖 , 𝑔 𝑗 ) we fit a logistic regression model ˜𝑦 𝑖 𝑗 = 𝛽 𝑖 𝑥 𝑖 + 𝛽 𝑗 𝑥 𝑗 + 𝛽 𝑖 𝑗 𝑥 𝑖 𝑥 𝑗 , including their interaction term 
+
+𝑥 𝑖 𝑥 𝑗 , and evaluate its significance via the Wald test [ 1]. Figure A6 reports the ratio of number of pairs with p-value below 0.05 for the top and bottom gene pairs in the ranking, showing that up to 
+
+70 –75% of top-ranked interactions are significantly higher than for bottom pairs. 
+
+Bivariate gene enrichment. In line with unweighted enrichment score for single-gene ranks [ 59 ], we define bivariate enrichment for gene-gene pair ranks as follows: 
+
+biES = max  
+
+> 1≤𝑘 ≤𝑀
+> 𝑘
+
+∑︁ 
+
+> ℎ=1
+
+⊮𝜋 ℎ ∈ S pair 
+
+
+
+|S pair | − ⊮𝜋 ℎ ∉ Spair 
+
+
+
+𝑀 − |S pair |
+
+!
+
+, 𝑀 =
+
+𝑚 
+
+2
+
+
+
+,
+
+where {𝜋 ℎ }𝑀 ℎ=1 is the ranked list of gene pairs (each 𝜋 ℎ = (𝑔 𝑖 ℎ , 𝑔 𝑗 ℎ ))and Spair denotes the set of relevant gene pairs co-occurring on known MoA-related pathways. Figure A7 presents bivariate gene enrichment scores for gene-gene rankings produced by ILLUME+, compared against a random baseline where relevance labels are per-muted. Consistent with the univariate analysis, pairwise rankings from ILLUME+ are more likely to overrepresent known biological pathways, where ranked gene pairs co-occur—than those obtained by random ranking. 
+
+Comparison with pairwise SHAP. To further assess whether interaction rankings prioritize biologically coherent gene pairs, we compared ILLUME+ and pairwise SHAP in terms of pathway over-lap (PO). For each drug, we computed the mean PO among the highest-ranked 1,000 interaction pairs and contrasted it with the mean PO among the lowest-ranked 1,000 pairs. As shown in Fig-ure A8, ILLUME+ consistently exhibits a clear separation between the two groups, with top-ranked interactions displaying greater mean pathway overlap across all drugs. In contrast, pairwise SHAP shows much weaker discrimination: for several drugs, the mean pathway overlap of bottom-ranked interactions exceeds that of top-ranked interactions. This indicates that pairwise SHAP rankings are less effective at prioritizing biologically coherent gene-gene interactions, whereas ILLUME+ more reliably concentrates high-ranking interactions among genes participating in related biological pathways. 
+
+F Polarity graph analysis 
+
+In Section 5, we analyze a gene–gene interaction graph derived from the extracted decision rules. In this graph, nodes correspond to genes, and edge weights quantify the strength of interaction between gene pairs, as measured by lift. Separate gene-gene inter-action graphs are constructed for the sensitive and resistant classes, reflecting class-specific interaction patterns. To explicitly capture the class-discriminative role of gene–gene interactions, we additionally introduce the polarity graph GΔ =
+
+(𝑉 Δ, 𝐸 Δ, 𝑤 Δ). This graph is obtained by computing, for each gene pair, the difference between its lift value in the sensitive class and its lift value in the resistant class. As a result, edge weights encode both the magnitude and direction of class specificity, highlighting interactions that preferentially characterize sensitivity or resistance. Positive edge weights indicate stronger interactions in the resistant class, and negative values indicate the opposite. Edge weights close to zero correspond to interactions that are similarly represented in both classes and are therefore weakly discriminative. Based on this graph structure, we investigate whether genes within the same biological pathway exhibit coordinated, non-random changes in pairwise interaction strength between drug response classes (sensi-tive versus resistant), beyond what would be expected from generic graph structure alone. For each MoA-related pathway 𝜋 , we compute a polarity score 
+
+Δ(𝜋 ) defined as the mean differential interaction weight over edges internal to the pathway, i.e.: 
+
+Δ(𝜋 ) = 1
+
+|𝐸 Δ𝜋 |∑︁ (𝑢,𝑣 ) ∈ 𝐸 Δ𝜋 
+
+𝑤 Δ𝑢𝑣 , 𝐸 Δ𝜋 = {( 𝑢, 𝑣 ) ∈ 𝐸 Δ : 𝑢, 𝑣 ∈ 𝜋 },
+
+where 𝑤 Δ𝑢𝑣 = 𝑤 (𝑟𝑒𝑠𝑖𝑠𝑡𝑎𝑛𝑡 ) 
+
+> 𝑢𝑣
+
+− 𝑤 (𝑠𝑒𝑛𝑠𝑖𝑡𝑖𝑣𝑒 ) 
+
+> 𝑢𝑣
+
+is the difference between class-conditional lift scores in the resistant and sensitive classes KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea Martino Ciaperoni, Margherita Lalli, Simone Piaggesi, et al. ITGB5-TLR1 
+
+> ESRP1-SDC3
+> NINL-PGLYRP3
+> TET3-WAS
+> CYP2C9-XCR1
+> ARHGAP15-LCE1B
+> ADCY5-NQO2
+> ALDH3B2-TET3
+> CASP14-CSN2
+> ACKR2-MYF6
+> ACKR2-PLOD3
+> CASP14-TGOLN2
+> DSC2-TAF4B
+> CDC42BPG-OAF
+> C2CD2L-SLC52A3
+> PRSS22-TGIF2LX
+> MT4-TAF4B
+> GULP1-ITGB5
+> ARHGAP15-CA2
+> GULP1-TLR1
+
+Gene pair 
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> Pathway overlap fraction
+
+Drug: Gefitinib | Sensitive CXCL8-MC1R 
+
+> G6PD-PIK3CD
+> IL17RB-TXNIP
+> ARID3A-PIAS3
+> SPRN-ZNF250
+> OAS3-OPHN1
+> BTN1A1-SDSL
+> EIF4A2-MCEE
+> LCAT-SUOX
+> RNF43-UCK2
+> PGS1-UCK2
+> ABCA6-OR9G4
+> GMFB-PIK3CD
+> SUOX-ZNF687
+> CST8-SUOX
+> LCAT-ZNF687
+> CST8-LCAT
+> KRTAP9-3-SYCN
+> CCHCR1-SNTB1
+> DPP7-SLURP1
+
+Gene pair 
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> Pathway overlap fraction
+
+Drug: Navitoclax | Sensitive LGMN-SFTPD 
+
+> CFHR1-FMNL1
+> LFNG-PSTK
+> DEFB1-FRAT1
+> B4GALT1-FRAT2
+> MESP2-NLRC3
+> FRAT2-ZC3H12A
+> PRDM14-PRM1
+> ATP1B2-ZC3H12A
+> B4GALT1-ZC3H12A
+> PRM1-TBXAS1
+> KRTAP22-1-UBD
+> ADAT2-FRAT2
+> NFIB-PSTK
+> BNIPL-SKAP1
+> FOXD1-SERPINB11
+> EPS8-TMEM254
+> ADAT2-ZC3H12A
+> CFAP58-PPP1R26
+> CFAP58-PLEKHJ1
+
+Gene pair 
+
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Pathway overlap fraction
+
+Drug: WIKI4 | Sensitive AREG-DKK1 
+
+> HRC-KMT2A
+> ADAMTSL3-CXCL10
+> GFOD1-NQO1
+> CDH5-MATN4
+> AVPR1A-SDR16C5
+> IDO2-UBD
+> TAAR1-VGF
+> ADAM9-NLRC3
+> B3GALT5-TREML2
+> LIN28A-UBD
+> AVPR1A-OR6Y1
+> OR6Y1-SDR16C5
+> KMT2A-LRFN1
+> HRC-LRFN1
+> BOD1-TREML2
+> GSC2-OR6N2
+> OR6Y1-TBC1D21
+> IGSF9-TAAR1
+> ACRBP-VGF
+
+Gene pair 
+
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> Pathway overlap fraction
+
+Drug: AZD3759 | Sensitive ABCA3-SLCO1C1 
+
+> ABHD17B-MCM5
+> IL36B-WWTR1
+> IL36B-SLC2A2
+> IL17A-SLC2A4
+> BCL9L-GAST
+> PDE4D-SLC2A2
+> IL36B-PDE4D
+> SLC2A2-WWTR1
+> PDE4D-WWTR1
+> CASQ2-EPHA2
+> ABCA3-ARHGAP15
+> APOA5-CXCL13
+> FGF10-NPR2
+> ARHGAP15-SLCO1C1
+> NRXN2-S100A9
+> CA2-CD53
+> GJB3-LGI3
+> MOB3B-SH2D3C
+> SYAP1-TNFSF11
+
+Gene pair 
+
+> 0.000
+> 0.025
+> 0.050
+> 0.075
+> 0.100
+> Pathway overlap fraction
+
+Drug: Gefitinib | Resistant KRT31-KRTAP9-3 
+
+> ARHGEF11-ITGA5
+> ADAMTS14-ZNF136
+> RASA2-SERPINC1
+> ADAMTS14-MCEE
+> DDX3X-TBPL2
+> AQR-TAB1
+> RABEP1-TCF7L1
+> EME2-FGF16
+> ALCAM-COQ9
+> DCTPP1-RHBDF2
+> RABEP1-RHCG
+> GNS-KRT31
+> GNS-KRTAP9-3
+> CYP4A22-DDX21
+> AICDA-COL3A1
+> KRTAP9-9-TAB1
+> EDAR-SYT7
+> RHCG-TCF7L1
+> KLK12-SERPINC1
+
+Gene pair 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Pathway overlap fraction
+
+Drug: Navitoclax | Resistant RHOA-SREBF2 
+
+> PTPN7-WASL
+> IL4-RNF34
+> SNW1-USP12
+> TOMM20-WNT4
+> MARCKS-OBSCN
+> MESP2-SKP2
+> GSTO2-IFITM2
+> ADAT2-IKBKG
+> KRTAP22-1-RHOA
+> KRTAP9-7-TJP1
+> EIF3L-TBC1D16
+> RLN2-SLC25A22
+> C6orf141-MARCKS
+> TMEM213-VDAC2
+> ELFN1-HYI
+> ALKBH1-ARAP1
+> ADAT2-STK32A
+> CUEDC2-TJP1
+> MAPRE3-TMEM213
+
+Gene pair 
+
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> Pathway overlap fraction
+
+Drug: WIKI4 | Resistant KLC3-SH3RF1 
+
+> BATF-CXCL10
+> COL4A2-JUP
+> AREG-CTTN
+> CHEK2-TDG
+> DGKA-FGF3
+> HTR2A-SCN4B
+> UBD-WNT3A
+> AMTN-DOCK8
+> CSN2-XCR1
+> ANP32A-NPAS2
+> SLC52A1-SULT1E1
+> CAPN8-KIR3DL1
+> CAPN8-SLAMF7
+> F2-SLC52A1
+> EGFR-ONECUT3
+> DNAJC5-KRT36
+> MATN4-XCL1
+> F2-SULT1E1
+> NEURL3-PRSS22
+
+Gene pair 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> Pathway overlap fraction
+
+Drug: AZD3759 | Resistant 
+
+Figure A5: Biological relevance. Pathway Overlap values for the top-20 gene pairs in four exemplifying drugs ( Gefitinib ,
+
+Navitoclax , WIKI4 , and AZD3759 ). Top row: Sensitive class. Bottom row: Resistant class. 0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+> ratio of significant pairs
+> (top vs. bottom)
+
+Sensitive Gefitinib 
+
+Venetoclax 
+
+WIKI4 
+
+Erlotinib 
+
+RVX-208 
+
+AZD3759 
+
+BMS-536924 
+
+Ibrutinib 
+
+NVP-ADW742 
+
+SGC0946 
+
+Daporinad 
+
+Navitoclax 
+
+LMB_AB3 
+
+Sepan. bromide 
+
+BMS-754807 
+
+ABT737 
+
+EPZ5676 
+
+Alisertib 
+
+Linsitinib 
+
+Nutlin-3a (-) 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+Resistant 
+
+> ratio of significant pairs
+> (top vs. bottom)
+
+Figure A6: Task-based relevance. Proportion of significant interactions in top-1,000 ranked gene pairs compared to bottom-1,000 ranked ones for multiple drugs. ILLUME+  Random 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+> Gene enrichment score
+
+Sensitive ILLUME+  Random 
+
+0.0 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+> Gene enrichment score
+
+Resistant 
+
+Figure A7: Distribution of bivariate enrichment scores for the rankings of pairwise interactions given by ILLUME+ and a random baseline. 
+
+and |𝐸 Δ𝜋 | denotes the number of edges with both incident nodes within 𝜋 . We restrict the analysis to pathways with at least 5 nodes in 𝑉 Δ and at least 3 edges in 𝐸 Δ𝜋 . A positive Δ(𝜋 ) indicates that interactions among pathway genes are, on average, stronger under label resistant than under label sensitive, whereas negative values indicate the opposite. To assess statistical significance, we construct a null distribution using a strength-matched randomization procedure. First, all genes in GΔ are discretized into 30 bins according to their node strength. For a given pathway 𝜋 , we generate null gene sets with the same cardinality as 𝜋 . Each null set is obtained by independently replac-ing every gene in 𝜋 with a gene sampled uniformly at random from the same strength bin. This procedure preserves the node-strength profile of the pathway while removing pathway-specific structure. The resulting collection of randomized gene sets defines the null distribution used for significance testing. The observed Δ(𝜋 ) is compared to the null distribution to ob-tain empirical 𝑝 -values. Because a pathway can be associated with either increased sensitivity or increased resistance, we compute the smaller of the left- and right-tail empirical 𝑝 -values. We find that approximately 15% of the pathways attain an empirical 𝑝 -value below 0.1, while 6% fall below 0.05 . Figure A9 provides an example. 
+
+G Validation on additional datasets 
+
+Additional datasets from GDSC database. To enable biological validation based on putative target recovery, the main analysis was restricted to the 20 GDSC drugs for which the annotated putative targets were retained by Boruta during feature selection. This restriction is necessary for target-based metrics, but not for other evaluations. Therefore, to test whether the conclusions extend be-yond this subset, we considered 5 additional GDSC drugs for which 
+
+Boruta discards the putative target. For these drugs, ILLUME+ remained more robust than SHAP, with median robustness of 0.626 
+
+versus 0.497 for the sensitive class and 0.473 versus 0.381 for the re-sistant class, corresponding to relative improvements of 26 .1% and 
+
+24 .1% , respectively. Both differences were highly significant accord-ing to a Mann-Whitney U test ( 𝑝 -value < 10 −6). We then evaluated biological coherence at the pathway level, by testing whether signif-icantly enriched pathways in the explanations were consistent with the known drug mechanism of action. Across these additional GDSC drugs, ILLUME+ recovered more MoA-related enriched pathways than SHAP. For example, for SGC0946 , a DOT1L methyltransferase Explainable AI for Cancer Drug Response Prediction: Beyond Univariate Feature Attributions KDD ’26, August 09–13, 2026, Jeju Island, Republic of Korea −0.06 
+
+−0.03 
+
+0.00 
+
+0.03 
+
+> (top vs. bottom)
+> difference in avg. PO
+
+Sensitive 
+
+ILLUME+ 
+
+Pairwise SHAP Gefitinib 
+
+> Navitoclax
+> Nutlin-3a (-)
+> Alisertib
+> BMS-536924
+> Erlotinib
+> Daporinad
+> Linsitinib
+> EPZ5676
+> RVX-208
+> LMB_AB3
+> Ibrutinib
+> Venetoclax
+> ABT737
+> AZD3759
+> NVP-ADW742
+> WIKI4
+> Sepan. bromide
+> BMS-754807
+> SGC0946
+
+−0.050 
+
+−0.025 
+
+0.000 
+
+0.025 
+
+Resistant 
+
+ILLUME+ 
+
+Pairwise SHAP 
+
+> difference in avg. PO
+> (top vs. bottom)
+
+Figure A8: Comparison with pairwise SHAP. Difference in mean pathway overlap (PO) between the top and bottom 1,000 ranked gene pairs across each drug. Positive values indicate greater pathway overlap among highly ranked interactions. Table A3: External validation on PRISM. We report mean explanation robustness, the mean number of significantly enriched Reactome pathways per drug, and the fraction of drugs for which at least one pathway is enriched. 
+
+Method Mean robustness Enriched pathways per drug Drugs with enrichment ILLUME+ 0.3058 0.6571 0.4000 SHAP 0.2510 0.1715 0.1143 −2 −1 0 1 2         
+
+> Polarity ¢
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> Null density
+> P(¢ null >¢obs ) = 0 :001
+> Diseases of signal transduction by growth factor
+> receptors and second messengers −2 −1 01
+> Polarity ¢
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> Null density
+> P(¢ null <¢obs ) = 0 :078
+> RNA Polymerase II Transcription
+
+Figure A9: Polarity graph analysis. Null distribution of po-larity and empirical polarity of the pathway specified above for drugs Gefitinib (left) and Erlotinib (right). 
+
+inhibitor, ILLUME+ highlighted olfactory-receptor expression path-ways in sensitive cell lines, consistent with their dependence on H3K79 methylation. For Dasatinib , explanations for the resistant class were enriched for extracellular-matrix organization, collagen formation, and assembly of collagen fibrils and other multimeric structures, in line with processes associated with tyrosine-kinase activity and cancer drug resistance. 
+
+Additional datasets from PRISM database. To further assess whether the observed advantages of ILLUME+ generalize beyond the GDSC benchmark, we performed an additional validation exper-iment on PRISM [ 12 ], an independent large-scale pharmacogenomic screening resource including oncological and non-oncological com-pounds. In contrast to GDSC, which provides 𝐼𝐶 50 measurements derived from drug-response curves, PRISM reports log-fold-change viability estimates measured at a single drug concentration. For this reason, we use PRISM solely as a complementary external validation setting. In particular, we consider a sample of 14 drugs from PRISM and compared ILLUME+ against SHAP using two complementary criteria. First, we evaluated internal robustness using the same local cosine-similarity metric adopted in the main experiments. Second, we assessed biological validity by testing the Reactome pathways significantly enriched by the feature-importance rankings produced by each method, using false-discovery-rate correction. Results are aggregated across training, validation, and test splits; the same qualitative trend is observed on each split separately. ILLUME+ outperforms SHAP on all considered metrics. In par-ticular, ILLUME+ achieves higher mean robustness, identifies a larger number of significantly enriched Reactome pathways per drug, and yields at least one enriched pathway for a larger fraction of drugs. Moreover, among the enriched pathways, ILLUME+ iden-tifies more pathway-drug associations directly related to known mechanisms of action: 6 associations across 4 drugs, compared with 4 associations across 2 drugs for SHAP. These results support the generalizability of our conclusions beyond the GDSC setting and suggest that ILLUME+ provides more stable and biologically grounded explanations also on an independent drug-screening re-source.

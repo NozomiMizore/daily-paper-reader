@@ -1,0 +1,23 @@
+---
+title: "From Lipid Dynamics to Precision Predictions: A New Approach Methodology for Precision Modeling of Phosphoinositide Signaling"
+title_zh: 从脂质动力学到精准预测：一种磷酸肌醇信号传导精确建模的新方法论
+authors: "Hernandez-Hernandez, G., Tieu, M., Yang, P.-C., Vivas, O., Lewis, T. J., Santana, L. F., Clancy, C. E."
+date: 2026-06-29
+pdf: "https://www.biorxiv.org/content/10.1101/2025.07.03.663046v3.full.pdf"
+tags: ["query:virtual-cell"]
+score: 7.0
+evidence: 预测磷酸肌醇信号通路中遗传或药物扰动的细胞响应
+tldr: 精准医学需要细胞类型特异性的预测模型，尤其对于磷酸肌醇信号障碍。本文提出一种新方法（NAM），基于基础PI(4)P储备大小决定脂质信号稳健性的动力学模型，通过敏感度分析和逆推方法推断细胞特异性参数。模型成功预测了不同细胞对PI4KA抑制的差异脆弱性：大PI(4)P池细胞维持信号，小池细胞失败。该框架将动态脂质测量转化为机制模型，支持磷酸肌醇相关疾病的精准医学应用。
+source: biorxiv
+selection_source: fresh_fetch
+motivation: 精准医学需要能根据分子测量预测个体响应的模型，磷酸肌醇信号障碍具有细胞类型特异性响应，现有模型缺乏个体化能力。
+method: "构建含PI、PI(4)P、PI(4,5)P2、IP3的动力学模型，结合实验数据优化参数，通过敏感度分析和逆推方法（指纹法/神经网络）生成细胞特异性模型。"
+result: 模型预测不同细胞对PI4KA抑制的差异脆弱性，大PI(4)P池海马神经元维持信号，小池细胞信号失败；突变模拟显示小池渐进崩溃。
+conclusion: 该NAM基于基础脂质组成提供预测性细胞特异性框架，将动态测量转化为机制模型，支持磷酸肌醇疾病精准医学。
+---
+
+## 摘要
+精准医学需要能够将丰富的分子测量转化为个体化生物反应预测的模型。这一挑战对于磷酸肌醇信号传导障碍尤为严峻，因为这些障碍通常对相同的遗传或药理学扰动表现出细胞类型特异性反应。在此，我们开发了一种新方法论（NAM），证明由PI(4)P储备大小决定的基底磷酸肌醇池组成决定了脂质信号传导的稳健性。该NAM包含一个核心动力学模型，涵盖磷脂酰肌醇（PI）、磷脂酰肌醇4-磷酸（PI(4)P）、磷脂酰肌醇4,5-二磷酸（PI(4,5)P2）和肌醇1,4,5-三磷酸（IP3）的动力学。该模型还纳入了磷脂酶C（PLC）介导的水解和磷酸酶介导的转换，并在参数优化过程中明确考虑了IP3生物传感器结合。使用来自颈上神经节（SCG）神经元的实验测量优化参数，并针对独立的剂量依赖性PI(4,5)P2消耗数据进行验证。进行了局部和全局敏感性分析，以确定通路行为的主要参数驱动因素。然后利用这些敏感性关系生成一组模型变体，捕获在tsA201细胞、人神经母细胞瘤细胞和海马神经元中观察到的磷酸肌醇动力学。为了推断细胞特异性模型，我们开发了两种互补的逆方法：来自机制模型敏感性的敏感性指纹识别，以及在合成磷酸肌醇时间序列上训练的神经网络。这两种方法都在保留基线模型结构的同时，跨细胞类型再现了实验性PI(4)P、PI(4,5)P2和IP3动力学。重要的是，推断出的模型预测了实验观察到的对激酶扰动的差异性易感性，无需额外拟合。具有大基底PI(4)P池的海马神经元在磷脂酰肌醇4-激酶α（PI4KA）抑制下维持了PI(4,5)P2和IP3信号传导，而具有小基底PI(4)P池的细胞则表现出信号传导失败。在重复刺激下对PI4KA和磷脂酰肌醇-4-磷酸5-激酶1型γ（PIP5K1C）功能丧失突变的模拟进一步揭示了小池神经元中信号传导的渐进性崩溃，而大池神经元则维持功能，证明基底脂质组成可以决定遗传易感性。总之，该NAM提供了一个预测性的、细胞特异性的框架，用于将动态脂质测量转化为支持磷酸肌醇相关疾病精准医学应用的机制模型。
+
+## Abstract
+Precision medicine requires models that can translate rich molecular measurements into individualized predictions of biological response. This challenge is particularly acute for phosphoinositide signaling disorders that often exhibit cell-type-specific responses to identical genetic or pharmacological perturbations. Here, we develop a New Approach Methodology (NAM) demonstrating that basal phosphoinositide pool composition, determined by the size of the PI(4)P reserve, determines the robustness of lipid signaling. The NAM comprises a core kinetic model of phosphatidylinositol (PI), phosphatidylinositol 4-phosphate (PI(4)P), phosphatidylinositol 4,5-bisphosphate (PI(4,5)P2), and inositol 1,4,5-trisphosphate (IP3) dynamics. The model also incorporates phospholipase C (PLC)-mediated hydrolysis and phosphatase-mediated turnover and explicitly accounts for IP3 biosensor binding during parameter optimization. Parameters were optimized using experimental measurements from superior cervical ganglion (SCG) neurons and validated against independent dose-dependent PI(4,5)P2 depletion data. Local and global sensitivity analyses were performed to identify the dominant parameter drivers of pathway behavior. These sensitivity relationships were then used to generate a population of model variants that captured phosphoinositide dynamics observed in tsA201 cells, human neuroblastoma cells, and hippocampal neurons. To infer cell-specific models, we developed two complementary inverse methods: sensitivity fingerprinting derived from mechanistic model sensitivities and a neural network trained on synthetic phosphoinositide time series. Both approaches reproduced experimental PI(4)P, PI(4,5)P2, and IP3 dynamics across cell types while preserving the baseline model structure. Importantly, the inferred models predicted experimentally observed differential vulnerability to kinase perturbation without additional fitting. Hippocampal neurons with large basal pools of PI(4)P maintained PI(4,5)P2 and IP3 signaling under phosphatidylinositol 4-kinase alpha (PI4KA) inhibition, whereas cells with small basal PI(4)P pools exhibited signaling failure. Simulations of PI4KA and phosphatidylinositol-4-phosphate 5-kinase type 1 gamma (PIP5K1C) loss-of-function mutations under repeated stimulation further revealed progressive signaling collapse in small-pool neurons but sustained function in large-pool neurons, demonstrating that basal lipid composition can determine genetic vulnerability. Together, this NAM provides a predictive, cell-specific framework for translating dynamic lipid measurements into mechanistic models that support precision medicine applications in phosphoinositide-related disorders.
