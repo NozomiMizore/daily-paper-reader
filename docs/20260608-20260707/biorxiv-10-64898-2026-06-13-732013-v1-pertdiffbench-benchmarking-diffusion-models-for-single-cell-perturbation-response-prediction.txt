@@ -1,0 +1,2200 @@
+Title: PertDiffBench: Benchmarking Diffusion Models for Single-Cell Perturbation Response Prediction
+
+URL Source: https://www.biorxiv.org/content/10.64898/2026.06.13.732013v1.full.pdf
+
+Published Time: Tue, 07 Jul 2026 04:59:44 GMT
+
+Number of Pages: 31
+
+Markdown Content:
+PertDiffBench:  Benchmarking Diffusion Models for Single -Cell Perturbation 1
+
+Response Prediction 2
+
+3
+
+Zijun Song 1,4* , Yujia Xiang 2,3,* , Zhi Song 6,9 , Wenyi Jin 7,8 , Jiangmeng Li 5, Chuxiong Sun 5,4
+
+Linhai Xie 3,$ 
+
+5
+
+6
+
+> 1
+
+School of Advanced Interdisciplinary Sciences, University of Chinese Academy of 7
+
+Sciences, Beijing 101408, China 8
+
+> 2
+
+School of Life Sciences,  Tsinghua University, Beijing 100084, China 9
+
+> 3
+
+State Key Laboratory of Medical Proteomics, National Center for Protein Sciences 10 
+
+(Beijing),  Research Unit of Proteomics Driven Cancer Precision Medicine (Chinese 11 
+
+Academy of Medical Sciences),  Beijing  102206, China 12 
+
+> 4
+
+Institute of Automation, Chinese Academy of Sciences, Beijing 100190, China 13 
+
+> 5
+
+Institute of Software, Chinese Academy of Sciences, Beijing 100190, China 14 
+
+> 6
+
+Department of Computer Science, City University of Hong Kong, Kowloon Tong, Hong 15 
+
+Kong SAR 999077, China 16 
+
+> 7
+
+Department of Clinical Laboratory, Renmin Hospital of Wuhan University, No. 99 17 
+
+Zhangzhidong Road, Wuchang District, Wuhan 430060, China 18 
+
+> 8
+
+Department of Biomedical Sciences, City University of Hong Kong, Kowloon Tong, Hong 19 
+
+Kong SAR 999077, China 20 
+
+> 9
+
+AI for Life Sciences Laboratory, Tencent, Shenzhen 518057, China 21 
+
+22 
+
+*Equal contributions 23 
+
+> $
+
+Corresponding author 24 
+
+25 
+
+Emails: 26 
+
+Linhai Xie:  xielinhai@ncpsb.org.cn 27 
+
+28 
+
+29 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+# Abstract 30 
+
+Diffusion models are increasingly used to predict transcriptional responses to 31 
+
+perturbations, but whether they improve on simpler generative and representation -based 32 
+
+baselines remains unclear. Existing evaluations often do not separate the effects of model 33 
+
+architecture, input representation, biological context and metric choice, making it difficult 34 
+
+to determine where diffusion -based methods are useful. Here we introduce PertDiffBench, 35 
+
+a standardized benchmark for diffusion -based transcriptomic perturbation prediction 36 
+
+across single -cell and bulk RNA -seq datasets. PertDiffBench evaluates diffusion -based 37 
+
+models across three complementary evaluation settings: standard prediction in known 38 
+
+single -cell contexts and bulk perturbation conditions, generalization to unseen cell types, 39 
+
+species, drugs and intermediate time points, and stress tests of feature dimensionality, 40 
+
+input representation, noise type and gene ordering. Across these settings, diffusion models 41 
+
+did not show a consistent advantage. scGen remained a strong baseline in common 42 
+
+prediction tasks, whereas scDiffusion was the most competitive diffusion -based method in 43 
+
+several generalization settings. Temporal imputation showed a different pattern, with a 44 
+
+simple DDPM operating directly in expression space outperforming more specialized 45 
+
+models. Stress tests showed that performance was model dependent and sensitive to 46 
+
+feature dimensionality, encoder choice, noise type and gene ordering. Pretrained encoders 47 
+
+did not consistently improve performance, with the classical scVI representation slightly 48 
+
+exceeding STATE in seen -condition and unseen -cell -type settings. These results indicate 49 
+
+that diffusion -model performance in perturbation response prediction depends strongly on 50 
+
+task design and representation choice. PertDiffBench provides a practical framework for 51 
+
+evaluating these models under biologically varied and stress -tested conditions. 52 
+
+53 
+
+# Introduction 54 
+
+Single -cell perturbation technologies have made it possible to study gene function and 55 
+
+cell -state transitions at high resolution  (Bunne, et al., 2024; Peidli, et al., 2024) . By 56 
+
+measuring transcriptional responses to genetic or chemical perturbations in individual cells, 57 
+
+these assays can reveal state -specific effects, population heterogeneity and rare 58 
+
+responsive subpopulations that are not accessible from bulk readouts. Yet the experimental 59 
+
+space grows quickly with perturbation type, cellular context, dose, time and species, and 60 
+
+soon exceeds what can be measured systematically. Given the cost, throughput and 61 
+
+applicability limits of current single -cell assays, exhaustive experimental coverage is not 62 
+
+feasible  (Srivatsan, et al., 2020; Yao, et al., 2024) . Predicting cellular responses to 63 
+
+unmeasured perturbations and unseen biological conditions from limited observations has 64 
+
+therefore become a central goal of single -cell perturbation modelling  (Qian, et al., 2025; 65 
+
+Rood, et al., 2024) .66 
+
+Computational methods have evolved with this goal, moving from the description of 67 
+
+measured perturbation effects toward generalization across unmeasured conditions. Early 68 
+
+method s such  as scGen used variational autoencoders to model perturbation -induced 69 
+
+shifts in latent space and predict responses in unmeasured cellular contexts  (Lotfollahi, et 70 
+
+al., 2019) . CPA then extended this framework through compositional modeling of 71 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+perturbation, dose and covariate effects, enabling predictions across doses, combinations, 72 
+
+time points and species  (Lotfollahi, et al., 2023) . More recent knowledge -informed graph 73 
+
+models and single -cell foundation models, including GEARS, scGPT, scFoundation, 74 
+
+STATE and Tahoe -x1, have further broadened the scope of out -of -distribution perturbation 75 
+
+response prediction  (Adduri, et al., 2025; Cui, et al., 2024; Gandhi, et al., 2025; Hao, et al., 76 
+
+2024; Roohani, et al., 2024) .77 
+
+Diffusion models have recently entered this landscape as a new class of generative 78 
+
+models for cellular response prediction. By learning conditional distributions through 79 
+
+iterative denoising, they provide a flexible way to model heterogeneous and potentially 80 
+
+multimodal cellular responses. Their formulation also allows perturbation identity, dose, cell 81 
+
+state and other covariates to be included in the generation process. Early single -cell 82 
+
+applications, including scVAEDer, scDiff and scDiffusion, explored diffusion -based 83 
+
+generation of cellular states under specified biological conditions, with scVAEDer among 84 
+
+the first to demonstrate perturbation response prediction using a VAE –diffusion framework 85 
+
+(Luo, et al., 2024; Sadria and Layton, 2025; Tang, et al., 2023) . More recent methods have 86 
+
+become increasingly specialized: dbDiffusion focuses on unseen genetic perturbations and 87 
+
+connects generation with debiasing and downstream statistical inference  (Shang, et al., 88 
+
+2025) . scPPDM addresses single -cell drug response prediction, with an emphasis on 89 
+
+unseen drugs and covariate combinations  (Liang, et al., 2025) . Squidiff extends diffusion -90 
+
+based modelling to developmental dynamics and mechanistic interpretation  (He, et al., 91 
+
+2025) . In parallel, morphology -focused models such as MorphoDiff and MorphDiff apply 92 
+
+diffusion models to perturbation -induced cellular imaging phenotypes  (Navidi, et al., 2025; 93 
+
+Wang, et al., 2025) . These studies suggest that diffusion -based perturbation response 94 
+
+prediction is emerging as a diverse family of methods with different architectures, 95 
+
+conditioning strategies, modalities and prediction targets. 96 
+
+However, it remains unclear what actually drives the performance of diffusion models 97 
+
+in omics perturbation prediction. Diffusion models were first successful in domains such as 98 
+
+imaging, where nearby features show strong local dependence and the data have an 99 
+
+explicit spatial structure. Omics data differ in an important way: genes have no natural 100 
+
+spatial ordering, and their dependencies are often nonlocal, context dependent and shaped 101 
+
+by regulatory programs rather than local neighbourhoods. This raises a central question 102 
+
+for perturbation modelling. When diffusion -based methods improve performance, do the 103 
+
+gains come from the diffusion backbone itself, or from other parts of the pipeline, such as 104 
+
+input representation, feature selection, dataset scale, noise structure or task design? 105 
+
+Current benchmark studies do not yet answer this question. Existing comparisons 106 
+
+differ in datasets, train/test splits, evaluation metrics and baseline selection, making results 107 
+
+difficult to align across studies  (Csendes, et al., 2025; Li, et al., 2025; Li, et al., 2025; Viñas 108 
+
+Torné, et al., 2025; Wei, et al., 2026; Wenteler, et al., 2025; Wu, et al., 2024) . Diffusion -109 
+
+based models have also not been evaluated systematically within a single framework, so 110 
+
+their relative strengths and limitations remain difficult to assess. This gap is important 111 
+
+because recent benchmarks suggest that complex models are not consistently superior to 112 
+
+simpler baselines and that model rankings can vary across tasks and metrics. A unified 113 
+
+benchmark is therefore needed to determine when diffusion models offer meaningful gains 114 
+
+and which components of the modelling pipeline drive their performance. 115 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+Here we present  PertDiffBench , a benchmark for evaluating diffusion models in 116 
+
+single -cell perturbation response prediction. PertDiffBench compares diffusion -based 117 
+
+methods, including scDiffusion, scDiff, Squidiff and DDPM -based baselines, with 118 
+
+established generative baselines such as scGen within a unified framework covering seen -119 
+
+condition prediction, unseen cell -type prediction, cross -species transfer, unseen 120 
+
+mechanism -of -action prediction and temporal imputation. It also tests how performance is 121 
+
+affected by feature dimensionality, data representation, input noise and feature ordering. 122 
+
+By evaluating these factors in the same framework, PertDiffBench helps distinguish the 123 
+
+contribution of the diffusion backbone from that of representation, data preprocessing and 124 
+
+task design, and provides a clearer view of when diffusion models are useful for single -cell 125 
+
+perturbation response prediction. 126 
+
+127 
+
+# Results 128 
+
+Overview of PertDiffBench 129 
+
+We construct PertDiffBench to assess how well diffusion models support single -cell 130 
+
+perturbation response prediction (Figure 1). The framework is designed to test whether 131 
+
+performance gains are driven by the diffusion backbone itself or from other factors, 132 
+
+including the input data representation, data scale, noise structure and the difficulty of the 133 
+
+extrapolation task. We selected models that represent distinct conditional generation 134 
+
+strategies in current single -cell perturbation modeling: scDiffusion uses classifier -guided 135 
+
+conditional generation, scDiff incorporates conditions through a cross -attention -based 136 
+
+diffusion framework, and Squidiff integrates semantic features into the denoising process 137 
+
+to model cell -state transitions and perturbation responses. To provide controlled references, 138 
+
+we further implemented two DDPM baselines: one that generates directly in the original 139 
+
+gene -expression space and one that generates in a 256 -dimensional latent space encoded 140 
+
+by a three -layer MLP. We also included scGen as a classical VAE -based baseline for 141 
+
+perturbation response prediction. This model panel allowed us to compare published 142 
+
+diffusion architectures with simplified diffusion baselines and an established non -diffusion 143 
+
+generative model under the same evaluation framework. 144 
+
+PertDiffBench first evaluates prediction under measured perturbation conditions using 145 
+
+two standard settings. The Kang18 dataset is used to test single -cell perturbation 146 
+
+prediction in seen cell types, whereas the Ramaiahgari19 dataset is used to test bulk -level 147 
+
+drug perturbation prediction. These tasks evaluate diffusion -based models against the 148 
+
+VAE -based baseline scGen under standard perturbation  response  prediction settings, 149 
+
+providing a reference point for the later analyses of generalization and robustness. 150 
+
+The benchmark then extends to unseen -condition prediction across three 151 
+
+extrapolation settings. Biological -context generalization is evaluated through unseen cell -152 
+
+type prediction on Kang18 and cross -species prediction of LPS responses in the Hagai18 153 
+
+dataset. Perturbation generalization is evaluated on Srivatsan20 by testing prediction for 154 
+
+unseen drug perturbations. Temporal generalization is evaluated on Cao20 through a 155 
+
+temporal imputation task, which reflects the sparse time sampling common in cell 156 
+
+differentiation and dynamic perturbation experiments and tests whether models can 157 
+
+recover cellular states at unobserved intermediate time points. These settings assess not 158 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+only the fit to observed perturbation patterns, but also the reliability of generalization across 159 
+
+biological context, perturbation type and temporal dynamics. 160 
+
+Beyond task -level comparisons, PertDiffBench examines how data representation, 161 
+
+model components and data noise affect prediction. We compare performance across 162 
+
+feature dimensions and evaluate how different single -cell data representation methods 163 
+
+work with the DDPM backbone, including STATE, scFoundation, scGPT, Tahoe -x1, 164 
+
+Geneformer, Scimilarity, and scVI. These experiments ask whether performance is mainly 165 
+
+determined by the diffusion backbone or depends strongly on data representation. 166 
+
+Because single -cell data are sparse, overdispersed and affected by dropout and technical 167 
+
+noise, PertDiffBench also includes a noise robustness analysis. We introduce Gaussian 168 
+
+noise, Log -Normal noise, Poisson noise and Zero -Inflation to measure how performance 169 
+
+changes under different data perturbations and to test whether the denoising premise of 170 
+
+diffusion models leads to a practical robustness advantage. 171 
+
+At the model and metric levels, all models are evaluated with the same data 172 
+
+processing pipeline, task splits and metrics. The primary metric is PCC -Delta, 173 
+
+supplemented by PCC, MAE, MMD, E -distance and metrics based on top differentially 174 
+
+expressed genes. Together, these metrics measure prediction quality at the levels of global 175 
+
+expression state, perturbation response direction and key differentially expressed genes. 176 
+
+PertDiffBench therefore addresses a diffusion model specific question: whether diffusion 177 
+
+models are well suited to single -cell perturbation response prediction, and under which 178 
+
+data conditions and task settings their strengths and limitations become apparent. 179 
+
+180 
+
+Diffusion models do not consistently outperform scGen under seen perturbation 181 
+
+conditions 182 
+
+To assess the baseline predictive performance of diffusion models under seen 183 
+
+perturbation conditions, we compare diffusion -based models with  the VAE -based  model 184 
+
+scGen in two standard perturbation response prediction tasks, one at the single -cell level 185 
+
+and the other at the bulk level. In the Kang18 known -cell -type prediction task, scGen 186 
+
+achieves the highest PCC -Delta and outperforms all diffusion -based models. Among the 187 
+
+diffusion models, scDiffusion performs best, followed by Squidiff, DDPM, scDiff and 188 
+
+DDPM+MLP, with progressively lower performance (Figure 2A, Supplementary Figure 1A 189 
+
+and 1B). The bulk -level drug perturbation task shows a similar pattern. scGen and 190 
+
+scDiffusion rank first and second, respectively, whereas the other diffusion models show 191 
+
+weaker overall performance (Figure 2B, Supplementary Figure 1C). These results suggest 192 
+
+that, under measured perturbation conditions, diffusion models do not consistently 193 
+
+outperform classical VAE -based methods, and their performance varies substantially 194 
+
+across model designs. 195 
+
+We next examine how input feature dimensionality and representation affect predictive 196 
+
+performance. As shown in Figure 2C, most models lose performance as the feature 197 
+
+dimension increases. scGen remains the strongest model across all feature dimensions, 198 
+
+followed by scDiffusion. DDPM, DDPM+MLP and scDiff stay at relatively low performance 199 
+
+levels, whereas Squidiff performs well with low -dimensional features but declines rapidly 200 
+
+as the feature dimension increases (Supplementary Figure 1D). For the known -cell -type 201 
+
+prediction task, using CD4 T cells as the evaluation setting, we evaluated single -cell 202 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+foundation models and classical representation models as encoders for DDPM. scVI and 203 
+
+STATE produced the largest gains, followed by scFoundation, scGPT and Tahoe -x1, 204 
+
+whereas Geneformer and Scimilarity reduced PCC -Delta on the top 50 differentially 205 
+
+expressed genes and all genes (Figure 2D, Supplementary Figure 1E). The results  suggest 206 
+
+that the input representation may affect model performance more than the diffusion 207 
+
+architecture itself. 208 
+
+Overall, diffusion models show measurable predictive performance under in -209 
+
+distribution perturbation conditions, but their performance is unstable and they do not 210 
+
+generally outperform scGen. Performance depends strongly on feature dimensionality and 211 
+
+data representation, indicating that representation learning is a key determinant of 212 
+
+diffusion -based models for single -cell perturbation response prediction. 213 
+
+214 
+
+Diffusion models show task -dependent generalization under unseen conditions 215 
+
+To assess model generalization under unseen conditions, we design extrapolation 216 
+
+tasks that span cell type, species and perturbation type. In the unseen cell -type prediction 217 
+
+task on the Kang18 dataset, we retain 25% of control cells from the held -out cell type as 218 
+
+input and compare the predictive performance of different models. scGen achieves the 219 
+
+best across PCC, PCC -Delta, MMD and MAE, followed by scDiffusion, whereas DDPM, 220 
+
+DDPM+MLP, scDiff and Squidiff show weaker performance (Figure 3A). These results 221 
+
+indicate that  the  VAE -based model scGen  remains  strong for unseen cell -type prediction, 222 
+
+and that diffusion models do not consistently outperform scGen in this setting. 223 
+
+We next examine how the proportion of control cells affects unseen cell -type prediction. 224 
+
+As the fraction of control cells in the held -out cell type increases from 0% to 25% and 50%, 225 
+
+PCC -Delta remains stable for most models (Figure 3B). scGen showed consistently high 226 
+
+and stable performance across all held -out cell types. Among diffusion -based models, 227 
+
+scDiffusion performed best overall, but its performance was lower for FCGR3A+ 228 
+
+monocytes, indicating context -dependent generalization. Other diffusion -based models 229 
+
+remained substantially weaker, with Squidiff performing close to zero across settings. 230 
+
+These results suggest that control cells provide useful state references, but generalization 231 
+
+is still shaped by the complexity of cell -type -specific responses and by model architecture. 232 
+
+We further evaluate cross -species prediction of LPS responses using the Hagai18 233 
+
+dataset. This task requires models to learn perturbation responses from a subset of species 234 
+
+and predict cellular state changes in an unseen species, making it more challenging than 235 
+
+cell -type transfer within the same species. scGen and scDiffusion show the strongest 236 
+
+overall performance, DDPM performs at an intermediate level, and scDiff, DDPM+MLP and 237 
+
+Squidiff perform less well (Figure 3C) . These results show that cross -species 238 
+
+generalization varies substantially across diffusion models, with only a few approaching 239 
+
+the performance of the VAE -based baseline. 240 
+
+Finally, we evaluated cross -MOA unseen drug prediction, where models were trained 241 
+
+on perturbations from other mechanisms of action and tested on held -out MOA groups. We 242 
+
+compared DDPM, DDPM+MLP and Squidiff, and included ChemCPA, an adversarially 243 
+
+regularized autoencoder -based model for compound -conditioned perturbation response 244 
+
+prediction, as a task -specific baseline. DDPM and DDPM+MLP achieved the best overall 245 
+
+PCC -Delta, with mean values of 0.46 and 0.44, respectively, outperforming ChemCPA 246 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+across most MOA groups (Figure 3D). ChemCPA showed moderate performance but 247 
+
+varied substantially across mechanisms, whereas Squidiff consistently produced negative 248 
+
+PCC -Delta values. These results indicate that cross -MOA generalization remains highly 249 
+
+model -dependent and mechanism -dependent, and that simple DDPM -based models can 250 
+
+provide stronger performance than the compound -conditioned baseline in this setting. 251 
+
+Taken together, the unseen -condition tasks reveal the operating limits of different 252 
+
+models. scGen performs consistently in unseen cell -type and cross -species prediction, 253 
+
+suggesting that VAE -based latent perturbation modeling remains competitive in these 254 
+
+extrapolation settings. The performance of diffusion -based models depends more strongly 255 
+
+on the task and implementation. scDiffusion is relatively stable across several tasks, 256 
+
+whereas DDPM baseline performs well in unseen MOA prediction. These results indicate 257 
+
+that diffusion models do not provide a consistent advantage across unseen -condition 258 
+
+settings (Figure 3E). Their generalization is shaped by the biological context, the 259 
+
+extrapolation setting, and the input embedding. 260 
+
+261 
+
+Diffusion models show model -specific behavior in temporal imputation 262 
+
+To assess whether diffusion models can infer missing time points, we design a 263 
+
+temporal imputation task using single -cell omics data from DEX -treated A549 cells 264 
+
+collected at 0, 2, 4, 6, 8, and 10 h . The models are trained on the remaining time points 265 
+
+and used to predict the held -out 4 h and 6 h cell states (Figure 4A and B). The models 266 
+
+show clear differences in this setting (Figure 4C). DDPM shows the strongest overall 267 
+
+performance at both held -out time points. It achieves the lowest MMD and MAE and the 268 
+
+highest PCC -Delta, indicating better recovery of both the expression distribution and 269 
+
+perturbation -induced changes at 4 h and 6 h. scDiffusion achieves the highest PCC, 270 
+
+suggesting accurate reconstruction of overall expression profiles, but it is weaker than 271 
+
+DDPM on PCC -Delta and distribution -level metrics. DDPM+MLP and Squidiff perform 272 
+
+poorly overall, with near -zero PCC and higher MMD and MAE. These results suggest that, 273 
+
+for temporal imputation, a simple DDPM backbone can outperform more complex diffusion 274 
+
+variants. 275 
+
+The UMAP visualization reveals distinct patterns for each model (Figure 4D) . DDPM 276 
+
+produces cells spread across a wider region, but local neighborhoods are less coherent. 277 
+
+Cells generated by scDiffusion closely follow the reference distribution. Squidiff predictions 278 
+
+are concentrated in specific branches, while DDPM+MLP forms a tight cluster of predicted 279 
+
+cells, consistent with strong mode collapse. 280 
+
+These results show that diffusion models can impute unobserved intermediate time 281 
+
+points, but their ability to recover temporal structure varies across implementations. DDPM 282 
+
+better reconstructs the overall expression  distribution .283 
+
+284 
+
+Failure modes and sensitivity analysis of diffusion -based perturbation response 285 
+
+prediction 286 
+
+We next asked which factors most strongly affected diffusion -based perturbation 287 
+
+response prediction. We first examined the role of input representation by pairing DDPM 288 
+
+with a set of pretrained and classical single -cell encoders in the unseen cell -type task. 289 
+
+Under the 25% control -cell setting, DDPM performance varied markedly across encoders 290 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+and target cell types (Figure 5A). scVI, a classical VAE -based representation model, 291 
+
+achieved the strongest overall performance, followed by STATE. By contrast, larger 292 
+
+pretrained transcriptomic language models, including scGPT, scFoundation,  and  Tahoe -x1 293 
+
+showed intermediate performance and rarely outperformed scVI. Scimilarity and 294 
+
+Geneformer performed poorly across most cell types, with PCC -Delta values close to zero 295 
+
+in several cases. Performance also differed across target cell types, with B cells, CD8 T 296 
+
+cells, dendritic cells and NK cells being more predictable than FCGR3A+ monocytes. 297 
+
+These results suggest that effective perturbation response prediction does not simply 298 
+
+follow model scale. Instead, a compact VAE -based representation such as scVI can 299 
+
+provide a more suitable latent space for DDPM -based generation than several larger 300 
+
+pretrained encoders. 301 
+
+We next examined whether these encoder -dependent differences were associated 302 
+
+with perturbation -aware structure in the embedding space. To account for differences in 303 
+
+prediction difficulty across held -out cell types, we centered both representation metrics and 304 
+
+PCC -Delta values within each held -out cell type. In this analysis, condition kNN purity 305 
+
+showed a positive association with PCC -Delta on the top 50 differentially expressed genes, 306 
+
+whereas the association was weaker for PCC -Delta across all genes (Supplementary 307 
+
+Figure 3). By contrast, perturbation signal ratio showed little association with either metric. 308 
+
+These results suggest that DDPM performance in the unseen -cell -type setting is more 309 
+
+closely related to the preservation of local Control/IFN -perturbed neighborhood structure 310 
+
+than to the magnitude of the global IFN perturbed –Control centroid shift alone. 311 
+
+We then evaluated model robustness by adding Gaussian, Log -Normal, Poisson and 312 
+
+Zero -Inflation noise  to the input expression profiles. scDiffusion was the most stable model 313 
+
+across noise types and noise ratios, maintaining high PCC -Delta on the top 50 differentially 314 
+
+expressed genes (Figure 5B). scGen also remained competitive, although its performance 315 
+
+varied more under Gaussian and Log -Normal noise. DDPM and DDPM+MLP showed 316 
+
+stronger dependence on the noise distribution. DDPM+MLP performed well under high 317 
+
+Gaussian noise but was less stable under Log -Normal and Poisson noise, whereas DDPM 318 
+
+showed moderate performance across most settings. scDiff was sensitive to the type of 319 
+
+noise, with a marked drop under log -normal noise. Squidiff was the least robust model 320 
+
+overall, producing near -zero or negative PCC -Delta under several noise settings. 321 
+
+We also tested whether model performance was sensitive to the ordering of input 322 
+
+genes. We compared a cluster -based gene ordering with a random gene shuffle, with the 323 
+
+same order applied consistently to training and validation data. Most models showed 324 
+
+limited sensitivity to gene order, including scGen, DDPM+MLP and Squidiff 325 
+
+(Supplementary Figure 4). By contrast, DDPM and scDiffusion showed significant 326 
+
+differences between the two orderings, although the direction of the effect was model 327 
+
+dependent. These results indicate that gene order is not a universal driver of performance, 328 
+
+but can affect models whose implementation implicitly or explicitly uses feature 329 
+
+organization. 330 
+
+Across the benchmark, commonly used evaluation metrics were correlated but not 331 
+
+interchangeable (Figure 5C). PCC was positively correlated with both all -gene PCC -Delta 332 
+
+and top -50 -DEG PCC -Delta, whereas MMD was negatively correlated with PCC -Delta, 333 
+
+consistent with their opposite performance directions. The overall ranking further showed 334 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+that no single model dominated every task (Figure 5D). scGen and scDiffusion ranked 335 
+
+highest in several known -condition and generalization settings, while DDPM -based models 336 
+
+remained competitive in selected tasks, including unseen drug perturbation response 337 
+
+prediction. The encoder comparison showed a similar pattern at the representation level, 338 
+
+with scVI and STATE ranking above other pretrained models in both known and unseen 339 
+
+cell -type settings (Figure 5E). Together, these analyses indicate that model performance 340 
+
+depends not only on the generative backbone, but also on the input representation, noise 341 
+
+structure and evaluation metric. 342 
+
+343 
+
+# Discussion 344 
+
+Our benchmark shows that diffusion models are not a default improvement over 345 
+
+established generative baselines for single -cell perturbation response prediction. Across 346 
+
+the tasks examined here, scGen remained the strongest model in the seen -condition 347 
+
+setting, while scDiffusion was the most competitive diffusion -based method. Other diffusion 348 
+
+variants showed more variable performance. This result does not rule out the value of 349 
+
+diffusion models, but it argues against treating the diffusion backbone itself as sufficient for 350 
+
+improved prediction. 351 
+
+A recurring pattern across the benchmark is the importance of representation. In the 352 
+
+feature -dimensionality analysis, most models lost accuracy as the input space became 353 
+
+larger. scGen remained robust across feature dimensions, followed by scDiffusion, 354 
+
+whereas DDPM, DDPM+MLP and scDiff stayed at relatively low performance levels. 355 
+
+Squidiff performed well with low -dimensional features but declined rapidly when more 356 
+
+genes were included. These results point to a practical issue for diffusion -based modelling 357 
+
+in omics: denoising in gene -expression space may be sensitive to the scale and structure 358 
+
+of the input features. Unlike images, gene -expression matrices do not have an obvious 359 
+
+spatial neighbourhood structure, and dependencies between genes are often nonlocal and 360 
+
+context dependent. The effectiveness of a diffusion model may therefore depend heavily 361 
+
+on whether the input representation exposes a learnable structure for the denoising 362 
+
+process. 363 
+
+The encoder experiments support this view. Pretrained representations did not provide 364 
+
+a uniform benefit. In the unseen cell -type task, scVI and STATE gave stronger and more 365 
+
+stable results than several larger trained encoders. This suggests that encoder quality 366 
+
+should not be judged only by pretraining scale. For perturbation response prediction, a 367 
+
+useful representation needs to preserve cell -state variation and perturbation -relevant 368 
+
+expression structure in a form that is compatible with the downstream generative model. 369 
+
+Generalization performance also depended on the biological setting. In unseen cell -370 
+
+type prediction, scGen remained the strongest overall model, followed by diffusion -based 371 
+
+methods. Adding control cells from the held -out cell type produced only modest changes, 372 
+
+and the effect varied across cell types. This implies that cell -type extrapolation is not 373 
+
+determined only by the amount of control information available, but also by how 374 
+
+transferable the target cell state is from the training conditions. In cross -species prediction, 375 
+
+scGen and scDiffusion alternated as the best -performing methods, with DDPM usually 376 
+
+ranking below them. Thus, diffusion -based models can be competitive in some out -of -377 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+distribution settings, but the advantage is not consistent across tasks. 378 
+
+Temporal imputation showed a different behavior. In this task, the DDPM baseline 379 
+
+applied directly to the original gene -expression space outperformed DDPM+MLP and 380 
+
+scDiffusion, whereas Squidiff showed the weakest performance. This result suggests that 381 
+
+temporal imputation is particularly sensitive to how intermediate cellular states are 382 
+
+represented. Direct modeling in gene -expression space may preserve subtle, time -383 
+
+dependent changes in gene abundance, while DDPM+MLP compresses the input through 384 
+
+a three -layer MLP into a 256 -dimensional latent space, which may remove part of this 385 
+
+information. These results indicate that the relative performance of diffusion models 386 
+
+depends not only on the diffusion backbone, but also on whether the chosen representation 387 
+
+preserves the structure required by the task. 388 
+
+The robustness analysis further shows that model performance depends on the type 389 
+
+of noise introduced into the input data. Log -Normal overdispersion produced the largest 390 
+
+decrease in top -DE -gene PCC -Delta, whereas dropout had a more limited effect. This 391 
+
+difference may reflect the fact that overdispersion alters gene -level variability and response 392 
+
+magnitude, both of which are central to perturbation response prediction, while dropout 393 
+
+mainly increases sparsity. Robustness to one form of noise therefore does not necessarily 394 
+
+imply robustness to another. Perturbation -model benchmarks should include noise settings 395 
+
+that capture distinct sources of technical and biological variation, rather than relying on a 396 
+
+single generic corruption test. 397 
+
+Taken together, these results suggest that the main determinant of performance is not 398 
+
+the diffusion backbone alone, but its interaction with representation, feature space and task 399 
+
+design. Diffusion models may be useful for single -cell perturbation response prediction, but 400 
+
+their current advantage is conditional rather than universal. Future methods may need 401 
+
+more omics -specific inductive biases, better task -aligned representations, and explicit use 402 
+
+of regulatory and pathway structure to make the denoising process better matched to gene -403 
+
+expression data. 404 
+
+This study has several limitations. The benchmark focuses mainly on transcriptomic 405 
+
+perturbation responses and does not yet cover the full range of multimodal perturbation 406 
+
+readouts. The evaluated methods represent current diffusion -based approaches, but they 407 
+
+do not exhaust all possible architectures. Some failure -mode analyses, including sensitivity 408 
+
+to feature ordering, require further investigation. Finally, quantitative benchmarks can 409 
+
+compare model behavior across controlled settings, but they cannot replace biological 410 
+
+validation. Future work should extend these evaluations to larger perturbation atlases, 411 
+
+multimodal measurements and more stringent out -of -distribution settings, with particular 412 
+
+attention to separating the effects of representation, model architecture and task design. 413 
+
+414 
+
+Datasets and Code  Availability 415 
+
+https://github.com/ZijunSong/PertDiffBench 416 
+
+417 
+
+Author Contributions 418 
+
+L.X. and Y.X. conceived the study and designed the PertDiffBench framework. J.Z.S., Y.X., 419 
+
+Z.S., and W.J. developed the benchmark tasks, evaluation settings and analysis workflow. 420 
+
+J.Z.S. implemented the benchmarking pipeline and performed model training and 421 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+evaluation. Y.X. and J.L. performed data analysis. Y.X., J.Z.S., L.X., Z.S., W.J., J.L., and 422 
+
+C.S. wrote the manuscript. All authors reviewed and approved the final manuscript. 423 
+
+424 
+
+Funding 425 
+
+This work was supported by  National Key R&D Program of China , 2025YFA1309400 .426 
+
+427 
+
+Competing interests 428 
+
+The authors declare no competing interests. 429 
+
+430 
+
+# Methods 431 
+
+432 
+
+Datasets and preprocessing 433 
+
+We used Kang18 and Ramaiahgari19 to benchmark response prediction in known 434 
+
+perturbation contexts, covering single -cell RNA -seq and bulk RNA -seq data, respectively 435 
+
+(Kang, et al., 2018; Ramaiahgari, et al., 2019) . For unseen -context prediction, we used 436 
+
+Srivatsan20 for compound perturbation generalization, Kang18 for cross -cell -type 437 
+
+prediction and Hagai18 for cross -species transfer  (Hagai, et al., 2018; Srivatsan, et al., 438 
+
+2020) . A549 time -resolved datasets were used to evaluate temporal imputation  (Cao, et 439 
+
+al., 2020) . For all datasets, expression matrices were centered and log -normalized before 440 
+
+model training and evaluation. The number of genes used for each benchmark setting is 441 
+
+provided in Supplementary Table 1. Task -specific transformations and train -test split 442 
+
+procedures are described in the corresponding Methods sections. 443 
+
+444 
+
+Benchmarking tasks and experiment settings 445 
+
+To systematically evaluate perturbation -response prediction, we organized the 446 
+
+benchmark into four scenarios: known -condition prediction, un seen -condition 447 
+
+generalization, robustness analyses, and representation -learning benchmarking. These 448 
+
+settings were designed to cover both standard in -distribution prediction and biologically 449 
+
+meaningful distribution shifts, including transfer across perturbations, cellular contexts, 450 
+
+species, and treatment times. 451 
+
+Known -condition prediction.  Known -condition prediction was used to assess whether 452 
+
+models could generate post -perturbation expression profiles for perturbation contexts 453 
+
+observed during training. For the scRNA -seq benchmark, we used seven cell types from 454 
+
+the Kang PBMC dataset: B cells, CD14+ monocytes, CD4 T cells, CD8 T cells, dendritic 455 
+
+cells, FCGR3A+ monocytes and natural killer cells. Each cell type was analysed separately, 456 
+
+and models were evaluated on held -out control and perturbed profiles from the same cell 457 
+
+type and perturbation context. 458 
+
+For the bulk RNA -seq benchmark, we used the Ramaiahgari19 dataset from LINCS, 459 
+
+which contains expression profiles before and after aflatoxin treatment across ten dose 460 
+
+levels. The dataset included 12 control samples and 30 treated samples, with three 461 
+
+replicates for each dose. We generated three random train -test splits. In each split, six 462 
+
+control samples and 20 treated samples, two replicates per dose, were used for training, 463 
+
+while the remaining six control samples and ten treated samples, one replicate per dose, 464 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+were held out for testing. Models were evaluated by their ability to predict the held -out 465 
+
+treated expression profiles from control inputs under perturbation conditions represented 466 
+
+during training. 467 
+
+Biological -context generalization.  For cross -cell -type prediction, each cell type was held 468 
+
+out in turn, and the remaining cell types were used for training. For each held -out cell type, 469 
+
+we used two protocols. In the fully out -of -distribution setting, all samples from the held -out 470 
+
+cell type were excluded from training. In the partially shared setting, control cells from the 471 
+
+held -out cell type were included during training, but the corresponding perturbed cells were 472 
+
+kept for testing. This design allowed us to distinguish transfer to an entirely unseen cellular 473 
+
+context from prediction in a target context where baseline expression profiles were 474 
+
+available. 475 
+
+The cross -species task followed the same leave -one -context -out design. Each 476 
+
+species was held out in turn, with the remaining species used for training under the same 477 
+
+perturbation setting. Models were then evaluated on the held -out species, allowing us to 478 
+
+test whether perturbation responses learned in one set of species could be transferred to 479 
+
+another. 480 
+
+Perturbation generalization.  Perturbation generalization was evaluated in two settings: 481 
+
+intra -MOA unseen drug prediction and cross -MOA unseen mechanism prediction. For 482 
+
+intra -MOA prediction, each mechanism -of -action (MOA) category was analysed 483 
+
+independently. Within each MOA, drugs were split into training and test sets. Models were 484 
+
+trained to predict drug -treated expression profiles from matched control profiles using the 485 
+
+training drugs, and were evaluated on held -out drugs from the same MOA. This analysis 486 
+
+was performed across 15 MOA -specific splits. 487 
+
+For cross -MOA prediction, we used a leave -one -MOA -out design. In each split, drugs 488 
+
+from one MOA were held out for testing, and drugs from the remaining MOAs were used 489 
+
+for training. This procedure was repeated for all 15 MOA categories. Because this task 490 
+
+requires prediction for drugs from unseen mechanisms, we restricted the benchmark to 491 
+
+models that support drug -conditioned generation. Drug information was provided 492 
+
+according to the input format required by each model. 493 
+
+For DDPM, DDPM+MLP and Squidiff, compound identity and dose were encoded 494 
+
+jointly as a structure –dose representation. Specifically, each compound was represented 495 
+
+by a 1,024 -dimensional RDKit Morgan feature fingerprint using a radius of 2; for multi -496 
+
+componen t SMILES strings, component -level fingerprints were averaged. The resulting 497 
+
+molecular fingerprint was then scaled by log ₁₀ (dose + 1), so that dose information 498 
+
+modulated the structural representation rather than being provided as an independent 499 
+
+categorical  variable. During testing, held -out compounds were encoded from their SMILES 500 
+
+strings using the same procedure, with the corresponding dose summarized by the median 501 
+
+observed dose for that condition. Squidiff used the same structure –dose representation in 502 
+
+the cross -MOA experiments. ChemCPA used a different encoding scheme. Each canonical 503 
+
+SMILES string was converted into a 2,048 -bit RDKit Morgan fingerprint with radius 2, while 504 
+
+the dose was encoded separately by ChemCPA ’s learned dose network before decoding. 505 
+
+Time -point generalization . For temporal imputation, we used a time -resolved single -cell 506 
+
+RNA -seq dataset of A549 cells treated with dexamethasone (DEX), with cells collected at 507 
+
+0 h, 2 h, 4 h, 6 h, 8 h and 10 h after treatment. Models were trained on observed response 508 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+states at 0 h, 2 h, 8 h and 10 h, and evaluated on the held -out intermediate time points at 509 
+
+4 h and 6 h. This task assesses whether a model can recover unseen intermediate 510 
+
+transcriptional states along a perturbation -induced temporal trajectory. 511 
+
+The models used different latent representations for intermediate -state generation. 512 
+
+The direct -expression DDPM baseline was trained directly in gene -expression space, and 513 
+
+the held -out 4 and 6 h states were estimated by linear interpolation between the observed 514 
+
+2 and 8 h expression profiles, without an auxiliary encoder or decoder. DDPM+MLP used 515 
+
+the same interpolation scheme in a learned 256 -dimensional latent space before decoding 516 
+
+the interpolated states back to gene -expression space. 517 
+
+For Squidiff, temporal imputation was performed in its semantic latent space. In the 518 
+
+default addition mode, 2 h cells were encoded into 60 -dimensional semantic 519 
+
+representations, and a global transition vector was estimated as the difference between 520 
+
+the mean 8 h and mean 2 h latent states. Intermediate states were generated by moving 521 
+
+the 2 h latent representation along this transition direction according to the target time point, 522 
+
+followed by DDIM decoding. Cell -level stochastic variation was retained during decoding. 523 
+
+We also evaluated a linear -interpolation variant of Squidiff, in which 2 and 8 h semantic 524 
+
+latents were mixed directly on a per -cell basis before decoding. 525 
+
+For scDiffusion, temporal imputation was performed in a 128 -dimensional VAE latent 526 
+
+space using classifier -guided gradient interpolation rather than direct latent mixing. The 527 
+
+model was trained as a three -component pipeline on the observed time points at 0 h, 2 h, 528 
+
+8 h and 10 h. First, a VAE initialized from a pretrained annotation encoder –decoder was 529 
+
+used to map expression profiles into latent representations. A diffusion model was then 530 
+
+trained on these latent codes, and a time -point classifier was trained to distinguish the four 531 
+
+observed treatment times from VAE -encoded cells. To generate the held -out 4 h and 6 h 532 
+
+states, cells from the 2 h state were encoded into the VAE latent space and diffused to an 533 
+
+intermediate noise level before reverse sampling. During reverse diffusion, classifier 534 
+
+guidance was applied jointly with respect to the 2 h and 8 h time labels, thereby steering 535 
+
+samples between the early and late observed response states. The relative guidance 536 
+
+strengths were controlled by predefined interpolation weights assigned to the two endpoint 537 
+
+labels. For the 4 h prediction, balanced guidance toward 2 h and 8 h was used, whereas 538 
+
+the 6 h prediction used stronger guidance toward the 8 h state. Classifier guidance was 539 
+
+applied during the final portion of the reverse -diffusion trajectory, and the resulting latent 540 
+
+samples were decoded back into gene -expression space. 541 
+
+Unlike the linear -interpolation baselines, scDiffusion used observed time labels 542 
+
+explicitly through the auxiliary classifier during both training and sampling. The temporal -543 
+
+imputation experiments did not use SMILES or dose embeddings for Squidiff, and the 544 
+
+DDPM -family models were not provided with explicit time -point embeddings. Thus, for 545 
+
+these baselines, temporal information was inferred from the latent geometry between 546 
+
+observed early and late response states. 547 
+
+548 
+
+Ba seline  models 549 
+
+The benchmark included two implemented DDPM baselines, DDPM and 550 
+
+DDPM+MLP, together with published  models , including scGen, scDiff, scDiffusion 551 
+
+and Squi diff. 552 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+DDPM.  The direct -expression DDPM baseline used a conditional denoising diffusion 553 
+
+model operating on preprocessed gene -expression vectors. Let  𝑥 0 ∈ ℝ𝐺  denote a 554 
+
+perturbed expression profile and  𝑐  ∈ ℝ𝐺  denote the corresponding control -profile 555 
+
+input. The forward diffusion process was defined as 556 
+
+557 
+
+𝑞 (𝑥 𝑡  |𝑥 0) = 𝒩 (𝑥 𝑡  ; √𝛼 ̅𝑡 𝑥 0, (1 − 𝛼 ̅ 𝑡 )𝐼 ), (1)558 
+
+559 
+
+where  𝛼 𝑡  = 1 − 𝛽 𝑡 , 𝛼 ̅ 𝑡  = ∏ 𝛼 𝑠  
+
+> 𝑡
+> 𝑠 =1
+
+, and  {𝛽 𝑡 }𝑡 =1 
+
+> 𝑇
+
+followed a linear variance schedule. 560 
+
+The denoising model  𝜖 𝜃 (𝑥 𝑡  , 𝑐 , 𝑡 ) was parameterized by a compact conditional 561 
+
+multilayer perceptron. The noisy target profile and the control profile were 562 
+
+concatenated and projected into a hidden representation, while the diffusion timestep 563 
+
+was encoded with a sinusoidal timestep embedding. These two representations were 564 
+
+combined before the final noise -prediction layers: 565 
+
+566 
+
+ℎ𝑡  = 𝜑 𝑥 ([𝑥 𝑡  ; 𝑐 ]) + 𝜑 𝑡 (𝜙 (𝑡 )), 𝜖 ̂ = 𝜖 𝜃 (𝑥 𝑡  , 𝑐 , 𝑡 ) = 𝑓 𝜃 (ℎ𝑡 ), (2)567 
+
+568 
+
+where  [𝑥 𝑡 ; 𝑐 ] denotes concatenation along the gene dimension,  𝜙 (𝑡 ) is the 569 
+
+sinusoidal timestep embedding, and  𝜑 𝑥 , 𝜑 𝑡  and  𝑓 𝜃  are fully connected 570 
+
+transformations. This architecture provides conditional generation from control to 571 
+
+perturbed expression space without introducing convolutional assumptions over the 572 
+
+gene order. 573 
+
+The model was trained with the standard DDPM noise -prediction objective, 574 
+
+575 
+
+ℒ𝐷𝐷𝑃𝑀  = 𝔼 𝑥 0,𝑐 ,𝑡 ,𝜖  [‖𝜖  − 𝜖 𝜃 (√𝛼 ̅ 𝑡 𝑥 0 + √1 − 𝛼 ̅𝑡 𝜖 , 𝑐 , 𝑡 )‖2
+
+> 2
+
+] , 𝜖  ∼ 𝒩 (0, 𝐼 ). (3)576 
+
+577 
+
+At inference, samples were generated by conditional reverse diffusion initialized 578 
+
+from Gaussian noise and conditioned on the control profile  𝑐 . Generated profiles 579 
+
+were evaluated directly in the same preprocessed expression space used for 580 
+
+training. The default configuration used  𝑇  = 1,000  diffusion steps, a linear schedule 581 
+
+from  𝛽 1 = 10 −4 to  𝛽 𝑇  = 0.02 , and a hidden width of  1,024 . Optimization used 582 
+
+AdamW with cosine learning -rate annealing and gradient clipping. 583 
+
+DDPM+MLP.  The DDPM+MLP baseline extended the direct -expression DDPM by 584 
+
+moving the diffusion process from gene -expression space to a learned latent space. 585 
+
+Let  𝐸 𝜙  and  𝐷 𝜔  denote an MLP encoder and decoder, respectively. For a control 586 
+
+profile  𝑐  ∈ ℝ𝐺  and a perturbed target profile  𝑥 0 ∈ ℝ𝐺 , the corresponding latent 587 
+
+representations were 588 
+
+589 
+
+𝑧 𝑐  = 𝐸 𝜙 (𝑐 ), 𝑧 0 = 𝐸 𝜙 (𝑥 0), (4)590 
+
+591 
+
+where  𝑧 𝑐 , 𝑧 0 ∈ ℝ𝐿 . Diffusion was applied to the perturbed latent representation  𝑧 0,592 
+
+while the control latent representation  𝑧 𝑐  was used as the conditioning input. 593 
+
+The latent denoising network followed the same conditional noise -prediction principle 594 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+as the direct -expression DDPM, but operated on  𝐿 -dimensional latent variables 595 
+
+rather than  𝐺 -dimensional expression profiles: 596 
+
+597 
+
+𝜖 ̂ = 𝜖 𝜃 (𝑧 𝑡 , 𝑧 𝑐 , 𝑡 ) = 𝑓 𝜃  (𝜑 𝑧 ([𝑧 𝑡 ; 𝑧 𝑐 ]) + 𝜑 𝑡 (𝜙 (𝑡 ))) , (5)598 
+
+599 
+
+where  𝑧 𝑡  is the noisy perturbed latent variable,  [𝑧 𝑡 ; 𝑧 𝑐 ] denotes latent 600 
+
+concatenation,  𝜙 (𝑡 ) is the sinusoidal timestep embedding, and  𝜑 𝑧 , 𝜑 𝑡  and  𝑓 𝜃  are 601 
+
+fully connected transformations. This design tests whether a compact latent 602 
+
+representation improves conditional denoising by reducing the dimensionality of the 603 
+
+generation space. 604 
+
+Training used the latent -space analogue of the DDPM noise -prediction objective: 605 
+
+606 
+
+ℒ𝑙𝑎𝑡𝑒𝑛𝑡  = 𝔼 𝑧 0,𝑧 𝑐 ,𝑡 ,𝜖 [‖𝜖  − 𝜖 𝜃 (𝑧 𝑡 , 𝑧 𝑐 , 𝑡 )‖2
+
+> 2
+
+], (6)607 
+
+608 
+
+with  𝑧 𝑡  obtained by applying the forward diffusion process to  𝑧 0. At inference, a 609 
+
+perturbed latent profile was sampled by conditional reverse diffusion from Gaussian 610 
+
+noise given  𝑧 𝑐 , and the generated latent representation was decoded back to 611 
+
+expression space: 612 
+
+613 
+
+𝑥 ̂0 = 𝐷 𝜔 (𝑧 ̂0). (7)614 
+
+615 
+
+The generated expression profiles were evaluated in the same preprocessed 616 
+
+expression space as the other baselines. 617 
+
+In the main benchmark, direct -expression DDPM and DDPM+MLP were 618 
+
+evaluated as separate baselines to distinguish diffusion in expression space from 619 
+
+diffusion in a learned latent space. Encoder -based representation experiments used 620 
+
+a separate latent -diffusion setting in which pretrained or separately learned cellular 621 
+
+embeddings were supplied to the downstream diffusion module; these experiments 622 
+
+were therefore analysed as representation -learning benchmarks rather than as the 623 
+
+main DDPM+MLP baseline. 624 
+
+Published baselines.  scGen was used as the VAE -based perturbation  response 625 
+
+prediction  baseline. It learns a latent representation of single -cell expression and 626 
+
+estimates perturbation responses as shifts from control to perturbed states in the latent 627 
+
+space. The diffusion -based published baselines, including scDiff, scDiffusion and 628 
+
+Squi diff, were evaluated using the same task definitions, train -test splits and processed 629 
+
+expression matrices as the implemented DDPM baselines whenever their model 630 
+
+interfaces supported the required conditioning variables. For drug -response tasks, 631 
+
+molecular structure and dose information were provided only to models whose native 632 
+
+architecture supported these conditioning inputs. 633 
+
+Each published baseline was run with the configuration required by its  original 634 
+
+implementation. scGen was trained for up to  100  epochs with batch size  32  and 635 
+
+early stopping with a patience of  25  epochs. scDiff was trained with the benchmark 636 
+
+configuration for up to  1,000  epochs using a fixed data -split seed. scDiffusion was 637 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+trained as a three -component pipeline consisting of a variational autoencoder, a 638 
+
+diffusion model and a classifier; the VAE, diffusion and classifier components were 639 
+
+each trained according to the corresponding benchmark configuration, with  10 ,000 640 
+
+optimization steps or iterations for the main components. In the repeated -generation 641 
+
+setting, the trained scDiffusion components were reused and stochastic generation 642 
+
+was repeated three times for evaluation. Squi diff was trained with its benchmark 643 
+
+configuration using a learning rate of  10−4, 1,000  diffusion steps and batch size  128 ,644 
+
+without early stopping. This design kept data preprocessing, task splits and evaluation 645 
+
+metrics unified across models, while preserving the model -specific optimization 646 
+
+procedures needed for each published method. 647 
+
+648 
+
+Representation -learning benchmark 649 
+
+For the representation -learning benchmark, cellular embeddings were first 650 
+
+extracted with each encoder and then kept fixed during downstream perturbation 651 
+
+response  prediction. The downstream predictor was held constant across encoders 652 
+
+and consisted of a latent conditional DDPM followed by an MLP decoder. The latent 653 
+
+DDPM generated perturbed -state embeddings from control -state embeddings, and 654 
+
+the decoder mapped the generated embeddings back to gene -expression space 655 
+
+before metric computation. The model was trained with a combined objective that 656 
+
+included the latent diffusion loss and a decoder reconstruction loss. 657 
+
+The evaluated encoders included scVI, STATE, Tahoe -x1, scGPT, scFoundation, 658 
+
+Geneformer and S cimilarity. For each encoder, input preprocessing and gene 659 
+
+handling followed the requirements of the corresponding  representation  method, 660 
+
+including model -specific normalization, gene -vocabulary alignment or tokenization 661 
+
+where applicable. Encoder dimensionalities and checkpoint choices followed the 662 
+
+released benchmark configuration. This design allowed the benchmark to compare 663 
+
+the practical utility of different cellular representation spaces while keeping the 664 
+
+downstream generative model, task splits and evaluation metrics fixed. 665 
+
+In the main baseline comparison, DDPM and DDPM+MLP refer to the direct -666 
+
+expression diffusion baseline and the autoencoder -based latent diffusion baseline, 667 
+
+respectively. In the encoder benchmark, by contrast, only the upstream cellular 668 
+
+embedding was varied, whereas the downstream latent DDPM -decoder module was 669 
+
+fixed across encoders. 670 
+
+671 
+
+Perturbation -aware embedding structure analysis 672 
+
+To examine whether encoder -dependent DDPM performance was associated with 673 
+
+perturbation -relevant structure in the embedding space, we quantified two perturbation -674 
+
+aware representation metrics for each encoder and held -out cell type.  For each encoder, 675 
+
+embeddings from all held -out cell types were pooled and standardized before PCA. We 676 
+
+retained up to 50 principal components; for lower -dimensional embeddings such as scVI, 677 
+
+all available dimensions were used. Metrics were then computed within each encoder -678 
+
+specific PCA space. 679 
+
+Condition k -nearest -neighbor (kNN) purity was used to quantify local perturbation -680 
+
+state structure. For each cell, we identified its 15 nearest neighbors in the embedding 681 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+space and calculated the fraction of neighbors with the same perturbation condition, 682 
+
+Control or IFN. The mean value across cells was used as the condition kNN purity for that 683 
+
+encoder –held -out -cell -type pair. 684 
+
+Perturbation signal ratio was used to quantify global IFN perturbed –Control separation 685 
+
+relative to within -condition variation. For each held -out cell type, we computed the 686 
+
+centroids of Control and IFN perturbed cells in the embedding space. The perturbation 687 
+
+signal ratio was defined as the Euclidean distance between the IFN perturbed and Control 688 
+
+centroids divided by the square root of the mean within -condition variance, where within -689 
+
+condition variance was calculated from the squared distances of cells to their 690 
+
+corresponding condition centroid. 691 
+
+To account for differences in prediction difficulty across held -out cell types, both 692 
+
+representation metrics and DDPM performance values were centered within each held -out 693 
+
+cell type before correlation analysis. DDPM performance was measured using PCC -Delta 694 
+
+on the top 50 differentially expressed genes and, separately, on all genes. Associations 695 
+
+between centered representation metrics and centered DDPM performance were 696 
+
+evaluated using Spearman correlation across all encoder -held -out -cell -type pairs. 697 
+
+Reported P values are nominal and were not adjusted for multiple testing. 698 
+
+699 
+
+Robustness analyses 700 
+
+For the feature -dimensionality analysis, genes were ranked once by highly 701 
+
+variable gene selection after library -size normalization and log1p transformation. 702 
+
+Nested gene panels were then constructed by retaining the top -ranked genes at 703 
+
+increasing feature dimensions (1,000, 2,000, 3,000, 4,000, 5,000 and 6,000 genes). 704 
+
+When the aligned expression space allowed, an additional 6,998 -gene panel was 705 
+
+included. All panels were generated from the same underlying expression matrix so 706 
+
+that cell assignments, perturbation labels and train -test splits were identical across 707 
+
+feature dimensions. 708 
+
+For the noise -robustness analysis, we focused on CD4 T cells, the largest 709 
+
+subpopulation in the Kang PBMC dataset. Noise was added separately to the training 710 
+
+and validation data. For each noise type and severity level, models were trained from 711 
+
+scratch and tested under the same conditional generation setting used for the clean 712 
+
+data. 713 
+
+We assessed four types of input noise. Additive Gaussian noise was applied by 714 
+
+adding independent zero -mean Gaussian noise to each expression value and 715 
+
+truncating negative values to zero, with noise standard deviation  𝜎  ∈716 
+
+{0.1, 0.25 , 0.5, 1.0, 1.5}. Log -nor mal overdispersion was used to mimic excess cell -to -717 
+
+cell variability: gene -specific mean expression was estimated from the data, latent 718 
+
+expression rates were sampled from a log -normal distribution with coefficient of 719 
+
+variation  𝑐 , and observed values were s ampled from a Poisson distribution around 720 
+
+these rates, with  𝑐  ∈ {0.1, 0.25 , 0.5, 1.0, 1.5}. Poisson noise was used to model depth -721 
+
+dependent sampling noise by drawing corrupted entries from a Poisson distribution 722 
+
+with rate proportional to the original expression value and a sequencing -depth factor 723 
+
+𝑑  ∈ {0.25 , 0.5, 1.0, 2.0, 4.0}. Zero inflation was used to mimic dropout by assigning 724 
+
+gene -specific dropout probabilities as a decreasing logistic function of gene 725 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+abundance, with low -abundance genes assigned higher dropout probabilities than 726 
+
+high -abundance genes. A global severity factor  𝑠  ∈ {0.3, 0.6, 1.0, 1.6, 2.2} scaled 727 
+
+these dropout probabilities, and entries were masked by independent Bernoulli 728 
+
+draws. 729 
+
+730 
+
+Feature ordering analysis 731 
+
+For the random -shuffle setting, gene columns were randomly permuted. For the 732 
+
+cluster -reorder setting, genes were ordered by average -linkage hierarchical clustering of 733 
+
+the gene -gene Pearson correlation matrix computed from log -normalized training data, 734 
+
+with distance defined as 1 minus the correlation coefficient. In both settings, only the 735 
+
+column order was changed; expression values were left unchanged, genes were not 736 
+
+aggregated, and the same order was used for training and validation data. 737 
+
+738 
+
+Evaluation metrics 739 
+
+Model outputs were evaluated at the distribution level. For a condition  𝑐 , let  𝑌 𝑐  =740 
+
+{𝑦 𝑖 }𝑖 =1 
+
+> 𝑚
+
+denote the held -out real perturbed profiles,  𝑌 ̂𝑐  = {𝑦 ̂𝑖 }𝑖 =1 
+
+> 𝑛
+
+the generated 741 
+
+perturbed profiles, and  𝐵 𝑐  the corresponding control or baseline profiles. Their mean 742 
+
+profiles are denoted by  𝜇 𝑌 , 𝜇 𝑌 ̂ and  𝜇 𝐵 , respectively. Unless otherwise specified, all 743 
+
+vector operations were performed across genes. 744 
+
+The primary response -level metric was PCC -Delta , which measures agreement 745 
+
+between the predicted and observed perturbation effects. The observed and 746 
+
+predicted effects were defined as 747 
+
+748 
+
+Δobs  = 𝜇 𝑌  − 𝜇 𝐵 , Δpred  = 𝜇 𝑌 ̂ − 𝜇 𝐵 ̂ . (8)749 
+
+750 
+
+PCC -Delta  was then computed as the Pearson correlation 751 
+
+752 
+
+PCC  Delta  = 𝜌 (Δpred , Δobs ), (9)753 
+
+754 
+
+where, for two gene -wise vectors a and b, 755 
+
+756 
+
+𝜌 (𝑎 , 𝑏 ) = Σ𝑔 (𝑎 𝑔  − 𝑎 ̅ )(𝑏 𝑔  − 𝑏 ̅ )
+
+√Σ𝑔 (𝑎 𝑔  − 𝑎 ̅ )2√Σ𝑔 (𝑏 𝑔  − 𝑏 ̅ )2
+
+. (10 )
+
+757 
+
+758 
+
+PCC -Delta  therefore evaluates whether a model recovers the direction and relative 759 
+
+magnitude of the perturbation -induced transcriptional response, rather than only 760 
+
+reconstructing global expression levels. 761 
+
+Pearson Delta on differentially expressed genes was computed by restricting 762 
+
+Delta PCC to the top  𝑘  genes ranked by  |Δobs |:763 
+
+764 
+
+Delta  PCC  top  k = 𝜌 (Δpred ,𝐷 𝑘 , Δo𝑏𝑠 ,𝐷 𝑘  ), (11 )765 
+
+766 
+
+where  𝐷 𝑘  denotes the top k real response genes. We reported  𝑘  = 20 , 50  and 767 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+100 , with  𝑘  = 50  used as the primary top -DE subset when a single top -DE result 768 
+
+was shown. 769 
+
+770 
+
+Mean -profile accuracy was evaluated using PCC and MAE. PCC was computed 771 
+
+as the Pearson correlation between the mean generated profile and the mean real 772 
+
+target profile: 773 
+
+774 
+
+PCC  = 𝜌 (𝜇 𝑌 ̂ , 𝜇 𝑌 ). (12 )775 
+
+776 
+
+MAE measured the average absolute difference between these two mean profiles: 777 
+
+778 
+
+MAE  = 1
+
+𝐺  ∑|𝜇 𝑌 ̂ ,𝑔  − 𝜇 𝑌 ,𝑔 |
+
+> 𝐺
+> 𝑔 =1
+
+. (13 )779 
+
+780 
+
+where  𝐺  is the number of genes. 781 
+
+Distribution -level discrepancies were measured using maximum mean 782 
+
+discrepancy (MMD) and E -distance. MMD was computed with an RBF kernel, 783 
+
+784 
+
+𝑘 (𝑥 , 𝑦 ) = exp (−𝛾 ‖𝑥  − 𝑦 ‖2
+
+> 2
+
+) , (14 )785 
+
+786 
+
+with  𝛾  = 1/(2𝑑 med  
+
+> 2
+
+), where  𝑑 med  is the median pairwise Euclidean distance among 787 
+
+real samples, with a small numerical stabilizer. The empirical squared MMD between 788 
+
+generated and real samples was 789 
+
+790 
+
+MMD  = √
+
+1
+
+𝑛 2 ∑ 𝑘 (𝑦 ̂𝑖 , 𝑦 ̂𝑗 ) +
+
+> 𝑖 ,𝑗
+
+1
+
+𝑚 2 ∑ 𝑘 (𝑦 𝑖 , 𝑦 𝑗 ) − 2
+
+𝑛𝑚  ∑ 𝑘 (𝑦 ̂𝑖 , 𝑦 𝑗 )
+
+> 𝑖 ,𝑗 𝑖 ,𝑗
+
+. (15 )791 
+
+792 
+
+E-distance followed the energy -distance formulation: 793 
+
+794 
+
+𝐸  = 2𝔼 [‖𝑋  − 𝑌 ‖2] − 𝔼 [‖𝑋  − 𝑋 ′‖2] − 𝔼 [‖𝑌  − 𝑌 ′‖2], (16 )795 
+
+796 
+
+where  𝑋 , 𝑋 ′ are independent generated samples and  𝑌 , 𝑌 ′ are independent real 797 
+
+samples. 798 
+
+799 
+
+Randomization and statistical reporting 800 
+
+Randomness in the benchmark arose from train -test splitting, random pairing of 801 
+
+unpaired single -cell profiles, sampling of target -domain control cells, model initialization, 802 
+
+minibatch ordering and stochastic generation. All random procedures used fixed seeds 803 
+
+specified in the released benchmark configurations. Unless otherwise noted, repeated 804 
+
+experiments were run three times with independent training and evaluation. For published 805 
+
+baselines with a fixed trained model and stochastic generation, we repeated only the 806 
+
+generation step three times. 807 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+Results are reported as mean ±s.d. across repeated runs or held -out evaluation units, 808 
+
+as indicated in each figure. Standard deviations were computed within comparable 809 
+
+replicate settings and were not pooled across distinct cell types, species, compounds or 810 
+
+time points. 811 
+
+812 
+
+813 
+
+814 
+
+815 
+
+.CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint Figure Legends 816 
+
+817 
+
+.CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint Figure 1. Framework of PertDiffBench.  PertDiffBench evaluates diffusion -based models 818 
+
+for perturbation response prediction (PRP) across in -distribution prediction, out -of -819 
+
+distribution generalization, representation -dependence analyses and noise -robustness 820 
+
+tests. It includes several single -cell and bulk perturbation datasets. Model performance is 821 
+
+assessed using error -based, correlation -based and distributional metrics, including MAE, 822 
+
+Pearson correlation, PCC -Delta, DEG -based PCC -Delta, MMD and E -distance. The lower 823 
+
+panel summarizes the benchmarked models, including DDPM, DDPM+MLP, scGen, scDiff, 824 
+
+scDiffusion and Squidiff, and their applicable task settings; blue circles denote applicable 825 
+
+settings and red crosses denote inapplicable settings. 826 
+
+827 
+
+828 
+
+Figure 2. Baseline performance under seen perturbation conditions.  (A) Single -cell 829 
+
+perturbation response prediction under seen perturbation conditions. Model performance 830 
+
+was evaluated across cell types using PCC -Delta. Gray points indicate performance for 831 
+
+individual cell types, and colored points with error bars indicate the mean ±s.d. across cell 832 
+
+types. (B) Bulk -level drug perturbation response prediction under seen perturbation 833 
+
+conditions. Models were compared in a drug -split task using PCC -Delta. (C) Effect of 834 
+
+feature dimensionality on model performance in the CD4 T cell seen -condition prediction 835 
+
+task. Models were evaluated using different numbers of input features. (D) Effect of 836 
+
+encoder choice on DDPM performance in the CD4 T cell seen -condition prediction task. 837 
+
+838 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+839 
+
+Figure 3.  Model performance across out -of -distribution perturbation response 840 
+
+prediction tasks.  (A) Unseen cell -type prediction with 25% control cells from the held -out 841 
+
+cell type provided as input. Models were evaluated using multiple metrics, including PCC, 842 
+
+PCC -Delta, MMD and MAE. (B) Effect of control -cell proportion on unseen cell -type 843 
+
+prediction. Models were evaluated with 0%, 25% and 50% control cells from the held -out 844 
+
+cell type. PCC -Delta was compared across cell types and control -cell proportions. (C) 845 
+
+Cross -species prediction of perturbation responses. Models were trained on a subset of 846 
+
+species and tested on held -out species. Performance was evaluated using PCC -Delta, 847 
+
+MMD and MAE. (D) Unseen mechanism -of -action prediction. (E) Summary of model 848 
+
+rankings across unseen cell -type, unseen drug and cross -species prediction tasks. NA 849 
+
+indicates models that were not evaluated for a given task because the model setting was 850 
+
+not applicable. Coverage denotes the number of tasks included for each model. 851 
+
+852 
+
+853 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+854 
+
+Figure 4. Temporal interpolation of perturbation responses at held -out time points. 855 
+
+(A) Schematic of the temporal interpolation task. (B) E -distance from each time point to the 856 
+
+0 h baseline, showing the progression of transcriptional changes over time. Shaded 857 
+
+regions indicate the held -out time points used for model evaluation. (C) Temporal 858 
+
+imputation performance on DEX -treated A549 single -cell omics data. Models were trained 859 
+
+using the observed time points and evaluated on the held -out 4 h and 6 h cell states. 860 
+
+Performance was measured using PCC, PCC -Delta, MMD and MAE. (D) UMAP 861 
+
+visualization of predicted cells for the held -out 4 h and 6 h time points across three repeated 862 
+
+runs. Gray points represent reference cells, and blue points represent model -generated 863 
+
+cells, with light blue indicating 4 h and dark blue indicating 6 h. 864 
+
+865 
+
+866 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+867 
+
+Figure 5.  Sensitivity  analysis.  (A) Effect of input representation on DDPM -based 868 
+
+prediction across held -out cell types. DDPM was paired with pretrained and classical 869 
+
+single -cell encoders, and performance was assessed using PCC -Delta. (B) Robustness of 870 
+
+perturbation response prediction models to input noise. Gaussian, Log -Normal, Poisson 871 
+
+and Zero -Inflation noise were added at increasing noise ratios, and performance was 872 
+
+measured using PCC -Delta on the top 50 differentially expressed genes. (C) Agreement 873 
+
+between evaluation metrics across models and tasks. Scatter plots compare PCC with 874 
+
+PCC -Delta, PCC with PCC -Delta on the top 50 differentially expressed genes, and PCC -875 
+
+Delta with MMD. Dashed lines show fitted linear trends, and  ρ and p values indicate 876 
+
+Spearman correlation statistics. (D) Overall ranking of model performance across 877 
+
+benchmark tasks, including known -condition prediction, generalization and robustness to 878 
+
+noise. Lower ranks indicate better performance, and blue shading marks the best -879 
+
+performing model for each task. (E) Ranking of representation models used as DDPM 880 
+
+encoders for known and unseen cell -type prediction. Lower ranks indicate better 881 
+
+performance, and blue shading marks the top -ranked encoder. 882 
+
+883 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+# Supplementary Figures 884 
+
+885 
+
+Supplementary Figure 1. Additional evaluation of known -condition perturbation 886 
+
+response prediction.  (A) Model performance across seven cell types in the Kang PBMC 887 
+
+dataset under the known -condition setting. Performance was evaluated using Pearson 888 
+
+correlation and MMD for each cell type. (B) Multi -metric ranking of models in the single -889 
+
+cell known -condition benchmark. Models were ranked across gene -level correlation, DEG -890 
+
+based correlation, PCC, MAE and MMD metrics. Lower ranks indicate better performance. 891 
+
+(C) Bulk RNA -seq perturbation response prediction for aflatoxin -treated samples. Models 892 
+
+were evaluated using Pearson correlation and MMD under the known -condition setting. (D) 893 
+
+Effect of input feature dimensionality on model performance in the CD4 T -cell known -894 
+
+condition task. Models were evaluated across different numbers of input genes using PCC -895 
+
+Delta for the top 20 differentially expressed genes, PCC, MMD and MAE. (E) Effect of 896 
+
+representation choice on DDPM performance in the CD4 T -cell known -condition task. 897 
+
+DDPM was combined with different representation models, and performance was 898 
+
+evaluated using PCC -Delta across all genes. 899 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+900 
+
+Supplementary Figure 2. Within -MOA unseen drug prediction.  Models were trained 901 
+
+and tested within each MOA using predefined drug -level splits. Values indicate PCC -Delta 902 
+
+for held -out drugs, and the final column shows the mean across MOAs. Higher values 903 
+
+indicate better prediction performance. 904 
+
+905 
+
+906 
+
+907 
+
+Supplementary Figure 3. Perturbation -aware embedding structure in the unseen -908 
+
+cell -type task.  (A) Association between condition k -nearest -neighbor (kNN) purity and 909 
+
+DDPM prediction performance. Condition kNN purity was calculated as the fraction of the 910 
+
+15 nearest neighbors with the same perturbation condition, Control or IFN perturbed, in the 911 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+encoder embedding space. (B) Association between perturbation signal ratio and DDPM 912 
+
+prediction performance. Perturbation signal ratio was defined as the IFN perturbed –Control 913 
+
+centroid distance normalized by within -condition variation. To account for differences in 914 
+
+prediction difficulty across held -out cell types, both representation metrics and PCC -Delta 915 
+
+values were centered within each held -out cell type before correlation analysis. DDPM 916 
+
+performance was evaluated using PCC -Delta on the top 50 differentially expressed genes 917 
+
+and all genes. 918 
+
+919 
+
+920 
+
+Supplementary Figure 4. Gene -order perturbation in CD4 T -cell known -condition 921 
+
+prediction.  PCC -Delta is shown for six models under two input -order settings: clustering -922 
+
+based gene ordering and random gene shuffling. Both settings used the same 1,000 highly 923 
+
+variable genes, and the assigned gene order was kept fixed across training and validation 924 
+
+data. Bars show the mean across three runs, and error bars denote s.d. Within each model, 925 
+
+the two ordering strategies were compared using two -sided Welch ’s t -tests based on 926 
+
+summary statistics (n = 3 per setting). Significant differences are indicated as *P < 0.05 927 
+
+and **P < 0.01. 928 
+
+929 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+# Supplementary Tables 930 
+
+931 
+
+Figure  Benchmark setting  Dataset  Number of 
+
+genes used 
+
+Fig. 2  Known -condition prediction, 
+
+single -cell RNA -seq 
+
+Kang18  1,000 
+
+Fig. 2  Known -condition prediction, 
+
+bulk RNA -seq 
+
+Ramaiahgari19  2,969 
+
+Fig. 2  Feature -number ablation  Kang18 (select CD4T cells for this task)  1,000 –6,998 
+
+Fig. 3  Unseen drug perturbation 
+
+response prediction 
+
+Srivatsan20  3,000 
+
+Fig. 3  Unseen cell type prediction  Kang18  6,998 
+
+Fig. 3  Cross -species prediction  Hagai18  6,619 
+
+Fig. 4  Temporal imputation  Cao20  3,000 
+
+Fig. 5  Representation learning  Kang18  3,000 
+
+Fig. 5  Noise robustness analysis  Kang18 (select CD4T cells for this task)  3,000 
+
+Supplementar 
+
+y Fig. 4 
+
+Gene -order robustness  Kang18 (select CD4T cells for this task), cluster -
+
+based gene reorder and random gene shuffle 
+
+1,000 
+
+Supplementary Table 1. Dataset used in each benchmark task. 932 
+
+933 
+
+934 
+
+935 
+
+.CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint References 936 
+
+Adduri, A.K. , et al.  Predicting cellular responses to perturbation across diverse contexts with 937 
+
+STATE.  bioRxiv  2025:2025.06.26.661135. 938 
+
+Bunne, C. , et al.  How to build the virtual cell with artificial intelligence: Priorities and 939 
+
+opportunities.  Cell  2024;187(25):7045 -7063. 940 
+
+Cao, J. , et al.  Sci -fate characterizes the dynamics of gene expression in single cells.  Nat. 941 
+
+Biotechnol.  2020;38(8):980 -988. 942 
+
+Csendes, G. , et al.  Benchmarking foundation cell models for post -perturbation RNA -seq 943 
+
+prediction.  BMC Genomics  2025;26(1):393. 944 
+
+Cui, H. , et al.  scGPT: toward building a foundation model for single -cell multi -omics using 945 
+
+generative AI.  Nature Methods  2024;21(8):1470 -1480. 946 
+
+Gandhi, S. , et al.  Tahoe -x1: Scaling Perturbation -Trained Single -Cell Foundation Models to 3 947 
+
+Billion Parameters.  bioRxiv  2025:2025.10.23.683759. 948 
+
+Hagai, T. , et al.  Gene expression variability across cells and species shapes innate immunity. 949 
+
+Nature  2018;563(7730):197 -202. 950 
+
+Hao, M. , et al.  Large -scale foundation model on single -cell transcriptomics.  Nature Methods 951 
+
+2024;21(8):1481 -1491. 952 
+
+He, S. , et al.  Squidiff: predicting cellular development and responses to perturbations using a 953 
+
+diffusion model.  Nature Methods  2025. 954 
+
+Kang, H.M. , et al.  Multiplexed droplet single -cell RNA -sequencing using natural genetic 955 
+
+variation.  Nat. Biotechnol.  2018;36(1):89 -94. 956 
+
+Li, C. , et al.  Benchmarking AI Models for In Silico Gene Perturbation of Cells.  bioRxiv 957 
+
+202 4:2024.12.20.629581. 958 
+
+Li, L. , et al.  A Systematic Comparison of Single -Cell Perturbation Response Prediction Models. 959 
+
+bioRxiv  202 4:2024.12.23.630036. 960 
+
+Liang, Z. , et al.  scPPDM: A Diffusion Model for Single -Cell Drug -Response Prediction.  CoRR 961 
+
+2025;abs/2510.11726. 962 
+
+Lotfollahi, M. , et al.  Predicting cellular responses to complex perturbations in high -throughput 963 
+
+screens.  Mol Syst Biol  2023;19(6):e11517. 964 
+
+Lotfollahi, M., Wolf, F.A. and Theis, F.J. scGen predicts single -cell perturbation responses. 965 
+
+Nature Methods  2019;16(8):715 -721. 966 
+
+Luo, E. , et al.  scDiffusion: conditional generation of high -quality single -cell data using diffusion 967 
+
+model.  Bioinformatics  2024;40(9):btae518. 968 
+
+Navidi, Z. , et al.  MorphoDiff: Cellular Morphology Painting with Diffusion Models. In,  The 969 
+
+Thirteenth International Conference on Learning Representations . 2025. 970 
+
+Peidli, S. , et al.  scPerturb: harmonized single -cell perturbation data.  Nature Methods 971 
+
+2024;21(3):531 -540. 972 
+
+Qian, L., Dong, Z. and Guo, T. Grow AI virtual cells: three data pillars and closed -loop learning. 973 
+
+Cell Res.  2025;35(5):319 -321. 974 
+
+Ramaiahgari, S.C. , et al.  The Power of Resolution: Contextualized Understanding of Biological 975 
+
+Responses to Liver Injury Chemicals Using High -throughput Transcriptomics and Benchmark 976 
+
+Concentration Modeling.  Toxicol. Sci.  2019;169(2):553 -566. 977 
+
+Rood, J.E., Hupalowska, A. and Regev, A. Toward a foundation model of causal cell and tissue 978 
+
+> .CC-BY-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 13, 2026. ;https://doi.org/10.64898/2026.06.13.732013 doi: bioRxiv preprint
+
+biology with a Perturbation Cell and Tissue Atlas.  Cell  2024;187(17):4520 -4545. 979 
+
+Roohani, Y., Huang, K. and Leskovec, J. Predicting transcriptional outcomes of novel multigene 980 
+
+perturbations with GEARS.  Nat Biotechnol  2024;42(6):927 -935. 981 
+
+Sadria, M. and Layton, A. scVAEDer: integrating deep diffusion models and variational 982 
+
+autoencoders for single -cell transcriptomics analysis.  Genome Biology  2025;26(1):64. 983 
+
+Shang, E., Wei, Y. and Roeder, K. Predicting the unseen: A diffusion -based debiasing 984 
+
+framework for transcriptional response prediction at single -cell resolution.  Proceedings of the 985 
+
+National Academy of Sciences  2025;122(52):e2525268122. 986 
+
+Srivatsan, S.R. , et al.  Massively multiplex chemical transcriptomics at single -cell resolution. 987 
+
+Science  2020;367(6473):45 -51. 988 
+
+Tang, W. , et al.  A General Single -Cell Analysis Framework via Conditional Diffusion Generative 989 
+
+Models.  bioRxiv  2023:2023.10.13.562243. 990 
+
+Viñas Torné, R. , et al.  Systema: a framework for evaluating genetic perturbation response 991 
+
+prediction beyond systematic variation.  Nat. Biotechnol.  2025. 992 
+
+Wang, X. , et al.  Prediction of cellular morphology changes under perturbations with a993 
+
+transcriptome -guided diffusion model.  Nature Communications  2025;16(1):8210. 994 
+
+Wei, Z. , et al.  Benchmarking algorithms for generalizable single -cell perturbation response 995 
+
+prediction.  Nature Methods  2026;23(2):451 -464. 996 
+
+Wenteler, A. , et al.  PertEval -scFM: Benchmarking Single -Cell Foundation Models for 997 
+
+Perturbation Effect Prediction.  Forty -second International Conference on Machine Learning 998 
+
+2025. 999 
+
+Wu, Y. , et al.  PerturBench: Benchmarking Machine Learning Models for Cellular Perturbation 1000 
+
+Analysis.  arXiv  2024. 1001 
+
+Yao, D. , et al.  Scalable genetic screening for regulatory circuits using compressed Perturb -seq. 1002 
+
+Nat. Biotechnol.  2024;42(8):1282 -1295. 1003 
+
+1004 
+
+1005

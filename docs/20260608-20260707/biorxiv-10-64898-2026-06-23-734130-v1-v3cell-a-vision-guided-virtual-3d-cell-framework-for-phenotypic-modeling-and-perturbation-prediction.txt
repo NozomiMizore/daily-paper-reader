@@ -1,0 +1,729 @@
+Title: V3Cell: A Vision-Guided Virtual 3D Cell Framework for Phenotypic Modeling and Perturbation Prediction
+
+URL Source: https://www.biorxiv.org/content/10.64898/2026.06.23.734130v1.full.pdf
+
+Published Time: Tue, 07 Jul 2026 05:01:27 GMT
+
+Number of Pages: 38
+
+Markdown Content:
+# V3Cell: A Vision-Guided Virtual 3D Cell Framework for Phenotypic Modeling and Perturbation Prediction 
+
+## Lu You 1,2 , Xun Deng 1,2 , Chenke Xu 3, Xiaobo Zhu 1,2 ,Zhigang Zhang 1,2 , Pengyu Chen 1,2 , Xiwen Yang 1,2 ,Zhengzheng Yan 6, Jiahua Rao 7, Huili Hu 4,5 , Jianying Hu 3,Pengwei Hu 1,2* 
+
+> 1
+
+Xinjiang Technical Institute of Physics and Chemistry, Chinese Academy of Sciences, Urumqi, China. 
+
+> 2
+
+University of Chinese Academy of Sciences, Beijing, China. 
+
+> 3
+
+College of Urban and Environment Sciences, Peking University, Beijing, China. 
+
+> 4
+
+The Key Laboratory of Experimental Teratology, Ministry of Education, Department of Systems Biomedicine, School of Basic Medical Sciences, Shandong University, Jinan, 250012, China. 
+
+> 5
+
+Qilu Hospital, Cheeloo College of Medicine, Shandong University, Jinan, 250012, China. 
+
+> 6
+
+Shenzhen Institutes of Advanced Technology, Chinese Academy of Sciences, Shenzhen, China. 
+
+> 7
+
+School of Computer Science and Engineering, Sun Yat-sen University, Guangzhou, China. *Corresponding author(s). E-mail(s): hpw@ms.xjb.ac.cn; 
+
+Abstract 
+
+Predicting how organoids respond to chemical perturbations is central to disease modeling and drug discovery. Existing virtual cell models operate at the single-cell level, producing static endpoint predictions from destructive assays. This leaves a critical gap at the organoid scale, where biological identity is defined by tissue-level architecture and continuous developmental dynamics rather than single-cell features. Here we introduce V3Cell, a vision-guided framework that 
+
+1
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+constructs in silico surrogates of organoids directly from non-invasive bright-field microscopy. A foreground-aware model constructs static virtual 3D cells across colon, stomach, and lung organoid lineages. These virtual 3D cells closely match real samples across distributional metrics, micro-texture, and lineage-specific morphometrics, with small effect sizes for most descriptors. A temporal module further predicts developmental fate from as few as six early-frame obser-vations and models fate-conditioned spatiotemporal trajectories that closely recapitulate real perturbation responses. V3Cell requires no omics profiling or fluorescent labeling, establishing a non-invasive brightfield-based paradigm for organoid-scale perturbation prediction. Our code and data are publicly available at https://github.com/Laineyoulu/V3Cell.  
+
+> Keywords: Virtual 3D cell, organoid, phenotypic modeling, perturbation prediction, brightfield microscopy, fate prediction, phenotypic screening
+
+# 1 Introduction 
+
+Three-dimensional cell constructs self-organize from living cells and exhibit emergent structural and functional properties that are absent in conventional two-dimensional cultures. Organoids recapitulate this three-dimensional cellular organization in vitro, faithfully reproducing the architecture and physiology of their parent organs [1, 2]. A central challenge in disease modeling and drug development is to understand and predict how organoids respond to external perturbations, such as drug treatments [3, 4]. The ability to predict these organoid state changes in silico would enable large-scale pre-screening of candidate compounds before committing to wet-lab validation, reducing the time and cost of experimental screening [5, 6]. The concept of the virtual cell, which leverages computational models to simulate cellular behavior, has emerged as a promising paradigm to address this challenge [7–11]. Driven by advances in deep learning and single-cell sequencing, a growing family of virtual cell models has been developed for perturbation prediction [12, 13]. The dom-inant paradigm operates in molecular feature space, where models such as scGen [14], CPA [15], GEARS [16], and CellOT [17] learn to map perturbation contexts directly to post-perturbation gene expression profiles. Meanwhile, foundation models including scGPT [18], scFoundation [19], and Geneformer [20] leverage large-scale pretraining to adapt to perturbation tasks. Collectively, these molecular-space methods operate at the single-cell level and produce static, endpoint predictions of transcriptomic states. More recently, image-based generative approaches such as CellFlux [21], MorphGen [22], MorphoDiff [23], and PhenDiff [24] have begun to model perturbation-induced morphological changes at the single-cell level[25, 26], typically taking multichannel fluorescent Cell Painting images as their input and output modalities. These image-based methods share the same single-cell scope as their molecular-space counterparts and typically depend on multichannel fluorescent staining for data acquisition. Despite this progress, fundamental gaps remain when the modeling target is extended from isolated single cells to complex 3D multicellular systems [27, 28]. From a modeling perspective, both molecular-space and existing image-based approaches 2
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+operate at the single-cell level and produce predictions at static perturbation end-points. Although some methods support smooth interpolation between cell states [17, 29], few, if any, predict temporally ordered frame sequences at the organoid scale, conditioned on brightfield observations alone and without molecular priors. A sep-arate body of work has developed non-invasive tools for brightfield-based organoid segmentation and longitudinal tracking [30–32], but these tools aim to quantify observed trajectories rather than to forecast future ones. This distinction is critical at the organoid scale, because organoid phenotypic identity arises from the col-lective self-organization of thousands of cells into spatially structured architectures [33, 34], and its morphology is defined by tissue-level architecture, internal texture, and three-dimensional context. Existing single-cell models are designed to capture single-cell-level features by construction [11], whereas capturing these tissue-level emergent features requires the model to ingest and model organoid-scale observations directly [35, 36]. This requirement points naturally toward image-based modeling at the whole-organoid level [37, 38]. From a data perspective, current approaches depend on modalities that are funda-mentally incompatible with longitudinal observation. Transcriptomic profiling requires cell dissociation and lysis [39–42], while fluorescence-based cell painting demands fix-ation and staining [43–45]. Both are destructive, precluding repeated measurement of the same specimen and making it difficult to track the continuous developmental trajectories that define organoid biology [46, 47]. While live fluorescent reporters par-tially mitigate this, they require transgenic labeling and are restricted to a narrow set of markers, limiting the biological scope that can be observed longitudinally. For organoids, this constraint is further amplified. Comprehensive molecular or fluores-cence characterization demands costly protocols and labor-intensive preparation. More critically, molecular profiling often destroys the intact 3D architecture of the speci-men, whereas endpoint fluorescence assays typically preclude continued longitudinal observation of the same living organoid. Constructing a virtual surrogate for organoids therefore demands a fundamentally different approach. Such a framework must instantiate an observable entity with multi-scale spatial structure and continuous temporal dynamics, and it must derive this entity from a modality that is both non-invasive and longitudinally compatible. Bright-field microscopy provides a practical compromise that meets these requirements. As a stain-free imaging modality, it captures morphological architecture, internal texture, and spatial organization without fixation, staining, or perturbation of the specimen [48–51]. Because the specimen remains intact and viable, brightfield imaging supports continuous time-lapse recording of individual organoids over extended culture peri-ods [52, 53]. This produces specimen-anchored developmental trajectories that are inaccessible to any destructive assay. Moreover, visual phenotyping is not merely a convenient proxy. The molecular and cellular states that define organoid identity ulti-mately manifest as observable morphological features, establishing brightfield imaging as an empirically supported readout of the underlying biological state [54–57]. Building on these principles, we introduce V3Cell, a vision-guided modeling frame-work for the construction of virtual 3D cells, which are in silico surrogates of organoids 3
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+constructed directly from 2D brightfield microscopy (Figure 1). V3Cell adopts a two-stage architecture. The first stage learns latent representations of organoid visual phenotypes at the region-of-interest (ROI) level, where each ROI is a single organoid cropped from the imaging field rather than the entire field itself. This stage also enables controllable construction across diverse organoid lineages and morphological categories. Because organoid imaging fields are dominated by background artifacts such as Matrigel, debris, and out-of-focus neighboring organoids[30, 58], a foreground-aware learning strategy directs the model to prioritize organoid-centric morphological features while suppressing background confounds. The second stage extends the frame-work to the temporal domain. Conditioned on sparse early-frame observations, V3Cell first predicts the organoid developmental fate and then predicts fate-conditioned spatiotemporal trajectories of its morphological evolution and treatment response, where the spatial dimension refers to 2D image-plane morphology. By operating entirely within the observational modality of standard brightfield microscopy, V3Cell requires neither omics profiling nor destructive endpoints, establishing a non-invasive brightfield-based paradigm for in silico virtual 3D cell construction and perturbation prediction. We highlight three main contributions of our study: 
+
+• Establishing the Virtual 3D Cell Paradigm. We introduce the concept of vir-tual 3D cells as in silico surrogates of 3D multicellular systems that are constructed as observable entities with image-plane spatial structure and temporal dynamics. This complements existing models that operate at the single-cell level with static, endpoint predictions[7, 11] by extending the paradigm to the organoid scale. V3Cell realizes this paradigm by learning latent representations of organoid states directly from brightfield images, providing a non-destructive, scalable alternative to both omics-based and fluorescence-based modeling. 
+
+• High-Fidelity Construction with ROI-Level Conditioning. We demonstrate that V3Cell constructs high-quality static virtual 3D cells across diverse organoid categories and culture contexts. Through a foreground-aware learning strategy, the model supports class-conditioned ROI-level construction of visual phenotypes while suppressing Matrigel, debris, and out-of-focus background. These static rep-resentations serve as a foundation for longitudinal modeling and morphological analysis. 
+
+• Longitudinal Fate Prediction and Perturbation Modeling of Virtual 3D Cells. We show that V3Cell supports predictive modeling of organoid fate under external perturbations using as few as K = 6 early-frame observations. By first predicting the developmental fate from these sparse observations and then condition-ing on the predicted fate, V3Cell predicts ROI-level spatiotemporal trajectories of future developmental outcomes and treatment responses, enabling early phenotypic response forecasting from sparse imaging data alone. 4
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+# 2 Results 
+
+## 2.1 V3Cell constructs a high-quality static virtual 3D cell resource 
+
+To assess whether brightfield microscopy alone provides sufficient signal for phenotype-faithful virtual 3D cell construction, we applied V3Cell across three organoid lineages encompassing a broad range of morphological subtypes. The constructed virtual 3D cells faithfully recapitulated lineage-specific hallmark morphologies across all systems, spanning colon organoids stratified by budding status and optical transparency, stom-ach organoids with apoptotic, hollow, or solid architectures, and lung organoids with lumen or non-lumen organization (Fig. 2). V3Cell modeled both canonical pheno-typic archetypes and visually intermediate states within the annotated categories. Reproducible construction across phenotypic categories indicates that the learned rep-resentation organizes major visual phenotypes consistently. Together, these results indicate that non-invasive brightfield imaging encodes sufficient morphological infor-mation to support high-throughput virtual 3D cell construction across diverse organoid systems, providing the static virtual-cell basis for the distributional, morphometric, and phenotyping analyses below. 
+
+## 2.2 Multi-dimensional evaluation of virtual 3D cell quality 
+
+To validate V3Cell as a reliable in silico model, we assessed whether the constructed virtual 3D cells statistically recapitulate the population-level distributions of real sam-ples. We benchmarked V3Cell against representative generative baselines, including conditional GANs (cGAN[59], F2DGAN[60]), a conditional VAE (cVAE[61]), and dif-fusion models (LDM[62], DiT[63], Medfusion[64]). To quantify distributional fidelity, we employed the Inception Score (IS) and Kernel Inception Distance (KID) (for-mulations in Methods and Table S1). Across all organoid systems, V3Cell achieved the highest IS and lowest KID (Fig. 3A), indicating strong alignment with the real phenotypic manifold. On the colon dataset, V3Cell recorded a low KID of 1.9 × 10 −5 ± 1.0 × 10 −6, indicating a small discrepancy between real and virtual fea-ture distributions. V3Cell attained the lowest KID across all three organoid lineages, reducing KID by up to 2.7-fold relative to the best-performing baseline, and the high-est IS in all systems, indicating consistent advantages in both distributional alignment and phenotypic diversity across distinct biological contexts. While distributional metrics capture population-level fidelity, they do not directly assess whether virtual 3D cells preserve the fine-grained micro-textural properties that distinguish different organoid subtypes. As shown in Fig. 3B, distinct organoid sub-types exhibit characteristic micro-textural patterns. We therefore quantified Haralick texture descriptors [65], including contrast, correlation, homogeneity, entropy, and Information Measure of Correlation 1 (IMC1), across representative subtypes from each lineage (Fig. 3C), with the complete set of evaluations provided in Supplementary Fig. S1. Given the large sample sizes employed, we focused on effect size rather than statistical significance as the primary measure of practical difference. Cohen’s d [66] values remained below 0.2 across most metrics and organoid subtypes, indicative of 5
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+a small effect size between real and virtual cell distributions. Quantile-quantile plots showed tight alignment with the identity line across evaluated subtypes, supporting close agreement between real and virtual organoids in micro-textural statistics. To integrate these multi-scale descriptors into a unified phenotypic landscape, we projected high-dimensional feature vectors from our organoid-specific encoder using Uniform Manifold Approximation and Projection (UMAP) [67]. Virtual 3D cell pop-ulations were embedded within and overlapped extensively with the manifold of their real counterparts across all lineages (Fig. 3D), supporting broad coverage of the real phenotypic manifold and showing no evidence of gross mode collapse. The biological fidelity of this virtual space is further evidenced by the precise recapitulation of lineage-specific developmental hallmarks (Fig. 3E–F, Supplementary Fig. S2). In colon budding opaque organoids, V3Cell reproduced the distribution of bud number, a critical emergent feature of colon crypt formation, with no signifi-cant difference from real samples. In lung lumen organoids, the modeled lumen area closely aligned with real observations, showing only a small residual difference that was negligible in effect size ( p = 0 .033, d = −0.27 ± 0.05). For stomach apoptotic organoids, ellipticity distributions showed no significant difference between real and virtual cells, indicating that our foreground-aware training strategy effectively priori-tizes organoid-centric features. Collectively, these results establish that virtual 3D cells are not merely visually plausible but are closely aligned with real organoids at the ROI level, with small effect sizes across descriptors, providing a high-fidelity foundation for the longitudinal analyses that follow. 
+
+## 2.3 Virtual 3D cells empower reliable phenotyping 
+
+Beyond statistical realism, we asked whether virtual 3D cells provide functional utility for downstream phenotyping tasks under the sparse sampling constraints typical of lon-gitudinal organoid studies. All evaluations were conducted exclusively from brightfield images, without omics profiling or fluorescence labeling. We first assessed whether virtual 3D cells alone encode sufficient biological information for phenotypic discrimination. A classifier trained exclusively on V3Cell-constructed virtual 3D cells, without any physical samples, achieved macro-F1 scores of 0.86 in colon, 0.78 in stomach, and 0.82 in lung organoids, indicating that vir-tual cells preserve lineage-specific morphological information sufficient for phenotypic discrimination. We then simulated sparse physical sampling constraints. Relying solely on 25 phys-ical samples per category caused macro-F1 scores to degrade to 65.8% in colon, 59.4% in stomach, and 31.7% in lung organoids (Fig. 4A). Augmenting these limited sets with V3Cell-constructed virtual 3D cells restored performance to 87.8%, 83.4%, and 76.4%, respectively, yielding improvements of 22.0, 24.1, and 44.7 percentage points (Fig. 4B). This augmentation effect was consistent across a broader range of low-resource regimes spanning 10 to 50 samples per class, with the most pronounced recovery occurring in the lung lineage. Beyond classification accuracy, virtual augmentation substantially reduced inter-run variability. At 25 samples per class, the real-only lung classifier exhibited a standard deviation of 15.9% in macro-F1 score. Incorporating virtual 3D cells reduced 6
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+this variance to 1.3% (Fig. 4C), indicating that virtual augmentation can stabilize phenotypic decision boundaries under sparse physical sampling conditions. 
+
+## 2.4 V3Cell predicts organoid fate trajectories and perturbation responses from sparse early frames 
+
+To evaluate whether V3Cell can recapitulate fate-specific morphological trajectories and perturbation responses from sparse conditioning frames, we designed a systematic quantitative assessment spanning representation learning, early-frame classification, and trajectory fidelity. For this longitudinal analysis we employed an independent brightfield time-lapse dataset of hESC-derived amniotic-sac organoids (rosette-like 3D structures) undergoing apical cavity formation under chemical perturbation, which is biologically and experimentally distinct from the static colon, stomach, and lung organoid datasets analyzed in Sections 2.1–2.3 (dataset details in Methods). Within this assay we focused on three distinct developmental fate classes: cavity formation, cavity collapse, and non-cavity outcome. Each fate class represents a characteris-tic developmental endpoint whose probability is modulated by external chemical perturbation. Importantly, neither fate prediction nor trajectory modeling requires knowledge of the applied perturbation at inference time. Both are driven entirely by morphological features extracted from early brightfield observations, and the predicted fate label then serves as the sole categorical conditioning signal supplied to the frozen image generator that renders each predicted frame (Fig. 5A). Notably, across this OPFR family, developmental toxicity could neither be separated by molecular struc-ture nor predicted from it at screening-relevant accuracy (Supplementary Figs. S4 and S5), motivating the phenotype-based modeling used in V3Cell. As shown in Fig. 5A (complete sequences in Supplementary Fig. S3), V3Cell produced fate-specific morphological sequences for all three fate classes. Across the displayed culture-time window, the V3Cell-modeled trajectories progressively mani-fested the hallmark morphological features of their respective fates, yielding visually distinct outputs consistent with the corresponding developmental outcomes. To test whether fate is decodable from sparse early frames, we applied the fate classifier to the n = 36 held-out organoids at the cross-validation-selected early frame (k∗ = 4, the fifth conditioning frame). The classifier reached 88.9% accuracy and a macro-F1 of 0.888 on this held-out set, with performance across all six early frames reported in Supplementary Table S2. The predicted fate was then supplied as the class condition to the frozen image generator that renders each predicted frame. To quantify temporal fidelity, we compared the per-frame fate-class probability of V3Cell-constructed virtual and matched real trajectories, scored for both by the same independently trained classifier (Fig. 5C). The virtual mean trajectories tracked the real ones in both temporal profile and absolute level, with strong agreement for non-cavity and cavity collapse (Pearson r = 0.929 and 0 .912) and moderate agreement for cavity formation ( r = 0 .705), consistent with the higher intrinsic vari-ability of the cavity-formation fate. The virtual and real fate-probability distributions also overlapped closely (right marginals, Fig. 5C), supporting that V3Cell constructs fate-consistent morphological trajectories from sparse early frames. 7
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+To visualize trajectory organization without imposing fate labels on the embed-ding, we fitted an unsupervised UMAP reducer exclusively on L2-normalized features extracted from real training frames using an independent ImageNet-pretrained ResNet-50. Held-out real frames were projected into the fixed embedding without refitting. V3Cell-generated frames were then projected using the same reducer, again without refitting or label supervision. The generated frames occupied regions overlap-ping with the corresponding held-out real trajectories and exhibited similar temporal progression (Fig. 5D,E). We next asked whether the regions driving V3Cell’s fate encoding correspond to biologically meaningful structures. Grad-CAM attribution for the cavity-formation logit concentrated in the amniotic ectodermal epithelial region rather than in the cavity or background, and this preferential concentration was quantified by the Normalized Energy Fraction (nEF), which was significantly above the uniform baseline in the epithelial region and below it in the background and cavity (Fig. 5F). The attended epithelial region spatially coincided with p-MLC-II immunofluorescence, a marker of actomyosin contractility, and this spatial pattern was consistent across the EHDPP, IDDPP, and RGD perturbation conditions (Fig. 5B), indicating that model attribution localizes to mechanically active epithelial regions in an anatomically grounded and perturbation-generalizable manner. Finally, we assessed whether V3Cell reproduces quantitative morphodynamics by comparing fate-specific morphometric features between real and virtual sequences over the full time series (Fig. 5G). Real and V3Cell mean trajectories were closely aligned for cavity area in cavity-formation ( r = 0 .752), boundary irregularity in cavity-collapse ( r = 0 .913), and organoid area in non-cavity ( r = 0 .991), supporting that V3Cell captures fate-specific morphological dynamics rather than merely class-level appearance. 
+
+# 3 Discussion 
+
+The virtual cell concept has emerged as a promising paradigm for modeling cellular behavior in silico. However, existing implementations predominantly operate in molec-ular feature space at the single-cell level, producing static endpoint predictions from destructive assays. V3Cell extends this paradigm to the organoid scale by constructing virtual 3D cells directly from non-invasive brightfield microscopy. Unlike molecular-space models that require cell lysis for transcriptomic readout or image-based models that depend on fluorescent staining, V3Cell derives all representations from bright-field images alone. This non-destructive approach preserves the intact 3D architecture of the specimen and enables longitudinal tracking of the same organoid over extended culture periods. Our results demonstrate that this modality encodes sufficient morpho-logical information to support both high-fidelity static construction and temporally faithful trajectory prediction. Our multi-dimensional evaluation demonstrates that virtual 3D cells are not merely visually plausible but closely aligned with real organoids at both the population and single-ROI levels. While distributional fidelity confirmed by IS and KID captures 8
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+population-level alignment, the Haralick texture analysis and lineage-specific morpho-metrics establish that virtual 3D cells preserve the fine-grained biological features that define organoid identity. The practical value of this fidelity is evidenced by the pheno-typing experiments, where augmenting sparse physical samples with virtual 3D cells improved classification performance by up to 44.7 percentage points and reduced inter-run variability from 15.9% to 1.3%, addressing a practical bottleneck in organoid-based screening where physical sample availability is often limited. The longitudinal fate prediction results reveal that developmental fate informa-tion is already encoded in early-frame brightfield morphology. By first predicting the developmental fate from sparse early observations and then conditioning trajectory generation on this prediction, V3Cell factorizes the task into two well-defined subprob-lems: inferring the discrete developmental outcome and modeling the corresponding spatiotemporal trajectory. This explicit factorization makes the predictions structured and interpretable. The strong concordance between predicted and real fate-probability dynamics across all three fate classes suggests that V3Cell captures not only the end-point morphology but also the temporal progression toward each fate. Importantly, both fate prediction and trajectory modeling are driven entirely by visual features from early brightfield frames, requiring no knowledge of the applied perturbation at inference time. This property is particularly relevant for screening applications, where the goal is to assess compound effects from observable phenotypic changes without prior knowledge of the mechanism of action. This result clarifies why V3Cell is formulated as a phenotype-conditioned rather than perturbation-conditioned framework. Many perturbation-response mod-els extrapolate from observed to unobserved perturbations by learning a transferable response structure in molecular or latent feature space, as illustrated by latent-state arithmetic in scGen [14], compositional perturbation embeddings in CPA [15], and gene-regulatory graph embeddings in GEARS [16]. Such extrapolation is most reliable when perturbations occupy a representation in which related inputs induce related responses. In the OPFR panel examined here, however, molecular structure did not provide such a predictive coordinate system: neither structure-derived descriptors nor learned chemical embeddings separated toxic from non-toxic compounds, and structure-based prediction of the developmental readout was no better than chance at screening-relevant accuracy (Supplementary Figs. S4 and S5). This observation is consistent with recent evidence that perturbation-effect predictors can fail to out-perform simple baselines under distribution shift [27]. It also reflects the phenotype being modeled: cavity formation is an emergent tissue-level program, and structurally related analogues can produce divergent developmental outcomes. V3Cell therefore avoids requiring a perturbation-feature prior. By conditioning on early brightfield mor-phology rather than perturbation identity, it asks whether the effect of an unknown perturbation has already become observable in the developing organoid and uses that observed phenotypic state to forecast future fate. Thus, V3Cell generalizes from sparse phenotypic observation to future trajectory, rather than from chemical structure to response. The foreground-aware training strategy addresses a practical challenge specific to organoid imaging. Unlike single-cell microscopy, where individual cells can be cleanly 9
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+segmented, organoid imaging fields contain substantial background artifacts including Matrigel, debris, and out-of-focus structures. By spatially reweighting gradient penal-ties toward the organoid foreground, V3Cell learns to prioritize biologically meaningful features while suppressing these confounds, as confirmed by the faithful recapitulation of organoid-centric morphometrics such as ellipticity. We anticipate that this vision-guided paradigm will complement existing molecular-space approaches, providing a scalable and longitudinally compatible tool for organoid biology and drug discovery. 
+
+## 3.1 Limitations of the study 
+
+V3Cell currently models three-dimensional organoids from two-dimensional bright-field projections. Although this imaging strategy enables non-invasive longitudinal observation, it does not directly provide depth-resolved information about features such as internal cavity topology or layered cellular organization. Extending V3Cell to light-sheet microscopy or other three-dimensional imaging modalities could support volumetric modeling when such data are available. In addition, the temporal frame-work was evaluated in one hESC-derived amniotic-sac organoid system. Future studies across additional organoid systems, cell lines, genetic perturbations and combinatorial treatments will be needed to establish its broader applicability. Finally, the present study focuses on phenotype-conditioned forecasting rather than molecular mechanism inference. Paired brightfield and molecular measurements could complement the cur-rent non-invasive framework by linking predicted morphological trajectories to their associated molecular processes. 10 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+# 4 Methods 
+
+## 4.1 Datasets 
+
+Two independent imaging datasets were used to support the two stages of the V3Cell framework. The first, a static brightfield image dataset, comprises three organoid lineages (colon, stomach, and lung) assembled from publicly accessible repositories. Raw microscopy fields for the colon, stomach, and lung lineages were obtained from the OrgaExtractor repository [68], the in-house collection released alongside our group’s previous work [69], and the Orga-Dete lung organoid dataset [70], respectively. No pre-cropped ROIs or pre-existing phenotype labels from the original sources were used. Individual organoid ROIs were cropped in-house from the raw fields. The resulting dataset comprises 17,331 ROI images distributed across 9 morphological phenotype classes, including 4 colon classes (2,476 images), 3 stomach classes (897 images), and 2 lung classes (13,958 images). For each ROI, a binary foreground mask delineating the organoid boundary from the culture background was derived from an organoid instance segmentation model developed in our group [71]. Each ROI image served as a real training target for Stage 1, and its corresponding mask was used only to define training-time foreground constraints. Morphological phenotype labels and foreground-mask verification were produced under the annotation workflow described below. The second dataset is a longitudinal brightfield time-lapse dataset established to capture the developmental trajectories of living hESC-derived amniotic-sac organoids (rosette-like 3D structures) under chemical perturbation. It is biologically and experi-mentally distinct from the static dataset described above and was collected specifically to support temporal modeling in the second stage. The human embryonic stem cell (hESC) line H1 was obtained from the Shao laboratory (School of Aerospace Engi-neering, Tsinghua University) and maintained on Matrigel-coated plates in mTeSR1 medium (85850, STEMCELL Technologies). Cells were seeded as single cells at 2 × 10 4 cells cm −2 onto a thick Matrigel bed with nominal thickness ≥ 100 μm. Imme-diately after passaging, the culture medium was supplemented with 10 μM Y-27632 (1254/10, Tocris). After 24 h, the medium was replenished with fresh mTeSR1 con-taining 4% (v/v) Geltrex (A1413201, Thermo Fisher Scientific) and replenished daily thereafter. On day 2 of culture, cells were treated with 2-ethylhexyl diphenyl phos-phate (EHDPP) at a final concentration of 10 μM (treatment group) or an equivalent volume of DMSO (vehicle control). To further probe the generalizability of model attention beyond a single compound, two additional perturbation conditions were acquired under the identical culture and imaging protocol: isodecyl diphenyl phos-phate (IDDPP), a second organophosphate flame retardant, at a final concentration of 10 μM, and the RGD peptide, a positive-control integrin β1 antagonist, at 1 μM. The IDDPP and RGD single-organoid time-lapse sequences ( n = 10 and n = 10, respec-tively) were reserved exclusively for the Grad-CAM attention-generalization analysis described in the Grad-CAM spatial attribution and normalized energy fraction sub-section and were not used to train or test the temporal model. Continuous brightfield time-lapse imaging was performed on a DeltaVision Elite microscope (Applied Preci-sion) equipped with a 10 × objective, acquiring one frame every 15 min over a 2-day window, within a stage-top live-cell incubator maintained at 37 ◦C and 5% CO 2. Each 11 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+time-lapse sequence was assigned to one of three developmental fate categories. The 
+
+cavity-formation phenotype was characterized by cells arranging around a shared point of apical constriction before approximately 64 h, followed by the emergence of a rosette-like structure surrounding a central cavity between 72 and 96 h. The non-cavity phenotype was characterized by the absence of such a structure throughout the imaging window. The cavity-collapse phenotype was characterized by a malformed rosette in which the central cavity failed to stabilize. The three fate outcomes were observed in both treatment and control groups but occurred with substantially higher frequency under EHDPP perturbation, indicating a probabilistic rather than deter-ministic perturbation response. The training corpus for the temporal model comprises 245 labeled time-lapse sequences (28 cavity-formation, 106 cavity-collapse, and 111 non-cavity), and an additional class-stratified set of 36 sequences (12 per fate class), disjoint from these 245, was reserved as a held-out test set for evaluation. Fate-label assignment followed the annotation workflow described below. Each raw sequence con-tained 196 frames acquired at 15-min intervals over the 48-h observation window from culture time 48 to 96 h, with chemical treatment administered at 48 h. For temporal modeling, each sequence was downsampled by retaining every eighth frame, yielding 25 frames at 2-h intervals. Static images used for the reported Stage 1 experiments were resized to 64 × 64 pixels. The generator architecture supports configurable output resolutions. For the reported temporal experiments, the amniotic-sac generator and generated frames were trained and evaluated at 64 × 64 pixels to reduce computational cost. For downstream morphometric segmentation, real and generated frames were resized to 256 ×256 pixels using bilinear interpolation. Pixel intensities were linearly normalized to [ −1, 1], class labels were encoded as one-hot vectors c ∈ { 0, 1}C , and horizontal flipping was applied as data augmentation during all training stages. 
+
+## 4.2 Annotation workflow and quality control 
+
+All phenotype and fate labels used in V3Cell were produced in-house under a uni-fied annotation workflow designed to ensure consistency across lineages and between the static and dynamic datasets. Raw imaging data were first pre-processed and de-identified, after which three trained laboratory researchers independently performed annotation using a shared labeling schema. No pre-existing labels from the public source repositories were used. For the static brightfield dataset, morphological phenotype labels were assigned per ROI following the phenotype taxonomy and labeling protocol established in our previ-ous work [69, 72], which defines 4 colon, 3 stomach, and 2 lung classes on the basis of reproducible morphological criteria (e.g., budding status, lumenization, overall shape regularity). Each ROI was annotated independently by three researchers. The consen-sus label (agreement of at least two annotators) was adopted as the final class label, and ROIs with no majority agreement were resolved by a senior expert reviewer. In paral-lel, each foreground mask produced by the OrgLine [71] instance segmentation model was visually inspected frame-by-frame. Masks with leakage, under-segmentation, or 12 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+mis-attribution to neighboring organoids were manually corrected using a polygon-editing tool, and the corrected masks were cross-checked by a second annotator before entering the training set. For the longitudinal time-lapse dataset, each sequence was annotated at the sequence level using the three fate categories defined in the Datasets subsection (cavity-formation, non-cavity, cavity-collapse). Annotation was performed by reviewing the full 2-day recording with specific attention to the 64–96 h window, during which fate-diagnostic rosette dynamics emerge. Three trained researchers labeled every sequence independently while remaining blinded to the experimental condition (EHDPP treat-ment or DMSO control) to prevent condition-driven labeling bias. The consensus label was adopted when at least two annotators agreed, and ambiguous cases—in particular borderline cavity-collapse sequences where the central cavity partially stabilized— were resolved by expert consensus involving a senior domain expert. Inter-annotator agreement was monitored on a held-out calibration subset prior to full-scale annota-tion to confirm that the three annotators achieved substantial concordance on the fate taxonomy. 
+
+## 4.3 Overview of the V3Cell framework 
+
+V3Cell is a two-stage framework that formalizes virtual 3D cell modeling as two com-plementary conditional generation tasks. In the static task, given a one-hot class label 
+
+c ∈ { 0, 1}C , a conditional model pθ(x | c) is trained such that each sample ˆ x ∼ pθ(· | c)constitutes a static virtual 3D cell. In the dynamic task, given K = 6 early brightfield frames of a live organoid, a fate classifier Φ first predicts the developmental outcome ˆc = Φ( xk∗ ) from a single early frame. Here, k∗ = arg max k Acc(Φ( xk), c ) is the most informative frame index selected by 5-fold cross-validation ( k∗ = 4). The dynamic model then produces the complete predicted trajectory ˆXK+1: T = V3Cell( X1: K , ˆc)from the same K = 6 conditioning frames. Neither stage requires knowledge of the applied perturbation at inference time. Both are driven entirely by morphological features extracted from the brightfield observations. An overview of the complete architecture is shown in Figure 6. 
+
+## 4.4 Foreground-aware static virtual 3D cell generator 
+
+Static virtual 3D cells were modeled by a class-conditional GAN built on the R3GAN framework [73]. For the Stage 1 static generators, the generator G maps a latent code 
+
+z ∼ N (0, I) ( dz = 64) and a one-hot phenotype label c ∈ { 0, 1}C to a brightfield image through a generative basis layer followed by grouped-convolution residual blocks with bilinear upsamplers. The discriminator D mirrors this structure. Class conditioning was applied symmetrically to both G and D in Stage 1. The same decoder backbone was used to train a separate amniotic-sac generator GAS for Stage 2, which was then frozen as the image decoder for temporal modeling. 13 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+To prioritize biologically meaningful features and suppress background artifacts such as Matrigel and debris, the zero-centered gradient penalties were spatially re-weighted by a foreground-emphasis map: 
+
+Wij = 1 + mij (λfg − 1) , λfg = 5 .0, (1) where m ∈ { 0, 1}H×W is the binary foreground mask used only for training-time loss weighting and not as a generator input at inference. The foreground-weighted R1 and R2 gradient penalties, applied to real and generated samples respectively, were defined as: 
+
+LR1 = λR1
+
+2 Exr
+
+X
+
+> i,j,ℓ
+
+Wij (∇xr D(xr)) 2
+
+> ijℓ
+
+ , LR2 = λR2
+
+2 Eˆx
+
+X
+
+> i,j,ℓ
+
+Wij (∇ˆxD(ˆ x)) 2
+
+> ijℓ
+
+ .
+
+(2) The discriminator and generator were optimized using a relativistic pairing objective with softplus loss: 
+
+LG = softplus[ − (D(ˆ x) − D(x))] , (3) 
+
+LD = softplus[ − (D(x) − D(ˆ x))] + γreg 
+
+2 (LR1 + LR2 ) . (4) The complete adversarial objective combined full-image and foreground-only branches: 
+
+Ladv = Lfull adv + λfg Lforeground adv , λfg = 5 . (5) Optimization, scheduling, and inference-time behavior for Stage 1 are described in the Details of pipeline training and inference subsection below. 
+
+## 4.5 Dynamic virtual 3D cell modeler 
+
+The dynamic modeler was trained on top of a separate frozen amniotic-sac generator 
+
+GAS and comprises three components that operate jointly at inference time: a fate classifier that predicts the developmental outcome from a single early frame xk∗ , a sequence encoder that compresses each of the K = 6 conditioning frames into a latent representation, and MotionRNN, which autoregressively evolves the latent to generate future frames. The fate classifier is a ResNet-50 [74] backbone pre-trained on ImageNet [75] with a three-way linear classification head, fine-tuned end-to-end with cross-entropy loss. The optimal observation frame k∗ was identified by 5-fold cross-validation across candidate frame indices, with k∗ selected as the index that maximized cross-validated classification accuracy. This procedure selected k∗ = 4, which was used for held-out fate prediction. At inference time, the predicted fate ˆ c = Φ( xk∗ ) ∈{cavity-formation , non-cavity , cavity-collapse } was used as the class-conditioning input to the frozen generator GAS and broadcast across all decoded frames of the tra-jectory, exactly as in Stage 1 static generation. MotionRNN did not receive ˆ c; it evolved the motion latent solely from the early-frame encoding and the injected per-step noise. 14 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+The sequence encoder fϕ processed each early frame through a 7 × 7 convolutional stem, five residual downsampling blocks, global average pooling, and parallel linear heads, yielding a VAE-style reparameterized latent: (μk, log σ2
+
+> k
+
+) = fϕ(xk), zk = μk + ϵ ⊙ exp   12 log σ2
+
+> k
+
+ , ϵ ∼ N (0, I). (6) The sequence {z1, . . . , zK } was passed through a two-layer LSTM with hidden dimen-sion dh = 384 to initialize the motion predictor. Each latent was further factorized into a content component zC ∈ R32 (fixed from z1) preserving organoid-specific appear-ance, and a motion component zM ∈ R32 carrying temporally evolving dynamics. The motion component was autoregressively evolved by MotionRNN Rψ , which consumed the previous motion state and a stochastic noise input to produce an incremental update: 
+
+zMt = zMt−1 + α δt, δt = MLP  LSTM Rψ
+
+ [zMt−1, ϵt], ht−1, st−1
+
+ , α = 0 .2. (7) The full latent zt = [ zC , zMt ] was decoded by the frozen amniotic-sac generator as ˆxt = GAS (zt, ˆc), with the predicted fate ˆ c supplied as the class condition and broadcast to every frame, to produce each predicted future frame. Fate therefore modulates the rendered appearance of each frame, whereas the latent motion dynamics produced by MotionRNN are independent of ˆ c.The composite training loss combines reconstruction, adversarial, feature-matching, contrastive, and regularization terms: 
+
+Ltotal = 10 Lrecon + L2D adv + L3D adv + 0 .1Lmotion + Ldir + LMI 
+
++ 10 Lfeat + 0 .01 LKL + Lcontrastive . (8) where Lrecon = P 
+
+> t
+
+γmax( t−K, 0) ∥ˆxt − xt∥1 with γ = 0 .95 is a temporally discounted pixel-wise reconstruction loss. The adversarial terms used a 2D image discriminator and a multi-scale 3D video discriminator, both optimized with relativistic average least-squares GAN objectives. No WGAN-GP term was used in Stage 2. Ldir enforced biologically consistent morphological progression direction. LMI prevented motion mode collapse by maximizing alignment between injected and reconstructed noise [76]. 
+
+Lmotion penalized abrupt latent transitions, and LKL regularized the encoder posterior toward the standard Gaussian prior. Individual loss terms are defined in Supplemen-tary Note 1. Optimization, class-balanced sampling, and inference-time behavior for Stage 2 are described in the Details of pipeline training and inference subsection below. 
+
+## 4.6 Details of pipeline training and inference 
+
+The two stages of V3Cell were trained sequentially. Three lineage-specific static gener-ators were trained for the colon, stomach, and lung analyses. A separate amniotic-sac generator GAS was trained for temporal modeling and then frozen to serve as the fixed decoder during Stage 2 training. Within Stage 2, the fate classifier, sequence encoder, and MotionRNN were optimized on the time-lapse dataset, while gradient flow into 
+
+GAS was disabled. 15 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+Static generator training and inference. 
+
+The static generator was trained independently for each lineage (colon, stomach, lung) using the foreground-weighted relativistic pairing objective described above. Opti-mization used the Adam optimizer with β1 = 0 and β2 linearly scheduled from 0 .9 to 0.99. The learning rate followed a cosine schedule from 2 × 10 −4 towards a nominal floor of 5 × 10 −5 over a 20,000-kimg horizon. Each colon-, lung- and stomach-organoid generator was trained for 443 kimg with a batch size of 64 on a single NVIDIA A100 GPU. The learning rate was 1 .998 × 10 −4 at the selected 443-kimg checkpoint, which was used for all subsequent analyses. The gradient-regularization coefficient followed the same nominal cosine schedule from 150 towards 15. Gradient penalties LR1 and 
+
+LR2 were applied at every discriminator update with the foreground-emphasis weight 
+
+λfg = 5 .0. Before Stage 1 training, 10% of the real images from each lineage were reserved as a fixed stratified test set using random seed 42. These images and their corresponding masks were excluded from generator training and model selection. The remaining 90% of ROI–mask pairs were used to train the lineage-specific generators. At inference, static virtual 3D cells were generated by sampling z ∼ N (0, I) with a fixed target class label c. No stochastic augmentation, test-time refinement, or foreground mask was used at inference. 
+
+Dynamic modeler training and inference. 
+
+The amniotic-sac generator GAS and the temporal model were trained exclusively using the 245 training sequences. All frames from the 36 held-out test sequences were excluded from training and model selection for both components. The fate classifier was fine-tuned on the time-lapse dataset with cross-entropy loss using the Adam opti-mizer at a learning rate of 1 × 10 −4 under cosine annealing, for 50 epochs with a batch size of 32. The sequence encoder and MotionRNN were jointly optimized against the composite loss Ltotal defined above using the Adam optimizer with β1 = 0 .5, 
+
+β2 = 0 .999, and a learning rate of 2 ×10 −4. Each training iteration used T = 25 frames with K = 6 conditioning frames and a batch size of 32. For temporal training, kimg denotes the cumulative number of processed frames rather than the number of videos, kimg = P
+
+> steps
+
+(B × T )/1000. Optimization proceeded for 581 kimg on 8 NVIDIA A100 GPUs. The learning rate was held fixed at 2 × 10 −4 throughout Stage 2 training, with no learning-rate schedule. Class imbalance across the three fate categories (28 cavity-formation, 106 cavity-collapse, and 111 non-cavity sequences) was addressed by class-balanced sampling, ensuring that each mini-batch contained approximately equal proportions of all three fate classes. Throughout Stage 2 training, GAS remained frozen. At inference, given the K = 6 early frames of an unseen organoid, the sequence encoder produced the initial latent factorization into content and motion components. The fate classifier read the cross-validated frame xk∗ (k∗ = 4) to emit ˆ c. Motion-RNN autoregressively rolled out the motion latent for the remaining T − K = 19 frames, which were decoded by GAS to yield the complete 25-frame predicted trajec-tory ˆX1: T . No ground-truth future frames, foreground masks, or perturbation identity were provided at inference time. 16 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+## 4.7 Grad-CAM spatial attribution and normalized energy fraction 
+
+To assess whether V3Cell encodes fate-relevant information from spatially specific anatomical regions, we applied gradient-weighted class activation mapping (Grad-CAM) [77] to the V3Cell image encoder. Because the encoder outputs a 64-dimensional latent vector z rather than class logits, we trained a linear fate probe on frozen encoder representations to provide class-discriminative gradients for post hoc attri-bution. The probe was trained on the EHDPP dataset comprising 245 videos across three fate classes: cavity-formation ( n = 28), cavity-collapse ( n = 106), and non-cavity ( n = 111). It consisted of a single fully connected layer optimized with Adam for 200 epochs. Its training accuracy was monitored only to confirm that the frozen encoder representations retained fate-related information. The probe was used solely to provide class-discriminative gradients for post hoc attribution and was never used to optimize generated frames during inference. The Grad-CAM target layer was the encoder’s third convolutional block, which retained a 32 × 32 spatial resolution. Grad-CAM and nEF analyses were restricted to videos exhibiting cavity forma-tion or a cavity-forming tendency, so as to align the attribution analysis with the immunofluorescence validation described below. The analyzed subset comprised 58 videos: 28 EHDPP training videos, 10 EHDPP held-out videos, 10 IDDPP videos, and 10 RGD videos. Because this analysis aimed to localize fate-relevant encoder responses rather than to estimate predictive generalization, both training and held-out EHDPP cavity-forming videos were included. For each frame, the cavity-formation logit scavity from the linear probe was back-propagated to the target convolutional layer. Let Ak ∈ RH×W denote the k-th activation map of the target layer. The Grad-CAM channel weight was computed as 
+
+αk = 1
+
+HW 
+
+> H
+
+X
+
+> i=1
+> W
+
+X
+
+> j=1
+
+∂s cavity 
+
+∂A kij 
+
+. (9) The frame-level Grad-CAM activation map was then computed as 
+
+ACAM = ReLU X
+
+> k
+
+αkAk
+
+!
+
+. (10) The resulting map was normalized to [0 , 1] and upsampled to the original frame resolution of 256 × 256 pixels by bilinear interpolation. For post hoc attribution quantification, spatial regions were defined from per-frame segmentation masks produced by task-specific OrgLine [71] segmentation models. A whole-organoid boundary model produced the foreground mask, and a cavity model produced the cavity mask. All masks were manually inspected and corrected where necessary prior to analysis. Three mutually exclusive regions were defined: background (pixels outside the whole-organoid mask), cavity (pixels inside the cavity mask), and epithelial cell ring (pixels inside the whole-organoid mask but outside the cavity mask). 17 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+These segmentation masks were used only for post hoc regional quantification and were not provided to V3Cell during inference. For each region R in each frame, we first computed the Energy Fraction (EF), the fraction of total Grad-CAM activation falling inside that region: EF( R) = 
+
+P 
+
+> (p,q )∈R
+
+ACAM (p, q )
+
+P 
+
+> (p,q )∈Ω
+
+ACAM (p, q ) , (11) where Ω is the full image domain. To account for differences in region size, EF was normalized by the area fraction of the corresponding region: nEF( R) = EF( R)
+
+|R| /|Ω| . (12) An nEF of 1 indicates Grad-CAM activation proportional to region area, correspond-ing to a spatially uniform attention baseline. Values greater than 1 indicate preferential attention to a region, whereas values below 1 indicate relative suppression. Frames with zero total Grad-CAM activation were excluded from the nEF com-putation. nEF was computed for every remaining frame of each analyzed video and averaged across frames to obtain one video-level nEF per region. Statistical analyses were performed at the video level on these per-video mean nEF values: one-sample Wilcoxon signed-rank tests compared each region against the uniform baseline of nEF = 1, and paired Wilcoxon signed-rank tests were used for between-region comparisons. 
+
+## 4.8 Immunofluorescence validation of model attribution 
+
+To assess whether the regions highlighted by V3Cell Grad-CAM attribution corre-spond to biologically relevant anatomical structures, we compared the attribution maps with immunofluorescence (IF) staining from the same amniotic-sac organoid experimental system. IF images were obtained from the dataset provider and followed the previously reported staining protocol [78]. These fluorescence images were used only for post hoc anatomical validation of model attribution and were not used for V3Cell training, fate prediction, trajectory generation, or model selection. Organoids were fixed in 4% paraformaldehyde for 60 min at room temperature, permeabilized with 0.25% Triton X-100 for 30 min, and blocked in 3% bovine serum albumin (BSA) for 60 min at 37 ◦C. Samples were incubated with primary antibod-ies overnight at 4 ◦C, followed by fluorophore-conjugated secondary antibodies for 60 min at room temperature, and nuclei were counterstained with DAPI (1:5000, Sigma, D9542) for 30 min. Fixed samples were imaged using a high-speed spinning-disk confocal microscope (Andor Technology) equipped with a Leica 0.45 NA 10 × air objective. Primary antibody sources, catalog numbers, and working dilutions followed the dataset-provider protocol and are summarized in Table S3. We focused on phosphorylated myosin light chain II (p-MLC-II), a marker of acto-myosin contractility, because cavity formation in this amniotic-sac organoid system involves epithelial organization and actomyosin activity around the nascent cavity. 18 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+Developmental marker channels, including OCT4, TFAP2A, CDX2, and DAPI, were used to provide anatomical and cellular context, whereas p-MLC-II served as the pri-mary IF marker for interpreting whether model attribution localized to mechanically active epithelial regions. Attribution maps and region-level Normalized Energy Fraction (nEF) were com-puted as described in the Grad-CAM spatial attribution and normalized energy fraction subsection, using the same three anatomical regions: non-organoid back-ground, cavity, and epithelial cell ring. IF images were used to interpret the anatomical relevance of regions with elevated Grad-CAM nEF. In particular, enrichment of attribution in the epithelial cell ring was compared with the spatial localization of p-MLC-II in representative matched or condition-matched IF fields. Because IF imag-ing required fixation, fluorescence images were used as endpoint or representative anatomical validation rather than as longitudinal inputs to V3Cell. 
+
+## 4.9 Evaluation metrics 
+
+Kernel Inception Distance (KID). 
+
+Given m real-image feature vectors {ϕ(xi)}mi=1 and n virtual-image feature vectors 
+
+{ϕ(ˆ xj )}nj=1 extracted by an ImageNet-pretrained Inception-v3 feature extractor ϕ(·), KID was computed as the squared maximum mean discrepancy (MMD) under a degree-3 polynomial kernel k(u, v) =   1 
+
+> d
+
+u⊤v + 1 3:KID = 1
+
+m(m − 1) 
+
+X
+
+> i̸=i′
+
+k(ϕi, ϕ i′ ) + 1
+
+n(n − 1) 
+
+X 
+
+> j̸=j′
+
+k( ˆϕj , ˆϕj′ ) − 2
+
+mn 
+
+X
+
+> i,j
+
+k(ϕi, ˆϕj ). (13) A subtype-balanced sampling protocol with n = min s min( Nreal ,s , 2000) was used to remove subtype-size confounds, with subtype-balanced samples merged across subtypes, and KID was averaged over 10 independent sampling runs. 
+
+Inception Score (IS). 
+
+Let p(ˆ c | ˆx) denote the softmax output of the ImageNet-pretrained Inception-v3 classi-fier evaluated on virtual image ˆ x, and p(ˆ c) = Eˆx[p(ˆ c | ˆx)] the corresponding marginal. The Inception Score was computed as: IS = exp( Eˆx KL( p(ˆ c | ˆx) ∥ p(ˆ c))) . (14) Following standard practice, IS was computed over all constructed images across 10 independent runs and reported as mean ± standard deviation across runs. 
+
+Haralick texture descriptors. 
+
+For each ROI, a gray-level co-occurrence matrix (GLCM) was computed from the 8-bit grayscale image restricted to the foreground mask. For a displacement vector (∆ x, ∆y), each entry of the unnormalized GLCM counts co-occurring intensity pairs: ˜P (i, j ) = # {(p, q ) : I(p, q ) = i, I (p + ∆ x, q + ∆ y) = j}, (15) 19 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+and is normalized to P (i, j ) = ˜P (i, j )/ P 
+
+> i,j
+
+˜P (i, j ). GLCMs were computed at four distances {1, 2, 3, 4} pixels and four angles {0◦, 45 ◦, 90 ◦, 135 ◦} at 256 gray levels and averaged across angles for rotational invariance. Five Haralick descriptors [65] were then derived: Contrast = X
+
+> i,j
+
+(i − j)2P (i, j ), (16) Correlation = X
+
+> i,j
+
+(i − μi)( j − μj ) P (i, j )
+
+σiσj
+
+, (17) Homogeneity = X
+
+> i,j
+
+P (i, j )1 + ( i − j)2 , (18) Entropy = − X
+
+> i,j
+
+P (i, j ) log P (i, j ), (19) where μi, μj and σi, σj are the means and standard deviations of the marginal dis-tributions Pi(i) = P 
+
+> j
+
+P (i, j ) and Pj (j) = P 
+
+> i
+
+P (i, j ). The Information Measure of Correlation 1 (IMC1) was computed as: IMC1 = HXY − HXY 1
+
+max( HX , H Y ) , (20) where HX = − P 
+
+> i
+
+Pi(i) log Pi(i), HY = − P 
+
+> j
+
+Pj (j) log Pj (j), HXY =
+
+− P 
+
+> i,j
+
+P (i, j ) log P (i, j ) (the joint entropy, equivalent to the Entropy descriptor defined above), and HXY 1 = − P 
+
+> i,j
+
+P (i, j ) log Pi(i) Pj (j). IMC1 is non-positive by construction and quantifies the degree to which the joint GLCM distribution departs from the product of its marginals. Real and V3Cell descriptor distributions were compared with two-sided Wilcoxon rank-sum tests, and effect sizes were quantified by Cohen’s d [66]: 
+
+d = ¯xreal − ¯xV3Cell 
+
+spooled 
+
+, spooled =
+
+s
+
+(n1 − 1) s21 + ( n2 − 1) s22
+
+n1 + n2 − 2 , (21) with |d| < 0.2 regarded as biologically negligible, 0 .2 ≤ | d| < 0.5 as small, and |d| ≥ 0.5as moderate or larger. 
+
+Lineage-specific morphometric descriptors. 
+
+Three lineage-specific morphometric descriptors were extracted per ROI: 
+
+• Bud number (colon): the count of morphologically distinct convex protrusions extending from the organoid boundary, where each bud was defined as a discrete outgrowth with a visible constriction at its base relative to the main organoid body. Bud numbers were assigned by human annotators following the consensus labeling protocol described in the Annotation Workflow subsection above. 20 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+• Lumen area (lung): normalized internal-hollow-region area, LumenArea = 
+
+P 
+
+> (p,q )∈Ωlumen
+
+1
+
+P 
+
+> (p,q )∈Ωfg
+
+1 , (22) where Ω fg is the foreground mask and Ω lumen ⊂ Ωfg is the internal hollow region detected within it. 
+
+• Ellipticity (stomach): computed from the major and minor axes a and b of the best-fitting ellipse of the foreground region, Ellipticity = p1 − b2/a 2. (23) Distributional comparisons between real and virtual populations used the Wilcoxon rank-sum test and Cohen’s d as defined above. 
+
+UMAP visualization. 
+
+For static phenotypic visualization, a D-dimensional feature vector fi ∈ RD was extracted per sample using ResNet-101 features at D = 2048, L2-normalized, and projected into R2 via UMAP [67]. The static visualization used n neighbors = 15, 
+
+min dist = 0 .1, cosine metric, and random state = 42. For trajectory visualization, L2-normalized features extracted using an inde-pendent ImageNet-pretrained ResNet-50 were obtained from frames in the 245 training sequences. These features were used to fit UMAP without label supervision (n neighbors = 30, min dist = 0 .25, cosine metric and random state = 42). The fit-ted reducer was subsequently fixed and used, without refitting, to project frames from the 36 held-out real trajectories and their corresponding V3Cell-generated trajectories. Fate labels were used only to color the points after projection. 
+
+Phenotyping augmentation classifier. 
+
+To evaluate whether V3Cell-generated virtual organoids improve downstream phe-notype classification under sparse-sampling conditions, we trained an independent phenotype classifier for each organ lineage. The classifier used a ResNet-50 back-bone initialized with ImageNet-pretrained weights, with the final fully connected layer replaced by a lineage-specific linear classification head mapping the 2048-dimensional feature vector to the number of phenotype classes (colon with 4 classes, stomach with 3 and lung with 2). All layers were fine-tuned end-to-end. Grayscale brightfield ROIs were replicated into three channels, resized to 64 × 64 pixels, and normalized using ImageNet channel statistics. For each lineage, 10% of real images were held out as a fixed stratified test set (random seed 42). This test set contained only real images and was never used for training, validation, model selection, or virtual-image generation. The remaining real images formed the training pool. To simulate low-resource phenotyping, we sampled 
+
+N ∈ { 10 , 25 , 50 } real images per class from the training pool and compared three mutu-ally exclusive training conditions using identical real-image splits: real-only, standard augmentation, and V3Cell augmentation. In the real-only condition, the classifier was 21 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+trained only on the sampled real images. In the standard-augmentation condition, the same sampled real images were augmented online using random horizontal and vertical flips ( p = 0 .5), random rotations within ±15 ◦, and color jitter in brightness, contrast, and saturation (magnitude 0.2). Because each image was randomly transformed on the fly at every access, this condition increased sample diversity without changing the number of training samples, leaving the per-class training cardinality fixed at N . In the V3Cell-augmentation condition, the same sampled real images were supplemented with an equal number of class-matched V3Cell-generated virtual ROIs (a 1:1 real-to-virtual ratio, i.e., N virtual ROIs per class), added as stored images to the training set. A virtual-only setting with N = 0 real images per class was also evaluated to test whether V3Cell-generated images alone contained class-discriminative morphological information. Synthetic images were added only to the training set and were never included in validation or test sets. Validation images were sampled from the real-image training pool, disjoint from the sampled training images, and used only for model selection. Models were trained with cross-entropy loss and the Adam optimizer (learning rate 1×10 −3, batch size 128) for up to 50 epochs. The learning rate was reduced by a factor of 0.5 when validation accuracy plateaued for 5 epochs, and early stopping was applied if validation accuracy did not improve for 10 consecutive epochs. The checkpoint with the highest validation accuracy was restored for evaluation. Each configuration was repeated across five random seeds (0–4) using matched real-image splits across conditions. Primary performance was quantified by macro-averaged F1 on the fixed real test set. The 25-image-per-class setting was used for the main augmentation-effect and reproducibility analyses shown in Fig. 4B–C. 
+
+Macro-averaged F1 for phenotyping augmentation. 
+
+Phenotyping performance was quantified by the macro-averaged F1 score. For each phenotype class c ∈ { 1, . . . , C }, precision and recall were computed from the confusion matrix entries: Prec c = TP c
+
+TP c + FP c
+
+, Rec c = TP c
+
+TP c + FN c
+
+, F1,c = 2 Prec c · Rec c
+
+Prec c + Rec c
+
+, (24) and the macro-averaged score treats every class equally regardless of class frequency: 
+
+F macro 1 = 1
+
+C
+
+> C
+
+X
+
+> c=1
+
+F1,c . (25) Across seeds, the standard deviation of F macro 1 served as the primary reproducibility metric. 
+
+Per-frame fate-class probability for trajectory fidelity. 
+
+Temporal fidelity of V3Cell-constructed virtual trajectories was quantified by the per-frame fate-class probability for the ground-truth fate class. For a frame xt (real) or ˆ xt
+
+22 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+(virtual) and a fixed fate classifier Φ producing logits z = Φ( ·) ∈ R3, the probability of fate class c was defined as the softmax value: 
+
+Pc(x) = exp( zc)
+
+P3 
+
+> c′=1
+
+exp( zc′ ) . (26) For each test organoid of ground-truth fate c⋆, the sequence {Pc⋆ (·)}25  
+
+> t=1
+
+was computed over the 25-frame horizon ( K = 6 conditioning frames, 19 predicted frames). Mean probability trajectories were then averaged across organoids within each fate class and smoothed by a Savitzky–Golay filter [79] with window length 7 and polynomial order 3 to suppress high-frequency noise. The same procedure was applied to real frames to obtain paired reference curves. 
+
+Fate-specific morphometric trajectories. 
+
+Three fate-specific morphological readouts were extracted independently from each frame using ROIRefineNetV1 with an Atto backbone. Real and V3Cell-generated frames were resized to 256 × 256 pixels using bilinear interpolation before segmenta-tion. Segmentation logits were transformed using a sigmoid function and binarized at a threshold of 0.5. Separate task-specific checkpoints were used for cavity-formation, cavity-collapse and non-cavity organoids. For cavity-formation organoids, cavity area was defined as the number of fore-ground pixels in the segmented cavity mask. For cavity-collapse organoids, boundary irregularity was calculated from the largest connected component of the segmented organoid outline as P 2/(4 πA ), where A and P denote area and perimeter, respectively. For non-cavity organoids, organoid area was defined as the number of foreground pixels in the general organoid mask. For each video, both the real and corresponding generated trajectories were normal-ized by the peak value of the real trajectory. Mean trajectories were calculated across videos at each time point, and agreement was quantified using Pearson correlation between the real and generated mean trajectories. 
+
+## 4.10 Empirical study 
+
+To clarify how each reported result in the Results section was obtained, we summarize below the experimental protocol associated with each of the four major analyses. Unless otherwise noted, all analyses used the V3Cell models described above, A100 GPUs, and the dataset splits specified in the Datasets subsection. 
+
+Experimental setup for static virtual 3D cell generation. 
+
+This experiment evaluates the ability of Stage 1 to synthesize high-fidelity, class-consistent static virtual 3D cells for each of the nine morphological phenotype classes across the colon, stomach, and lung lineages. From the complete collection of 17,331 static ROI–mask pairs, 10% of images from each lineage were reserved as a fixed strat-ified test set before generator training. The remaining 90% were used to train the lineage-specific generators. A separate lineage-specific foreground-aware static genera-tor was trained using the Stage 1 protocol specified in the Details of pipeline training 23 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+and inference subsection. Generation quality was quantified by comparing a class-balanced population of constructed virtual 3D cells against the full set of real ROIs using KID, IS, and qualitative side-by-side inspection. Each generator was sampled to produce a class-balanced virtual population used both for the fidelity evaluations below and for the phenotyping augmentation experiments. 
+
+Experimental setup for multi-dimensional morphological and texture fidelity evaluation. 
+
+This experiment evaluates whether V3Cell-constructed static virtual 3D cells repro-duce the morphological and textural feature distributions of real organoids at a population level. For each lineage, the full set of real ROIs was compared with an equally sized set of V3Cell-constructed ROIs sampled from the corresponding lineage-specific generator. Haralick texture descriptors (contrast, correlation, homogeneity, entropy, and IMC1) were computed per ROI on the 8-bit grayscale image restricted to the foreground mask, using the GLCM protocol specified under the Haralick tex-ture descriptors subsection. Lineage-specific morphometric descriptors, bud number for colon, lumen area for lung and ellipticity for stomach, were extracted per ROI as specified under the Lineage-specific morphometric descriptors subsection. For each descriptor, real versus V3Cell distributions were compared with a two-sided Wilcoxon rank-sum test, and effect size was quantified by Cohen’s d, with |d| < 0.2 regarded as biologically negligible. UMAP projections of ResNet-101 features were computed with the static-visualization hyperparameters to provide a class-level structural comparison. 
+
+Experimental setup for phenotyping augmentation. 
+
+This experiment evaluates whether V3Cell-constructed virtual populations can aug-ment small real training sets for downstream phenotype classification. For each lineage, a ResNet-50 phenotype classifier was fine-tuned under physical-sample budgets of 
+
+{0, 10 , 25 , 50 } real ROIs per class (with 0 corresponding to the virtual-only setting) and three augmentation conditions (real-only, standard augmentation, and V3Cell augmentation), exactly as detailed in the Phenotyping augmentation classifier subsec-tion. Each configuration was repeated with n = 5 independent random seeds sharing identical real-image splits and was evaluated on the fixed held-out real test set using macro-averaged F1. The mean and standard deviation across seeds were reported, and statistical comparison between augmentation conditions used paired-seed comparisons. 
+
+Experimental setup for fate prediction and trajectory modeling. 
+
+This experiment evaluates both the per-sequence fate classifier and the full dynamic virtual 3D cell trajectory predictor on the longitudinal time-lapse dataset. The tem-poral model was trained on the 245 labeled sequences (28 cavity-formation, 106 cavity-collapse, 111 non-cavity) and evaluated on a separate, class-stratified held-out test set of n = 36 organoids (12 per fate class) that was disjoint from the 245 training sequences. The fate classifier was fine-tuned per the Stage 2 protocol above, and the optimal observation frame k∗ was selected by 5-fold cross-validation on the 245 train-ing sequences. Fate-prediction performance on the held-out test set was quantified by macro-averaged F1 and a per-class confusion matrix. The dynamic modeler (sequence 24 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+encoder, MotionRNN and frozen amniotic-sac generator GAS ) was jointly trained per the Stage 2 protocol and evaluated on the same held-out test set. Given the first K = 6 conditioning frames and the predicted fate ˆ c, MotionRNN rolled out the remaining 19 frames to yield 25-frame predicted trajectories. Temporal fidelity was quantified by the per-frame fate-class probability on the ground-truth fate class, computed over the full 25-frame horizon, averaged across test organoids within each fate class, and smoothed by a Savitzky–Golay filter (window length 7, polynomial order 3). The same proce-dure was applied to the corresponding real frame sequences to obtain paired reference curves, and an unsupervised UMAP reducer fitted exclusively on real training-frame features was fixed and used to project held-out real and V3Cell-generated frames into the same embedding. 
+
+## 4.11 Quantification and statistical analysis 
+
+All quantitative analyses and statistical tests were performed in Python 3.10 using NumPy (1.26), SciPy (1.11), scikit-learn (1.4), scikit-image (0.22), umap-learn (0.5), and PyTorch (2.1). Deep-learning models were trained on NVIDIA A100 GPUs under CUDA 12.1. Microscopy image parsing and GLCM-based Haralick descriptor extrac-tion were performed with scikit-image, and Savitzky–Golay smoothing was performed with SciPy. Random seeds were fixed for all stochastic procedures unless otherwise specified: the global seed was 42 for dataset splitting and UMAP projection, and n = 5 independent seeds {0, 1, 2, 3, 4} were used for the phenotyping augmentation study. Sample sizes are reported in the relevant Methods subsection or figure legend. For distributional fidelity, KID and IS were computed over n = 10 independent sampling runs and reported as mean ± standard deviation. For phenotyping augmentation, macro-averaged F1 scores are reported as mean ± standard deviation across n = 5 seeds sharing identical physical training splits. For the fate prediction classifier, test-set performance was computed on n = 36 held-out organoids (12 per fate class), and per-frame fate-class probability trajectories were averaged over the same test set. Two-sided Wilcoxon rank-sum tests [80] were used to compare distributions of Haralick descriptors and lineage-specific morphometrics between real and V3Cell-constructed organoids. Cohen’s d [66] quantified effect sizes, with |d| < 0.2 considered biologically negligible, 0 .2 ≤ | d| < 0.5 small, 0 .5 ≤ | d| < 0.8 moderate, and |d| ≥ 0.8large. Statistical significance was set at p < 0.05 unless otherwise stated. Where mul-tiple comparisons were performed within a single analysis, p-values were reported without additional multiple-testing correction because effect size (Cohen’s d) rather than p-value was used as the primary criterion for biological interpretation, following best-practice recommendations for large-sample comparisons where nominal signif-icance is inflated by sample size. Unless otherwise specified, summary statistics in figures are reported as mean ± standard deviation. Temporal trajectory plots in Fig. 5C and Fig. 5G are presented as mean ± s.e.m. Box plots indicate median, interquartile range (IQR), and 1.5 ×IQR whiskers, with individual outliers plotted. 
+
+Supplementary information. 
+
+Supplementary Note 1. Stage 2 loss terms. 25 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+Table S1. Kernel Inception Distance and Inception Score for constructed virtual organoids from colon, lung, and stomach, reported as mean ± s.d. over 10 independent runs. 
+
+Table S2. Per-frame fate-classification performance on the held-out test set. 
+
+Table S3. Antibodies, isotype controls, and DAPI used for validation assays. 
+
+Figure S1. Complete micro-textural fidelity evaluation of virtual 3D cells across all organoid lineages and subtypes. 
+
+Figure S2. Extended lineage-specific morphometric evaluation. 
+
+Figure S3. Full-frame fate-conditioned virtual 3D cell trajectories. 
+
+Figure S4. Chemical-structure features do not separate toxic from non-toxic OPFRs. 
+
+Figure S5. Structure-based models cannot predict OPFR developmental toxicity at screening-relevant accuracy. 
+
+Acknowledgements. The authors thank all members of the lab for their support. 
+
+Funding. This work was supported in part by the National Key R&D Program of China under Grant 2025YFC3409000. 
+
+Author contributions. Conceptualization, L.Y. and P.H. Methodology, L.Y., X.D., and P.H. Data collection, C.X. and J.H. Data curation, Z.Z. and P.C. Investiga-tion, X.D. and P.H. Formal analysis, L.Y., X.D., C.X., J.H., and P.H. Writing—original draft, L.Y. and P.H. Writing—review & editing, L.Y., X.D., C.X., X.Z., Z.Z., P.C., X.Y., Z.Y., J.R., H.H., J.H., and P.H. Supervision, J.H. and P.H., and P.H. Funding acquisition, P.H. 
+
+Competing interests. The authors declare no competing interests. 
+
+Data availability. The data supporting the findings of this study are available at https://github.com/Laineyoulu/V3Cell. 
+
+Code availability. The source code associated with this study is available at https: //github.com/Laineyoulu/V3Cell. 
+
+# References 
+
+[1] Lancaster, M. A. & Knoblich, J. A. Organogenesis in a dish: modeling development and disease using organoid technologies. Science 345 , 1247125 (2014). [2] Clevers, H. Modeling development and disease with organoids. Cell 165 , 1586– 1597 (2016). [3] Bock, C. et al. The organoid cell atlas. Nature Biotechnology 39 , 13–17 (2021). [4] Broutier, L. et al. Human primary liver cancer-derived organoid cultures for disease modeling and drug screening. Nature Medicine 23 , 1424–1435 (2017). 26 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+[5] Driehuis, E., Kretzschmar, K. & Clevers, H. Establishment of patient-derived cancer organoids for drug-screening applications. Nature Protocols 15 , 3380–3409 (2020). [6] Kondo, J. & Inoue, M. Application of cancer organoid model for drug screening and personalized therapy. Cells 8, 470 (2019). [7] Bunne, C. et al. How to build the virtual cell with artificial intelligence: priorities and opportunities. Cell 187 , 7045–7063 (2024). [8] Johnson, G. T. et al. Building the next generation of virtual cells to understand cellular biology. Biophysical Journal (2023). [9] Noutahi, E. et al. Virtual cells: Predict, explain, discover. arXiv preprint arXiv:2505.14613 (2025). [10] Loew, L. M. & Schaff, J. C. The virtual cell: a software environment for computational cell biology. TRENDS in Biotechnology 19 , 401–406 (2001). [11] Rood, J. E., Hupalowska, A. & Regev, A. Toward a foundation model of causal cell and tissue biology with a perturbation cell and tissue atlas. Cell 187 , 4520–4545 (2024). [12] Ji, Y., Lotfollahi, M., Wolf, F. A. & Theis, F. J. Machine learning for perturbational single-cell omics. Cell Systems 12 , 522–537 (2021). [13] Przybyla, L. & Gilbert, L. A. A new era in functional genomics screens. Nature Reviews Genetics 23 , 89–103 (2022). [14] Lotfollahi, M., Wolf, F. A. & Theis, F. J. scgen predicts single-cell perturbation responses. Nature Methods 16 , 715–721 (2019). [15] Lotfollahi, M. et al. Predicting cellular responses to complex perturbations in high-throughput screens. Molecular Systems Biology 19 , e11517 (2023). [16] Roohani, Y., Huang, K. & Leskovec, J. Predicting transcriptional outcomes of novel multigene perturbations with GEARS. Nature Biotechnology 42 , 927–935 (2024). [17] Bunne, C. et al. Learning single-cell perturbation responses using neural optimal transport. Nature Methods 20 , 1759–1768 (2023). [18] Cui, H. et al. scgpt: toward building a foundation model for single-cell multi-omics using generative ai. Nature Methods 21 , 1470–1480 (2024). [19] Hao, M. et al. Large-scale foundation model on single-cell transcriptomics. Nature Methods 21 , 1481–1491 (2024). 27 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+[20] Theodoris, C. V. et al. Transfer learning enables predictions in network biology. 
+
+Nature 618 , 616–624 (2023). [21] Zhang, Y. et al. CellFlux: Simulating cellular morphology changes via flow matching. International Conference on Machine Learning (ICML) (2025). [22] Demirel, B., Fumero, M., Karaletsos, T. & Locatello, F. MorphGen: Con-trollable and morphologically plausible generative cell-imaging. arXiv preprint arXiv:2510.01298 (2025). [23] Navidi, Z. et al. MorphoDiff: Cellular morphology painting with diffusion models. 
+
+ICLR (2025). [24] Bourou, A. et al. PhenDiff: Revealing subtle phenotypes with diffusion models in real images. MICCAI (2024). [25] Palma, A., Theis, F. J. & Lotfollahi, M. Predicting cell morphological responses to perturbations using generative modeling. Nature Communications (2025). [26] Yang, K. et al. Mol2Image: improved conditional flow models for molecule to image synthesis. CVPR (2021). [27] Ahlmann-Eltze, C., Huber, W. & Anders, S. Deep learning-based predictions of gene perturbation effects do not yet outperform simple linear methods. BioRxiv 
+
+2024–09 (2024). [28] Wu, Y. et al. PerturbBench: Benchmarking machine learning models for cellular perturbation analysis. arXiv preprint arXiv:2408.10609 (2024). [29] Lopez, R., Regier, J., Cole, M. B., Jordan, M. I. & Yosef, N. Deep generative modeling for single-cell transcriptomics. Nature Methods 15 , 1053–1058 (2018). [30] Matthews, J. M. et al. OrganoID: A versatile deep learning platform for track-ing and analysis of single-organoid dynamics. PLOS Computational Biology 18 ,e1010584 (2022). [31] Deben, C. et al. OrBITS: label-free and time-lapse monitoring of patient derived organoids for advanced drug screening. Cellular Oncology 46 , 299–314 (2023). [32] Qin, Y. et al. A knowledge-driven deep learning framework for organoid morphological segmentation and characterization. BMC Biology 23 (2025). [33] Garreta, E. et al. Rethinking organoid technology through bioengineering. Nature Materials 20 , 145–155 (2021). [34] Brassard, J. A., Nikolaev, M., H¨ ubscher, T., Hofer, M. & Lutolf, M. P. Macro-scopic self-organization of intestinal organoids. Nature Materials 20 , 22–29 (2021). 28 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+[35] Serra, D. et al. Self-organization and symmetry breaking in intestinal organoid development. Nature 569 , 66–72 (2019). [36] Wahle, P. et al. Multimodal spatiotemporal phenotyping of human retinal organoid development. Nature Biotechnology 41 , 1765–1775 (2023). [37] Caicedo, J. C. et al. Data-analysis strategies for image-based cell profiling. Nature Methods 14 , 849–863 (2017). [38] Chandrasekaran, S. N., Ceulemans, H., Boyd, J. D. & Carpenter, A. E. Image-based profiling for drug discovery: due for a machine-learning upgrade? Nature Reviews Drug Discovery 20 , 145–159 (2021). [39] Macosko, E. Z. et al. Highly parallel genome-wide expression profiling of individual cells using nanoliter droplets. Cell 161 , 1202–1214 (2015). [40] Quadrato, G. et al. Cell diversity and network dynamics in photosensitive human brain organoids. Nature 545 , 48–53 (2017). [41] Dixit, A. et al. Perturb-seq: dissecting molecular circuits with scalable single-cell RNA profiling of pooled genetic screens. Cell 167 , 1853–1866 (2016). [42] Replogle, J. M. et al. Mapping information-rich genotype-phenotype landscapes with genome-scale Perturb-seq. Cell 185 , 2559–2575 (2022). [43] Chandrasekaran, S. N. et al. JUMP cell painting dataset: morphological impact of 136,000 chemical and genetic perturbations. BioRxiv 2023–03 (2023). [44] Carpenter, A. E. Image-based chemical screening. Nature Chemical Biology 
+
+(2007). [45] Perlman, Z. E. et al. Multidimensional drug profiling by automated microscopy. 
+
+Science (2004). [46] Srivatsan, S. R. et al. Massively multiplex chemical transcriptomics at single-cell resolution. Science 367 , 45–51 (2020). [47] Datlinger, P. et al. Pooled CRISPR screening with single-cell transcriptome readout. Nature Methods 14 , 297–301 (2017). [48] Ounkomol, C., Seshamani, S., Maleckar, M. M., Collman, F. & Johnson, G. R. Label-free prediction of three-dimensional fluorescence images from transmitted-light microscopy. Nature Methods 15 , 917–920 (2018). [49] Christiansen, E. M. et al. In silico labeling: predicting fluorescent labels in unlabeled images. Cell 173 , 792–803 (2018). 29 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+[50] Zaritsky, A., Jamieson, A. R. & Danuser, G. Interpretable deep learning uncov-ers cellular properties in label-free live cell images that are predictive of highly metastatic melanoma. Cell Systems 12 , 733–747 (2021). [51] Rios, A. C. & Clevers, H. Imaging organoids: a bright future ahead. Nature Methods 15 , 24–26 (2018). [52] Buggenthin, F. et al. Prospective identification of hematopoietic lineage choice by deep learning. Nature Methods 14 , 403–406 (2017). [53] Lukonin, I. et al. Phenotypic landscape of intestinal organoid regeneration. Nature 
+
+586 , 275–280 (2020). [54] Freckmann, E. C. et al. Traject3d allows label-free identification of distinct co-occurring phenotypes within 3d culture by live imaging. Nature Communications 
+
+13 , 5317 (2022). [55] Schiebinger, G. et al. Optimal-transport analysis of single-cell gene expression identifies developmental trajectories in reprogramming. Cell 176 , 928–943 (2019). [56] Loo, L.-H., Wu, L. F. & Altschuler, S. J. Image-based multivariate profiling of drug responses from single cells. Nature Methods (2007). [57] Caie, P. D. et al. High-content phenotypic profiling of drug response signatures across distinct cancer cells. Molecular Cancer Therapeutics (2010). [58] Borten, M. A., Bajikar, S. S., Sasaki, N., Clevers, H. & Janes, K. A. Automated brightfield morphometry of 3D organoid populations by OrganoSeg. Scientific Reports 8, 5319 (2018). [59] Mirza, M. & Osindero, S. Conditional generative adversarial nets. arXiv preprint arXiv:1411.1784 (2014). [60] Zhou, Y., Ye, Y., Zhang, P., Wei, X. & Chen, M. Exact fusion via feature distri-bution matching for few-shot image generation. Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition 8383–8392 (2024). [61] Kingma, D. P. & Welling, M. Auto-encoding variational Bayes. arXiv preprint arXiv:1312.6114 (2013). [62] Rombach, R., Blattmann, A., Lorenz, D., Esser, P. & Ommer, B. High-resolution image synthesis with latent diffusion models. Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition 10684–10695 (2022). [63] Peebles, W. & Xie, S. Scalable diffusion models with transformers. Proceedings of the IEEE/CVF International Conference on Computer Vision 4195–4205 (2023). 30 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+[64] M¨ uller-Franzes, G. et al. A multimodal comparison of latent denoising diffu-sion probabilistic models and generative adversarial networks for medical image synthesis. Scientific Reports 13 , 12098 (2023). [65] Haralick, R. M., Shanmugam, K. & Dinstein, I. Textural features for image classification. IEEE Transactions on Systems, Man, and Cybernetics SMC-3 ,610–621 (1973). [66] Cohen, J. Statistical Power Analysis for the Behavioral Sciences 2nd edn (Lawrence Erlbaum Associates, 1988). [67] McInnes, L., Healy, J. & Melville, J. UMAP: Uniform manifold approximation and projection for dimension reduction. arXiv preprint arXiv:1802.03426 (2018). [68] Park, T. et al. Development of a deep learning based image processing tool for enhanced organoid analysis. Scientific Reports 13 , 19841 (2023). URL https: //github.com/tpark16/orgaextractor. [69] Deng, X. et al. Fuzzy mixture-of-experts aggregation for organoid identifica-tion with multi-scale state space features. IEEE Transactions on Fuzzy Systems 
+
+(2025). [70] Huang, X. et al. Orga-dete: An improved lightweight deep learning model for lung organoid detection and classification. Applied Sciences 15 , 8377 (2025). URL https://osf.io/g2a7r/. [71] Deng, X. et al. Orgline: A versatile pipeline for organoid morphometry using detector-guided prompts. Cell Reports Methods (2026). URL https://doi.org/10. 1016/j.crmeth.2026.101482. [72] Deng, X. et al. MSSOrg: a multi-scale SSM-based model for organoid location and classification. 2024 IEEE International Conference on Bioinformatics and Biomedicine (BIBM) (2024). [73] Huang, N., Gokaslan, A., Kuleshov, V. & Tompkin, J. The GAN is dead; long live the GAN! a modern GAN baseline. Advances in Neural Information Processing Systems (NeurIPS) (2024). [74] He, K., Zhang, X., Ren, S. & Sun, J. Deep residual learning for image recognition. 
+
+Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition 
+
+770–778 (2016). [75] Deng, J. et al. ImageNet: A large-scale hierarchical image database. Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition 248–255 (2009). 31 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+[76] Tian, Y. et al. A good image generator is what you need for high-resolution video synthesis. International Conference on Learning Representations (ICLR) (2021). [77] Selvaraju, R. R. et al. Grad-CAM: Visual explanations from deep networks via gradient-based localization. Proceedings of the IEEE International Conference on Computer Vision (ICCV) 618–626 (2017). [78] Xu, C. et al. Amniogenesis in human amniotic sac embryoids after exposures to organophosphate flame retardants. Environmental Health Perspectives 131 ,047007 (2023). [79] Savitzky, A. & Golay, M. J. E. Smoothing and differentiation of data by simplified least squares procedures. Analytical Chemistry 36 , 1627–1639 (1964). [80] Wilcoxon, F. Individual comparisons by ranking methods. Biometrics Bulletin 
+
+1, 80–83 (1945). 32 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint
+
+Fig. 1 Overview of the V3Cell framework for non-invasive virtual 3D cell modeling and perturbation prediction. Data collection. Brightfield time-lapse sequences of organoids are acquired under baseline and chemically perturbed conditions, yielding longitudinal observa-tions xt0 , xt1 , . . . , xtk . This label-free imaging modality preserves specimen viability and enables repeated phenotypic observation without destructive omics profiling. Stage 1: Static modeling. 
+
+A foreground-aware conditional model constructs high-fidelity static virtual 3D cells from sampling noise and phenotype-conditioning information. During training, foreground masks derived from real organoid images impose organoid-centered constraints. At inference, masks are not provided. Stage 2: Temporal modeling and fate prediction. Conditioned on sparse early-frame observations, a temporal modeling module first predicts organoid developmental fate and then autoregressively forecasts fate-conditioned future morphological trajectories, producing dynamic virtual 3D cells that capture spatiotemporal evolution under perturbation. 
+
+33 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint Lung (two categories) 
+
+> Solid
+> Non budding
+> transparent
+> Non budding
+> opaque
+> Budding
+> transparent
+> Budding
+> opaque
+
+Colon (four categories)  Stomach (three categories)   
+
+> Non lumen Lumen
+> Real Organoid
+> Non budding
+> transparent
+> Apoptotic Hollow Solid
+> Virtual Organoid
+
+Fig. 2 Comparison of real organoids and V3Cell-constructed virtual 3D cells across diverse phenotypes. Representative brightfield images of real organoids are shown in the upper block, and category-matched virtual 3D cells constructed by V3Cell are shown in the lower block. Samples are organized by organoid lineage and phenotype class, including four colon categories, three stomach categories, and two lung categories as labeled in the figure. Virtual examples were modeled using a fixed random seed for display consistency. 
+
+34 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint Lung Lumen Colon Budding Opaque     
+
+> Lumen Area
+> Buds Number
+> Colon Budding Opaque
+> B
+> C
+> E
+> Buds Number Lumen Area
+> Texture homogeneity minimal Texture contrast minimal Texture correlation minimal
+> Ellipticity
+> Texture
+> D
+> UMAP1
+> UMAP2
+> A
+> F
+> Stomach Apoptotic
+> Stomach Apoptotic Lung Lumen
+> Inception Score
+> Kernel Inception Distance
+> Ellipticity
+> Colon
+> Stomach
+> Lung
+> Real V3Cell
+
+Fig. 3 Multi-dimensional evaluation of virtual 3D cell quality and phenotypic fidelity. (A) Quantitative benchmarking of V3Cell against generative baselines including DiT, Medfusion, F2DGAN, cGAN, cVAE, and LDM. Bar charts show Inception Score and Kernel Inception Distance across colon, lung, and stomach datasets. (B) Representative brightfield micrographs of real organoids with magnified regions highlighting local micro-textural patterns. (C) Micro-textural fidelity evalu-ated using representative Haralick descriptors for Colon Budding Opaque, Lung Lumen, and Stomach Apoptotic organoids. Q-Q plots show quantile alignment between real organoids and virtual 3D cells, and box plots show the corresponding marginal distributions. (D) UMAP projection of high-dimensional organoid features from real and V3Cell-constructed populations across colon, lung, and stomach lineages. (E) Visual annotations of lineage-specific morphometric hallmarks, including bud number in colon, lumen area in lung, and ellipticity in stomach organoids. (F) Violin plots comparing morphometric distributions between real organoids and virtual 3D cells for Colon Budding Opaque, Lung Lumen, and Stomach Apoptotic organoids. Statistical significance was assessed by Wilcoxon rank-sum test, with effect sizes reported as Cohen’s d± s.e. 
+
+35 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint A
+
+> F1 Macro Score
+
+Image per Class  Image per Class  Image per Class 
+
+> F1 Macro Score
+
+B CFig. 4 Virtual 3D cells empower reliable phenotyping in low-resource regimes. (A) Phe-notypic classification performance (macro-F1) across varying quantities of physical training samples (10, 25, and 50 per class) for colon, stomach, and lung organoids, comparing real-only, standard augmentation, and V3Cell augmentation conditions. Shaded regions indicate ±1 standard deviation across n = 5 independent random seeds. (B) Quantitative comparison of augmentation effect at 25 physical samples per class across all three lineages. Error bars denote standard deviations. (C) 
+
+Phenotyping reproducibility at 25 samples per class. Lines connect paired experimental runs shar-ing identical physical training splits, demonstrating that V3Cell augmentation consistently reduces inter-run variance and stabilizes classification performance. 
+
+36 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint Fig. 5 V3Cell predicts organoid fate trajectories and perturbation responses from sparse early frames. All trajectories span culture time 48–96 h. (A) Representative V3Cell-constructed virtual fate trajectories for the three fate classes (cavity formation, cavity collapse, and non-cavity). All displayed frames are V3Cell-modeled virtual organoids. (B) Grad-CAM spatial attri-bution and immunofluorescence validation across three perturbation conditions (EHDPP, IDDPP, and RGD). Columns show the brightfield frame, the Grad-CAM map for the cavity-formation logit, phosphorylated myosin light chain II (p-MLC-II), and DAPI. Scale bar, 20 μm for immunofluores-cence panels. Brightfield and Grad-CAM panels were cropped to individual organoids. (C) Per-frame fate-class probability for real (solid) and virtual (dashed) trajectories in each fate class. Shaded bands denote ± s.e.m., and the dotted line marks the conditioning boundary. Right marginals show fate-probability distributions as kernel density estimates. r, Pearson correlation between real and virtual mean trajectories. (D) Unsupervised UMAP projection of held-out real frames using a reducer fit-ted on real training-frame features only. Points are colored by fate class after projection, and arrows indicate temporal progression. (E) The same fixed embedding showing held-out real frames (gray) and the corresponding virtual frames (white-outlined), projected without refitting the reducer or using fate labels. (F) Normalized Energy Fraction (nEF) of Grad-CAM attribution across three regions (amniotic ectodermal epithelial region, cavity, and background). The dashed line marks the uniform baseline (nEF = 1). ∗∗ p < 0.01, ∗∗∗ p < 0.001 (Wilcoxon signed-rank tests). (G) Fate-specific morphometric trajectories (mean ± s.e.m., thin lines for individual organoids): cavity area for cavity-formation, boundary irregularity for cavity-collapse, and organoid area for non-cavity. Per-class Pearson r between real and virtual mean trajectories is shown. 
+
+37 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint Fig. 6 Overview of the V3Cell framework for virtual 3D cell modeling. (a) Conceptual illustration of the virtual 3D cell paradigm. Organoid phenotypic state is modeled as a trajectory in a continuous latent space, progressing from early developmental states (spheroid) through fate-specific outcomes (cavity formation or collapse). External chemical perturbations shift the developmental trajectory, enabling fate prediction and fate-conditioned morphological modeling from sparse early-frame observations. (b) Architecture of the Stage 2 Motion RNN. The module autoregressively evolves a motion latent by combining the previous motion state with stochastic noise inputs through a multi-layer LSTM, producing incremental latent updates that are decoded by the frozen Image Generator to render predicted future frames ˆXt. (c) End-to-end pipeline of the V3Cell framework. Left (Stage 1, foreground-aware static virtual 3D cell construction): a class-conditioned GAN trained with foreground-weighted constraints maps latent noise z ∼ N (0, I) and one-hot phenotype label c to high-fidelity brightfield images of static virtual 3D cells. Foreground masks are used only during train-ing to weight foreground-focused losses and are not supplied at inference. Right (Stage 2, dynamic virtual 3D cell modeling and fate prediction): early-frame brightfield observations are encoded by a Sequence Encoder into content and motion latents, a parallel Fate Prediction module identifies the developmental outcome ˆ c from an optimal observation frame Xk , and MotionRNN uses ˆ c as its cat-egorical conditioning signal while evolving the motion latent. The combined latent representation is decoded by the frozen Image Generator to produce the complete predicted morphological trajectory of the virtual 3D cell. 
+
+38 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted June 24, 2026. ;https://doi.org/10.64898/2026.06.23.734130 doi: bioRxiv preprint

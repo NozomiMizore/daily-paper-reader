@@ -1,0 +1,2472 @@
+Title: Robust causal gene network estimation for large-scale single-cell perturbation screens using reduced control function
+
+URL Source: https://www.biorxiv.org/content/10.64898/2026.04.20.719759v2.full.pdf
+
+Published Time: Tue, 07 Jul 2026 05:00:59 GMT
+
+Number of Pages: 32
+
+Markdown Content:
+Robust causal gene network estimation for large-scale single-cell perturbation screens 1
+
+using reduced control function 2
+
+Changhao Ge 1,2,3 and Hongzhe Li 1,2,* 3
+
+> 1
+
+Graduate Group of Applied Mathematics and Computational Science, University of 4
+
+Pennsylvania, Philadelphia, 19104, PA, USA 5
+
+> 2
+
+Department of Biostatistics, Epidemiology and Informatics, University of Pennsylvania, 6
+
+Philadelphia, 19104, PA, USA 7
+
+> 3
+
+Department of Statistics and Data Science, University of Pennsylvania, Philadelphia, 19104, 8
+
+PA, USA 9
+
+> *
+
+Correspondence: hongzhe@upenn.edu 10 
+
+# SUMMARY 11 
+
+Single-cell CRISPR perturbation screens provide a foundation for causal discovery in gene regu- 12 
+
+latory networks, but existing methods struggle with latent confounding, count-valued expression 13 
+
+data, and high-multiplicity-of-infection (high-MOI) designs. We introduce RICE, a unified frame- 14 
+
+work that addresses all three challenges. At its core is a reformulated control function tailored to 15 
+
+the network-estimation setting, which restores robustness to exclusion-restriction violations that 16 
+
+are pervasive in real CRISPR screens and that cause standard control function approaches to 17 
+
+fail. RICE pairs this estimator with a constrained negative binomial model and a differentiable 18 
+
+acyclicity penalty, accommodating hard and soft interventions and natively supporting high-MOI 19 
+
+designs within a single, GPU-scalable model. Across extensive synthetic benchmarks, RICE 20 
+
+consistently outperforms existing methods and remains stable under strong confounding, exclu- 21 
+
+sion violations, and high-MOI conditions. Applied to CRISPRi screens, RICE achieves stronger 22 
+
+causal-discovery performance on held-out data. RICE further reconstructs the canonical inter- 23 
+
+feron (IFN)-γ signaling pathway in melanoma cells upon immune stimulation, and nominates 24 
+
+stable regulatory candidates that conventional significance tests may overlook due to limited sta- 25 
+
+tistical power. Together, these results establish RICE as a robust and scalable framework for 26 
+
+causal discovery in single-cell perturbation genomics. 27 
+
+# KEYWORDS 28 
+
+Acyclic graph learning, Control function methods, Generalized linear models, Latent confounding 29 
+
+# INTRODUCTION 30 
+
+Single-cell perturbation screens have become a central tool for studying gene regulation, com- 31 
+
+bining pooled CRISPR perturbations with single-cell transcriptomic readouts to measure how 32 
+
+individual cells respond to targeted genetic intervention 1. Unlike observational single-cell data, 33 
+
+these experiments generate interventional variation, making them a natural foundation for causal 34 
+
+discovery 2–4 . The central goal in this setting is to reconstruct causal gene networks — directed 35 
+
+graphs in which edges encode regulatory influence rather than undirected association — typi- 36 
+
+cally represented as directed acyclic graphs (DAGs). Recovering such structure is essential for 37 
+
+distinguishing direct regulatory effects from those mediated through downstream pathways, and 38 
+
+for understanding how perturbations propagate through regulatory programs 5–7 . 39 
+
+1
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+A persistent obstacle to this goal is unmeasured confounding. Latent factors such as techni- 40 
+
+cal artifacts, cell-state heterogeneity, and other unobserved variables can influence many genes 41 
+
+simultaneously, inducing dependencies that are statistical but not causal 8. If these spurious de- 42 
+
+pendencies are not explicitly modeled, they can be misinterpreted as regulatory edges, and the 43 
+
+inferred network is corrupted by false positives. This problem is intrinsic to single-cell data, and 44 
+
+any method intended for real perturbation screens must contend with it. 45 
+
+Control function methods, well established in econometrics for estimation under endogene- 46 
+
+ity 9, offer a principled route to addressing latent confounding. They exploit the fact that CRISPR 47 
+
+perturbations, being assigned independently of unmeasured factors, can serve as valid instru- 48 
+
+ments. However, control functions were developed for equation-level estimation — recovering a 49 
+
+single causal relationship — and their direct extension to network estimation does not behave 50 
+
+well. The full control function regresses each gene on the entire perturbation vector, so any 51 
+
+exclusion-restriction violation in a single perturbation contaminates the fitted values for every 52 
+
+downstream gene and propagates into the corresponding edge estimates. Because such viola- 53 
+
+tions are pervasive in real CRISPR screens, the natural tool for the confounding problem fails in 54 
+
+precisely the DAG-estimation setting. 55 
+
+Here we show that a reduced control function resolves this failure. By residualizing each 56 
+
+gene only on its own perturbation indicator, rather than on the full set of perturbations, the re- 57 
+
+duced formulation isolates the directed causal influence among genes while still absorbing latent 58 
+
+confounding. This modification trades a modest amount of statistical power, readily afforded by 59 
+
+the large sample sizes typical of single-cell screens, for a substantial gain in robustness, making 60 
+
+confounding-robust causal discovery tractable at large DAG scale. We develop this idea into 61 
+
+RICE (Robust Identification of Causal Entanglements), an integrated framework for causal gene 62 
+
+network estimation in large-scale single-cell perturbation screens. 63 
+
+RICE naturally accommodates the conditions that modern screens actually present. It mod- 64 
+
+els count-valued transcript data directly through a constrained negative binomial GLM, avoiding 65 
+
+both the linearity assumptions of recent interventional methods such as inspre 10 , IBCD 11 , and 66 
+
+dotears 12 , and the restrictive distributional assumptions of count-based approaches such as 67 
+
+ODS 13 and ZIPBNs 14 . It handles both hard interventions, such as CRISPR knockout, which 68 
+
+removes upstream regulation of the targeted gene, and soft interventions, such as CRISPRi and 69 
+
+CRISPRa, which shift the conditional distribution of the targeted gene while preserving its up- 70 
+
+stream dependence 15–18 (Figure 1B); this distinction destabilizes methods tailored to only one 71 
+
+regime, whereas RICE captures both within a single parameterization. RICE also supports high- 72 
+
+multiplicity-of-infection (high-MOI) designs natively. Low-MOI screens, in which each cell re- 73 
+
+ceives at most one perturbation, scale linearly with library size and are efficient for small panels 74 
+
+but prohibitively expensive at genome scale; high-MOI designs deliver multiple perturbations 75 
+
+per cell and have emerged as a more scalable alternative 6 (Figure 1C). Many computational 76 
+
+pipelines analyze one perturbation at a time, ignoring the combined regulatory effects of ad- 77 
+
+ditional perturbations present in the same cell 19–21 ; RICE instead models the joint effect of co- 78 
+
+occurring perturbations directly. This joint treatment respects the biological structure of high-MOI 79 
+
+experiments and translates into improved performance in these settings. 80 
+
+# RESULTS 81 
+
+Model overview 82 
+
+RICE estimates a causal gene network in four steps (Figure 1A), built around a generalized linear 83 
+
+model (GLM) framework. Suppose we observe read counts y = ( yj ) together with covariate z. 84 
+
+Because modeling the relationships among raw counts directly is numerically unstable, RICE first 85 
+
+2  
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint 1. Transform counts to expression level Observed counts y
+> Expression level x
+
+M       
+
+> y1y2ypx1x2xp
+> 2. Adjust for unmeasured confounding via control function
+> xjDjrj
+
+A              
+
+> Hard intervention Soft intervention Perturbation indicator Covariates Regression residual Reduced Control Function Constrained GLM
+> x1x2xpy1
+> y2
+> ypr1r2rpD1D2Dpz1zdz1zd
+> 3. Fit the constrained generalized linear model Inferred causal gene network 4. Get DAG after thresholding High-MOI Low-MOI : Perturbed cells : Control cells : sgRNA Few sgRNAs per cell One sgRNA per cell
+> : Perturbed genes : Influenced downstream genes : Other genes : Perturbation (sgRNAs) : Causal effects : Deactivated Causal effects
+
+B C 
+
+> (Multiplicity of infection > 1) (Multiplicity of infection ≤ 1)
+
+Figure 1: Overview of the RICE framework and experimental paradigms. (A) Schematic of the RICE pipeline. For each gene, expression levels are regressed against perturbation in-dicators and observed confounders to derive residuals. The resulting data are modeled using a generalized linear model (GLM) subject to a DAG constraint. (B) Schematic of causal gene networks under soft and hard interventions. Soft interventions preserve the underlying network topology, whereas hard interventions (e.g., gene knockout) eliminate all incoming edges to the targeted gene. (C) Illustration of low- and high-multiplicity of infection (MOI) screens. In low-MOI regimes, perturbed cells receive a single perturbation, whereas high-MOI screens allow multiple concurrent perturbations per cell. transforms the counts into continuous expression levels x = ( xj ) via a non-decreasing univariate 86 
+
+mapping. This mapping is applied only to the GLM predictors; the response still uses the raw 87 
+
+counts y. RICE then constructs a reduced control function to absorb unmeasured confounding, 88 
+
+fits a constrained negative binomial GLM that enforces a DAG structure on the inferred causal 89 
+
+matrix, and thresholds the learned weights to obtain the final network. 90 
+
+The reduced control function step is the conceptual core, which residualizes each gene on its 91 
+
+own perturbation. Concretely, the expression of each gene j depends on its parents, on its own 92 
+
+perturbation (sgRNAs), and on unmeasured confounders zum . The reduced control function is 93 
+
+3
+
+(which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint defined, for each gene j, as 94 
+
+rj = xj − bE[xj | Dj , z], (1) where the conditioning set includes the gene’s own perturbation indicator Dj and observed co- 95 
+
+variates z. Because Dj is assigned independently of zum and is exogenous with respect to every 96 
+
+upstream gene, E[xj | Dj , z] isolates the variation in xj attributable to perturbing j. The residual 97 
+
+rj therefore carries no perturbation-induced regulatory signal and reflects only latent confound- 98 
+
+ing and intrinsic noise. Conditioning the second-stage model on r = ( rj ) consequently yields 99 
+
+regression coefficients that serve as proxies for the causal effects and thus preserves the causal 100 
+
+target. 101 
+
+Under this formulation, the conditional mean of gene j is modeled as 102 
+
+E[yj | z, D, r] = f
+
+z⊤uj + X
+
+> k∈Pa( j)
+
+xkwkj Dej + X 
+
+> l̸=j
+
+rlβlj Dej + vj Dj
+
+ ,
+
+where f is the GLM link function, uj is the coefficient of covariates for gene j, Pa( j) denotes the 103 
+
+parent set of gene j, wkj is the direct causal effect of gene k on gene j, βlj is the coefficient of 104 
+
+the control function residual from gene l, vj is the effect of perturbing gene j, and Dej encodes 105 
+
+the intervention type ( Dej = 1 for soft interventions and Dej = 1 − Dj for hard interventions, 106 
+
+which remove upstream regulation of the perturbed gene). The weight wkj measures the direct 107 
+
+effect of gene k on gene j after conditioning on the residuals. The cost is a modest reduction in 108 
+
+statistical power, since the first stage introduces additional variables; however, as we show later 109 
+
+(Figure 4A), we find it does not materially affect recovery of strong causal edges. 110 
+
+RICE then fits a regularized negative binomial GLM using the full set of variables, including 111 
+
+the residuals r = ( rj ), while constraining the inferred causal matrix to a DAG. The negative bino- 112 
+
+mial likelihood accommodates the overdispersion characteristic of single-cell count data, and the 113 
+
+same parameterization handles both hard and soft interventions, with only the definition of De dif- 114 
+
+fering between regimes; extensions to other count-based distributions are described in Note S1. 115 
+
+Because the combinatorial DAG constraint is intractable, RICE replaces it with a differentiable 116 
+
+acyclicity constraint 22 , making the objective smooth, gradient-optimizable, and GPU-accelerable. 117 
+
+These properties are essential for scaling to the hundreds of genes and hundreds of thousands 118 
+
+of cells in modern screens. After optimization, RICE applies change-point detection to the sorted 119 
+
+edge weights to separate true causal signal from a tail of near-zero background weights, yielding 120 
+
+the final DAG (see Methods). 121 
+
+The reduced control function is preferable for Perturb-seq analysis 122 
+
+The formulation in (1) is termed the reduced control function to distinguish it from its full coun- 123 
+
+terpart, in which the residual conditions on all perturbations, 124 
+
+rj = xj − bE[xj | D, z],
+
+recovering the standard control function. Both formulations are valid under the standard assump- 125 
+
+tions of the instrumental variable framework. Under the conditions typical of modern single-cell 126 
+
+perturbation screens, however, the two exhibit different properties, and we find the reduced con- 127 
+
+trol function preferable. The principal reason is its greater robustness to model misspecification 128 
+
+in practice, a regime in which the full control function breaks down. 129 
+
+The instrumental variable framework requires that each perturbation Dj affects downstream 130 
+
+gene expression only through the targeted gene xj , an idealization rarely met in practice. Real 131 
+
+CRISPR perturbations can produce effects on non-target genes through pathways that bypass 132 
+
+4     
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint soft hard
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> PPV
+> soft hard
+> 0.80
+> 0.85
+> 0.90
+> TPR
+> soft hard
+> 0.7
+> 0.8
+> 0.9
+> MCC
+> soft hard
+> 10 2
+> 2 × 10 2
+> 3 × 10 2
+> SHD
+> Intervention Type
+> Full control function Reduced control function
+
+Figure 2: The reduced control function yields more stable performance than the full con-trol function under exclusion-restriction violations. Each point represents a single simulation replicate with 10,000 cells, 100 genes and 400 true causal edges; boxplots summarize 20 repli-cates per method. Abbreviations are defined in Methods. the targeted gene, including off-target sgRNA activity, perturbation-induced changes in cellular 133 
+
+state such as DNA damage responses, and effects mediated by unmeasured intermediaries 134 
+
+— proteins, chromatin states, and non-coding RNAs — that fall outside the gene expression 135 
+
+panel 23,24 . When such violations occur, Dj retains predictive power for genes other than xj 136 
+
+along paths that do not pass through xj . 137 
+
+The full control function, which regresses each gene on the entire perturbation vector, propa- 138 
+
+gates these out-of-target signals into the first-stage fitted values ˆxj used for downstream genes, 139 
+
+contaminating the second-stage edge estimates. The reduced control function avoids this path- 140 
+
+way: because ˆxj depends only on Dj , out-of-target effects of other perturbations cannot enter ˆxj 141 
+
+and therefore cannot propagate into the edge estimates incident to gene j. 142 
+
+We emphasize that, under such violations, neither formulation recovers the structural causal 143 
+
+graph in the strict sense. The reduced formulation nevertheless yields edge estimates that re- 144 
+
+main locally interpretable and empirically stable, whereas the full formulation produces estimates 145 
+
+that depend non-locally on the entire perturbation design and can be substantially biased. 146 
+
+We confirm this property empirically through simulations with such violations (Figure 2), eval- 147 
+
+uating performance using positive predictive value (PPV), true positive rate (TPR), Matthews 148 
+
+correlation coefficient (MCC), and structural Hamming distance (SHD); full simulation details are 149 
+
+provided in Methods. In the presence of off-target effects, the full control function exhibits sub- 150 
+
+stantial degradation in edge recovery, whereas the reduced formulation remains stable. The 151 
+
+deterioration is driven primarily by an excess of false positives under the full formulation, which 152 
+
+depresses PPV from over 0.8 to roughly 0.65; combined with a marginal decrease in TPR, this 153 
+
+loss propagates to MCC and SHD. The same pattern emerges in our real-data analyses (Figure 154 
+
+S1). Because exclusion violations of this form are difficult to rule out in practice, this robustness 155 
+
+is a substantive advantage in Perturb-seq settings. 156 
+
+Accurate and efficient DAG recovery on synthetic data 157 
+
+To evaluate the performance of RICE in causal discovery, we applied it to synthetic Perturb-seq 158 
+
+data and compared it with inspre, IBCD and dotears. For a fair comparison, the log(1 + y) trans- 159 
+
+formation was applied to inspre, IBCD, and dotears for three reasons: these methods assume 160 
+
+continuous data, the transformation reflects the data-generating process, and it outperformed 161 
+
+other common choices such as a linear transformation for these methods. The simulation details 162 
+
+are reported in Methods. 163 
+
+Figure 3A shows representative examples of three manually curated network topologies: hub, 164 
+
+5
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+BC DAFigure 3: RICE outperforms existing methods in accuracy and efficiency. (A) Representa-tive examples of DAG recovery using 500 cells and 6 genes. Three distinct network topologies were curated, with data generated under both soft and hard intervention regimes. (B) Bench-marking results on Erd ˝ os–R ´ enyi graphs across three data-generating processes. Each point represents a single replicate with 10,000 cells, 100 genes and 400 true causal edges. Error bars denote one standard deviation. (C) Computational runtime as a function of the number of genes. (D) GPU memory consumption of RICE and IBCD as a function of the number of genes. For (C) and (D), markers represent the mean across 10 replicates. Abbreviations are defined in Methods. 6
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+chain, and clusters. We further evaluated the models under three data-generating distributions: 165 
+
+Poisson, negative binomial, and Poisson log-normal (Figure 3B). RICE ranked first or nearly first 166 
+
+across evaluation metrics in most experimental settings. We attribute this robust performance, 167 
+
+even under model misspecification, to the flexibility of the negative binomial distribution (see 168 
+
+Methods). Although inspre achieved high TPR, this came at the cost of numerous false discov- 169 
+
+eries, resulting in substantially lower PPV and MCC. By contrast, IBCD achieved high PPV but 170 
+
+had low TPR, suggesting overly conservative behavior. Finally, dotears performed poorly in both 171 
+
+PPV and TPR, indicating a limited ability to recover the underlying regulatory structure in this 172 
+
+setting. Additional simulation settings, including alternative graph topologies, weak perturbation 173 
+
+effects, weak causality, and larger network scales, are summarized in Figure S2. 174 
+
+An additional pattern is that inspre and IBCD were less stable under hard interventions, 175 
+
+whereas dotears performed worse under soft interventions. This is consistent with the methods’ 176 
+
+underlying intervention models: dotears identifies exogenous variance from the edge-breaking 177 
+
+structure of hard interventions, whereas inspre and IBCD model perturbations as changes that 178 
+
+leave a gene’s incoming edges intact — i.e., soft interventions. Each method is therefore 179 
+
+matched to one regime, while RICE accommodates both soft and hard interventions and main- 180 
+
+tains stable performance across settings. 181 
+
+Another advantage of RICE is its computational efficiency in large-scale settings, driven by 182 
+
+GPU-accelerated matrix operations. Figure 3C summarizes algorithm runtime as a function of 183 
+
+the number of genes. CPU-based methods such as dotears and inspre were efficient on small 184 
+
+networks, but their runtimes increased rapidly with network size. By contrast, RICE showed 185 
+
+markedly better scalability, with little noticeable increase in runtime for networks containing up 186 
+
+to 200 genes. For networks with 500 genes, CPU-based approaches typically required several 187 
+
+hours, whereas RICE completed in approximately twenty minutes. 188 
+
+Although IBCD also leverages GPU computation and showed similar scaling behavior, its 189 
+
+reliance on posterior sampling introduced substantial overhead, leading to longer runtimes in 190 
+
+practice. In addition, IBCD incurred substantially higher GPU memory consumption (Figure 3D). 191 
+
+For example, on datasets containing 100,000 cells and 500 genes, RICE used less than 10 192 
+
+gibibytes (GiB) of GPU memory—within the capacity of many consumer-grade GPUs—whereas 193 
+
+IBCD required more than 30 GiB. These results suggest that, under the same hardware con- 194 
+
+straints, RICE can accommodate substantially larger datasets than IBCD. 195 
+
+Robustness to unmeasured confounding via reduced control function 196 
+
+A key concern in perturbation-based causal discovery is whether the inferred graph remains reli- 197 
+
+able in the presence of unobserved factors that jointly affect multiple genes. To examine this, we 198 
+
+conducted an additional simulation study in which the number of unmeasured confounders was 199 
+
+increased from 2 to 10 under both soft and hard interventions. As shown in Figure 4A, RICE with 200 
+
+reduced control function (RCF) remained robust as latent confounding became stronger, with 201 
+
+all metrics staying relatively stable across settings. In contrast, competing methods either lost 202 
+
+precision or recovered fewer true signals as the effect of unmeasured confounders increased, 203 
+
+leading to poor performance under strong confounding. 204 
+
+Figure 4A also serves as an ablation study of RCF. When the number of unmeasured con- 205 
+
+founders was small, RICE without RCF showed slightly better performance, since it avoids the 206 
+
+loss of statistical power introduced by residualization. However, its performance deteriorated 207 
+
+rapidly as confounding increased. In particular, removing RCF led to more false positives, indi- 208 
+
+cating that confounding effects were misinterpreted as causal relationships. As a result, although 209 
+
+TPR remained consistently high, the model without RCF showed a marked decline in PPV and 210 
+
+MCC, together with a substantial increase in SHD. These results highlight a tradeoff between 211 
+
+7
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+Aa 
+
+BFigure 4: Simulation results highlight the robustness of RICE to unmeasured confounding and high multiplicity of infection (MOI). (A) Performance comparison across a range of i.i.d. unmeasured confounders. RCF: reduced control function. (B) Evaluation of model performance under increasing MOI. For both panels, each simulation is based on 10,000 cells, 100 genes and 400 true causal edges. Markers represent the mean across 20 simulation replicates, and error bars denote one standard deviation.Abbreviations are defined in Methods. 8
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+power and robustness and show that RCF is essential for maintaining reliable graph recovery in 212 
+
+the presence of strong unmeasured confounding like those in the Perturb-seq data. 213 
+
+Extension to high-MOI screens 214 
+
+To evaluate whether RICE remains effective beyond the conventional low-MOI regime, we con- 215 
+
+ducted an additional simulation study under increasing MOI, in which individual cells may carry 216 
+
+multiple perturbations simultaneously. As described in the model, RICE naturally accommodates 217 
+
+this setting through an additive formulation of perturbation effects without altering the overall es- 218 
+
+timation framework. The competing methods, by contrast, are formulated for single-perturbation 219 
+
+data and provide no native mechanism for multiple co-occurring perturbations, so comparing 220 
+
+them at high-MOI requires adapting the input. We adopted the most direct and transparent adap- 221 
+
+tation available: each cell carrying m perturbations was expanded into m pseudo-observations, 222 
+
+one per perturbation, so that every perturbation–response pair is presented to each method ex- 223 
+
+actly as it would appear in low-MOI data. This construction does not explicitly model perturbation 224 
+
+co-occurrence, but it supplies each method with the full set of single-perturbation signals it was 225 
+
+designed to exploit, rather than discarding high-MOI cells or forcing the methods to fail. 226 
+
+As shown in Figure 4B, RICE remained robust as MOI increased, with performance staying 227 
+
+relatively stable across evaluation metrics over a broad range of settings. By contrast, under 228 
+
+soft interventions, IBCD showed declining performance with increasing MOI, suggesting that 229 
+
+it does not generalize well to high-MOI data. Although the other two competing methods did 230 
+
+not exhibit a pronounced MOI-dependent decline, their performance remained consistently poor 231 
+
+across all settings, indicating limited effectiveness even before entering the high-MOI regime. 232 
+
+Furthermore, performance was continuous from MOI=1 onward, with no jump where cells begin 233 
+
+carrying multiple perturbations, indicating that the baselines were not handicapped, and RICE’s 234 
+
+advantage is genuine rather than an artifact of a weakened comparator. Notably, under hard 235 
+
+interventions, the TPR and MCC of all methods improved marginally as MOI increased. This 236 
+
+reflects the fact that simultaneous perturbation of multiple genes removes their dependence on 237 
+
+upstream regulators, thereby simplifying recovery of the remaining graph. 238 
+
+Taken together, these results highlight the flexibility of RICE across a broad range of MOI 239 
+
+settings. This robustness makes it a practical framework for causal discovery in increasingly 240 
+
+complex single-cell perturbation studies. 241 
+
+Uncovering causal structure in CRISPRi screens of K562 and RPE1 cells 242 
+
+We benchmarked model performance on CRISPRi screens in K562 and RPE1 cells targeting 243 
+
+essential genes with single-gene perturbations 19 , treated as soft interventions in RICE. K562 244 
+
+is a human immortalized myelogenous leukemia cell line, whereas RPE1 is a non-cancerous 245 
+
+hTERT-immortalized retinal pigment epithelial cell line. After preprocessing, we split the data 246 
+
+into two parts: 80% of the cells were used for model training, and the remaining 20% were 247 
+
+reserved for benchmarking. The perturbation proportions in each split were preserved. 248 
+
+RICE identified 2,850 edges in K562 (Supplementary Data S1) and 1,191 edges in RPE1 249 
+
+(Supplementary Data S2). For comparison, inspre, IBCD, and dotears identified 3,252, 4,314, 250 
+
+and 4,817 edges in K562, and 1,813, 1,250, and 2,348 edges in RPE1, respectively. RICE 251 
+
+and IBCD exhibited similar scale-free-like degree distributions (Figures S3 and S4), character- 252 
+
+ized by a concentration near zero and a small number of highly connected genes. This pattern 253 
+
+is consistent with prior reports of power-law behavior in gene regulatory networks 25–27 . RICE 254 
+
+produced the shallowest network, with a maximum depth of 12 layers and most genes located 255 
+
+9
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+A
+
+B CDFigure 5: RICE shows superior causal discovery performance on held-out K562 and RPE1 cells. (A) Correlation between negative total effects of regulator–target pairs and inferred edge weights. Red dashed lines represent linear regression fits; R2 denotes the coefficient of de-termination. (B) Quantile–quantile plots comparing p-values for total and direct causal effects against the theoretical uniform distribution under the null. (C) Mean log odds ratios (OR) for the enrichment of inferred upstream genes that, upon perturbation, induce significant differential ex-pression of the target gene (Mann–Whitney U test, p < 0.01 ). ORs were calculated relative to a null distribution of randomly sampled gene sets. Comparisons are based on the Mann–Whitney 
+
+U test. (D) Number of transcription factor (TF)–target gene regulatory interactions among the top 500 inferred edges supported by external knowledge bases. Definitions of total effect, direct effect and OR can be found in Methods. 10 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+near the top, in line with previous findings of shallow and largely feedforward structure of tran- 256 
+
+scriptional networks 28–30 . In contrast, inspre and dotears yielded substantially deeper networks 257 
+
+(depth > 40 ). 258 
+
+We first examined whether inferred edge weights were associated with total causal effects in 259 
+
+the held-out data. In CRISPRi, gene repression is expected to decrease downstream expression 260 
+
+under positive regulation and increase it under negative regulation, implying a negative correla- 261 
+
+tion between edge weights and total effects. This relationship was strongly observed for RICE, 262 
+
+with R2 = 0 .71 in K562 and R2 = 0 .64 in RPE1 (Figure 5A), compared to at most R2 = 0 .35 for 263 
+
+other methods. Moreover, 95% of RICE-inferred edges had signs opposite to their corresponding 264 
+
+total effects, versus less than 86% for competing methods. 265 
+
+Next, we evaluated inferred edges using both total and direct causal effects (Figure 5B). 266 
+
+Because this analysis was performed on held-out data with a relatively limited sample size (min- 267 
+
+imum of 20 perturbed cells), the resulting p-values were not expected to be extremely small. 268 
+
+Nevertheless, more than 80% of RICE edges were significant ( t-test, p < 0.05 ) for both effect 269 
+
+types in both cell lines, whereas none of the competing methods achieved comparable signifi- 270 
+
+cance. Additionally, in RICE, edges with larger inferred magnitudes were more likely to exhibit 271 
+
+downstream perturbation effects after data normalization (Figures 6A and S5A), providing a nat- 272 
+
+ural basis for prioritizing the identified edges for further investigation. 273 
+
+To assess edge directionality, we examined reversed-edge effects by testing whether pertur- 274 
+
+bation of inferred target genes influenced their corresponding upstream regulators. As shown in 275 
+
+Figures 6B, 6C, S5B and S5C, such reciprocal effects were not observed for RICE, indicating 276 
+
+that the model captures directed causal relationships rather than undirected gene associations. 277 
+
+Collectively, these results suggest that RICE effectively recovers both total causal effects and 278 
+
+non-mediated interactions, enabling more accurate reconstruction of causal pathways. 279 
+
+For each gene, we analyzed whether its inferred upstream regulators exerted causal effects 280 
+
+on its expression; specifically, whether the gene showed expression changes when its identified 281 
+
+parent genes were perturbed. To quantify this, we computed the mean log-odds ratio of the 282 
+
+fraction of upstream genes with significant differential expression (Mann–Whitney U test, p < 283 
+
+0.01 ) (Figure 5C). RICE produced positive values in both datasets (one-sided Wilcoxon signed- 284 
+
+rank test, p < 10 −4) and significantly outperformed all other methods (Mann–Whitney U test, 285 
+
+p < 10 −4). 286 
+
+Figure 5D summarizes the number of transcription factor (TF)–gene regulatory interactions, 287 
+
+together with their inferred directions, supported by TRRUST 31 , PerturbAtlas 32 , OmniPath 33 , 288 
+
+and RummaGEO 34 among the top 500 identified gene pairs for each method. RICE recovered 289 
+
+the largest number of annotated interactions in both cell lines while maintaining a relatively low 290 
+
+number of incorrectly oriented (reversed) edges, providing additional support for its accuracy in 291 
+
+causal discovery. 292 
+
+We further characterized the causal network inferred by RICE in K562 cells, identifying 11 293 
+
+modules via the Louvain algorithm 35 . Module sizes ranged from a two-gene doublet to a 118- 294 
+
+gene component (Supplementary Data S1), and several modules captured coherent functional 295 
+
+programs with biologically interpretable internal structure. One representative module (Fig- 296 
+
+ure 6D), comprising 61 genes, contains a coherent ubiquitin–proteasome substructure: it groups 297 
+
+together members of every major proteasome subunit family — PSMA and PSMB (20S core) 298 
+
+together with PSMC and PSMD (19S regulatory particle) — alongside the assembly chaper- 299 
+
+one family PSMG, recovering the structural architecture of the 26S proteasome together with 300 
+
+its biogenesis machinery. Crucially, the same module additionally contains canonical upstream 301 
+
+regulators of the ubiquitin–proteasome system: UBC, the polyubiquitin precursor that supplies 302 
+
+the ubiquitin pool for proteasomal substrate targeting 36 , and HSPA8, an Hsc70 chaperone that 303 
+
+triages misfolded substrates toward proteasomal degradation 37,38 . The co-clustering of struc- 304 
+
+tural subunits with their assembly factors and functional regulators distinguishes this substruc- 305 
+
+11 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+A
+
+EBCDFigure 6: RICE identifies biologically coherent causal structures in K562 cells. (A) Propor-tions of top-ranked edges (from top 1,000 to top 100) exhibiting significant total or direct causal effects ( t-test, p < 0.01 ). The proportion of validated effects increases with higher edge impor-tance. Error bars denote 95% Wilson binomial confidence intervals. (B) Correlation between total causal effects of reversed regulator–target pairs and inferred edge weights. Red dashed lines represent linear regression fits; R2 denotes the coefficient of determination. (C) Quantile– quantile plots of p-values for reversed regulator–target pairs compared against the theoretical uniform distribution under the null. (D) Representative gene cluster with 61 genes identified via Louvain community detection. (E) Gene Ontology enrichment analysis across identified clusters for “Biological Process” and “Molecular Function” categories. The top 15 terms ranked by odds ratio among those with Benjamini–Hochberg adjusted p < 0.01 are shown. Only clusters con-taining at least one enriched term are displayed. 12 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+ture from a mere co-expression group: RICE groups these genes by participation in a shared 306 
+
+regulatory program, not by similarity of expression alone. GAPDH also clusters here, consistent 307 
+
+with its emerging non-glycolytic roles in proteostasis under oxidative stress 39 . A related pro- 308 
+
+teostasis module recurs in RPE1 cells (Figure S5D), where the 20S subunit PSMB5 and the 19S 309 
+
+ATPase PSMC5 co-cluster with protein-folding and stress-response factors: the mitochondrial 310 
+
+co-chaperonin HSPE1, the oxidative-stress regulator PTMA 40 , and the tubulin folding cofactor 311 
+
+TBCA 41 . The recurrence of proteasome subunits within a coherent proteostasis grouping across 312 
+
+two independent cell lines indicates that the recovered structure reflects conserved regulatory 313 
+
+organization rather than a cell-line-specific artifact. 314 
+
+To assess whether these clusters captured biologically meaningful signals, we performed 315 
+
+Gene Ontology enrichment analysis 42,43 across all clusters. Among significantly enriched terms 316 
+
+(Fisher’s exact test with Benjamini–Hochberg correction, p < 0.01 ), we report the top 15 ranked 317 
+
+by odds ratio in the “Biological Process” and “Molecular Function” categories (Figure 6E). Of 318 
+
+the seven clusters enriched for at least one term, three showed enrichment in both categories. 319 
+
+Enriched molecular function terms were unique to each cluster, and redundancy in biological 320 
+
+process terms was minimal, with only three terms shared between two clusters. A similar pat- 321 
+
+tern was observed in RPE1 cells (Figure S5E), where enriched terms were distinct across both 322 
+
+categories. 323 
+
+The enriched biological processes are strongly centered on core essential functions, includ- 324 
+
+ing mitotic spindle organization, chromosome segregation, and cell cycle checkpoint regulation, 325 
+
+while molecular function terms highlight RNA polymerase activity, RNA binding, and ribosome- 326 
+
+associated processes . These results are consistent with well-established categories of essential 327 
+
+genes, reflecting both proliferative machinery and fundamental transcriptional and translational 328 
+
+programs. Importantly, rather than arising from a generic list of essential genes, these enrich- 329 
+
+ments emerge from the structure of the inferred network, suggesting that the proposed method 330 
+
+captures biologically meaningful organization. The presence of coherent functional modules fur- 331 
+
+ther indicates that the estimated DAG reflects structured dependencies among genes, providing 332 
+
+evidence that the inferred relationships are not purely statistical but align with known biological 333 
+
+systems. 334 
+
+Revealing condition-specific immune regulatory signals in melanoma cells 335 
+
+We studied immune regulatory networks across conditions using a pooled Perturb-CITE-seq 336 
+
+dataset of melanoma cells 44 . In this dataset, cells were co-cultured with autologous tumor- 337 
+
+infiltrating lymphocytes (TILs), treated with interferon (IFN)-γ, or maintained under control con- 338 
+
+ditions, to probe mechanisms of cancer immune evasion. The data consists of 182 genes after 339 
+
+filtration. 340 
+
+RICE was run separately on each condition across 50 bootstrap replicates, and we selected 341 
+
+edges with consistent sign (positive or negative) in at least 80% of replicates for downstream 342 
+
+analysis. Resampling was stratified by perturbation: the number of perturbed cells for each gene, 343 
+
+together with the number of control cells, was preserved in every bootstrap sample, holding the 344 
+
+perturbation design fixed across replicates. This step improves model stability and is motivated 345 
+
+by the sparsity of the data: roughly 40% of genes have mean expression below 0.5, which 346 
+
+destabilizes their negative binomial regression coefficients. As a consequence, an edge may be 347 
+
+selected owing to the low signal-to-noise ratio in these genes rather than a genuine and stable 348 
+
+effect. This limitation of magnitude-based selection becomes pronounced under high sparsity; 349 
+
+because the bootstrap procedure mitigates it, we recommend this approach for similarly sparse 350 
+
+datasets. 351 
+
+The inferred networks comprised 113, 110, and 102 edges in the IFN-γ, co-culture, and con- 352 
+
+13 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+A
+
+B CFigure 7: De novo discovery of JAK–STAT immune signaling in melanoma cells under IFN-γ or autologous TIL stimulation using RICE. Edges shown appear in at least 80% of 50 bootstrap replicates. (A) The top 10 genes by in-degree and out-degree in the inferred net-work across the three environments: IFN-γ, co-culture with TIL, and control. (B) Subgraph of edges present under IFN-γ and co-culture with TIL but absent from control. Edge color indi-cates the average edge weight across bootstrap samples in which the edge is selected. Node color indicates whether a gene is an IFN-γ signaling gene, an IFN-γ-regulated gene, or other (see Methods for definitions). Node size reflects degree within the subgraph. (C) Boxplots of normalized target-gene expression, comparing unperturbed versus source-gene-perturbed cells across all three environments, for three source–target pairs: STAT1 →HLA-B, IFNGR1 →STAT1, and JAK1 →B2M. Both the inferred and reverse directions are shown, and p-values are from the Mann–Whitney U test. A yellow background indicates that the edge was selected by RICE in the corresponding environment. 14 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+trol environments, respectively, characterized by per-gene in- and out-degree (Figure 7). STAT1 353 
+
+was a dominant out-hub under IFN-γ and co-culture but not control (out-degree 25 and 15), con- 354 
+
+sistent with its tumour-suppressive role: STAT1 mediates the anti-proliferative and pro-apoptotic 355 
+
+effects of interferons and drives MHC class I-dependent recognition by cytotoxic T cells 45 , and its 356 
+
+silencing suppresses MHC expression as immune evasion 46 . The receptor-proximal signalling 357 
+
+genes IFNGR1, IFNGR2, and JAK1 were out-hubs only under immune stimulation, recovering 358 
+
+the ligand-gated activation of the IFN-γ cascade—whose disruption (e.g. JAK1/2 loss) confers 359 
+
+checkpoint-blockade resistance 47,48 . In contrast, the antigen-presentation genes B2M and HLA- 360 
+
+B were hubs across all three environments, matching the constitutive, IFN-γ-amplified MHC 361 
+
+class I machinery: B2M is the invariant light chain obligate for surface MHC class I, and its 362 
+
+loss is a recurrent evasion mechanism in melanoma 49,50 . That immune stimulation concen- 363 
+
+trates IFN-γ pathway genes among the hubs while antigen-presentation effectors remain cen- 364 
+
+tral throughout shows the inferred networks recover the canonical, context-specific JAK/STAT 365 
+
+antigen-presentation program 44 . 366 
+
+We next examined edges present under both IFN-γ and co-culture but absent from control 367 
+
+(Figure 7B). A coherent core of the IFN-γ signalling cascade was shared across the stimulated 368 
+
+environments: IFNGR1, IFNGR2, and JAK1 → STAT1 and B2M; STAT1 → B2M, HLA-B, HLA-E, 369 
+
+and HLA-F; and HLA-B → HLA-A all appeared under IFN-γ and co-culture but not control. These 370 
+
+orientations match the canonical cascade—IFNGR and JAK1 act upstream of STAT1, which 371 
+
+drives the MHC class I genes B2M and the HLA heavy chains 51,52 —and were identical across the 372 
+
+two independent stimulated conditions, indicating that the method reconstructs a stable, correctly 373 
+
+oriented structure rather than condition-specific noise. The HLA-B → HLA-A orientation was 374 
+
+further supported interventionally: perturbing HLA-B significantly shifted the HLA-A distribution 375 
+
+(p < 10 −4 in all environments, Mann–Whitney U test) with no significant reciprocal effect. 376 
+
+Edge directions were further verified in Figure 7C: for representative edges (STAT1 →HLA-B, 377 
+
+IFNGR1 →STAT1, JAK1 →B2M), the inferred effect was significant under IFN-γ and co-culture 378 
+
+but not control, and significant in the inferred but not the reverse direction, confirming both the 379 
+
+condition-specificity and the orientation of the recovered structure (additional comparisons in 380 
+
+Figure S6). Beyond the canonical pathway, RICE identified STAT1 as the source of many down- 381 
+
+stream IFN-γ genes in both stimulated environments: for example, CD47, an IFN-γ-inducible 382 
+
+immune-modulatory gene regulated via the JAK-STAT1-IRF1 axis 53,54 , and RNF213, an interferon- 383 
+
+stimulated gene induced by IFN-γ downstream of STAT1-IRF1 55,56 . These edges represent a de 384 
+
+novo recovery of interferon-driven immune structure with correct directionality. 385 
+
+Beyond recovering known biology, RICE yields novel candidate findings in this dataset. Fig- 386 
+
+ure 7A shows that GPNMB and MIA serve as in-degree hubs across all conditions, both with 387 
+
+established immunological roles: GPNMB is an IFN-γ-associated immunosuppressive glyco- 388 
+
+protein that negatively regulates tumor response to immune checkpoint inhibitors 57 , and MIA 389 
+
+is a secreted melanoma marker linked to suppression of anti-tumor immunity 58 . Although their 390 
+
+expression shows no significant shift when the sources are perturbed, both are expressed ex- 391 
+
+tremely sparsely (mean < 0.1), which limits statistical power and explains the large p-values. 392 
+
+Importantly, the corresponding edges recur in at least 80% of bootstrap replicates under our 393 
+
+negative binomial model, marking them as stable candidates despite the lack of significance. 394 
+
+Considering their established immunosuppressive roles, this motivates their nomination as puta- 395 
+
+tive regulators. We similarly highlight S100A6, which emerges as an out-degree hub across all 396 
+
+environments. RICE also identifies HLA-A, HLA-B → HLA-F in every environment; these pertur- 397 
+
+bations did not reach significance either, which we again attribute to the low expression of HLA-F 398 
+
+(mean expression around 0.4). We recommend all of these for further investigation. 399 
+
+Taken together, these results show that our method recovers not merely individual gene-to- 400 
+
+gene edges but a coherent regulatory structure consistent with both the data and prior biology, 401 
+
+demonstrating its utility for reconstructing complex networks. Moreover, by surfacing stable reg- 402 
+
+15 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+ulatory candidates that conventional significance tests overlook, RICE goes beyond confirming 403 
+
+known biology to nominate novel hypotheses for further investigation based on the recovered 404 
+
+causal structure. 405 
+
+# DISCUSSION 406 
+
+Across both synthetic and real-world datasets, RICE consistently outperforms existing methods, 407 
+
+and its accuracy remains stable across data distributions and intervention types where current 408 
+
+approaches, typically optimized for a single setting, degrade. Our ablation analysis shows that 409 
+
+the reduced control function is the source of this robustness: removing it leaves true signals intact 410 
+
+but admits a substantial number of false edges under strong confounding, and the resulting loss 411 
+
+of precision is exactly the failure mode that corrupts network reconstruction in real perturbation 412 
+
+data. This establishes the reduced control function not as an incidental design choice but as 413 
+
+the component that makes confounding-robust causal discovery feasible at network scale, at the 414 
+
+cost of a modest and readily affordable reduction in statistical power. 415 
+
+RICE also accommodates high-MOI designs directly, by modeling the combined effects of 416 
+
+multiple perturbations rather than reducing each cell to a single primary perturbation through 417 
+
+the heuristic simplifications common in prior methods. This treatment is increasingly relevant 418 
+
+as high-MOI screens become a practical necessity for genome-scale studies. Supported by 419 
+
+GPU-accelerated optimization, RICE scales to datasets with hundreds of genes and hundreds of 420 
+
+thousands of cells, making it suitable for the size of modern single-cell perturbation experiments. 421 
+
+Several limitations remain. The current framework assumes that perturbation effects com- 422 
+
+bine additively and does not explicitly model higher-order genetic interactions. The acyclicity 423 
+
+constraint, while essential for valid causal interpretation and tractable optimization, precludes the 424 
+
+recovery of feedback loops, which are known to occur in many regulatory systems 59,60 . RICE 425 
+
+therefore recovers the feedforward backbone of the regulatory network, and extending it to ad- 426 
+
+mit cyclic structure is an important direction for future work. In addition, as a point estimator, 427 
+
+RICE selects edges by coefficient magnitude for efficient large-scale optimization; extending it 428 
+
+to settings where edge uncertainty is natively supported is a further direction for methodological 429 
+
+development. 430 
+
+In conclusion, RICE provides a robust and scalable framework for causal network reconstruc- 431 
+
+tion in increasingly complex single-cell perturbation experiments. By making confounding-robust 432 
+
+causal discovery practical at scale, and by recovering networks that both recapitulate known 433 
+
+regulatory biology and nominate new candidate regulators, RICE offers a foundation for moving 434 
+
+from cataloguing perturbation effects toward a causal understanding of gene regulation. 435 
+
+16 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+# RESOURCE AVAILABILITY 436 
+
+Lead contact 437 
+
+Requests for further information and resources should be directed to and will be fulfilled by the 438 
+
+lead contact, Hongzhe Li (hongzhe@upenn.edu). 439 
+
+Materials availability 440 
+
+This study did not generate new materials. 441 
+
+Data and code availability 442 
+
+• The K562 and RPE1 data are publicly available at https://doi.org/10.25452/figshare. 443 
+
+plus.20029387 . 444 
+
+• The melanoma data was downloaded via scPerturb 61 at http://zenodo.org/records/ 445 
+
+7041849 . 446 
+
+• The code for model training, simulation and data analysis is provided at https://github. 447 
+
+com/HowardGech/RICE . 448 
+
+• Any additional information required to reanalyze the data reported in this paper is available 449 
+
+from the lead contact upon request. 450 
+
+# ACKNOWLEDGMENTS 451 
+
+This work was funded by National Institutes of Health via grant R01GM129781 and U01HG013841. 452 
+
+The authors thank all members of the lab for their support. 453 
+
+# SUPPLEMENTAL INFORMATION INDEX 454 
+
+Table S1, Figures S1-S7 and their legends in a PDF 455 
+
+Data S1-S5. Html files of identified gene edges and clusters in K562, RPE1 and melanoma 456 
+
+cells 457 
+
+Note S1. More probabilistic models including the Poisson and Poisson Log-Normal models 458 
+
+under the RICE framework. 459 
+
+Note S2. Identifiability results of the structural model and reduced control function approach. 460 
+
+17 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+# References 461 
+
+1. Kernfeld, E., Keener, R., Cahan, P., and Battle, A. (2024). Transcriptome data are insufficient 462 
+
+to control false discoveries in regulatory network inference. Cell Systems 15 , 709–724.e13. 463 
+
+2. Dixit, A., Parnas, O., Li, B., Chen, J., Fulco, C.P., Jerby-Arnon, L., Marjanovic, N.D., Dionne, 464 
+
+D., Burks, T., Raychowdhury, R. et al. (2016). Perturb-seq: dissecting molecular circuits with 465 
+
+scalable single-cell rna profiling of pooled genetic screens. cell 167 , 1853–1866. 466 
+
+3. Jaitin, D.A., Weiner, A., Yofe, I., Lara-Astiaso, D., Keren-Shaul, H., David, E., Salame, T.M., 467 
+
+Tanay, A., van Oudenaarden, A., and Amit, I. (2016). Dissecting immune circuits by linking 468 
+
+crispr-pooled screens with single-cell rna-seq. Cell 167 , 1883–1896. 469 
+
+4. Datlinger, P., Rendeiro, A.F., Schmidl, C., Krausgruber, T., Traxler, P., Klughammer, J., 470 
+
+Schuster, L.C., Kuchler, A., Alpar, D., and Bock, C. (2017). Pooled crispr screening with 471 
+
+single-cell transcriptome readout. Nature methods 14 , 297–301. 472 
+
+5. Duan, B., Zhou, C., Zhu, C., Yu, Y., Li, G., Zhang, S., Zhang, C., Ye, X., Ma, H., Qu, S., 473 
+
+Zhang, Z., Wang, P., Sun, S., and Liu, Q. (2019). Model-based understanding of single-cell 474 
+
+crispr screening. Nature Communications 10 , 2233. 475 
+
+6. Yao, D., Binan, L., Bezney, J., Simonton, B., Freedman, J., Frangieh, C.J., Dey, K., Geiger- 476 
+
+Schuller, K., Eraslan, B., Gusev, A., Regev, A., and Cleary, B. (2024). Scalable genetic 477 
+
+screening for regulatory circuits using compressed perturb-seq. Nature Biotechnology 42 , 478 
+
+1282–1295. 479 
+
+7. Rood, J.E., Hupalowska, A., and Regev, A. (2024). Toward a foundation model of causal 480 
+
+cell and tissue biology with a perturbation cell and tissue atlas. Cell 187 , 4520–4545. 481 
+
+8. Chen, M., and Zhou, X. (2017). Controlling for confounding effects in single cell rna se- 482 
+
+quencing studies using both control and target genes. Scientific Reports 7, 13587. 483 
+
+9. Wooldridge, J.M. (2015). Control function methods in applied econometrics. The Journal of 484 
+
+Human Resources 50 , 420–445. 485 
+
+10. Brown, B.C., Tokolyi, A., Morris, J.A., Lappalainen, T., and Knowles, D.A. (2025). Large- 486 
+
+scale causal discovery using interventional data sheds light on gene network structure in 487 
+
+k562 cells. Nature Communications 16 , 9628. 488 
+
+11. Han, S.W., Vo, D.D., and Brown, B.C. (2025). Large-scale bayesian causal discovery with 489 
+
+interventional data. . arXiv:2510.01562 . 490 
+
+12. Xue, A., Rao, J., Sankararaman, S., and Pimentel, H. (2025). dotears: Scalable and consis- 491 
+
+tent directed acyclic graph estimation using observational and interventional data. iScience 492 
+
+28 . 493 
+
+13. Park, G., and Raskutti, G. (2015). Learning large-scale poisson dag models based on 494 
+
+overdispersion scoring. Advances in neural information processing systems 28 . 495 
+
+14. Choi, J., Chapkin, R., and Ni, Y. (2020). Bayesian causal structural learning with zero- 496 
+
+inflated poisson bayesian networks. Advances in neural information processing systems 497 
+
+33 , 5887–5897. 498 
+
+18 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+15. Shalem, O., Sanjana, N.E., Hartenian, E., Shi, X., Scott, D.A., Mikkelsen, T.S., Heckl, D., 499 
+
+Ebert, B.L., Root, D.E., Doench, J.G., and Zhang, F. (2014). Genome-scale crispr-cas9 500 
+
+knockout screening in human cells. Science 343 , 84–87. 501 
+
+16. Wang, T., Wei, J.J., Sabatini, D.M., and Lander, E.S. (2014). Genetic screens in human cells 502 
+
+using the crispr-cas9 system. Science 343 , 80–84. 503 
+
+17. Gilbert, L.A., Horlbeck, M.A., Adamson, B., Villalta, J.E., Chen, Y., Whitehead, E.H., 504 
+
+Guimaraes, C., Panning, B., Ploegh, H.L., Bassik, M.C., Qi, L.S., Kampmann, M., and 505 
+
+Weissman, J.S. (2014). Genome-scale crispr-mediated control of gene repression and ac- 506 
+
+tivation. Cell 159 , 647–661. 507 
+
+18. Horlbeck, M.A., Gilbert, L.A., Villalta, J.E., Adamson, B., Pak, R.A., Chen, Y., Fields, A.P., 508 
+
+Park, C.Y., Corn, J.E., Kampmann, M., and Weissman, J.S. (2016). Compact and highly 509 
+
+active next-generation libraries for crispr-mediated gene repression and activation. eLife 5, 510 
+
+e19760. 511 
+
+19. Replogle, J.M., Saunders, R.A., Pogson, A.N., Hussmann, J.A., Lenail, A., Guna, A., Masci- 512 
+
+broda, L., Wagner, E.J., Adelman, K., Lithwick-Yanai, G. et al. (2022). Mapping information- 513 
+
+rich genotype-phenotype landscapes with genome-scale perturb-seq. Cell 185 , 2559–2575. 514 
+
+20. Barry, T., Wang, X., Morris, J.A., Roeder, K., and Katsevich, E. (2021). Sceptre improves 515 
+
+calibration and sensitivity in single-cell crispr screen analysis. Genome Biology 22 , 344. 516 
+
+21. Park, K., and Li, H. (2026). Confounder-robust causal discovery and inference in perturb- 517 
+
+seq using proxy and instrumental variables. . URL: https://arxiv.org/abs/2601.01830 . 518 
+
+arXiv:2601.01830 . 519 
+
+22. Zheng, X., Aragam, B., Ravikumar, P., and Xing, E.P. (2018). DAGs with NO TEARS: Con- 520 
+
+tinuous Optimization for Structure Learning. Advances in Neural Information Processing 521 
+
+Systems. 522 
+
+23. Tycko, J., Wainberg, M., Marinov, G.K., Ursu, O., Hess, G.T., Ego, B.K., Aradhana, Li, 523 
+
+A., Truong, A., Trevino, A.E., Spees, K., Yao, D., Kaplow, I.M., Greenside, P.G., Morgens, 524 
+
+D.W., Phanstiel, D.H., Snyder, M.P., Bintu, L., Greenleaf, W.J., Kundaje, A., and Bassik, 525 
+
+M.C. (2019). Mitigation of off-target toxicity in crispr-cas9 screens for essential non-coding 526 
+
+elements. Nature Communications 10 , 4063. 527 
+
+24. Haapaniemi, E., Botla, S., Persson, J., Schmierer, B., and Taipale, J. (2018). Crispr–cas9 528 
+
+genome editing induces a p53-mediated dna damage response. Nature Medicine 24 , 927– 529 
+
+930. 530 
+
+25. Balaji, S., Iyer, L.M., Aravind, L., and Babu, M.M. (2006). Uncovering a hidden distributed 531 
+
+architecture behind scale-free transcriptional regulatory networks. Journal of Molecular 532 
+
+Biology 360 , 204–212. 533 
+
+26. Aguirre, M., Spence, J.P., Sella, G., and Pritchard, J.K. (2025). Gene regulatory network 534 
+
+structure informs the distribution of perturbation effects. PLOS Computational Biology 21 , 535 
+
+1–31. 536 
+
+27. Singh, A.J., Ramsey, S.A., Filtz, T.M., and Kioussi, C. (2018). Differential gene regulatory 537 
+
+networks in development and disease. Cellular and Molecular Life Sciences 75 , 1013–1025. 538 
+
+19 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+28. Lagomarsino, M.C., Jona, P., Bassetti, B., and Isambert, H. (2007). Hierarchy and feedback 539 
+
+in the evolution of the escherichia coli transcription network. Proceedings of the National 540 
+
+Academy of Sciences 104 , 5516–5520. 541 
+
+29. Rosenfeld, N., and Alon, U. (2003). Response delays and the structure of transcription 542 
+
+networks. Journal of Molecular Biology 329 , 645–654. 543 
+
+30. Sellerio, A., Bassetti, B., Isambert, H., and Cosentino Lagomarsino, M. (2008). A compara- 544 
+
+tive evolutionary study of transcription networks. the global role of feedback and hierachical 545 
+
+structures. Molecular BioSystems(MBS) 5, 170–179. 546 
+
+31. Han, H., Shim, H., Shin, D., Shim, J.E., Ko, Y., Shin, J., Kim, H., Cho, A., Kim, E., Lee, T., 547 
+
+Kim, H., Kim, K., Yang, S., Bae, D., Yun, A., Kim, S., Kim, C.Y., Cho, H.J., Kang, B., Shin, 548 
+
+S., and Lee, I. (2015). Trrust: a reference database of human transcriptional regulatory 549 
+
+interactions. Scientific Reports 5, 11432. 550 
+
+32. Zhang, Y., Zhang, T., Yang, G., Pan, Z., Tang, M., Wen, Y., He, P., Wang, Y., and Zhou, 551 
+
+R. (2024). Perturbatlas: a comprehensive atlas of public genetic perturbation bulk rna-seq 552 
+
+datasets. Nucleic Acids Research 53 , D1112–D1119. 553 
+
+33. T ¨ urei, D., Schaul, J., Palacio-Escat, N., Boh ´ ar, B., Bai, Y., Ceccarelli, F., C ¸ evrim, E., Daley, 554 
+
+M., Darcan, M., Dimitrov, D., Do ˘ gan, T., Domingo-Fern ´ andez, D., Dugourd, A., G ´ abor, A., 555 
+
+Gul, L., Hall, B.A., Hoyt, C.T., Ivanova, O., Klein, M., Lawrence, T., Ma ˜ nanes, D., M ´ odos, D., 556 
+
+M ¨ uller-Dott, S., ¨ Olbei, M., Schmidt, C., S ¸ en, B., Theis, F.J., ¨ Unl ¨ u, A., Ulusoy, E., Valdeolivas, 557 
+
+A., Korcsm ´ aros, T., and Saez-Rodriguez, J. (2025). Omnipath: integrated knowledgebase 558 
+
+for multi-omics analysis. Nucleic Acids Research 54 , D652–D660. 559 
+
+34. Marino, G.B., Clarke, D.J.B., Lachmann, A., Deng, E.Z., and Ma’ayan, A. (2024). Rumma- 560 
+
+geo: Automatic mining of human and mouse gene sets from geo. Patterns 5. 561 
+
+35. Blondel, V.D., Guillaume, J.L., Lambiotte, R., and Lefebvre, E. (2008). Fast unfolding of 562 
+
+communities in large networks. Journal of Statistical Mechanics: Theory and Experiment 563 
+
+2008 , P10008. 564 
+
+36. Ciechanover, A. (2003). The ubiquitin proteolytic system and pathogenesis of human dis- 565 
+
+eases: a novel platform for mechanism-based drug targeting. Biochemical Society Trans- 566 
+
+actions 31 , 474–481. 567 
+
+37. McClellan, A.J., Tam, S., Kaganovich, D., and Frydman, J. (2005). Protein quality control: 568 
+
+chaperones culling corrupt conformations. Nature Cell Biology 7, 736–741. 569 
+
+38. R ¨ odl, S., and Herrmann, J.M. (2023). The role of the proteasome in mitochondrial protein 570 
+
+quality control. IUBMB Life 75 , 868–879. 571 
+
+39. Nakajima, H., Itakura, M., Kubo, T., Kaneshige, A., Harada, N., Izawa, T., Azuma, Y.T., 572 
+
+Kuwamura, M., Yamaji, R., and Takeuchi, T. (2017). Glyceraldehyde-3-phosphate dehy- 573 
+
+drogenase (gapdh) aggregation causes mitochondrial dysfunction during oxidative stress- 574 
+
+induced cell death*. Journal of Biological Chemistry 292 , 4727–4742. 575 
+
+40. Karapetian, R.N., Evstafieva, A.G., Abaeva, I.S., Chichkova, N.V., Filonov, G.S., Rubtsov, 576 
+
+Y.P., Sukhacheva, E.A., Melnikov, S.V., Schneider, U., Wanker, E.E., and Vartapetian, A.B. 577 
+
+(2005). Nuclear oncoprotein prothymosin is a partner of keap1: Implications for expression 578 
+
+of oxidative stress-protecting genes. Molecular and Cellular Biology 25 , 1089–1099. 579 
+
+20 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+41. Harris, G., and Schaefer, K.L. (2009). The microtubule-targeting agent t0070907 induces 580 
+
+proteasomal degradation of tubulin. Biochemical and Biophysical Research Communica- 581 
+
+tions 388 , 345–349. 582 
+
+42. Ashburner, M., Ball, C.A., Blake, J.A., Botstein, D., Butler, H., Cherry, J.M., Davis, A.P., 583 
+
+Dolinski, K., Dwight, S.S., Eppig, J.T., Harris, M.A., Hill, D.P., Issel-Tarver, L., Kasarskis, 584 
+
+A., Lewis, S., Matese, J.C., Richardson, J.E., Ringwald, M., Rubin, G.M., and Sherlock, G. 585 
+
+(2000). Gene ontology: tool for the unification of biology. Nature Genetics 25 , 25–29. 586 
+
+43. Fang, Z., Liu, X., and Peltz, G. (2022). Gseapy: a comprehensive package for performing 587 
+
+gene set enrichment analysis in python. Bioinformatics 39 , btac757. 588 
+
+44. Frangieh, C.J., Melms, J.C., Thakore, P.I., Geiger-Schuller, K.R., Ho, P., Luoma, A.M., 589 
+
+Cleary, B., Jerby-Arnon, L., Malu, S., Cuoco, M.S., Zhao, M., Ager, C.R., Rogava, M., Hovey, 590 
+
+L., Rotem, A., Bernatchez, C., Wucherpfennig, K.W., Johnson, B.E., Rozenblatt-Rosen, O., 591 
+
+Schadendorf, D., Regev, A., and Izar, B. (2021). Multimodal pooled perturb-cite-seq screens 592 
+
+in patient models define mechanisms of cancer immune evasion. Nature Genetics 53 , 332– 593 
+
+341. 594 
+
+45. Meissl, K., Macho-Maschler, S., M ¨ uller, M., and Strobl, B. (2017). The good and the bad 595 
+
+faces of stat1 in solid tumours. Cytokine 89 , 12–20. 596 
+
+46. Osborn, J.L., and Greer, S.F. (2015). Metastatic melanoma cells evade immune detection 597 
+
+by silencing stat1. International Journal of Molecular Sciences 16 , 4343–4361. 598 
+
+47. Platanias, L.C. (2005). Mechanisms of type-i- and type-ii-interferon-mediated signalling. Na- 599 
+
+ture Reviews Immunology 5, 375–386. 600 
+
+48. Shin, D.S., Zaretsky, J.M., Escuin-Ordinas, H., Garcia-Diaz, A., Hu-Lieskovan, S., Kalbasi, 601 
+
+A., Grasso, C.S., Hugo, W., Sandoval, S., Torrejon, D.Y., Palaskas, N., Rodriguez, G.A., 602 
+
+Parisi, G., Azhdam, A., Chmielowski, B., Cherry, G., Seja, E., Berent-Maoz, B., Shintaku, 603 
+
+I.P., Le, D.T., Pardoll, D.M., Diaz, J., Luis A., Tumeh, P.C., Graeber, T.G., Lo, R.S., Comin- 604 
+
+Anduix, B., and Ribas, A. (2017). Primary resistance to pd-1 blockade mediated by jak1/2 605 
+
+mutations. Cancer Discovery 7, 188–201. 606 
+
+49. Restifo, N.P., Marincola, F.M., Kawakami, Y., Taubenberger, J., Yannelli, J.R., and Rosen- 607 
+
+berg, S.A. (1996). Loss of functional beta 2 -microglobulin in metastatic melanomas from 608 
+
+five patients receiving immunotherapy. JNCI: Journal of the National Cancer Institute 88 , 609 
+
+100–108. 610 
+
+50. Sade-Feldman, M., Jiao, Y.J., Chen, J.H., Rooney, M.S., Barzily-Rokni, M., Eliane, J.P., 611 
+
+Bjorgaard, S.L., Hammond, M.R., Vitzthum, H., Blackmon, S.M., Frederick, D.T., Hazar- 612 
+
+Rethinam, M., Nadres, B.A., Van Seventer, E.E., Shukla, S.A., Yizhak, K., Ray, J.P., Rose- 613 
+
+brock, D., Livitz, D., Adalsteinsson, V., Getz, G., Duncan, L.M., Li, B., Corcoran, R.B., 614 
+
+Lawrence, D.P., Stemmer-Rachamimov, A., Boland, G.M., Landau, D.A., Flaherty, K.T., Sul- 615 
+
+livan, R.J., and Hacohen, N. (2017). Resistance to checkpoint blockade therapy through 616 
+
+inactivation of antigen presentation. Nature Communications 8, 1136. 617 
+
+51. Du, W., Frankel, T.L., Green, M., and Zou, W. (2022). Ifn signaling integrity in colorectal 618 
+
+cancer immunity and immunotherapy. Cellular & Molecular Immunology 19 , 23–32. 619 
+
+52. Zheng, H., Guan, X., Meng, X., Tong, Y., Wang, Y., Xie, S., Guo, L., and Lu, R. (2023). 620 
+
+Ifn- in ovarian tumor microenvironment upregulates hla-e expression and predicts a poor 621 
+
+prognosis. Journal of Ovarian Research 16 , 229. 622 
+
+21 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+53. Schoggins, J.W., Wilson, S.J., Panis, M., Murphy, M.Y., Jones, C.T., Bieniasz, P., and Rice, 623 
+
+C.M. (2011). A diverse range of gene products are effectors of the type i interferon antiviral 624 
+
+response. Nature 472 , 481–485. 625 
+
+54. Ye, Z.H., Jiang, X.M., Huang, M.Y., Xu, Y.L., Chen, Y.C., Yuan, L.W., Huang, C.Y., Yu, W.B., 626 
+
+Chen, X., and Lu, J.J. (2021). Regulation of cd47 expression by interferon-gamma in cancer 627 
+
+cells. Translational Oncology 14 , 101162. 628 
+
+55. Matta, S.K., Kohio, H.P., Chandra, P., Brown, A., Doench, J.G., Philips, J.A., Ding, S., and 629 
+
+Sibley, L.D. (2024). Genome-wide and targeted crispr screens identify rnf213 as a mediator 630 
+
+of interferon gamma–dependent pathogen restriction in human cells. Proceedings of the 631 
+
+National Academy of Sciences 121 , e2315865120. 632 
+
+56. Li, H., Zhang, Y., Wang, J., Zhang, Q., Sun, H., and Wei, F. (2026). Rnf213 is an interferon- 633 
+
+stimulated gene that targets influenza a virus np and activates mda5 to restrict infection. 634 
+
+Advanced Science 13 , e11012. 635 
+
+57. Chung, J.S., Ramani, V., Kobayashi, M., Fattah, F., Popat, V., Zhang, S., Cruz, J., Pon- 636 
+
+ciano D., Gerber, D.E., and Ariizumi, K. (2020). Dc-hil/gpnmb is a negative regulator of 637 
+
+tumor response to immune checkpoint inhibitors. Clinical Cancer Research 26 , 1449–1459. 638 
+
+58. Bosserhoff, A.K. (2005). Melanoma inhibitory activity (mia): an important molecule in 639 
+
+melanoma development and progression. Pigment Cell Research 18 , 411–416. 640 
+
+59. El-Samad, H. (2021). Biological feedback control—respect the loops. Cell Systems 12 , 641 
+
+477–487. 642 
+
+60. Ferrell, J.E. (2013). Feedback loops and reciprocal regulation: recurring motifs in the sys- 643 
+
+tems biology of the cell cycle. Current Opinion in Cell Biology 25 , 676–686. 644 
+
+61. Peidli, S., Green, T.D., Shen, C., Gross, T., Min, J., Garda, S., Yuan, B., Schumacher, L.J., 645 
+
+Taylor-King, J.P., Marks, D.S., Luna, A., Bl ¨ uthgen, N., and Sander, C. (2024). scperturb: 646 
+
+harmonized single-cell perturbation data. Nature Methods 21 , 531–540. 647 
+
+62. Truong, C., Oudre, L., and Vayatis, N. (2020). Selective review of offline change point de- 648 
+
+tection methods. Signal Processing 167 , 107299. 649 
+
+63. Satopaa, V., Albrecht, J., Irwin, D., and Raghavan, B. (2011). Finding a ”kneedle” in a 650 
+
+haystack: Detecting knee points in system behavior. 31st International Conference on 651 
+
+Distributed Computing Systems Workshops pp. 166–171. 652 
+
+64. Okuta, R., Unno, Y., Nishino, D., Hido, S., and Loomis, C. (2017). Cupy: A numpy- 653 
+
+compatible library for nvidia gpu calculations. In Proceedings of Workshop on Machine 654 
+
+Learning Systems (LearningSys) in The Thirty-first Annual Conference on Neural Informa- 655 
+
+tion Processing Systems (NIPS). 656 
+
+65. Gillespie, M., Jassal, B., Stephan, R., Milacic, M., Rothfels, K., Senff-Ribeiro, A., Griss, J., 657 
+
+Sevilla, C., Matthews, L., Gong, C., Deng, C., Varusai, T., Ragueneau, E., Haider, Y., May, 658 
+
+B., Shamovsky, V., Weiser, J., Brunson, T., Sanati, N., Beckman, L., Shao, X., Fabregat, A., 659 
+
+Sidiropoulos, K., Murillo, J., Viteri, G., Cook, J., Shorser, S., Bader, G., Demir, E., Sander, 660 
+
+C., Haw, R., Wu, G., Stein, L., Hermjakob, H., and D’Eustachio, P. (2022). The reactome 661 
+
+pathway knowledgebase 2022. Nucleic Acids Research 50 , D687–D692. 662 
+
+22 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+66. Liberzon, A., Birger, C., Thorvaldsd ´ ottir, H., Ghandi, M., Mesirov, J.P., and Tamayo, P. 663 
+
+(2015). The molecular signatures database hallmark gene set collection. Cell Systems 664 
+
+1, 417–425. 665 
+
+67. Rusinova, I., Forster, S., Yu, S., Kannan, A., Masse, M., Cumming, H., Chapman, R., 666 
+
+and Hertzog, P.J. (2013). Interferome v2.0: an updated database of annotated interferon- 667 
+
+regulated genes. Nucleic Acids Research 41 , D1040–D1046. 668 
+
+23 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+# METHODS 669 
+
+Method details 670 
+
+Conditional distribution with observational and interventional data 671 
+
+Consider a Perturb-seq dataset involving p genes. For each cell, we observe (y, z, D), where y ∈ 672 
+
+Np is the vector of raw gene expression UMI counts, z ∈ Rd represents observed confounders 673 
+
+(for example, library size and batch ID), and D ∈ { 0, 1}p is the perturbation indicator vector, 674 
+
+where Dj = 1 indicates that gene j is perturbed and Dj = 0 otherwise. In addition, we allow for 675 
+
+the presence of unmeasured confounders zum . 676 
+
+Because linear relationships are rarely appropriate for count data, we assume that the in- 677 
+
+fluence between genes follows a univariate nonlinear monotone transformation g. Applying this 678 
+
+transformation yields the variable x ∈ Rp, where xj = g(yj ). We further assume that the p genes 679 
+
+form a DAG, such that each gene j is influenced only by its parent genes denoted by Pa( j). The 680 
+
+conditional distribution of y is specified by 681 
+
+y | x, z, zum , D ∼
+
+> p
+
+Y
+
+> j=1
+
+Pj
+
+ yj | z, zum , xPa( j), D j
+
+ .
+
+Under this framework, all non-perturbed genes retain an observational form, while perturbed 682 
+
+genes adopt an intervention-modified conditional distribution. 683 
+
+Interventions in Perturb-seq can be incorporated at two levels of granularity. Soft interven- 684 
+
+tions modify the conditional distribution of the perturbed gene by introducing a distribution shift, 685 
+
+while still allowing it to be influenced by its parents. In contrast, hard interventions fully over- 686 
+
+write upstream regulation: parent effects on the perturbed gene are removed, and the gene’s 687 
+
+expression depends solely on confounders and the intervention effect. Both intervention types 688 
+
+integrate seamlessly into our modeling and optimization framework; the underlying parameteri- 689 
+
+zation of the regulatory matrix and the DAG constraint remain identical, and only the regression 690 
+
+structure—and thus the gradients—differ during optimization. 691 
+
+In this study, we model each conditional gene-expression distribution using a generalized 692 
+
+linear model, where confounders, parent genes, and interventions contribute additively to the 693 
+
+expression of gene j: 694 
+
+Eyj | z, zum , xPa( j), D j
+
+ = f
+
+z⊤uj + z⊤
+
+> um
+
+u(um)  
+
+> j
+
++ X
+
+> k∈Pa( j)
+
+xk wkj Dej + vj Dj
+
+ ,
+
+where Dej =
+
+(
+
+1 − Dj , hard intervention ,
+
+1, soft intervention .
+
+(2) Here, uj and u(um)  
+
+> j
+
+denote the coefficients for the confounders, vj measures the intervention 695 
+
+effect, and Dj is the perturbation indicator. The function f (·) is the link function determined by 696 
+
+the assumed data distribution. The parameter wkj captures the direct causal effect of gene k on 697 
+
+gene j. The matrix W := ( wkj )1≤k,j ≤p captures the causal relationships and is constrained to 698 
+
+follow a DAG structure, ensuring a valid causal interpretation. 699 
+
+Reduced control function approach for unmeasured confounding 700 
+
+A common challenge in estimating causal gene networks is the presence of unmeasured con- 701 
+
+founding zum . Because zum cannot be directly conditioned on, estimates of the causal effects 702 
+
+24 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+W may be biased due to unblocked backdoor paths between genes. To address this issue, we 703 
+
+leverage the exogenous nature of Perturb-seq interventions. Because sgRNAs (and thus the 704 
+
+perturbation indicators D) are assigned independently of unmeasured confounders, they serve 705 
+
+as valid instrumental variables. Therefore, we adopt a reduced control function approach to 706 
+
+proxy the influence of zum . 707 
+
+The reduced control function approach proceeds in two stages. In the first stage, we isolate 708 
+
+variation in the parent genes that is independent of unmeasured confounders. For each gene 709 
+
+k, we model its transformed expression xk as a function of the observed covariates z and the 710 
+
+perturbation indicator Dk. Let ˆxk = ˆE[xk | z, D k] denote the predicted expression from this stage. 711 
+
+We then define the first-stage residual as 712 
+
+rk = xk − ˆxk.
+
+This residual rk captures the component of variation in xk that is not explained by observed con- 713 
+
+founders or the perturbation effect, and is therefore primarily driven by unmeasured confounders 714 
+
+zum as well as intrinsic biological noise. 715 
+
+In the second stage, we augment the model for each gene by including the residuals of all 716 
+
+other genes as additional covariates. The surrogate conditional expectation under the control 717 
+
+function formulation replaces the original regression structure and is given by 718 
+
+ECF 
+
+yj | z, xPa( j), r, D j
+
+ = f
+
+z⊤uj + X
+
+> k∈Pa( j)
+
+xkwkj Dej + X 
+
+> l̸=j
+
+rlβlj Dej + vj Dj
+
+ . (3) Here, βlj denotes the coefficient of the control function term from gene l to gene j. By condition- 719 
+
+ing on the residuals of all other genes, we control for variations not associated with perturbations, 720 
+
+including those from unmeasured confounding. This formulation isolates the directed causal in- 721 
+
+fluence among genes, ensuring that the DAG structural constraint and the causal interpretation 722 
+
+of the weight matrix W remain valid even in the presence of unmeasured confounding. 723 
+
+Instead of the full control-function method, which computes ˆxk = ˆE[xk | z, D], the reduced 724 
+
+approach regresses xk only on its own perturbation Dk, excluding all other perturbations. To un- 725 
+
+derstand why this formulation remains robust in practice, we rewrite the terms inside the paren- 726 
+
+thesis of the right-hand side in (3) as 727 
+
+z⊤uj + X
+
+> k∈Pa( j)
+
+ˆxkwkj Dej + X 
+
+> l̸=j
+
+rl ˜βlj Dej + vj Dj ,
+
+where ˜βlj = βlj + wlj . Because ˆxk is orthogonal to rk, the coefficient wkj primarily captures the 728 
+
+effect of ˆxk on yj . Under the reduced control-function approach, this effect is represented by Dk 729 
+
+after conditioning on z and other genes, which is the standard basis for identifying whether gene 730 
+
+k has a direct causal effect on gene j when Dk is treated as an instrumental variable. By contrast, 731 
+
+replacing ˆxk with ˆE[xk | z, D] makes the estimation of wkj depend on the full perturbation vector 732 
+
+D. When the data violate model assumptions (such as the DAG or instrumental variable), the 733 
+
+perturbation of other genes can induce false signals, therefore influencing the estimation of true 734 
+
+causal effects. The identifiability results with the exponential link function are detailed in Note S2. 735 
+
+Constrained optimization and GPU acceleration 736 
+
+Under the control function formulation, the log-likelihood for many commonly used count distri- 737 
+
+butions can be written as 738 
+
+> p
+
+X
+
+> j=1
+
+h
+
+yj , z⊤uj + X
+
+> k∈Pa( j)
+
+xkwkj Dej + X 
+
+> l̸=j
+
+rlβlj Dej + vj Dj
+
+ ,
+
+25 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+where h(·) is a smooth loss function. 739 
+
+Suppose we observe n cells, producing data matrices Y ∈ Nn×p, X ∈ Rn×p, Z ∈ Rn×d, and 740 
+
+D ∈ { 0, 1}n×p. Let U = ( u1, . . . , up), v = ( v1, . . . , v p)⊤, B = ( βlj )1≤l,j ≤p, and R = ( rij ); define De 741 
+
+as in (2). Maximizing the (regularized) log-likelihood is then equivalent to solving 742 
+
+min      
+
+> U,v,W,B
+
+1
+
+n1⊤h
+
+
+
+Y , ZU + De ⊙ (XW + RB ) + D ⊙ (1v⊤)
+
+
+
+1
+
++ λ1∥W ∥1 + λ2∥B∥22
+
+s.t.
+
+(
+
+W ∈ G DAG ,
+
+diag( B) = 0 .
+
+Here, ⊙ denotes the Hadamard product, and GDAG the set of matrices whose support corre- 743 
+
+sponds to a DAG. The loss h is applied element-wise. An ℓ1 penalty on W promotes sparsity 744 
+
+in the inferred network, improving recovery in high-dimensional settings. An ℓ2 penalty on B is 745 
+
+introduced to mitigate the typically high correlation between X and R, which would otherwise 746 
+
+lead to unstable estimates. 747 
+
+Enforcing diag( B) = 0 is straightforward. However, directly imposing the DAG constraint is 748 
+
+computationally prohibitive: the search space contains O(2 p2
+
+) possible graphs, rendering ex- 749 
+
+haustive enumeration infeasible. Traditional algorithms require O(2 p) operations in the worst 750 
+
+case, which quickly becomes impractical as p grows. Bayesian approaches attempt to explore 751 
+
+the DAG space using Markov Chain Monte Carlo (MCMC) moves that add, remove, or rewire 752 
+
+edges, but these strategies also scale poorly for modern perturbation datasets involving thou- 753 
+
+sands of genes. 754 
+
+To overcome these challenges, we adopt the framework of differentiable DAG learning, which 755 
+
+converts the combinatorial problem of causal structure learning into continuous optimization 756 
+
+through smooth acyclicity constraints. These formulations are smooth, differentiable, and prov- 757 
+
+ably equivalent to the exact DAG constraint, and several have been shown to recover both short- 758 
+
+and long-range causal dependencies effectively. We therefore incorporate a smooth acyclicity 759 
+
+constraint into our framework and solve the resulting constrained problem using an augmented 760 
+
+Lagrangian approach. Table S1 provides a detailed comparison of three commonly used con- 761 
+
+straints. 762 
+
+A key advantage of this framework is that both the loss function and the acyclicity constraint 763 
+
+are fully differentiable. This property enables the use of modern gradient-based optimizers, such 764 
+
+as Adam, which are well suited to the nonconvex optimization landscape arising in this setting. 765 
+
+The core computations of gradients—including matrix multiplications, element-wise operations, 766 
+
+and those required by the acyclicity constraint (for example, matrix inversion, exponentiation or 767 
+
+log-determinant evaluations)—are highly parallelizable and map naturally to modern GPU archi- 768 
+
+tectures. As a result, the method scales to large Perturb-seq datasets and high-dimensional 769 
+
+gene networks, where GPU acceleration can provide substantial computational gains over tradi- 770 
+
+tional CPU-based causal discovery approaches. 771 
+
+Negative binomial distribution for overdispersion 772 
+
+Although the proposed framework applies to a broad class of generalized linear models for count 773 
+
+data, we adopt the negative binomial distribution as the default likelihood because it provides a 774 
+
+good empirical fit to single-cell RNA-seq measurements. In particular, gene expression counts 775 
+
+from single-cell experiments typically exhibit substantial overdispersion , where the variance ex- 776 
+
+ceeds the mean, a phenomenon that cannot be adequately captured by the Poisson model. The 777 
+
+NB distribution naturally accommodates overdispersion by introducing an additional dispersion 778 
+
+parameter that allows the variance to vary independently of the mean. 779 
+
+26 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+We use the following parameterization of the NB distribution: 780 
+
+f (y) = 
+
+ ss + m
+
+s Γ( s + y)
+
+y! Γ( s)
+
+ ms + m
+
+y
+
+,
+
+where Γ( ·) denotes the Gamma function, m > 0 is the mean parameter, and s > 0 is the inverse 781 
+
+dispersion parameter controlling the level of overdispersion. The corresponding negative log- 782 
+
+likelihood for a single observation is 783 
+
+h(y, m, s ) = − log f (y) = − s log ss + m − log Γ( s + y)Γ( s) − y log ms + m.
+
+Under this parameterization, the distribution has mean m and variance m + m2/s , allowing 784 
+
+the variance to exceed the mean when s is finite. An attractive property of this formulation is 785 
+
+that as s → ∞ , the distribution converges to a Poisson distribution with mean m. The NB model 786 
+
+can therefore be viewed as a flexible extension of the Poisson model that explicitly captures 787 
+
+overdispersion while retaining closed-form likelihood and gradient expressions, enabling efficient 788 
+
+optimization within our framework. 789 
+
+To incorporate the NB model into the causal network formulation, we parameterize both the 790 
+
+mean and the dispersion using log links: 791 
+
+mj = exp 
+
+z⊤u(m) 
+
+> j
+
++ X
+
+> k∈Pa( j)
+
+xkwkj Dej + X 
+
+> l̸=j
+
+rlβlj Dej + v(m) 
+
+> j
+
+Dj
+
+ ,sj = exp 
+
+
+
+z⊤u(s) 
+
+> j
+
++ v(s) 
+
+> j
+
+Dj
+
+
+
+.
+
+Here the mean parameter mj is governed by the causal gene network while accounting for 792 
+
+variation induced by unmeasured confounders through the control function terms. In contrast, 793 
+
+the dispersion parameters sj are assumed to be gene-specific and independent of other genes. 794 
+
+Introducing this additional set of parameters allows the model to accommodate heterogeneous 795 
+
+variability across genes while preserving the causal structure encoded in the network weights. 796 
+
+The resulting optimization objective then becomes 797 
+
+− 1
+
+n1⊤
+
+
+
+S log SS + M + log Γ( S + Y )Γ( S) + Y log MS + M
+
+
+
+1 + λ1∥W ∥1 + λ2∥B∥22,
+
+M = exp  ZU (m) + De ⊙ (XW + RB ) + D ⊙ (1v(m)⊤) ,
+
+S = exp  ZU (s) + D ⊙ (1v(s)⊤) ,
+
+where the exponential is applied element-wise. 798 
+
+Augmented Lagrangian method and gradient computation 799 
+
+The proposed method is formulated within a general optimization framework using an augmented 800 
+
+Lagrangian procedure: 801 
+
+min Laug = Lloss + λ1∥W ∥1 + λ2∥B∥22 + c J (W ) + ρ
+
+2 J(W )2,c ← c + ρ J (W ),
+
+(4) where c and ρ denote the dual variable and penalty coefficient, respectively, and J(W ) repre- 802 
+
+sents the smooth DAG constraint. The loss function Lloss depends on the model parameters, 803 
+
+with gradients computed via the chain rule. 804 
+
+27 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+For the NB model, the loss admits a closed form, with gradients given by: 805 
+
+∂Lloss 
+
+∂m = s + ys + m − ym, ∂Lloss 
+
+∂s = log s + ms − ψ(s + y) + ψ(s) + y − ms + m ,
+
+where ψ(·) is the digamma function. 806 
+
+Post-training sparsity recovery and hyperparameter selection 807 
+
+Although the ℓ1 penalty in Eq. (4) encourages sparsity during optimization, the estimated weight 808 
+
+matrix is typically not exactly sparse after training. In particular, for computational efficiency, 809 
+
+we employ gradient-based optimizers such as Adam, which do not produce intrinsically sparse 810 
+
+solutions. As a result, many entries remain nonzero but have very small magnitudes, forming a 811 
+
+long tail of weak edge weights. In practice, these near-zero coefficients are difficult to distinguish 812 
+
+from numerical shrinkage artifacts and can obscure the final causal graph if retained directly. We 813 
+
+therefore apply a post-training thresholding step to recover a sparse network from the continuous 814 
+
+edge-weight estimates. 815 
+
+Specifically, after model fitting, we compute the absolute values of all off-diagonal entries in 816 
+
+cW , 817 
+
+akj = | bwkj |, k̸ = j, 
+
+and sort them in decreasing order, 818 
+
+a(1) ≥ a(2) ≥ · · · ≥ a(p(p−1)) .
+
+The resulting ordered sequence typically exhibits an initial regime corresponding to strong causal 819 
+
+signals, followed by a flatter tail dominated by background noise. We identify the transition be- 820 
+
+tween these two regimes by detecting a change point in the sorted weight profile, for example 821 
+
+using methods such as ruptures 62 or kneed 63 , and take the corresponding magnitude as the 822 
+
+threshold. Edges with absolute weight exceeding this threshold are retained, whereas the re- 823 
+
+maining edges are set to zero. An illustration of this procedure is shown in Figure S7A. 824 
+
+This procedure is fully data-driven and avoids the need to tune an edge-selection threshold 825 
+
+using ground-truth graphs or validation labels, which are generally unavailable in real applica- 826 
+
+tions. Compared with imposing a fixed cutoff a priori, change-point-based thresholding adapts 827 
+
+automatically to the scale of the learned weights in each fitted model and produces a sparse 828 
+
+graph that is more readily interpretable from a biological perspective. 829 
+
+As shown in Figure S7B, this post hoc thresholding strategy performs comparably to oracle 830 
+
+optimal thresholding across simulation replicates under both soft and hard interventions, sug- 831 
+
+gesting that it provides an effective practical approximation when the true graph is unknown. 832 
+
+We therefore use the adaptively thresholded graph as the final estimated causal network in all 833 
+
+downstream analyses of real-world data. 834 
+
+The data-driven thresholding strategy further enhances model stability when the ℓ1 penalty 835 
+
+on the weight matrix ( λ1) is small. While a low λ1 may theoretically select more false positives, 836 
+
+these typically manifest as weak signals in the tail of the weight distribution. Consequently, 837 
+
+the change-point detection algorithm tends to identify them as background noise and removes 838 
+
+them automatically. In contrast, an excessively large ℓ1 penalty can over-suppress true causal 839 
+
+signals, making them indistinguishable from noise and leading to their unintended removal during 840 
+
+thresholding. This is evident in the sensitivity analysis in Figure S7C, where higher λ1 values 841 
+
+result in a clear decrease in TPR. 842 
+
+While we observed that increasing the ℓ2 penalty for the control function ( λ2) generally im- 843 
+
+proves performance by reducing linear correlation, we caution against using an arbitrarily large 844 
+
+28 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+λ2. As λ2 → ∞ , the model effectively reverts to a version without the reduced control function 845 
+
+and may therefore fail to account for unmeasured confounding. Given the inherent heterogeneity 846 
+
+of single-cell screens—including differences in experimental platforms, cell types, and pertur- 847 
+
+bation strengths—a single set of hyperparameters is unlikely to be optimal across all settings. 848 
+
+We therefore recommend starting with a relatively small λ1 (e.g., 10 −4) and a moderate λ2 (e.g., 849 
+
+0.01 ), and then refining these parameters based on the results of the initial fit. 850 
+
+Simulation details 851 
+
+The simulations in this work followed the model described in (2), while varying the data-generating 852 
+
+distribution ( f ), the dimension of unmeasured confounding zum , the structure and magnitude of 853 
+
+the causal graph W , the perturbation indicator matrix D, and the perturbation effect v. The 854 
+
+default setting consisted of 10,000 cells, 100 genes, and 400 true causal effects, with a negative 855 
+
+binomial data-generating distribution and an Erd ˝ os–R ´ enyi topology for the support of W . In the 856 
+
+very-large-scale setting, we generated 100,000 cells, 500 genes, and 2,000 true causal effects. 857 
+
+True causal effects were randomly sampled from [−1, −0.5] ∪ [0 .5, 1] (or [−0.5, −0.3] ∪ [0 .3, 0.5] 858 
+
+under weak causality). Each element of the perturbation effect vector v was randomly sampled 859 
+
+from [−3, −2] (or [−1.5, −1] under weak perturbation) to mimic CRISPRi-mediated inhibition. For 860 
+
+the Poisson log-normal distribution, the standard deviation of the latent Gaussian component 861 
+
+was fixed at 0.5. 862 
+
+All settings included an intercept term ( z = 1 ) with coefficient −1. For the negative binomial 863 
+
+distribution, the log-dispersion parameter log( s) also included an intercept term with coefficient 1; 864 
+
+upon perturbation, an additional effect sampled from [−1, 1] (or [−0.5, 0.5] under weak perturba- 865 
+
+tion) was added to the log-dispersion. Unmeasured confounders zum were drawn independently 866 
+
+from a standard Gaussian distribution, with coefficients u(um) randomly sampled from [−1, 1] . 867 
+
+To avoid unrealistically large or sparse counts, we adjusted the gene-wise log-mean expression 868 
+
+vectors: we first shifted each vector by a constant such that its maximum value remained below 869 
+
+7.5 and then further shifted the vector to ensure its mean value remained above 0.5. 870 
+
+In the simulation with exclusion-restriction violations, we randomly select 5% of gene pairs to 871 
+
+carry hidden effects. For the source gene j in each such pair, we define 872 
+
+H(in)  
+
+> j
+
+= β(in)  
+
+> j
+
+Dj + ϵj ,
+
+and for each target gene k we define Sk as the set of its source genes, and 873 
+
+H(out)  
+
+> k
+
+= β(out) 
+
+> k
+
+X
+
+> j∈S k
+
+H(in)  
+
+> j
+
+,
+
+where the coefficients β(in)  
+
+> j
+
+and β(out)  
+
+> k
+
+are each sampled uniformly from [−3, 3] , and the noise 874 
+
+terms ϵj are sampled uniformly from [0 , 0.3] . For each k, the term H(out)  
+
+> k
+
+is then added to the 875 
+
+argument of the link function in equation (2). 876 
+
+In low-MOI settings, 10% of samples were designated as control cells, and the remaining 877 
+
+samples were partitioned into equal-sized groups and randomly assigned a single perturbation. 878 
+
+In high-MOI settings, 10% of samples were again retained as controls, whereas the remaining 879 
+
+samples were assigned a fixed number of random perturbations corresponding to the specified 880 
+
+multiplicity of infection. 881 
+
+Training configuration 882 
+
+All numerical studies were conducted on an internal compute server equipped with Intel Xeon 883 
+
+Gold 6542Y CPUs and NVIDIA H200 GPUs with 141 GB of VRAM. The Multi-Instance GPU 884 
+
+29 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+(MIG) feature was enabled on this platform, allowing the physical GPUs to be partitioned into 885 
+
+compute instances ranging from a minimum of 16 GB to the maximum full-device capacity of 886 
+
+141 GB. 887 
+
+To ensure fair comparisons in model runtime benchmarking, CPU-based methods were strictly 888 
+
+allocated 4 CPU cores, whereas GPU-based methods were assigned a single, unpartitioned 889 
+
+physical GPU. For all other analyses, we maintained the 4-core CPU configuration but allocated 890 
+
+the smallest MIG GPU instance that satisfied the memory requirements of each specific task to 891 
+
+improve resource utilization. 892 
+
+RICE was implemented in Python with GPU-accelerated linear algebra via CuPy 64 , trained 893 
+
+using the Adam optimizer with β1 = 0 .9, β2 = 0 .99 , and a learning rate of 10 −4. Unless otherwise 894 
+
+specified, the regularization hyperparameters were set to λ1 = 10 −4 and λ2 = 0 .01 . The aug- 895 
+
+mented Lagrangian parameters were initialized at ρ = 1 and c = 0 . For better convergence, ρ 896 
+
+was updated using a multiplicative factor of 10 whenever the DAG constraint failed to decrease 897 
+
+by at least 50% between successive iterations. 898 
+
+For baseline methods, the same hard-thresholding procedure was applied to the results of 899 
+
+dotears. For inspre, the optimal model was selected via the authors’ recommended cross- 900 
+
+validation, while for IBCD, we retained gene pairs that exhibited a posterior frequency greater 901 
+
+than 0.95 across the MCMC samples, utilizing the default setting of 3,900 iterations. 902 
+
+Pre- and post-processing of K562 and RPE1 cells 903 
+
+The K562 and RPE1 results were derived from the CRISPRi Perturb-seq functional genomics 904 
+
+maps generated by Replogle et al. 19 . Specifically, we used data from the essential-wide screens 905 
+
+for model illustration and benchmarking. The raw K562 dataset initially contained 310,385 cells 906 
+
+and 8,563 genes, with perturbations targeting 2,057 genes. To obtain a high-quality analytical 907 
+
+dataset, we applied the following filtering criteria: (i) perturbations assigned to fewer than 100 908 
+
+cells were removed; (ii) genes with perturbation-effect z-scores below 5 were excluded; and (iii) 909 
+
+genes with mean expression levels below 0.5 were filtered out. After preprocessing, the final 910 
+
+K562 dataset contained 175,894 cells and 811 genes. The same filtering procedure was applied 911 
+
+to the RPE1 cell line, which initially contained 247,914 cells, 8,749 genes, and 2,393 targeted 912 
+
+perturbations. After filtering, the final RPE1 analytical dataset comprised 86,173 cells and 374 913 
+
+genes. 914 
+
+For both datasets, the library size was calculated as the total UMI count per cell, adjusted 915 
+
+by the scale factor of the corresponding GEM group, and normalized by the total number of 916 
+
+sequenced genes. This library size, along with the mitochondrial read percentage and one-hot- 917 
+
+encoded GEM group identifiers, were included as observed covariates. To further account for 918 
+
+latent technical factors and increase statistical power, we also included the top 50 principal com- 919 
+
+ponents (PCs) derived from the set of excluded genes as additional covariates. To prevent these 920 
+
+PCs from capturing downstream regulatory signals—which could lead to unwanted mediation 921 
+
+effects or biased estimates—we regressed out the perturbation indicators from the PCs prior 922 
+
+to their inclusion in the model. For other linear-model-based methods, we applied the Frisch– 923 
+
+Waugh–Lovell theorem by first regressing out the covariates and then using the residuals as 924 
+
+model inputs, thereby isolating causal effects not explained by observed confounders. 925 
+
+The input expression levels xij were computed as: 926 
+
+xij = log (1 + yij /O i) ,
+
+where yij represents the raw sequencing reads for gene j in cell i, and Oi denotes the total UMI 927 
+
+count for that cell. Finally, we applied standard normalization to x to ensure that the inferred 928 
+
+weights capture the relative magnitudes of the causal signals. 929 
+
+30 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+Following model optimization, we applied the kneed algorithm 63 with a sensitivity parameter 930 
+
+of S = 2 .5 to determine the data-driven threshold for the weight matrix. 931 
+
+For external validation of inferred TF–target gene regulations, we integrated recorded inter- 932 
+
+actions from all knowledge bases into a single unified regulatory network. An inferred gene pair 933 
+
+(j, k ) was considered annotated if a directed path existed from the upstream gene j to the down- 934 
+
+stream gene k within this consolidated network, and a reverse pair was considered annotated if 935 
+
+a directed path existed from k to j. Pairs with directed paths in both directions were classified as 936 
+
+bidirectional. 937 
+
+Pre- and post-processing of melanoma cells 938 
+
+The melanoma dataset was obtained from the multimodal pooled Perturb-CITE-seq screens of 939 
+
+Frangieh et al. 44 . The raw data comprised 218,331 cells and 23,712 genes spanning 248 distinct 940 
+
+perturbations. Although the reported data exhibited a high-MOI structure, this was not intended 941 
+
+in the experimental design, and our exploratory analysis suggested that many detected guides 942 
+
+likely reflected ambient RNA noise rather than functional gene knockouts. We therefore used 943 
+
+the perturbation assignments provided by the original authors and treated the data as low-MOI 944 
+
+to ensure model stability. 945 
+
+Given the relatively small number of perturbed genes, we adopted a more relaxed filtering 946 
+
+strategy to retain sufficient data. We kept all genes with mean expression above 0.01 and at 947 
+
+least 50 assigned cells per environment, yielding a final set of 182 genes. After filtering, the 948 
+
+dataset comprised 75,213, 62,772, and 49,572 cells for the IFN-γ, co-culture, and control con- 949 
+
+ditions, respectively. To account for technical and biological variation, the model included library 950 
+
+size as well as mitochondrial and ribosomal read percentages as covariates. All other down- 951 
+
+stream procedures—PC calculation for excluded genes, data normalization, and weight-matrix 952 
+
+thresholding—followed the same protocol as the analyses on the previous datasets. 953 
+
+We defined IFN-γ signaling genes as those in the Reactome “Interferon gamma signaling” 954 
+
+gene set 65 . IFN-γ regulated genes were defined as those in the GO biological process “response 955 
+
+to type II interferon” gene set 42 , the Hallmark “interferon gamma response” gene set 66 , or the 956 
+
+Interferome database (type II interferon, melanoma cells) 67 . 957 
+
+Quantification and statistical analysis 958 
+
+Significance thresholds throughout the figures are indicated by asterisks: ∗p < 0.05 , ∗∗ p < 0.01 , 959 
+
+> ∗∗∗
+
+p < 0.001 , and ∗∗∗∗ p < 10 −4. Boxplots show the first quartile, median, and third quartile, with 960 
+
+whiskers extending to the minimum and maximum values. Markers in strip plots and line plots 961 
+
+denote the mean across all individual measurements. The specific statistical test, definition of 962 
+
+error bars, and any further conventions are reported in the corresponding figure legend. 963 
+
+To evaluate causal discovery performance, we treat the presence of a true causal relationship 964 
+
+between a pair of genes as a positive and the absence of such a relationship (or a reverse causal 965 
+
+relationship) as a negative. Let TP, FP, TN, and FN denote the numbers of true positives, false 966 
+
+positives, true negatives, and false negatives, respectively. Positive predictive value (PPV) and 967 
+
+true positive rate (TPR) are then defined as 968 
+
+PPV = TP TP + FP , TPR = TP TP + FN .
+
+The Matthews correlation coefficient (MCC) is computed as in standard binary classification: 969 
+
+MCC = TP × TN − FP × FN 
+
+p(TP + FP)(TP + FN)(TN + FP)(TN + FN) .
+
+31 
+
+> (which was not certified by peer review) is the author/funder. All rights reserved. No reuse allowed without permission. The copyright holder for this preprint this version posted June 16, 2026. ;https://doi.org/10.64898/2026.04.20.719759 doi: bioRxiv preprint
+
+The structural Hamming distance (SHD) is defined as the minimum number of edge additions, 970 
+
+deletions, or reversals required to transform the inferred causal graph into the ground-truth net- 971 
+
+work. 972 
+
+Total and direct causal effects in the Perturb-seq data were estimated by linear regression 973 
+
+with heteroskedasticity-robust (HC3) standard errors. Principal components derived from ex- 974 
+
+cluded genes (used as covariates during model fitting) were not included in these post hoc 975 
+
+analyses. The effect of perturbing gene k on the expression of gene j was estimated as 976 
+
+xj = Dkθkj + z⊤τkj + ϵkj , E[ϵkj ] = 0 ,
+
+where θkj is the perturbation effect, τkj is the vector of coefficients for the observed confounders 977 
+
+z, and ϵkj is the error term. 978 
+
+To isolate the direct causal effect, we additionally conditioned on the estimated parent set of 979 
+
+gene j, cPa( j), excluding gene k when it was itself a parent. The direct effect was then defined 980 
+
+through 981 
+
+xj = Dk ˜θkj + x⊤ 
+
+> cPa( j)\{ k}
+
+˜ηkj + z⊤ ˜τkj + ˜ ϵkj , E[˜ ϵkj ] = 0 ,
+
+where ˜θkj is the direct causal effect, ˜ηkj captures the contributions of the remaining parent genes, 982 
+
+and ˜τkj accounts for the observed confounders. Statistical significance of the total and direct 983 
+
+effects was assessed using the p-values of θkj and ˜θkj , respectively. 984 
+
+We use linear regression here for several reasons. First, total causal effects in linear SEMs 985 
+
+are conventionally estimated by linear regression, so this follows standard practice for the quan- 986 
+
+tity being computed. Second, it provides a fair benchmark against the competing methods, which 987 
+
+themselves assume linear structures; estimating effects with a GLM while comparing to linear- 988 
+
+SEM methods would confound the comparison. Third, the choice is empirically immaterial: our 989 
+
+preliminary results show that the GLM estimates differ little from the linear-model estimates. Fi- 990 
+
+nally, linear regression is substantially more efficient to compute than a GLM at this scale. We 991 
+
+retain the GLM in equation (2) where it matters—modeling raw counts within RICE’s estimation 992 
+
+framework—while using linear regression for the standalone effect estimates, where its assump- 993 
+
+tions are appropriate and its results are equivalent in practice. 994 
+
+To quantify the enrichment of significant regulatory interactions within the inferred network, 995 
+
+we computed the odds ratio as 996 
+
+OR = (P + 10 −4)(1 − Q + 10 −4)(Q + 10 −4)(1 − P + 10 −4),
+
+where P is the proportion of inferred edges that are statistically significant, and Q is the propor- 997 
+
+tion of statistically significant edges among a randomly sampled set of edges of the same size. 998 
+
+The constant 10 −4 is added for numerical stability. 999 
+
+32

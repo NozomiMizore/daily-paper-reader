@@ -1,0 +1,2243 @@
+Title: Unbalanced Perturbation Dynamics For Cell Fate Design
+
+URL Source: https://www.biorxiv.org/content/10.64898/2026.06.30.735555v1.full.pdf
+
+Published Time: Tue, 07 Jul 2026 05:01:43 GMT
+
+Number of Pages: 28
+
+Markdown Content:
+# Unbalanced Perturbation Dynamics For 1
+
+# Cell Fate Design 2
+
+## Qiangwei Peng 1†, Yuchuan Wang 2,3 †, Jianzhe Li 2,4 †, Xinyu Wang 1†,3
+
+## Yao Xiao 1,2 †, Peijie Zhou 2,5,6,7* 
+
+> 4
+> 1
+
+LMAM and School of Mathematical Sciences, Peking University, China. 5
+
+> 2
+
+Center for Machine Learning Research, Peking University, China. 6
+
+> 3
+
+School of Life Sciences, Peking University, China. 7
+
+> 4
+
+Yuanpei College, Peking University, China. 8
+
+> 5
+
+Center for Quantitative Biology, Peking University, China. 9
+
+> 6
+
+National Engineering Laboratory for Big Data Analysis and Applications, China. 10 
+
+> 7
+
+AI for Science Institute, Beijing, China. 11 
+
+*Corresponding author(s). E-mail(s): pjzhou@pku.edu.cn; 12 
+
+> †
+
+These authors contributed equally to this work. 13 
+
+Abstract 14 
+
+Large-scale single-cell perturbation sequencing provides an unprecedented opportunity to con-15 
+
+struct virtual cells for the in silico simulation of cellular responses and the inverse design of 16 
+
+optimal interventions. However, most perturbation-response models treat cellular responses 17 
+
+primarily as mass-preserving shifts in transcriptomic state, whereas single-cell perturbation 18 
+
+measurements are inherently unbalanced: the recovered endpoint population is shaped by tech-19 
+
+nical sampling as well as biological perturbation-induced proliferation, apoptosis and selection. 20 
+
+Here we introduce U-Pert, an unbalanced generative framework that learns condition- and 21 
+
+context-dependent perturbation dynamics from unpaired single-cell snapshots. U-Pert jointly 22 
+
+models transcriptomic state transitions and cell-number dynamics, enabling scalable and robust 23 
+
+forward prediction of unseen perturbations and contexts, as well as inverse design to screen 24 
+
+for desired genetic or pharmacological interventions that achieve user-defined transcriptomic 25 
+
+or population-level outcomes. Across controlled simulations, genetic perturbation benchmarks, 26 
+
+sciPlex3 drug responses and PBMC cytokine perturbations, U-Pert predicts unseen responses, 27 
+
+captures both molecular and abundance changes, and performs inverse design for target gene-28 
+
+expression programs and cell-type compositions. These results show that cell abundance is 29 
+
+an integral component of the perturbation phenotype, providing a mass-aware framework for 30 
+
+virtual-cell modeling and perturbation cell fate design. 31 
+
+# Introduction 32 
+
+Cell fate decisions arise from coordinated changes in gene expression, differentiation, prolifera-33 
+
+tion and cell death [1–3]. A central goal of modern cell biology is therefore not only to observe 34 
+
+these changes, but to predict how a cell population will respond when a gene, pathway or drug 35 
+
+is perturbed. The emerging concept of an in silico virtual cell aims to support this goal by 36 
+
+using computational models to prioritize experiments and anticipate cellular responses across bio-37 
+
+logical contexts [4]. For such models to be biologically useful, however, perturbation responses 38 
+
+cannot be simply reduced to transcriptomic state changes among recovered cells. Perturbations 39 
+
+can indeed alter the abundance and composition of the endpoint population through effects on 40 
+
+proliferation, apoptosis and selection [5]. Ignoring this abundance axis can confound perturbation 41 
+
+analysis by forcing expansion, depletion or selective survival to be explained only as movement in 42 
+
+transcriptomic state space. 43 
+
+1
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+Single-cell perturbation technologies, including Perturb-seq and sciPlex, now connect targeted 44 
+
+genetic or chemical interventions with transcriptome-wide readouts at single-cell resolution [6, 7]. 45 
+
+These assays have revealed gene functions, regulatory programs and genotype–phenotype relation-46 
+
+ships across rich perturbation landscapes [8–11]. In addition, the resulting datasets also expose 47 
+
+the unbalanced nature of perturbation responses: different conditions can yield markedly different 48 
+
+numbers and compositions of recovered cells, reflecting both technical factors such as sampling, 49 
+
+capture efficiency and experimental design [12] and biological effects of the perturbation itself. At 50 
+
+the same time, the space of possible perturbations, doses, combinations, exposure times and bio-51 
+
+logical contexts remains far larger than can be exhaustively tested. Because most single-cell assays 52 
+
+are destructive, the cells measured before and after perturbation are not the same cells. This cre-53 
+
+ates a need for models that can infer how an unperturbed population gives rise to a perturbed 54 
+
+outcome from unpaired snapshots, while allowing both transcriptomic states and population mass 55 
+
+to change. 56 
+
+Substantial progress has been made in modeling single-cell perturbation responses at the gene 57 
+
+expression level. For instance, representation-learning approaches learn latent spaces for coun-58 
+
+terfactual state prediction across cells, conditions and drug perturbations [13–17]. Graph- and 59 
+
+regulatory-network-based models use biological structure to predict or simulate genetic inter-60 
+
+ventions [18–20]. Optimal-transport, causal and flow-based approaches infer distribution-level 61 
+
+response mappings from unpaired single-cell data [21–24]. Recent foundation, language-informed 62 
+
+and perturbation-specific models have further expanded the scale and conditioning capacity of 63 
+
+response prediction [25–36]. 64 
+
+Despite this breadth, most current methods still treat perturbation response primarily as a 65 
+
+change in gene-expression state and leave population mass fixed or implicit. This mismatch is 66 
+
+particularly consequential when perturbations induce cell killing, expansion or selection, or when 67 
+
+balanced transport forces distributional differences into implausible cross-cell-type matching. More-68 
+
+over, existing models are largely formulated for forward prediction, whereas many biological and 69 
+
+therapeutic questions require inverse design, i.e. identifying genetic or pharmacological interven-70 
+
+tions that steer cells toward user-defined outcomes, from target differential-expression programs 71 
+
+to desired cell-type compositions or abundance phenotypes. Recent benchmark studies have also 72 
+
+shown that perturbation prediction remains sensitive to dataset structure, confounding factors and 73 
+
+may underperform the simple baselines [5, 37, 38], demonstrating the need for models that better 74 
+
+match the biological and experimental structure of perturbation data. 75 
+
+Here we introduce U-Pert (Unbalanced Perturbation), an unbalanced generative framework 76 
+
+for learning perturbation-induced cell-state and cell-abundance dynamics from unpaired single-cell 77 
+
+data. U-Pert learns condition- and context-dependent perturbation dynamics that couple tran-78 
+
+scriptomic state transitions with cellular abundance change. This formulation allows the model 79 
+
+to predict responses to unseen perturbations and biological contexts while also supporting inverse 80 
+
+design to screen for desired genetic or pharmacological interventions that achieve user-defined tran-81 
+
+scriptomic or population-level outcomes. The unbalanced modeling is particularly important for 82 
+
+population-level inverse design, because targets such as cell-type proportions or counts depend on 83 
+
+perturbation-induced expansion and depletion rather than transcriptomic state transitions alone. 84 
+
+For perturbations specified by discrete identities, such as target genes or drug compounds, U-Pert 85 
+
+performs design by optimizing a continuous perturbation representation and retrieving real candi-86 
+
+dates by embedding similarity; for continuous variables such as dose, it can search the perturbation 87 
+
+space directly. Across controlled simulations with known ground truth and broad genetic, phar-88 
+
+macological and cytokine perturbation datasets, U-Pert predicts unseen responses, captures both 89 
+
+molecular and abundance changes, and performs inverse design for target gene-expression pro-90 
+
+grams and cell-type compositions. By treating perturbation responses as unbalanced changes in 91 
+
+both cellular state and population structure, U-Pert provides a framework for perturbation biology 92 
+
+in which virtual cells can move beyond response prediction toward the rational design of cell-fate 93 
+
+outcomes. 94 
+
+# Results 95 
+
+## Overview of U-Pert 96 
+
+External biological perturbations, such as gene knockouts [6, 9] or drug treatments [7], leave an 97 
+
+immediate transcriptomic signature in single cells, most visibly through the up- or down-regulation 98 
+
+of differentially expressed genes (DEGs) (Fig. 1a). This transcriptomic readout has been the pri-99 
+
+mary target of many perturbation-response models [13, 15, 18, 21–24, 29, 31–35]. Across the 100 
+
+datasets analyzed, however, perturbations also produced substantial differences in the number of 101 
+
+2
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+recovered cells (Fig. 1b Left). Because many of these experiments began with controlled initial 102 
+
+cell inputs, the resulting endpoint differences reflect an abundance signal beyond initial load-103 
+
+ing, although capture efficiency, sampling and screening design can also contribute. Perturbations 104 
+
+are indeed known to alter proliferative capacity through cell-cycle regulation or apoptosis induc-105 
+
+tion [5, 39, 40] (Fig. 1b Right). These observations motivate modeling perturbation responses as 106 
+
+coupled endpoints, combining transcriptomic state changes with condition-dependent variation in 107 
+
+recovered cell abundance (Fig. 1b). 108 
+
+To capture such coupled processes, we develop U-Pert as a condition- and context-wise unbal-109 
+
+anced flow matching framework. U-Pert models the temporal evolution of cell populations by 110 
+
+coupling transcriptomic state transitions with changes in cell abundance (Fig. 1c and Methods). 111 
+
+The state of a cell population is represented as a time-dependent distribution over gene-expression 112 
+
+profiles, conditioned on both the perturbation condition and the biological context. Here, the per-113 
+
+turbation condition can represent a specific gene knockout, drug treatment or dose, whereas the 114 
+
+biological context can represent covariates such as cell line, tissue type or donor (Fig. 1d; Methods). 115 
+
+Unlike standard balanced optimal transport, which preserves total mass, U-Pert uses an unbal-116 
+
+anced transport-with-growth formulation to allow cell populations to expand or shrink during 117 
+
+the response. In this formulation, the gene velocity field describes how cells transition through 118 
+
+transcriptomic state space, whereas the growth rate function describes how cellular mass changes 119 
+
+along the response. Biologically, for a given condition and context, the gene velocity field captures 120 
+
+perturbation-induced gene-expression trajectories, while the growth rate function explicitly models 121 
+
+changes in cell abundance caused by division and apoptosis (Fig. 1c,d). 122 
+
+A major challenge in modeling single-cell perturbation responses is the destructive nature 123 
+
+of sequencing, which yields highly unpaired unbalanced data. Consequently, one cannot observe 124 
+
+the same cell both before and after perturbation. U-Pert addresses this challenge by learning 125 
+
+response dynamics from unpaired control and perturbed snapshots. For each perturbation condi-126 
+
+tion, it constructs an unbalanced matching between the control and perturbed cell distributions, 127 
+
+and then learns condition- and context-dependent velocity field and growth rate from these 128 
+
+matched population-level responses (Methods). This allows U-Pert to infer both transcriptomic 129 
+
+state transitions and abundance changes directly from static unbalanced single-cell perturbation 130 
+
+measurements. 131 
+
+After U-Pert captures the unified perturbation dynamics across diverse conditions and contexts, 132 
+
+it enables a suite of downstream tasks categorized into forward prediction and inverse design 133 
+
+(Fig. 1e,f and Methods). 134 
+
+Forward Prediction. Based on the learned velocity fields and growth rates, U-Pert provides 135 
+
+predictive and interpretative capabilities (Fig. 1e). 136 
+
+(1) Unseen condition/context generalization. By learning representations for both perturbation 137 
+
+conditions and biological contexts, U-Pert can generalize to settings that were not directly observed 138 
+
+during training. It simulates forward responses to predict cell distributions and transcriptional 139 
+
+states for zero-shot scenarios, including responses to unseen perturbations and biological, such as a 140 
+
+held-out gene/drug, or a held-out cell line absent from the training data (Fig. 1e Top and Methods). 141 
+
+(2) Driver gene discovery. U-Pert also allows the learned dynamics to be interrogated mecha-142 
+
+nistically. The gene-expression velocity field can be used to infer condition/context-specific gene 143 
+
+regulatory relationships that drive state transitions. In parallel, the growth rate function can be 144 
+
+used to identify genes associated with cellular proliferation or apoptosis, linking molecular features 145 
+
+to population-level abundance changes (Fig. 1e Bottom and Methods). 146 
+
+Inverse Design. A feature of U-Pert is its ability to perform inverse design, reversing 147 
+
+the perturbation-to-phenotype workflow to identify interventions for desired biological outcomes 148 
+
+(Fig. 1f). 149 
+
+(1) Targeting transcriptomic states. Given a desired outcome defined by a set of DEGs, U-150 
+
+Pert can trace the dynamics backward to search the embedding space for the optimal perturbation 151 
+
+condition, such as a specific drug or genetic modification, that is predicted to drive control cells 152 
+
+toward the target transcriptional state (Fig. 1f Top and Methods). 153 
+
+(2) Targeting cell type proportions and counts. By modeling perturbation responses as unbal-154 
+
+anced dynamics, U-Pert can use macroscopic population outcomes as inverse-design objectives. It 155 
+
+therefore designs perturbations not only toward desired transcriptional states, but also toward tar-156 
+
+get cell-type proportions or absolute cell counts by allowing population mass to expand or contract 157 
+
+through the growth field. Given a target composition, such as enriching a rare therapeutic cell 158 
+
+population or eliminating a malignant cluster, U-Pert infers the external perturbation condition 159 
+
+predicted to achieve this goal (Fig. 1f Bottom and Methods). 160 
+
+3
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+Fig. 1 : Overview of the U-Pert framework a. External perturbations (e.g., drug treatments or genetic modifications) induce transcriptomic shifts, driving the up- or down-regulation of DEGs. 
+
+b. Different perturbations lead to substantial variations in total cell counts (left), driven by altered cellular proliferation and apoptosis capacities (right), highlighting the necessity of jointly modeling expression and population size changes. c. Schematic of the condition- and context-wise unbal-anced flow matching. U-Pert seamlessly maps initial control distributions to various perturbed states across distinct biological contexts. The continuous state transition is governed by an unbal-anced dynamics equation (transport-with-growth PDE), where the gene velocity field ( vt) and growth rate ( gt) account for transcriptomic trajectories and varying cell counts (division and apop-tosis), respectively. d. Model inputs and neural network architecture. The framework takes gene expression ( xt), time ( t), and learned embeddings for condition (cond) and context (cont) to param-eterize the velocity ( Nv ) and growth ( Ng ) networks. e. Forward evolution downstream tasks. Top: U-Pert generalizes to unseen conditions or contexts to predict unobserved cellular responses. Bot-tom: Calculation of the Jacobian of the velocity field and the gradient of the growth rate enables the mechanistic discovery of condition-specific GRNs and growth-driver genes. f. Inverse design downstream tasks. Top: Given a target transcriptomic state defined by a specific DEG set, U-Pert traces backward to prioritize the candidate perturbation condition required to achieve it. Bottom: By explicitly modeling cell birth-death dynamics, U-Pert can prioritize the candidate perturbation condition needed to orchestrate a target macroscopic cell type proportion or count. 4
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+## U-Pert enables forward prediction and inverse design of perturbation 161 
+
+## responses in a controlled dynamical system 162 
+
+We first evaluated U-Pert to recover both components in a controlled synthetic system, where 163 
+
+the true perturbation dynamics were explicitly defined (Fig. 2a). The system consists of three 164 
+
+genes ( G1, G2, G3), whose expression levels (mRNA X1, X2, X3) are governed by an underlying 165 
+
+gene regulatory network (GRN) coupled with apoptosis dynamics. Specifically, G1 and G2 form a 166 
+
+toggle-switch circuit characterized by mutual inhibition, with both genes also exhibiting positive 167 
+
+autoregulation. The third gene, G3, acts as an upstream regulator that suppresses both G1 and 168 
+
+G2 while being activated by G2. In addition, G3 directly promotes apoptosis, thereby linking 169 
+
+gene expression dynamics to cell survival dynamics. The transcription rates of X1 and X2 are 170 
+
+parameterized by ρ1 and ρ2, respectively, while the apoptosis rate is controlled by α (Methods). In 171 
+
+our experiments, only these three dynamical parameters are perturbed, with all other parameters 172 
+
+fixed throughout. 173 
+
+To evaluate forward prediction under unseen perturbations, we defined a control population 174 
+
+of 1,163 cells under a fixed parameter setting and generated perturbed populations by varying 175 
+
+(ρ1, ρ 2, α ) (Fig. 2b). Evaluation on 100 unseen perturbation conditions shows that U-Pert-predicted 176 
+
+populations closely match the ground-truth perturbed populations after projection onto the 177 
+
+(X1, X 2) expression space. Representative examples from several selected perturbation conditions 178 
+
+are shown in Fig. 2b, illustrating that U-Pert faithfully captures cellular responses to perturbations. 179 
+
+Beyond forward prediction, U-Pert further enables recovery of underlying perturbation con-180 
+
+ditions via inverse design. Using target perturbed populations with ground-truth parameters, we 181 
+
+inferred the corresponding perturbation conditions from the cellular states. Across 100 unseen per-182 
+
+turbation conditions, the inferred conditions achieved an average cosine distance of 0.09 from the 183 
+
+true conditions. After projection into PCA space, paired inferred and true perturbation parame-184 
+
+ters showed strong overlap, indicating accurate recovery of the underlying dynamical parameters 185 
+
+(Fig. 2c). For visualization clarity, we show 10 representative perturbation conditions selected from 186 
+
+the full evaluation set in this PCA projection. 187 
+
+To further design the desired cell fates, we considered two inverse-design tasks enabled by 188 
+
+U-Pert. At the gene level, U-Pert infers perturbations that induce prescribed differential expres-189 
+
+sion patterns, such as decreasing X1 while increasing X2, resulting in clear shifts in expression 190 
+
+distributions relative to the control (Fig. 2d). At the cell-type composition level, U-Pert enables 191 
+
+control over cell-type proportions, where cell types are defined by dominant gene expression pat-192 
+
+terns (Methods). Starting from a control population dominated by T1 cells, U-Pert successfully 193 
+
+generates populations enriched for T2, T3, or T4 cells, achieving final proportions of 99.9%, 99.3%, 194 
+
+and 94.4%, respectively (Fig. 2e). 195 
+
+Of note, this controllability indeed did not come from arbitrarily forcing prescribed target com-196 
+
+positions. U-Pert respected the intrinsic dynamical constraints of the underlying gene regulatory 197 
+
+system. For instance, a 50% T1 and 50% T2 composition cannot be robustly achieved by a sin-198 
+
+gle perturbation applied to the fixed initial population. Mechanistically, this behavior is consistent 199 
+
+with the toggle-switch structure of the GRN, in which T1 and T2 correspond to two competing 200 
+
+stable attractors driven by mutually inhibitory X1 and X2 programs. Perturbations attempting to 201 
+
+balance the two fates inevitably place part of the population near the separatrix and the associated 202 
+
+saddle-like transition region between the two basins of attraction. Cells in this weakly committed 203 
+
+regime do not fully converge to either stable fate and are therefore classified as the intermedi-204 
+
+ate state T4. Consequently, U-Pert remains faithful to the attractor geometry of the underlying 205 
+
+dynamical system, revealing biologically constrained design limits instead of generating physically 206 
+
+implausible population mixtures. 207 
+
+Overall, rather than merely matching endpoint clouds, U-Pert can recover both imposed state 208 
+
+dynamics and imposed survival constraints in the synthetic perturbation datasets. 209 
+
+5
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+Fig. 2 : U-Pert enables forward prediction and inverse design of perturbation responses in a controlled dynamical system. a. Schematic of a gene regulatory network (GRN) gov-erning gene expression ( X1, X2, X3) and apoptosis dynamics. Perturbations act on transcription rates ( ρ1, ρ2) and the apoptosis rate ( α), while other dynamical parameters (not shown) are held constant. b. Forward prediction of virtual cells under perturbations in gene expression space ( X1–
+
+X2). Colors denote cell populations, with blue indicating the control and other colors representing perturbed states. Arrows indicate transitions from the control, with parameter changes encoding perturbation effects. Predicted populations closely match ground-truth distributions. c. Condition recovery, where designed conditions accurately recapitulate the true perturbation conditions, visu-alized via a comparison in the PCA1–PCA2 space obtained from the projection of three kinetic parameters: transcription rates ( ρ1, ρ2) and the apoptosis rate ( α). d. Inverse design of differential gene expression, generating cell populations that satisfy target constraints ( X1 ↓, X2 ↑). e. Inverse design of cell-type composition, demonstrating controllable transitions and proportions; feasible targets are achieved, whereas theoretically infeasible designs are correctly identified. 
+
+## U-Pert improves transcriptomic and cell-abundance prediction across 210 
+
+## genetic perturbation benchmarks 211 
+
+We next evaluated the predictive benefit of the unbalanced formulation in real biological datasets. 212 
+
+Large-scale single-cell genetic perturbation screens provide a stringent benchmark because pertur-213 
+
+bation responses must be predicted for unseen genetic interventions, while the recovered endpoint 214 
+
+populations vary substantially across conditions. In pooled Perturb-seq experiments, cells are 215 
+
+6
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+assigned genetic perturbations and then profiled after perturbation-specific growth, death and selec-216 
+
+tion have acted on the population [6, 8, 9, 11]. Consistent with this unbalanced experimental setting, 217 
+
+widely-used benchmarking perturbation datasets such as Norman [11], Adamson [8] and Replogle 218 
+
+K562 [9] all showed substantial variation in recovered cell abundance across perturbation conditions 219 
+
+(Fig. 3a). Because pooled screens profile recovered cells rather than a perfectly controlled output 220 
+
+population for every perturbation, these count differences should be interpreted cautiously: some 221 
+
+variation may reflect capture, sampling or experimental design as well as biology. Nevertheless, the 222 
+
+abundance structure showed biological organization, as high-abundance Norman conditions were 223 
+
+enriched for apoptosis regulation, cell proliferation, protein stabilization, hematopoiesis and oxy-224 
+
+gen transport programs (Fig. 3b). These observations define an observed perturbation response 225 
+
+that is intrinsically unbalanced, and U-Pert is naturally suited to this setting because it explicitly 226 
+
+models both transcriptomic transport and condition-dependent cell-abundance change [41, 42]. 227 
+
+To determine whether an abundance-aware formulation improves genetic-perturbation predic-228 
+
+tion, we benchmarked U-Pert on unseen perturbation conditions from Norman, Adamson and 229 
+
+Replogle K562 using standard perturbation-response metrics (Fig. 3c; Methods). The compar-230 
+
+ison included representative perturbation-prediction baselines from different modeling families: 231 
+
+the flow-matching model CellFlow [23], the single-cell foundation model scGPT [26], the graph-232 
+
+based perturbation predictor GEARS [18], as well as perturbation-mean and zero-change empirical 233 
+
+baselines. Across complementary expression metrics, U-Pert showed consistent improvements or 234 
+
+competitive performance across all three datasets. The clearest gain was observed for perturbation-235 
+
+induced expression changes, where mean Pearson delta reached 0.636 in Norman, 0.865 in Adamson 236 
+
+and 0.434 in Replogle, compared with 0.618, 0.661 and 0.399 for CellFlow. U-Pert also maintained 237 
+
+strong absolute-expression and distributional accuracy, indicating that the unbalanced formulation 238 
+
+did not compromise conventional gene-expression prediction. Representative unseen conditions fur-239 
+
+ther showed calibrated gene-level predictions in both Norman and Adamson, with predicted mean 240 
+
+expression closely matching the observed perturbed means and with strong agreement in expression 241 
+
+changes relative to control (Fig. 3d). U-Pert therefore retained robust transcriptomic prediction 242 
+
+performance while introducing an additional mass readout. 243 
+
+To evaluate this abundance component directly, we compared the predicted mass ratio after per-244 
+
+turbation with the observed target-to-source abundance ratio for each condition and benchmarked 245 
+
+this readout against a supervised MLP mass baseline using the same condition information. U-Pert 246 
+
+consistently improved mass-ratio correlation over the MLP baseline across Adamson, Norman and 247 
+
+Replogle (Fig. 3e). Pearson and Spearman correlations increased from 0.088 and 0.054 to 0.450 248 
+
+and 0.458 in Adamson, from 0.031 and 0.047 to 0.425 and 0.407 in Norman and from -0.015 and 249 
+
+0.014 to 0.247 and 0.368 in Replogle K562. This result suggests that the learned growth field pro-250 
+
+vides a useful condition-level abundance readout that is not captured by balanced transcriptomic 251 
+
+predictors alone. 252 
+
+Taken together, these benchmarks clarify the value of unbalanced modeling in pooled genetic 253 
+
+screens. Although recovered cell number reflects both biological and technical sources of varia-254 
+
+tion, modeling condition-dependent mass helped U-Pert better match the measured perturbation 255 
+
+endpoint, improving transcriptomic prediction beyond merely balanced state-only predictors. 256 
+
+7
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+Fig. 3 : Benchmarking U-Pert on genetic perturbation datasets. a. Norman, Adamson and Replogle K562 datasets exhibit substantial imbalance across perturbation conditions. Conditions are ranked within each dataset by observed cell count, and abundance is shown relative to the dataset median. b. Gene Ontology enrichment of significantly changed genes in high-abundance Norman perturbation conditions, showing significant enrichment of growth- and cell-death-related biological programs. c. Benchmarking of U-Pert against CellFlow, scGPT, GEARS, perturbation-mean and zero-change baselines across Norman, Adamson and Replogle K562. Bars show the mean across held-out perturbation conditions, and points show individual condition-level values. Correlation metrics include R2, Pearson correlation and Pearson delta, where Pearson delta eval-uates correlation of expression changes relative to control. Error metrics include MSE and MAE. Distributional metrics are W1 and W2 distances. d. Representative gene-level prediction exam-ples for held-out Norman and Adamson perturbation conditions. Each point represents one gene, with true mean expression on the x-axis and U-Pert-predicted mean expression on the y-axis. e. 
+
+Prediction of perturbation-associated mass changes across all conditions. Pearson and Spearman correlations between observed and predicted mass ratios are shown for Adamson, Norman and Replogle, comparing U-Pert with an MLP baseline. 8
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+## U-Pert captures drug-induced state changes and cell-abundance changes 257 
+
+## in sciPlex3 258 
+
+Genetic perturbation benchmarks provide evidence that U-Pert improves prediction across unseen 259 
+
+interventions. To examine a setting in which abundance change is a more explicit component of 260 
+
+the perturbation phenotype, we next investigated chemical perturbations, where dose and cell-line 261 
+
+identity can produce transcriptional state changes, cell survival effects or both. We used sciPlex3 [7] 262 
+
+to evaluate U-Pert’s ability to jointly recover transcriptional state and abundance changes in real 263 
+
+drug responses. The dataset included 188 compounds, three cancer cell lines, four dose levels and 264 
+
+two time points (Fig. 4a). Each held-out condition was defined by a tuple of drug, cell line, dose 265 
+
+and time. Predictions were generated from matched control cells. 266 
+
+To assess U-Pert’s ability to recover drug-induced abundance changes, we compared the 267 
+
+observed cell-abundance fold change with the mean predicted mass for each held-out condition. 268 
+
+We evaluated gain over a no-change baseline in log2 fold-change space (Fig. 4b). Conditions were 269 
+
+stratified by whether the observed fold change fell within the no-change band from 0.8 to 1.25. In 270 
+
+conditions with measurable abundance shifts, U-Pert improved 79 of 81 held-out cases. The median 271 
+
+error reduction was 0.466 log2 units (Wilcoxon P = 6 .46 × 10 −15 ). This result was not explained 272 
+
+by a generic tendency to move predictions away from the no-change value of one. In conditions 273 
+
+within the no-change band, only 14 of 43 cases improved over the no-change baseline. The median 274 
+
+delta error was -0.069 (Wilcoxon P = 0 .0074). Thus, U-Pert added value specifically when the 275 
+
+perturbation required a change in population mass. 276 
+
+To assess how learning mass affected transcriptional-state prediction, we evaluated U-Pert 277 
+
+across the same 124 held-out perturbation tuples. U-Pert retained strong state accuracy while 278 
+
+adding an abundance readout (Fig. 4c,e). Relative to CellFlow, mean delta-expression correla-279 
+
+tion increased from 0.152 to 0.380, and mean gene-level R2 increased from 0.644 to 0.736. Latent 280 
+
+energy distance decreased from 52.0 to 33.5, and latent Wasserstein distance decreased from 169.7 281 
+
+to 103.6. On these four displayed metrics, U-Pert also outperformed identity, chemCPA, Con-282 
+
+dOT and BioLord. Because supplementary state metrics showed less uniform separation among 283 
+
+the strongest baselines, we do not interpret these results as uniform dominance across every tran-284 
+
+scriptional metric. Rather, the sciPlex3 benchmark supports a more specific conclusion: U-Pert 285 
+
+recovered transcriptional responses while adding condition-specific abundance prediction. 286 
+
+To evaluate U-Pert’s generalization to unmeasured drug doses, we then applied the learned 287 
+
+model to belinostat (PXD101) on a log-spaced dose grid across A549, K562 and MCF7 cells at 288 
+
+24 h (Fig. 4d). The predicted particle-level mass distributions followed the observed abundance 289 
+
+trajectories across the measured dose points. This zero-shot interpolation converted dose into an 290 
+
+explicit survival-like response. This expanded perturbation prediction beyond comparing expression 291 
+
+states across doses. 292 
+
+Finally, the velocity-growth decomposition further separated distinct components of the drug 293 
+
+response. We separated these components for belinostat at 10 μM and 24 h (Fig. 4f), an HDAC 294 
+
+inhibitor setting with cell-line-specific sensitivity. In this response, MCF7 was relatively less sen-295 
+
+sitive, and the observed effect was dominated by state displacement. Consistent with this biology, 296 
+
+the velocity-only trajectory captured much of the MCF7 response. K562 showed the opposite pat-297 
+
+tern. The dominant effect was loss of cellular mass, and the growth-only trajectory moved closest 298 
+
+to the observed treated population. A549 showed both effects, requiring both velocity and growth 299 
+
+to match the observed response. 300 
+
+Together, these results show that in drug perturbation task, explicit mass modeling helps 301 
+
+describe cellular responses that cannot be fully represented by expression-state shifts alone. 302 
+
+9
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+Fig. 4 : U-Pert jointly predicts transcriptional response and cell-abundance change in sciPlex3. a. Overview of the sciPlex3 dataset. It contains 188 compounds profiled across A549, K562 and MCF7 cells, four dose levels and 24 h or 72 h time points. b. Recovery of cell-abundance shifts across 124 held-out drug, cell-line, dose and time tuples. The left panel shows observed and predicted cell-abundance fold changes after ranking conditions by observed fold change. The right panel shows prediction gain over a no-change baseline, computed as the reduction in absolute log2 fold-change error. Conditions are grouped by whether the observed fold change lies within the no-change band from 0.8 to 1.25. c. Gene-state benchmark across the same held-out tuples. Boxplots compare Identity, CellFlow, CondOT, chemCPA, BioLord and U-Pert using delta-expression correlation and gene-level R2. Higher values indicate better agreement with the observed response. d. Zero-shot dose interpolation for belinostat (PXD101) at 24 h in A549, K562 and MCF7 cells. Predicted particle-level mass distributions are shown across a log-spaced dose grid, with observed abundance fold-change points overlaid. e. Latent-distribution benchmark across the same held-out tuples. Boxplots show latent energy distance and latent Wasserstein distance, for which lower values indicate better agreement with the observed perturbed distribution. f. Velocity-growth decomposition for belinostat at 10 μM and 24 h. Columns show matched control cells, observed perturbed cells, velocity-only predictions, growth-only predictions and full velocity-plus-growth predictions. Grayscale indicates predicted growth weight. In this response, MCF7 was relatively less sensitive and was dominated by velocity-associated state change. K562 was dominated by growth-associated cell loss, whereas A549 required both components. 10 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+## U-Pert enables inverse drug screening for transcriptional and 303 
+
+## abundance phenotypes 304 
+
+We next asked whether the sciPlex3-trained U-Pert model could identify perturbations matching 305 
+
+specified transcriptional or abundance phenotypes. For each design task, we kept the trained model 306 
+
+fixed and optimized a continuous drug embedding to minimize the U-Pert objective for the desired 307 
+
+response (Fig. 5a; Methods). The optimized embedding was then mapped to real compounds in 308 
+
+an approximately 2,000-drug ChEMBL-derived library [43], and candidate compounds were re-309 
+
+evaluated with the same objective. Known pharmacology was used only after this step to assess 310 
+
+the biological plausibility of the selected candidates. 311 
+
+To design a transcriptional response, we targeted a K562 module-level response centered on cell-312 
+
+cycle regulation rather than isolated marker genes. The desired program increased a cellular-stress 313 
+
+gene group, including HSPA5, MDM2, GCLC, GCLM and FTL, while suppressing a proliferative 314 
+
+cell-cycle gene group marked by TOP2A, CENPF and CDC45 (Fig. 5b). These target modules 315 
+
+reflect biological processes recurrently connected to unfolded-protein stress responses and cancer 316 
+
+cell-cycle control [8, 39]. The optimized embedding strongly activated the target module, with a 317 
+
+module score of 10.71. Mapping this designed embedding to the external compound library selected 318 
+
+Venetoclax, whose predicted response preserved the intended module direction, increasing the 319 
+
+cellular-stress gene group and suppressing the cell-cycle gene group while satisfying all specified up-320 
+
+and down-regulation directions (Fig. 5c,d). This candidate is biologically plausible: Venetoclax is a 321 
+
+selective BCL-2 inhibitor with documented activity in BCL-2-dependent hematologic malignancy 322 
+
+models, including chronic myeloid leukemia stem and progenitor contexts [44, 45]. 323 
+
+To design an abundance phenotype, we then optimized a broad-killing objective intended to 324 
+
+induce cell death across A549, K562 and MCF7 (Fig. 5e). The designed embedding reduced pre-325 
+
+dicted survival across all three cell lines, and candidate mapping selected Vincristine as the top 326 
+
+real compound, with predicted survival of 18%, 29% and 32% in A549, K562 and MCF7 at 10 μM327 
+
+and a broad-killing score of 0.65 (Fig. 5f,g), which also shows a strong dosage dependence. Vin-328 
+
+cristine is a Vinca alkaloid microtubule-targeting chemotherapy, and microtubule disruption is a 329 
+
+well-established anticancer mechanism that blocks mitotic progression and induces cell death [46]. 330 
+
+Other high-scoring candidates in this screen (Alpelisib, Vorinostat, Eribulin, Arsenic Trioxide and 331 
+
+Paclitaxel) also fell into recognizable oncology-related mechanisms, including PI3K inhibition, 332 
+
+HDAC inhibition, microtubule targeting and pro-apoptotic leukemia therapy [47, 48]. The selected 333 
+
+compound is therefore consistent with the broad-killing phenotype produced by the inverse design 334 
+
+objective. 335 
+
+Finally, to evaluate U-Pert’s inverse-design capability for selective killing, we specified an 336 
+
+abundance objective that reduced K562 survival while preserving the other cell lines. The tar-337 
+
+get predicted survival values were 100%, 40% and 100% for A549, K562 and MCF7, respectively 338 
+
+(Fig. 5h). The optimized embedding matched this target closely. After mapping the design to real 339 
+
+compounds, Navitoclax ranked highest by target-profile score rather than by embedding similarity, 340 
+
+reducing predicted K562 survival to 42% while keeping A549 near baseline at 102% and par-341 
+
+tially sparing MCF7 at 78% (Fig. 5i,j). This candidate is also mechanistically coherent: Navitoclax 342 
+
+inhibits BCL-2, BCL-xL and BCL-w, and BCL-family blockade engages mitochondrial apoptosis 343 
+
+and can accelerate apoptosis during mitotic stress [49, 50]. Because K562 is a BCR-ABL-positive 344 
+
+chronic myeloid leukemia-derived line, whereas A549 and MCF7 are non-leukemic solid-tumor cell 345 
+
+lines, this leukemia-associated BCL-family vulnerability provides a plausible mechanism for the 346 
+
+predicted K562-selective response. 347 
+
+Interestingly, the three tasks recovered pharmacologically coherent compounds: Venetoclax for 348 
+
+the K562 transcriptional module, Vincristine for broad killing and Navitoclax for K562-selective 349 
+
+killing. Notably, two K562-centered designs converged on BCL-family biology despite being driven 350 
+
+by distinct objectives, consistent with studies showing that prosurvival BCL2-family programs 351 
+
+support chronic myeloid leukemia stem/progenitor cells and that BCL-2/BCR-ABL co-targeting 352 
+
+can eliminate these cells [45, 51]. This convergence suggests that U-Pert can prioritize biologically 353 
+
+plausible perturbations for both transcriptional programs and cell abundance phenotypes. 354 
+
+11 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+ChEMBL 
+
+~2000 drugs LLM Drug embeddings Optimized embedding  
+
+> Drug embedding library
+
+Encoding 
+
+> Desired phenotype Predicted response Loss
+
+Optimizing U-Pert inferring Ideal drug with embedding Similarity search Top matches Selected drug Optimizing Drug Embedding Retrieving Candidate Drugs Building Drug Embedding Library a
+
+b Gene regulation 
+
+# X XX
+
+e
+
+# X
+
+Selective killing Broad killing h
+
+HSPA5 MDM2 GCLC GCLM FTL TOP2A CENPF CDC45 
+
+> -4 -2 024Predicted Z-Score
+
+Target up Target down 
+
+> Optimized Venetoclax
+
+c Designed & retrieved responses  d    
+
+> 0.380 0.385 0.390 0.395 0.400
+
+Cosine cosine 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 Score 
+
+Venetoclax 
+
+Navitoclax Vincristine Cladribine Melphalan 
+
+Candidates Selected drug 
+
+Candidate selection process 
+
+Anticancer drugs retrieved 
+
+0.09 0.10 0.11 0.12 0.13 0.14 Cosine similarity 0.0 0.2 0.4 0.6 Score 
+
+Candidates Selected drug Vincristine AR-42 Alpelisib Vorinostat Eribulin 
+
+f
+
+0.01 0.03 0.1 0.3 1 3 10 Vincristine dose (uM) 0.00 0.25 0.50 0.75 1.00 1.25 1.50 1.75 Predicted mass ratio 
+
+> 0.18 0.29 0.32
+
+A549 K562 MCF7 
+
+Vincristine killing response g
+
+Design & retrieved result i
+
+A549 K562 MCF7 
+
+> 0.00 0.25 0.50 0.75 1.00 1.25 1.50 Predicted mass ratio  K562 kill target
+> Target Optimized Navitoclax
+
+Candidate ranking by similarity j     
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+
+Target-profile score 
+
+> Navitoclax Acifran Entinostat Estradiol Venetoclax Rimcazole Mezilamine Talnetant Buquineran Biapenem Palinavir Estradiol benzoate Eglumetad Fenofibrate 0.85 0.66 0.66 0.64 0.56 0.53 0.52 0.48 0.45 0.45 0.45 0.43 0.36 0.35
+
+Fig. 5 : U-Pert enables inverse drug screening in sciPlex. a. Overview of the inverse cell-fate design and drug screening workflow. A continuous drug embedding is optimized through the trained U-Pert to match a desired perturbation phenotype, and the resulting optimized embedding is mapped to real compounds by similarity search in an LLM-derived drug-embedding library. The library was constructed by encoding approximately 2,000 ChEMBL-derived drug profiles with an LLM embedding model. b. Module-level design task in K562. c. Predicted module-gene responses for the optimized embedding and the selected real-drug candidate Venetoclax. d. Candidate map-ping for the transcriptional module task. Each point represents a real drug evaluated by U-Pert after nearest-neighbor search in embedding space, and candidates are selected by task-specific val-idation score rather than cosine similarity alone. e. Broad-killing task, which aims to induce cell death across A549, K562 and MCF7. f. Candidate mapping for broad killing. Vincristine is selected as the top evaluated candidate. g. Dose-response validation for Vincristine across the three cell lines. h. K562-selective killing task, which targets reduced K562 survival while preserving A549 and MCF7 near baseline. i. Result of the K562-selective design. j. Candidate ranking for the selective-killing task by U-Pert target-profile score. Navitoclax ranks highest among evaluated candidates. 12 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint U-Pert preserves cytokine response geometry by reducing forced 355 
+
+## matching in PBMCs 356 
+
+We next considered a complementary regime in which large population-size changes are not the 357 
+
+dominant signal. PBMC cytokine perturbations [52] provide such a setting, where responses are 358 
+
+expected to be largely cell-type-specific, and the coupling of balanced transport may introduce 359 
+
+implausible cross-cell-type matching. The Parse 10M PBMC dataset spans 12 donors, 90 cytokines 360 
+
+and 16 immune cell types, providing a test of U-Pert’s ability to improve donor-held-out prediction 361 
+
+by reducing forced matching and correcting response direction (Fig. 6a). 362 
+
+To compare forced cross-cell-type matching between balanced and unbalanced formulations, we 363 
+
+quantified the fraction of predicted mass assigned to cell-type changes inconsistent with the anno-364 
+
+tated source and target cell types. Balanced transport-based prediction enforces mass-preserving 365 
+
+matching between control and treated distributions, which can encourage cross-cell-type assign-366 
+
+ments when the cytokine response is mainly a local transcriptional shift. By relaxing this constraint, 367 
+
+U-Pert can avoid explaining every distributional difference through state transport across cell types. 368 
+
+U-Pert reduced this wrong-change mass ratio relative to CellFlow across donor-generalization set-369 
+
+tings (Fig. 6b), from 0.109 to 0.094 when no donors were seen for the test cytokine, and from 0.131 370 
+
+to 0.118 at the 8-donor setting. 371 
+
+To link this reduction in forced matching to response geometry, we compared predicted and 372 
+
+observed perturbation directions across held-out cytokine-donor conditions. The median cosine 373 
+
+gain over CellFlow increased from 0.055 with no seen donors to 0.186 with 8 seen donors and 374 
+
+0.211 with 10 seen donors (Fig. 6c). At the 8-donor setting, U-Pert improved 85.4% of held-out 375 
+
+conditions, with 48 condition-level summaries and a paired Wilcoxon test of P = 6 .7 × 10 −7. All 376 
+
+non-zero seen-donor settings were repeated across three donor subsets. 377 
+
+To examine this directional correction in biologically relevant contexts, we analyzed known 378 
+
+cytokine-responsive cell types treated with IFN-β and IL-15. For IFN-β, U-Pert better aligned 379 
+
+predicted response vectors with observed responses in monocyte, dendritic, B cell and NK cell 380 
+
+contexts. For IL-15, the same pattern appeared in NK, CD8 T cell and MAIT cell contexts (Fig. 6d). 381 
+
+These cases show what the cosine metric captures: U-Pert keeps the response vector closer to the 382 
+
+observed cell-type-specific cytokine direction, whereas balanced transport can distort the prediction 383 
+
+direction through implausible assignments. 384 
+
+Notably, the gain in response geometry did not come at the expense of standard perturbation-385 
+
+prediction accuracy. At the 8-donor setting, U-Pert improved DEG50 R2 per cell type from 0.854 386 
+
+to 0.894, increased gene response Pearson correlation per cell type from 0.319 to 0.379, and reduced 387 
+
+latent energy distance from 2.91 to 2.48 relative to CellFlow (Fig. 6e). Thus, U-Pert improved 388 
+
+response direction while also achieving stronger gene-level and latent-distribution accuracy. 389 
+
+In summary, the PBMC analysis shows that unbalanced modeling remains useful even when 390 
+
+large abundance shifts are not the main response. By relaxing mass-preserving matching, U-391 
+
+Pert reduced forced cross-cell-type assignments, improved response directions and retained strong 392 
+
+gene-level and latent-distribution accuracy. In this setting, the unbalanced formulation of U-Pert 393 
+
+achieved prediction robustness by preventing distributional mismatch from being converted into 394 
+
+biologically implausible state transitions. 395 
+
+13 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+Fig. 6 : U-Pert preserves cytokine response geometry in PBMCs. a. The Parse 10M PBMC dataset contains short-term cytokine responses across 12 donors, 90 cytokines and 16 annotated immune cell types. b. Diagnostic for implausible cell-type reassignment under forced transport. Balanced transport-based prediction can encourage cross-cell-type matches, whereas U-Pert can modulate mass while retaining local response structure. Lower values indicate fewer assignments inconsistent with the annotated source and target cell types. c. Recovery of cytokine response direc-tion across held-out donor settings. Response direction is quantified by cosine similarity between predicted and observed perturbation response vectors and aggregated at the condition level. Points show the median gain of U-Pert relative to CellFlow, and labels report the fraction of held-out cytokine-donor conditions improved by U-Pert. For each setting except 0 seen donors, the donor-generalization analysis was repeated three times. d. Cell-type-specific response geometry for IFN-β
+
+and IL-15. Each subpanel shows observed and predicted response vectors for biology-selected responder contexts at the 6-donor setting. IFN-β examples include CD14 monocytes, CD16 mono-cytes, conventional dendritic cells, naive B cells and NK cells; IL-15 examples include NK cells, CD56bright NK cells, memory CD8 T cells, naive CD8 T cells and MAIT cells. e. Summary bench-mark across held-out perturbation metrics. U-Pert is compared with Identity, donor mean, cytokine mean and CellFlow. 
+
+# Discussion 396 
+
+To capture the coupled effects of gene-expression change and cell-abundance variation from destruc-397 
+
+tive and unpaired single-cell snapshots, we developed U-Pert, a mass-aware framework for single-cell 398 
+
+perturbation modeling. By learning condition- and context-aware velocity and growth fields, U-Pert 399 
+
+predicts responses to unseen perturbations and supports in silico prioritization of interventions for 400 
+
+user-defined transcriptomic or population-level outcomes. The velocity field describes displacement 401 
+
+14 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+in transcriptomic state space, whereas the growth field provides the abundance-associated informa-402 
+
+tion of expansion, depletion or selective recovery among profiled cells. Across genetic, chemical and 403 
+
+cytokine perturbation settings, the endpoints measured by single-cell profiling were better repre-404 
+
+sented as coupled molecular and population-level phenotypes than as purely transcriptomic states. 405 
+
+These findings support treating recovered cell abundance as an explicit component of the pertur-406 
+
+bation response, while keeping separate the biological and technical factors that may contribute 407 
+
+to this signal. 408 
+
+Existing single-cell perturbation models have achieved substantial progress in counterfactual 409 
+
+expression prediction, response mapping and generative modeling [13–15, 21, 23, 24, 29]. Their main 410 
+
+object, however, is usually the perturbed expression distribution. When the recovered endpoint 411 
+
+population differs in size or composition, balanced formulations may absorb depletion, expansion or 412 
+
+selective survival into apparent transcriptomic movement. Related unbalanced and growth-aware 413 
+
+approaches in trajectory inference have shown that proliferation, apoptosis and changes in popu-414 
+
+lation size can be incorporated into dynamical models of single-cell data [41, 42, 53–56], where 415 
+
+unbalanced transport and growth-aware models reconstruct cellular dynamics while accounting for 416 
+
+unbalance sampling, proliferation, apoptosis and shifts in population size. These methods show that 417 
+
+population-size changes can be treated as part of the dynamical process rather than as a nuisance 418 
+
+variable. However, they primarily address autonomous temporal progression, whereas perturbation 419 
+
+biology requires models that are conditioned on external genetic or pharmacological interventions, 420 
+
+biological context and design objectives. U-Pert brings this unbalanced perspective into single-cell 421 
+
+perturbation modeling by coupling transcriptomic state transitions with perturbation-induced pro-422 
+
+liferation and apoptosis. This separation provides a more interpretable description of perturbation 423 
+
+responses, allowing drug effects to be decomposed into state-transition and survival components, 424 
+
+and cytokine responses to be modeled without forcing implausible cross-cell-type matching. It 425 
+
+also creates a route to inverse design, because desired outcomes can be specified at the level of 426 
+
+gene-expression programs, cell-type compositions or abundance phenotypes. 427 
+
+While this study demonstrates the potential of unbalanced perturbation modeling, several lim-428 
+
+itations remain. First, observed cell-count changes can reflect both biological effects and technical 429 
+
+factors, including sampling depth, capture efficiency and batch variation. More carefully controlled 430 
+
+experimental designs will be important for separating true proliferation or apoptosis from technical 431 
+
+sampling noise. Second, because U-Pert learns dynamics from unpaired snapshots, the inferred tra-432 
+
+jectories should be interpreted as plausible transport paths rather than directly observed single-cell 433 
+
+lineages. Future integration with lineage tracing [57], live-cell imaging [58] or densely sampled time-434 
+
+resolved perturbation measurements [24] could further constrain the learned dynamics. Third, the 435 
+
+current inverse-design workflow relies on learned perturbation or drug embeddings and candidate 436 
+
+retrieval in an embedding library; therefore, experimental validation is required before designed 437 
+
+perturbations can be interpreted as causal or therapeutically actionable interventions. 438 
+
+Future extensions could broaden the biological scope of unbalanced perturbation modeling. Spa-439 
+
+tial perturbation technologies now make it possible to measure genetic perturbations together with 440 
+
+spatial transcriptomic or imaging measurements in native tissue contexts [59–63]. Extending U-Pert 441 
+
+to these data would allow perturbation responses to be modeled across transcriptomic state, popu-442 
+
+lation mass, physical location and local cell–cell communication. Such models could distinguish how 443 
+
+perturbations alter the targeted cells themselves from how they reshape neighboring cells through 444 
+
+ligand–receptor signaling, niche remodeling and collective tissue-level responses [64]. Multimodal 445 
+
+measurements, perturbation time courses and prospective validation of designed interventions 446 
+
+would also further clarify whether the mass-aware virtual-cell models can support experimental 447 
+
+decision-making. 448 
+
+Overall, U-Pert provides a unified unbalanced generative framework for learning perturbation-449 
+
+induced cell-state and cell-abundance dynamics from unpaired unbalanced single-cell snapshots. 450 
+
+By combining forward simulation, mechanistic interpretation and inverse design, U-Pert extends 451 
+
+virtual-cell modeling from predicting transcriptional responses to designing perturbations that 452 
+
+control both molecular programs and population outcomes. More broadly, our results support an 453 
+
+unbalanced view of perturbation biology, in which virtual-cell models incorporate population-level 454 
+
+changes alongside transcriptional state to predict and design cell fate. 455 
+
+# Methods 456 
+
+## Learning cell-state and abundance dynamics from unpaired snapshots 457 
+
+The dynamic unbalanced optimal transport described by the Wasserstein–Fisher–Rao (WFR) met-458 
+
+ric extends classical OT by coupling displacement with changes in mass, providing a geometry for 459 
+
+15 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+modeling cell-state transitions together with proliferation, apoptosis or selection[65–67]. In our set-460 
+
+ting, μ0 and μ1 denote finite measures over the single-cell state space X , representing the control 461 
+
+and perturbed cell populations. Unlike balanced OT, which preserves total mass, WFR allows the 462 
+
+total mass of the population to increase or decrease along the path. The dynamic WFR distance 463 
+
+is defined as[65, 66]: 464 
+
+WFR 2 
+
+> δ
+
+(μ0, μ 1) = inf 
+
+> ρ,g, u
+
+Z 10
+
+Z
+
+> X
+
+12 (|| u(x, t )|| 22 + δ2|| g(x, t )|| 22)ρt(x)dxdt, (1) 
+
+> 465
+
+s.t. ∂tρ + ∇x · (ρu) = ρg, ρ0 = μ0, ρ1 = μ1. (2) Here, u(x, t ) is the velocity field that transports transcriptomic states, g(x, t ) is the growth rate 466 
+
+that changes cell mass, ρt(x) is the time-dependent cell distribution, and δ balances transport and 467 
+
+birth-death penalties. Positive values of g locally increase mass, whereas negative values decrease 468 
+
+mass. 469 
+
+To connect this dynamic formulation to flow matching, we use the equivalent static WFR semi-470 
+
+coupling view[65, 66]. A semi-coupling ( γ0, γ 1) consists of two non-negative measures on X 2. The 471 
+
+first measure γ0 specifies how much source mass at x is assigned to a source–target pair ( x, y), 472 
+
+whereas γ1 specifies the corresponding target mass at y. Thus, each pair can carry different source 473 
+
+and target masses, recording both movement and birth-death effects. The static WFR formulation 474 
+
+is: 475 
+
+WFR 2 
+
+> δ
+
+(μ0, μ 1) = inf 
+
+> (γ0,γ 1)∈Γ( μ0,μ 1)
+
+Z 
+
+> X2
+
+WFR-DD 2 
+
+> δ
+
+(γ0(x, y)δx, γ 1(x, y)δy)dxdy. (3) Here, WFR-DD δ denotes the WFR cost between two weighted Dirac measures, and Γ( μ0, μ 1) is 476 
+
+the admissible set of semi-couplings, 477 
+
+Γ( μ0, μ 1) = (γ0, γ 1) ∈ M +(X 2)2 : ( π1)#γ0 = μ0, (π2)#γ1 = μ1 , (4) where π1(x, y) = x and π2(x, y) = y are the coordinate projections. In other words, the source 478 
+
+marginal of γ0 recovers the control population, and the target marginal of γ1 recovers the perturbed 479 
+
+population. In practice, the semi-coupling is computed through an equivalent optimal entropy-480 
+
+transport formulation [42, 65, 66]. 481 
+
+WFR Flow Matching (WFR-FM)[42] learns a time-dependent vector field vθ (x, t ) and growth 482 
+
+rate gϕ(x, t ) from the semi-coupled source–target pairs. For a sampled boundary pair z = ( x0, x1)483 
+
+from γ0, WFR-FM defines a conditional path ρt(x|z) = mt(z)˜ ρt(x|z). Here, ˜ ρt is the normalized 484 
+
+conditional distribution of cell states along the path, and mt(z) is the WFR mass associated with 485 
+
+that path at time t. The WFR geodesic provides target fields ut(x|z) for transcriptomic move-486 
+
+ment and gt(x|z) for mass change. The neural networks are then optimized with the conditional 487 
+
+unbalanced flow matching objective: 488 
+
+LCUFM (θ, ϕ) = Et∼U [0 ,1] ,z∼γ0,x∼ ˜ρt(x|z)
+
+  || vθ (x, t ) − ut(x|z)|| 22 + κ|| gϕ(x, t ) − gt(x|z)|| 22
+
+ mt(z) .
+
+(5) The mass weight mt(z) makes the regression objective sensitive to birth-death dynamics rather 489 
+
+than only to transcriptomic displacement. The closed-form construction of the conditional path 490 
+
+and target fields follows from the WFR geodesic [42, 65, 66]. 491 
+
+## Learning condition- and context-aware perturbation responses 492 
+
+To apply WFR-FM to single-cell perturbation modeling, U-Pert distinguishes between perturba-493 
+
+tion conditions, biological contexts and the matching strata used to construct WFR couplings. 494 
+
+The perturbation condition, denoted by cond, specifies the intervention and intervention-related 495 
+
+variables, such as a genetic knockout, drug identity, dose or treatment duration. The biological 496 
+
+context, denoted by cont, specifies the basal or experimental background in which the perturbation 497 
+
+acts, such as donor identity, cell line or cell type. 498 
+
+In practice, WFR couplings are constructed within dataset-specific matching strata. Each 499 
+
+observed stratum s is associated with a perturbation condition cond s and, when available, the 500 
+
+context covariates used to match control and perturbed cells. For example, when control and per-501 
+
+turbed cells from the same donor or cell line are available, the stratum can include that donor 502 
+
+or cell-line label; otherwise, the coupling may be constructed at a coarser condition level while 503 
+
+the context is provided as an additional neural-network input. This design allows U-Pert to use 504 
+
+matched controls whenever the experimental design supports them, while still sharing information 505 
+
+across contexts through the learned condition- and context-aware fields. 506 
+
+16 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+For each observed stratum s, let μs 
+
+> 0
+
+and μs 
+
+> 1
+
+denote the corresponding matched control and 507 
+
+perturbed distributions. U-Pert solves the static WFR problem between μs 
+
+> 0
+
+and μs 
+
+> 1
+
+to obtain 508 
+
+stratum-specific semi-couplings γs 
+
+> 0
+
+and γs 
+
+> 1
+
+. The trainable velocity vθ (x, t, cond , cont) and growth 509 
+
+rate gϕ(x, t, cond , cont) are conditioned on both the perturbation condition and the biological 510 
+
+context. The training objective is 511 
+
+L(θ, ϕ) = E s∼P S , t ∼U [0 ,1]    
+
+> z∼γs
+> 0,x∼˜ρt(x|z)
+
+[( ∥vθ (x, t, cond s, cont s) − ut(x|z)∥22
+
++ κ∥gϕ(x, t, cond s, cont s) − gt(x|z)∥22)mt(z)] .
+
+(6) Here, z denotes a WFR source-target pair sampled from the semi-coupling, mt(z) is the corre-512 
+
+sponding WFR path mass, and cond s and cont s are the condition and context labels provided to 513 
+
+the neural networks for stratum s. This objective allows U-Pert to learn how the same control pop-514 
+
+ulation can undergo different transcriptomic transitions and abundance changes under different 515 
+
+interventions and biological backgrounds. 516 
+
+For prediction, U-Pert uses multi-step integration to simulate the coupled state and growth 517 
+
+dynamics under a specified perturbation condition and biological context: 518 
+
+dxt
+
+dt = vθ (xt, t, cond , cont) , d log mt
+
+dt = gϕ(xt, t, cond , cont) . (7) The same condition- and context-aware framework can also be combined with a mean-flow param-519 
+
+eterization for one-step terminal prediction [56, 68]. In this variant, the network directly predicts 520 
+
+terminal displacement and terminal log-mass change, avoiding backpropagation through the ODE 521 
+
+solver. We therefore treat it as an optional acceleration strategy, particularly useful for large-scale 522 
+
+gradient-based inverse design. 523 
+
+## Preprocessing and implementation of U-Pert 524 
+
+Cell embedding. Single-cell transcriptional states were preprocessed before U-Pert training. For 525 
+
+all real biological datasets, count matrices were normalized, log-transformed, filtered to retain 526 
+
+highly variable genes (HVGs), and projected to a 100-dimensional PCA representation. The PCA 527 
+
+model was fitted using control cells and training perturbation conditions. U-Pert learned transport 528 
+
+and growth in this PCA space. Predicted PCA states were subsequently reconstructed in the HVG 529 
+
+expression space for gene-level analyses. 530 
+
+Condition embedding. Each perturbation was represented by a fixed external embedding. 531 
+
+The embedding source depended on the perturbation modality and could include textual descrip-532 
+
+tions, molecular features or protein annotations. In the real-data applications, compound and 533 
+
+cytokine descriptions were embedded before model training. U-Pert mapped each raw perturbation 534 
+
+embedding through a multilayer condition encoder consisting of layer normalization, two feed-535 
+
+forward hidden layers and a final linear projection. The hidden dimension was 512, and the output 536 
+
+condition representation was 256-dimensional in both applications. 537 
+
+Context embedding. Experimental and biological contexts were encoded separately from 538 
+
+perturbation identity according to a dataset-specific rulebook. Each prediction target was rep-539 
+
+resented as a condition tuple, and the rulebook specified which covariates were used for control 540 
+
+matching and model conditioning. Categorical covariates were encoded by trainable embedding 541 
+
+layers, whereas continuous covariates were transformed as specified by the rulebook and encoded 542 
+
+by two-layer multilayer perceptrons. During training and inference, control cells were selected with 543 
+
+the same matching covariates used to define the biological context. 544 
+
+Model architecture. U-Pert comprised two conditional output networks: a velocity network 545 
+
+for transcriptomic transport and a growth network for particle mass dynamics. The networks had 546 
+
+separate parameters but shared the same conditioning inputs. For each sampled particle, the model 547 
+
+encoded the perturbation, WFR interpolation time and context covariates, and then concatenated 548 
+
+these representations to condition the output networks. WFR time was represented by sinusoidal 549 
+
+features followed by a feed-forward time encoder. The processed time representation was projected 550 
+
+to 128 dimensions. 551 
+
+The velocity and growth networks used FiLM-conditioned residual multilayer perceptron 552 
+
+blocks [69, 70]. Each block first mapped the particle state into a hidden representation, normal-553 
+
+ized the hidden state and generated FiLM scale, shift and gate parameters from the concatenated 554 
+
+conditioning vector. The block then applied a two-layer feed-forward transformation and added 555 
+
+the gated output to the residual state. The final FiLM projection was initialized to zero, making 556 
+
+17 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+each residual block close to an identity map at initialization. The velocity network output a 100-557 
+
+dimensional vector field in PCA space, whereas the growth network output one scalar growth rate 558 
+
+per particle. 559 
+
+Implementation. U-Pert was implemented in Python with PyTorch. Unbalanced transport 560 
+
+plans were computed with POT [71]. Data preprocessing, AnnData storage and gene-expression 561 
+
+analyses used the scverse ecosystem [72], including anndata [73] and scanpy [74]. 562 
+
+## Real-data perturbation benchmarks 563 
+
+For real biological data, each prediction target was defined by a perturbation identity together with 564 
+
+a biological or experimental context. U-Pert used matched control cells as the starting population 565 
+
+for each target context and predicted both terminal cell states and particle masses. State-level pre-566 
+
+dictions were evaluated in the shared PCA and HVG expression spaces, whereas mass predictions 567 
+
+were used to assess abundance changes when cell-count information was available. 568 
+
+In the genetic perturbation benchmarks, we evaluated unseen-condition prediction on Norman, 569 
+
+Adamson and Replogle K562 Perturb-seq datasets [8, 9, 11]. Prediction targets were genetic pertur-570 
+
+bation conditions, and matched control cells were used as source populations. We compared U-Pert 571 
+
+with CellFlow, scGPT, GEARS, perturbation-mean and zero-change baselines for expression and 572 
+
+distributional metrics, and with a supervised MLP baseline for condition-level abundance-ratio 573 
+
+prediction. 574 
+
+In sciPlex3 datasets [7], we evaluated chemical perturbation responses across 188 compounds, 575 
+
+three cancer cell lines, four dose levels and two time points. A prediction target was defined by a 576 
+
+compound-cell line-dose-time tuple. We used a held-out-drug split to test generalization to unseen 577 
+
+compounds and evaluated both transcriptional-state recovery and drug-induced cell-abundance 578 
+
+change. Using the trained response field, we further performed inverse drug screening for user-579 
+
+defined gene-expression and abundance objectives. 580 
+
+In the PBMC cytokine-perturbation datasets [52], we evaluated responses across 12 donors and 581 
+
+90 cytokines profiled after 24 h. A prediction target was defined by a cytokine-donor pair. We used 582 
+
+held-out-cytokine and seen-donor generalization settings with donor-matched control cells, and 583 
+
+assessed whether U-Pert preserved cytokine response direction while reducing forced cross-cell-type 584 
+
+transport. 585 
+
+## Evaluation Metrics 586 
+
+To evaluate predicted perturbation responses, we adopted six population-average and population-587 
+
+distribution metrics from recent single-cell perturbation benchmarks [38]: population-average MSE, 588 
+
+population-average E-distance, population-average PCC-delta, population-distribution Wasser-589 
+
+stein distance, population-distribution KL-divergence and population-distribution Common-DEGs. 590 
+
+To explicitly evaluate cellular birth-death dynamics and cell-fate shifts, we additionally defined the 591 
+
+following U-Pert-specific abundance and composition metrics. 592 
+
+Cell Type Proportion Metrics. Traditional metrics evaluate transcriptomic states but 593 
+
+ignore population expansions or contractions. To evaluate how well the model captures unbalanced 594 
+
+cell-fate dynamics, we evaluate the predicted post-perturbation cell type proportions against the 595 
+
+ground truth. To assign cell types to the predicted perturbed cells in a non-parametric manner, 596 
+
+we determine the identity of each predicted cell via a majority vote from its k-nearest neighbors 597 
+
+(kNN) in the true perturbed cell pool. 598 
+
+Let p ∈ ∆K−1 and ˆ p ∈ ∆K−1 denote the true and predicted cell type proportion distributions 599 
+
+across K defined cell types. We quantify the compositional accuracy using the Mean Squared Error 600 
+
+(MSE prop ) and the Kullback-Leibler (KL) divergence (KL prop ): 601 
+
+MSE prop = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+(pk − ˆpk)2, KL prop =
+
+> K
+
+X
+
+> k=1
+
+pk ln pk
+
+ˆpk
+
+. (8) These custom metrics explicitly reflect the fidelity of the modeled birth-death dynamics under 602 
+
+perturbation conditions. 603 
+
+Mass fold-change and abundance gain. For models that predict particle masses, condition-604 
+
+level abundance change was evaluated from the total predicted mass. If M0 and M1 denote the 605 
+
+observed control and perturbed population masses, and ˆ mi denotes the predicted terminal mass 606 
+
+18 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+of control particle i, the observed and predicted fold changes are: 607 
+
+Ftrue = M1
+
+M0
+
+, Fpred = 1
+
+N0
+
+> N0
+
+X
+
+> i=1
+
+ˆmi. (9) Mass error was measured as ( Ftrue − Fpred )2. In the sciPlex3 abundance analysis, gain over a 608 
+
+no-change prediction was measured in log2 fold-change space: 609 
+
+Gain abund = | log 2 Ftrue | − | log 2 Fpred − log 2 Ftrue |. (10) Positive values indicate lower abundance error than a no-change baseline. 610 
+
+Cell-type transition error. For the PBMC analysis, we quantified implausible source-to-611 
+
+predicted cell-type transitions. Let si and ˆ ci denote the source and predicted cell-type labels for 612 
+
+particle i, and let A(si) denote the allowed target cell types for source type si. The mass fraction 613 
+
+assigned to forbidden transitions was: 614 
+
+Wrong-transition mass ratio = 
+
+P 
+
+> i
+
+ˆmiI[ˆ ci /∈ A (si), ˆci̸ = si]
+
+P 
+
+> i
+
+ˆmi
+
+. (11) We also reported the same numerator divided by the total mass assigned to changed cell-type 615 
+
+labels. 616 
+
+PBMC response-direction cosine gain. To evaluate donor- and cell-type-specific cytokine 617 
+
+response direction, we computed cosine similarity between observed and predicted response vectors 618 
+
+in PCA space. For a cytokine, donor and cell-type context, let: 619 
+
+∆true = μtrue − μcontrol , ∆pred = μpred − μcontrol . (12) The response-direction score is: 620 
+
+cos(∆ true , ∆pred ) = ∆⊤
+
+> true
+
+∆pred 
+
+∥∆true ∥2∥∆pred ∥2
+
+. (13) U-Pert gain was defined as the U-Pert cosine similarity minus the CellFlow cosine similarity. 621 
+
+## Discovery and Enrichment Analysis of Driver Genes 622 
+
+Beyond predicting the macroscopic terminal states of perturbed cell populations, understanding the 623 
+
+underlying molecular mechanisms that drive these transitions is essential for biological discovery 624 
+
+[6]. Our generative framework parameterizes the continuous dynamics of transcriptomic state and 625 
+
+cellular mass, providing a differentiable foundation for extracting model-inferred gene regulatory 626 
+
+relationships and growth-associated effects [53, 54, 75]. 627 
+
+Given a specific perturbation condition cond and cellular context cont, the velocity field 628 
+
+vθ (x, t, cond , cont) dictates the instantaneous transcriptomic rate of change in the learned expres-629 
+
+sion representation. For real biological datasets, U-Pert is trained in a low-dimensional PCA space. 630 
+
+Let y ∈ Rd denote the highly variable gene expression vector and x ∈ Rr denote its PCA repre-631 
+
+sentation, where d is the number of genes and r is the number of retained principal components. 632 
+
+We write the linear PCA encoder and decoder as 633 
+
+x = Ey , ˆy = Dx , (14) where centering, scaling and intercept terms are omitted for notation simplicity. 634 
+
+We first compute the Jacobian matrix of the velocity field in PCA space: 635 
+
+JPCA  
+
+> v
+
+(x, t, cond , cont) = ∂vθ
+
+∂x ∈ Rr×r . (15) To obtain a gene-space regulatory sensitivity matrix, we project this PCA-space Jacobian back to 636 
+
+gene space by the chain rule: 637 
+
+Jgene  
+
+> v
+
+(y, t, cond , cont) = DJ PCA  
+
+> v
+
+(x, t, cond , cont) E ∈ Rd×d. (16) 19 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+In this formulation, the element [ Jgene  
+
+> v
+
+]i,j represents the model-inferred instantaneous regulatory 638 
+
+effect of gene j on the expression velocity of gene i, after projection through the PCA encoder and 639 
+
+decoder. 640 
+
+Simultaneously, the growth rate function gϕ(x, t, cond , cont) models condition-dependent 641 
+
+changes in cellular mass. We compute the gradient of the growth rate in PCA space, 642 
+
+∇xgϕ(x, t, cond , cont) ∈ Rr , (17) and project it back to gene space using the PCA encoder: 643 
+
+∇ygϕ(y, t, cond , cont) = E⊤∇xgϕ(x, t, cond , cont) ∈ Rd. (18) This gene-level growth sensitivity score quantifies how variation in each gene is associated with local 644 
+
+increases or decreases in the predicted growth rate. Depending on the experimental setting, these 645 
+
+growth-associated effects may reflect proliferation, apoptosis, selective recovery or other sources of 646 
+
+abundance change. 647 
+
+Because the underlying neural networks are explicitly conditioned, the inferred gene regulatory 648 
+
+networks Jgene  
+
+> v
+
+and growth sensitivity landscapes ∇ygϕ are condition- and context-dependent. 649 
+
+They are not static global properties; rather, they can rewire in response to different perturbation 650 
+
+interventions or cellular backgrounds. By contrasting the projected Jacobians and growth gradients 651 
+
+across different cond and cont embeddings, we can systematically probe how specific drugs or 652 
+
+genetic knockouts alter gene circuitry and abundance-associated pathways. 653 
+
+Genes exhibiting the highest magnitude of change in their regulatory outgoing weights, mea-654 
+
+sured by large column norms in ∆ Jgene  
+
+> v
+
+, or growth influence, measured by large absolute values 655 
+
+in ∆ ∇ygϕ, are identified as putative driver genes for that specific condition. Finally, to translate 656 
+
+these mathematical sensitivities into actionable biological insights, the identified sets of critical 657 
+
+driver genes are subjected to downstream enrichment analyses, mapping them to known biological 658 
+
+pathways, gene ontologies and disease-associated mechanisms [76, 77]. 659 
+
+## Inverse Design of Differential Expression Genes Task 660 
+
+The ultimate goal of modeling single-cell perturbation dynamics is to enable in silico inverse design: 661 
+
+computationally identifying a perturbation condition cond that drives a cell population toward a 662 
+
+desired biological state. In many biological applications, this desired state is characterized by the 663 
+
+differential expression of specific marker genes. Formally, we define a set of target genes to be up-664 
+
+regulated, denoted as Sup , and a set of target genes to be down-regulated, denoted as Sdown . The 665 
+
+inverse design task is to optimize the condition embedding cond to induce the desired expression 666 
+
+changes in these target gene sets. 667 
+
+Let Φ cond ,cont denote the differentiable U-Pert forward operator under a given perturbation 668 
+
+condition and biological context. This operator maps an initial control cell, together with its initial 669 
+
+particle mass, to a predicted perturbed state and predicted terminal mass: 670 
+
+(x1, m 1) = Φ cond ,cont (x0, m 0). (19) The operator Φ cond ,cont can be implemented either by multi-step integration of the learned WFR-671 
+
+FM dynamics or by the optional one-step mean-flow variant [56]. In the inverse design objective 672 
+
+below, only the differentiable input-output mapping of Φ cond ,cont is required. 673 
+
+Given a set of N control cells X0 = {x(i)0 }Ni=1 , each initialized with mass m(i)0 = 1, we simulate 674 
+
+their response to a proposed condition cond: 675 
+
+(x(i)1 (cond) , m (i)1 (cond)) = Φ cond ,cont (i) (x(i)0 , 1) , i = 1 , . . . , N. (20) For DEG-based design, the predicted masses are normalized and used as sample weights for the 676 
+
+predicted perturbed population: 677 
+
+w(i)(cond) = m(i)1 (cond) 
+
+PNk=1 m(k)1 (cond) . (21) This normalization makes the DEG objective focus on the mass-weighted expression profile of the 678 
+
+predicted recovered population. Total abundance or survival objectives are handled separately in 679 
+
+the abundance-design tasks. 680 
+
+20 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+Let y(i)1 (cond) denote the predicted gene-expression vector used for evaluating target genes, 681 
+
+obtained from x(i)1 (cond) by PCA reconstruction when the model is trained in PCA space. Let 682 
+
+μ0,j and σ20,j denote the empirical mean and variance of gene j in the control population. For the 683 
+
+predicted perturbed population, we compute the mass-weighted mean and variance: 684 
+
+μ1,j (cond) = 
+
+> N
+
+X
+
+> i=1
+
+w(i)(cond) y(i)1,j (cond) , (22) 
+
+> 685
+
+σ21,j (cond) = 
+
+> N
+
+X
+
+> i=1
+
+w(i)(cond) 
+
+
+
+y(i)1,j (cond) − μ1,j (cond) 
+
+2
+
+. (23) We use a t-statistic-inspired standardized expression contrast to quantify the direction and 686 
+
+magnitude of the predicted expression change for each target gene j:687 
+
+sj (cond) = μ1,j (cond) − μ0,j 
+
+q σ21,j (cond)  
+
+> N
+
++ σ20,j 
+
+> N
+
+. (24) The design objective maximizes sj (cond) for genes that should be up-regulated and minimizes 688 
+
+sj (cond) for genes that should be down-regulated: 689 
+
+Ldesign-DEG (cond) = − X
+
+> j∈S up
+
+sj (cond) + X
+
+> j∈S down
+
+sj (cond) . (25) The optimized perturbation condition is then obtained by 690 
+
+cond ∗ = arg min  
+
+> cond
+
+Ldesign-DEG (cond) . (26) Because the forward operator Φ cond ,cont is differentiable, this optimization can be performed 691 
+
+by backpropagating the loss through the trained U-Pert model while keeping model parameters 692 
+
+fixed and updating only the continuous condition embedding. For discrete perturbations, such 693 
+
+as drug compounds or target genes, the optimized embedding is subsequently mapped back to 694 
+
+real candidates in a predefined perturbation-embedding library and the retrieved candidates are 695 
+
+re-evaluated by forward U-Pert inference. 696 
+
+## Inverse Design of Cell Type Proportion/Quantity Task 697 
+
+Beyond targeting specific gene expression profiles, a major goal in regenerative medicine, cell 698 
+
+therapy, and precision oncology is to discover perturbation interventions that can control cell 699 
+
+population dynamics. Practical applications include directing stem cells to differentiate into a 700 
+
+desired lineage, selectively expanding a specific immune subpopulation, or designing targeted drugs 701 
+
+that eradicate cancer cells while preserving healthy tissues. To achieve these macroscopic objectives, 702 
+
+modeling only transcriptomic transitions of individual cells is insufficient; one must also capture 703 
+
+the expansion and depletion of the populations themselves. Therefore, explicitly modeling growth 704 
+
+dynamics is important for this task. We formalize this objective as the inverse design of cell type 705 
+
+proportions, cell type quantities, or abundance ratios of fixed biological groups. 706 
+
+As in the differential expression task, we use the differentiable forward operator Φ cond ,cont to 707 
+
+simulate the perturbation response of N control cells. Given control cells X0 = {x(i)0 }Ni=1 , each 708 
+
+initialized with mass m(i)0 = 1, the predicted perturbed states and terminal masses are 709 
+
+(x(i)1 (cond) , m (i)1 (cond)) = Φ cond ,cont (i) (x(i)0 , 1) , i = 1 , . . . , N. (27) We consider two related settings. In the first setting, the target population label is state-710 
+
+dependent and may change after perturbation, as in cell fate conversion or differentiation. To 711 
+
+enable gradient-based optimization of the condition embedding cond, the assignment of predicted 712 
+
+perturbed cells to specific cell types must be differentiable. Therefore, non-differentiable assignment 713 
+
+methods, such as k-nearest neighbors (kNN) or hard clustering, cannot be used. Instead, we pre-714 
+
+train a continuous neural network classifier C(x) ∈ [0 , 1] K , where K is the total number of defined 715 
+
+cell types. For any given cell state x, the output Ck(x) represents the predicted probability that 716 
+
+the cell belongs to cell type k, subject to PKk=1 Ck(x) = 1. 717 
+
+21 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+The unbalanced formulation provides a natural way to optimize not only relative cell type pro-718 
+
+portions, but also the absolute quantity of cells assigned to each type. The differentiable predicted 719 
+
+quantity Qk(cond) for cell type k is computed by summing the predicted masses weighted by the 720 
+
+classifier assignment probabilities: 721 
+
+Qk(cond) = 
+
+> N
+
+X
+
+> i=1
+
+m(i)1 (cond) Ck(x(i)1 (cond)) . (28) Similarly, the predicted relative proportion Pk(cond) for cell type k is obtained by normalizing 722 
+
+this cell type quantity by the total predicted mass: 723 
+
+Pk(cond) = Qk(cond) 
+
+PKj=1 Qj (cond) =
+
+PNi=1 m(i)1 (cond) Ck(x(i)1 (cond)) 
+
+PNi=1 m(i)1 (cond) . (29) Given a user-defined target quantity profile Q∗ = [ Q∗
+
+> 1
+
+, . . . , Q ∗ 
+
+> K
+
+] or a target proportion profile 724 
+
+P∗ = [ P ∗ 
+
+> 1
+
+, . . . , P ∗ 
+
+> K
+
+], we formulate the state-dependent cell type design objective using mean squared 725 
+
+error: 726 
+
+Lquantity (cond) = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+(Qk(cond) − Q∗
+
+> k
+
+)2 , (30) and 727 
+
+Lproportion (cond) = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+(Pk(cond) − P ∗ 
+
+> k
+
+)2 . (31) In the second setting, the target group label is fixed and does not change with the transcriptomic 728 
+
+state. Examples include cell line, donor, sample group or other predefined biological contexts. 729 
+
+This setting is used, for example, when designing a drug that selectively kills one cell line while 730 
+
+preserving others. Let a(i) ∈ { 1, . . . , G } denote the fixed group label of control cell i, where G is 731 
+
+the number of fixed groups. The initial mass of group g is 732 
+
+M 0 
+
+> g
+
+= X
+
+> i:a(i)=g
+
+m(i)0 , (32) and the predicted terminal mass of group g under condition cond is 733 
+
+M 1 
+
+> g
+
+(cond) = X
+
+> i:a(i)=g
+
+m(i)1 (cond) . (33) The predicted abundance ratio for group g is then defined as 734 
+
+Rg (cond) = M 1 
+
+> g
+
+(cond) 
+
+M 0
+
+> g
+
+. (34) Given a target abundance-ratio profile R∗ = [ R∗
+
+> 1
+
+, . . . , R ∗
+
+> G
+
+], the fixed-group abundance design loss is 735 
+
+Lratio (cond) = 1
+
+G
+
+> G
+
+X
+
+> g=1
+
+ log( Rg (cond)) − log( R∗ 
+
+> g
+
+)2 . (35) For example, a selective-killing objective can be specified by setting a low target ratio for the cell 736 
+
+line to be depleted and target ratios near one for the cell lines to be preserved. 737 
+
+The optimized perturbation condition is identified by minimizing the corresponding target loss: 738 
+
+cond ∗ = arg min  
+
+> cond
+
+Ltarget (cond) , Ltarget ∈ {L quantity , Lproportion , Lratio }. (36) Because the classifier C(·), when used, and the forward operator Φ cond ,cont are differentiable, 739 
+
+the condition embedding can be optimized by backpropagating the target loss through the frozen 740 
+
+classifier and the trained U-Pert model. For fixed-group abundance-ratio objectives, no classifier is 741 
+
+required because the group label is fixed and carried by each particle during forward simulation. 742 
+
+For discrete perturbations, such as drug compounds or target genes, the optimized continuous 743 
+
+22 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+embedding is subsequently mapped back to real candidates in a predefined perturbation-embedding 744 
+
+library and the retrieved candidates are re-evaluated by forward U-Pert inference. 745 
+
+## Simulations of perturbed gene regulatory networks 746 
+
+To evaluate model performance under diverse perturbations, we simulated single-cell gene expres-747 
+
+sion dynamics using a three-gene regulatory network. The dynamics of the system are governed by 748 
+
+the following set of stochastic differential equations (SDEs): 749 
+
+dX 1
+
+dt = ρ1,c + β11 α1X21
+
+1 + α1X21 + γ2X22 + γ3X23
+
+− δ1X1 + η1 ξ1(t),dX 2
+
+dt = ρ2,c + β22 α2X22
+
+1 + γ1X21 + α2X22 + γ3X23
+
+− δ2X2 + η2 ξ2(t),dX 3
+
+dt = ρ3 + β32 α3X22
+
+1 + α3X22
+
+− δ3X3 + η3 ξ3(t),
+
+where Xi(t) denotes the mRNA expression level of gene i. The model implements a toggle switch 750 
+
+between X1 and X2 (mutual inhibition and self-activation), with additional regulation by X3 and 751 
+
+an external signal β. The equations are parameterized by basal transcription rates ( ρi,c ), self-752 
+
+activation strengths ( αi), inhibitory interactions ( γi), degradation rates ( δi), and stochastic noise 753 
+
+terms ( ηiξi(t)). Probabilistic cell death is incorporated by assigning each cell a death probability 754 
+
+over a time step dt :755 
+
+pdeath = 1 − exp g dt ,
+
+where the instantaneous growth rate g depends on gene expression: 756 
+
+g = αg,c 
+
+X23
+
+1 + X23
+
+, αg,c < 0.
+
+Here, αg,c is a condition-specific parameter, with more negative values corresponding to stronger 757 
+
+apoptosis. 758 
+
+For each perturbation condition, an initial population of up to 10 ,000 cells was sampled from 759 
+
+the control distribution. Each condition c is defined by a triplet of parameters ( ρ1,c , ρ 2,c , α g,c ), 760 
+
+randomly drawn from predefined ranges. A total of 200 perturbation conditions were generated, 761 
+
+with 100 assigned to the training set and 100 reserved for evaluation. Each condition was simulated 762 
+
+independently in parallel, producing final single-cell populations that capture the combined effects 763 
+
+of network regulation, stochastic fluctuations, and condition-specific survival. 764 
+
+To define cell-type composition in the simulated system, we assigned each cell to one of four 765 
+
+expression-defined states based on the relative dominance of the three gene expression levels. For 766 
+
+each cell, raw expression values ( X1, X 2, X 3) were first transformed to positive values using a 767 
+
+softplus function and normalized to obtain relative expression fractions: 768 
+
+pi = softplus( Xi)
+
+P3 
+
+> j=1
+
+softplus( Xj ) , i = 1 , 2, 3.
+
+We then quantified whether a cell showed a dominant gene-expression program by computing 769 
+
+the difference between the largest and second-largest relative expression fractions. Cells with a 770 
+
+sufficiently dominant gene were assigned to Type 1, Type 2, or Type 3 according to the gene with 771 
+
+the highest relative expression. Cells without a clearly dominant gene-expression program were 772 
+
+assigned to Type 4, representing an intermediate or non-dominant state. 773 
+
+For differentiable optimization of cell-type composition during inverse design, we used a soft 774 
+
+assignment scheme. Dominance was controlled by a sigmoid gate with margin 0 .10 and temperature 775 
+
+0.03, and gene-specific class probabilities were computed using a softmax with temperature 0 .03. 776 
+
+The resulting four-dimensional soft cell-type vector represents probabilities for Type 1, Type 2, 777 
+
+Type 3, and Type 4. Population-level cell-type proportions were then computed as the normalized 778 
+
+weighted average of these soft assignments, using the predicted cell weights from U-Pert. 779 
+
+23 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+## sciPlex drug inverse design and candidate retrieval 780 
+
+For the sciPlex inverse-design analysis, we used the trained sciPlex U-Pert model as a fixed differ-781 
+
+entiable forward operator and optimized only the continuous drug embedding. Cell-line context, 782 
+
+dose and time covariates were fixed according to the target task. We considered three objectives: a 783 
+
+K562 transcriptional gene-regulation objective, a broad-killing objective that minimized predicted 784 
+
+mass across A549, K562 and MCF7, and a selective-killing objective that matched target mass 785 
+
+ratios across the three cell lines. 786 
+
+Candidate drugs were selected from an external merged library of 2,009 ChEMBL-derived and 787 
+
+curated clinical candidate records [43]. For each drug, an LLM first generated a structured phar-788 
+
+macology description covering targets, mechanisms, pathways, expected transcriptional programs 789 
+
+and cell-line-specific effects, and this text was embedded with a text-embedding model. In total, 790 
+
+1,985 candidates had valid embeddings. After optimizing a continuous embedding, we retrieved 791 
+
+nearest real-drug candidates by cosine similarity and then re-ran U-Pert forward inference for each 792 
+
+candidate under the same task settings. Final compounds were selected by task-specific validation 793 
+
+scores from this re-inference step, not by cosine similarity alone. 794 
+
+## Data Availability 795 
+
+All real datasets used in this paper are publicly available. The Norman [11], Adamson [8] 796 
+
+and Replogle K562 [9] Perturb-seq datasets used for the genetic perturbation benchmarks 797 
+
+are publicly available and were accessed through the GEARS data utilities [18]. The sci-798 
+
+Plex3 chemical perturbation dataset was obtained from the public sci-Plex data release [7]. 799 
+
+The PBMC cytokine-perturbation dataset [52] was obtained from the publicly available 800 
+
+Parse Biosciences 10 Million Human PBMCs in a Single Experiment resource, available 801 
+
+through the Parse Biosciences data portal at https://www.parsebiosciences.com/datasets/ 802 
+
+10-million-human-pbmcs-in-a-single-experiment/. The simulated datasets generated in this study 803 
+
+will be released upon acceptance of the manuscript. 804 
+
+## Code Availability 805 
+
+The code of U-Pert will be made publicly available upon acceptance of the manuscript. 806 
+
+# Acknowledgments 807 
+
+P.Z. acknowledges support from the National Natural Science Foundation of China under grants 808 
+
+12288101, 8206100646, and T2321001, the Fundamental and Interdisciplinary Disciplines Break-809 
+
+through Plan of the Ministry of Education of China under grant JYB2025XDXM502, and the 810 
+
+Fundamental Research Funds for the Central Universities. We also acknowledge the support from 811 
+
+the High-performance Computing Platform of Peking University for computation. 812 
+
+# Contribution 813 
+
+Q.P. and P.Z. conceived the study. Q.P., Y.W., and J.L. developed and implemented the compu-814 
+
+tational method. Q.P., Y.W., J.L., X.W., and Y.X. performed the data analysis and wrote the 815 
+
+original draft. All authors reviewed and edited the manuscript. P.Z. supervised the project. 816 
+
+# References 
+
+[1] MacArthur, B. D., Ma’ayan, A. & Lemischka, I. R. Systems biology of stem cell fate and cellular reprogramming. Nature Reviews Molecular Cell Biology 10 , 672–681 (2009). [2] Moris, N., Pina, C. & Arias, A. M. Transition states and cell fate decisions in epigenetic landscapes. Nature Reviews Genetics 17 , 693–703 (2016). [3] Perrimon, N., Pitsouli, C. & Shilo, B.-Z. Signaling mechanisms controlling cell fate and embryonic patterning. Cold Spring Harbor Perspectives in Biology 4, a005975 (2012). [4] Bunne, C. et al. How to build the virtual cell with artificial intelligence: Priorities and opportunities. Cell 187 , 7045–7063 (2024). [5] Vi˜ nas Torn´ e, R. et al. Systema: a framework for evaluating genetic perturbation response prediction beyond systematic variation. Nature Biotechnology 1–10 (2025). 24 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+[6] Dixit, A. et al. Perturb-Seq: dissecting molecular circuits with scalable single-cell RNA profiling of pooled genetic screens. Cell 167 , 1853–1866 (2016). [7] Srivatsan, S. R. et al. Massively multiplex chemical transcriptomics at single-cell resolution. 
+
+Science 367 , 45–51 (2020). [8] Adamson, B. et al. A multiplexed single-cell CRISPR screening platform enables systematic dissection of the unfolded protein response. Cell 167 , 1867–1882 (2016). [9] Replogle, J. M. et al. Mapping information-rich genotype-phenotype landscapes with genome-scale perturb-seq. Cell 185 , 2559–2575 (2022). [10] Datlinger, P. et al. Pooled CRISPR screening with single-cell transcriptome readout. Nature Methods 14 , 297–301 (2017). [11] Norman, T. M. et al. Exploring genetic interaction manifolds constructed from rich single-cell phenotypes. Science 365 , 786–793 (2019). [12] Maan, H. et al. Characterizing the impacts of dataset imbalance on single-cell data integration. 
+
+Nature biotechnology 42 , 1899–1908 (2024). [13] Lotfollahi, M., Wolf, F. A. & Theis, F. J. scGen predicts single-cell perturbation responses. 
+
+Nature Methods 16 , 715–721 (2019). [14] Lotfollahi, M., Naghipourfar, M., Theis, F. J. & Wolf, F. A. Conditional out-of-distribution generation for unpaired data using transfer VAE. Bioinformatics 36 , i610–i617 (2020). [15] Lotfollahi, M. et al. Predicting cellular responses to complex perturbations in high-throughput screens. Molecular Systems Biology 19 , MSB202211517 (2023). [16] Hetzel, L. et al. Predicting cellular responses to novel drug perturbations at a single-cell resolution. Advances in Neural Information Processing Systems 35 , 26711–26722 (2022). [17] Aliee, H. et al. inVAE: Conditionally invariant representation learning for generating multivariate single-cell reference maps. bioRxiv 2024–12 (2024). [18] Roohani, Y., Huang, K. & Leskovec, J. Predicting transcriptional outcomes of novel multigene perturbations with gears. Nature Biotechnology 42 , 927–935 (2024). [19] Kamimoto, K. et al. Dissecting cell identity via network inference and in silico gene perturbation. Nature 614 , 742–751 (2023). [20] Wang, T. et al. Cellnavi predicts genes directing cellular transitions by learning a gene graph-enhanced cell state manifold. Nature Cell Biology 27 , 1863–1874 (2025). [21] Bunne, C. et al. Learning single-cell perturbation responses using neural optimal transport. 
+
+Nature Methods 20 , 1759–1768 (2023). [22] Dong, M. et al. Causal identification of single-cell experimental perturbation effects with CINEMA-OT. Nature Methods 20 , 1769–1779 (2023). [23] Klein, D. et al. CellFlow enables generative single-cell phenotype modeling with flow matching. 
+
+bioRxiv 2025–04 (2025). [24] Rohbeck, M. et al. Modeling complex system dynamics with flow matching across time and conditions. The Thirteenth International Conference on Learning Representations (2025). [25] Hao, M. et al. Large-scale foundation model on single-cell transcriptomics. Nature Methods 
+
+21 , 1481–1491 (2024). [26] Cui, H. et al. scGPT: toward building a foundation model for single-cell multi-omics using generative AI. Nature Methods 21 , 1470–1480 (2024). 25 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+[27] Theodoris, C. V. et al. Transfer learning enables predictions in network biology. Nature 618 ,616–624 (2023). [28] Rosen, Y. et al. Universal Cell Embeddings: A foundation model for cell biology. bioRxiv 
+
+2023–11 (2023). [29] Adduri, A. K. et al. Predicting cellular responses to perturbation across diverse contexts with State. bioRxiv 2025–06 (2025). [30] Li, C., Wei, L. & Zhang, X. Unified multimodal learning enables generalized cellular response prediction to diverse perturbations. bioRxiv 2025–11 (2025). [31] Yuan, X. et al. PerturbDiff: Functional diffusion for single-cell perturbation modeling. arXiv preprint arXiv:2602.19685 (2026). [32] Chuai, G. et al. Towards building a world model to simulate perturbation-induced cellular dynamics by AlphaCell. bioRxiv 2026–03 (2026). [33] Wang, C. et al. X-Cell: Scaling causal perturbation prediction across diverse cellular contexts via diffusion language models. bioRxiv 2026–03 (2026). [34] Zhu, O. & Li, J. Scouter predicts transcriptional responses to genetic perturbations with large language model embeddings. Nature Computational Science 1–8 (2025). [35] Chen, Y. & Zou, J. GenePert: Leveraging GenePT embeddings for gene perturbation prediction. bioRxiv 2024–10 (2024). [36] Jiang, Q. et al. Phenotype-guided in silico molecular generation using large language models. 
+
+bioRxiv 2026–01 (2026). [37] Wu, Y. et al. PerturBench: Benchmarking machine learning models for cellular perturbation analysis. Advances in Neural Information Processing Systems 38 (2026). [38] Wei, Z. et al. Benchmarking algorithms for generalizable single-cell perturbation response prediction. Nature Methods 23 , 451–464 (2026). [39] Evan, G. I. & Vousden, K. H. Proliferation, cell cycle and apoptosis in cancer. Nature 411 ,342–348 (2001). [40] McFarland, J. M. et al. Multiplexed single-cell transcriptional response profiling to define cancer vulnerabilities and therapeutic mechanism of action. Nature Communications 11 , 4296 (2020). [41] Zhang, Z., Li, T. & Zhou, P. Learning stochastic dynamics from snapshots through regu-larized unbalanced optimal transport. The Thirteenth International Conference on Learning Representations (2025). URL https://openreview.net/forum?id=gQlxd3Mtru. [42] Peng, Q. et al. WFR-FM: Simulation-free dynamic unbalanced optimal transport. The Fourteenth International Conference on Learning Representations (2026). [43] Zdrazil, B. et al. The ChEMBL database in 2023: a drug discovery platform spanning multiple bioactivity data types and time periods. Nucleic Acids Research 52 , D1180–D1192 (2024). [44] Souers, A. J. et al. ABT-199, a potent and selective BCL-2 inhibitor, achieves antitumor activity while sparing platelets. Nature Medicine 19 , 202–208 (2013). [45] Carter, B. Z. et al. Combined targeting of BCL-2 and BCR-ABL tyrosine kinase eradicates chronic myeloid leukemia stem cells. Science Translational Medicine 8, 355ra117 (2016). [46] Jordan, M. A. & Wilson, L. Microtubules as a target for anticancer drugs. Nature Reviews Cancer 4, 253–265 (2004). [47] Andre, F. et al. Alpelisib for PIK3CA-mutated, hormone receptor-positive advanced breast cancer. New England Journal of Medicine 380 , 1929–1940 (2019). 26 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+[48] Lo-Coco, F. et al. Retinoic acid and arsenic trioxide for acute promyelocytic leukemia. New England Journal of Medicine 369 , 111–121 (2013). [49] Tse, C. et al. ABT-263: a potent and orally bioavailable Bcl-2 family inhibitor. Cancer Research 68 , 3421–3428 (2008). [50] Shi, J., Zhou, Y., Huang, H.-C. & Mitchison, T. J. Navitoclax (ABT-263) accelerates apoptosis during drug-induced mitotic arrest by antagonizing bcl-xl. Cancer Research 71 , 4518–4526 (2011). [51] Goff, D. J. et al. A pan-bcl2 inhibitor renders bone-marrow-resident human leukemia stem cells sensitive to tyrosine kinase inhibition. Cell stem cell 12 , 316–328 (2013). [52] Oesinghaus, L. et al. A single-cell cytokine dictionary of human peripheral blood. bioRxiv 
+
+(2025). [53] Sha, Y., Qiu, Y., Zhou, P. & Nie, Q. Reconstructing growth and dynamic trajectories from single-cell transcriptomics data. Nature Machine Intelligence 6, 25–39 (2024). [54] Peng, Q., Zhou, P. & Li, T. stVCR: spatiotemporal dynamics of single cells. Nature Methods 
+
+23 , 542–553 (2026). [55] Wang, D. et al. Joint velocity-growth flow matching for single-cell dynamics modeling. 
+
+Advances in Neural Information Processing Systems 38 , 160552–160588 (2026). [56] Wang, X., Wang, R., Peng, Q., Zhou, P. & Li, T. WFR-MFM: One-step inference for dynamic unbalanced optimal transport. arXiv preprint arXiv:2601.20606 (2026). [57] Wagner, D. E. & Klein, A. M. Lineage tracing meets single-cell omics: opportunities and challenges. Nature Reviews Genetics 21 , 410–427 (2020). [58] Lukinaviˇ cius, G. et al. Fluorogenic probes for live-cell imaging of the cytoskeleton. Nature Methods 11 , 731–733 (2014). [59] Dhainaut, M. et al. Spatial CRISPR genomics identifies regulators of the tumor microenvi-ronment. Cell 185 , 1223–1239 (2022). [60] Binan, L. et al. Simultaneous CRISPR screening and spatial transcriptomics reveal intracellular, intercellular, and functional transcriptional circuits. Cell 188 , 2141–2158 (2025). [61] Shen, K. et al. Spatial perturb-seq: single-cell functional genomics within intact tissue architecture. Nature Communications 17 , 3018 (2026). [62] Zhang, H. et al. Uncovering spatially resolved functional genomics with CRISPR screen sequencing. Cell (2026). [63] Baysoy, A. et al. Large-scale, spatially resolved panoramic CRISPR screening in native tissue environments using Perturb-DBiT. Nature Biotechnology (2026). [64] Jin, S. et al. Inference and analysis of cell-cell communication using CellChat. Nature Communications 12 , 1088 (2021). [65] Liero, M., Mielke, A. & Savar´ e, G. Optimal transport in competition with reaction: The Hellinger–Kantorovich distance and geodesic curves. SIAM Journal on Mathematical Analysis 
+
+48 , 2869–2911 (2016). [66] Chizat, L., Peyr´ e, G., Schmitzer, B. & Vialard, F.-X. An interpolating distance between optimal transport and Fisher–Rao metrics. Foundations of Computational Mathematics 18 ,1–44 (2018). [67] Kondratyev, S., Monsaingeon, L. & Vorotnikov, D. A new optimal transport distance on the space of finite Radon measures. Advances in Differential Equations 21 , 1117 – 1164 (2016). 27 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 4, 2026. ;https://doi.org/10.64898/2026.06.30.735555 doi: bioRxiv preprint
+
+[68] Geng, Z., Deng, M., Bai, X., Kolter, Z. & He, K. Mean flows for one-step generative modeling. 
+
+Advances in Neural Information Processing Systems 38 , 75460–75482 (2026). [69] Perez, E., Strub, F., De Vries, H., Dumoulin, V. & Courville, A. FiLM: Visual reasoning with a general conditioning layer. Proceedings of the AAAI conference on artificial intelligence 32 
+
+(2018). [70] Peebles, W. & Xie, S. Scalable diffusion models with transformers. Proceedings of the IEEE/CVF International Conference on Computer Vision 4195–4205 (2023). [71] Flamary, R. et al. POT: Python optimal transport. Journal of Machine Learning Research 
+
+22 , 1–8 (2021). [72] Virshup, I. et al. The scverse project provides a computational ecosystem for single-cell omics data analysis. Nature Biotechnology 41 , 604–606 (2023). [73] Virshup, I., Rybakov, S., Theis, F. J., Angerer, P. & Wolf, F. A. anndata: Access and store annotated data matrices. Journal of Open Source Software 9, 4371 (2024). [74] Wolf, F. A., Angerer, P. & Theis, F. J. SCANPY: large-scale single-cell gene expression data analysis. Genome Biology 19 , 15 (2018). [75] Qiu, X. et al. Mapping transcriptomic vector fields of single cells. Cell 185 , 690–711 (2022). [76] Ashburner, M. et al. Gene Ontology: tool for the unification of biology. Nature Genetics 25 ,25–29 (2000). [77] Subramanian, A. et al. Gene set enrichment analysis: A knowledge-based approach for inter-preting genome-wide expression profiles. Proceedings of the National Academy of Sciences 
+
+102 , 15545–15550 (2005). 28

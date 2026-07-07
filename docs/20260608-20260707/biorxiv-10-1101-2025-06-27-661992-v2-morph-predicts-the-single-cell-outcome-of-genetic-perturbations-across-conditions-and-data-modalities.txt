@@ -1,0 +1,3772 @@
+Title: MORPH Predicts the Single-Cell Outcome of Genetic Perturbations Across Conditions and Data Modalities
+
+URL Source: https://www.biorxiv.org/content/10.1101/2025.06.27.661992v2.full.pdf
+
+Published Time: Tue, 07 Jul 2026 05:00:49 GMT
+
+Number of Pages: 46
+
+Markdown Content:
+# MORPH Predicts the Single-Cell Outcome of 1
+
+# Genetic Perturbations Across Conditions and 2
+
+# Data Modalities 3
+
+Chujun He 1,2,3 †, Jiaqi Zhang 1,2,3 †, Munther Dahleh 2,3 ,4
+
+Caroline Uhler 1,2,3* 
+
+> 5
+
+1Eric and Wendy Schmidt Center, Broad Institute of MIT and Harvard, 6
+
+Cambridge, 02142, MA, USA. 7
+
+2Laboratory of Information and Decision Systems, Massachusetts 8
+
+Institute of Technology, Cambridge, 02139, MA, USA. 9
+
+3Institute for Data, Systems, and Society, Massachusetts Institute of 10 
+
+Technology, Cambridge, 02139, MA, USA. 11 
+
+*Corresponding author(s). E-mail(s): cuhler@mit.edu; 12 
+
+†These authors contributed equally to this work. 13 
+
+Summary 14 
+
+Modeling cellular responses to genetic perturbations is a significant challenge 15 
+
+in computational biology. Measuring all gene perturbations and their combina-16 
+
+tions across cell types and conditions is experimentally challenging, highlighting 17 
+
+the need for predictive models that generalize across data types to support this 18 
+
+task. Here we present MORPH, a MOdular framework for predicting Responses 19 
+
+to Perturbational cHanges. MORPH combines a discrepancy-based variational 20 
+
+autoencoder with an attention mechanism to predict cellular responses to unseen 21 
+
+perturbations. It supports both single-cell transcriptomics and imaging outputs 22 
+
+and can generalize to unseen perturbations, combinations of perturbations, and 23 
+
+perturbations in new cellular contexts. The attention-based framework enables 24 
+
+inference of gene interactions and regulatory networks, while the learned gene 25 
+
+embeddings can guide the design of informative perturbations, as demonstrated 26 
+
+in two applications. Overall, MORPH is a flexible tool for optimizing perturbation 27 
+
+experiments, enabling efficient exploration of the perturbation space to advance 28 
+
+understanding of cellular programs for fundamental research and therapeutic 29 
+
+applications. 30 
+
+1
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint 1 Introduction 31 
+
+Single-cell sequencing and imaging technologies have revolutionized our understanding 32 
+
+of cellular heterogeneity, enabling detailed characterization of various cell states and 33 
+
+functions at scale [1]. Coupled with CRISPR-based perturbation platforms and multi-34 
+
+plexed barcoding strategies, these technologies now allow systematic, high-dimensional 35 
+
+mapping of the heterogeneous cellular responses to individual genetic perturba-36 
+
+tions. Several methods combine genetic perturbation with single-cell RNA sequencing 37 
+
+(scRNA-seq) as a readout for the gene expression changes [2–7], while optical pooled 38 
+
+screens capture cellular phenotypes through imaging data [8–10]. Understanding these 39 
+
+perturbation-induced effects not only provides insights into the structure of gene reg-40 
+
+ulatory networks but also has significant implications for biomedical research, such as 41 
+
+identifying potential therapeutic targets that could drive cells to a desired state [11–13] 42 
+
+and optimizing combination therapies [14–16]. 43 
+
+While the availability of single-cell perturbation data is growing, experimentally 44 
+
+testing all individual gene perturbations – and their combinations – across all pos-45 
+
+sible cell types, states, and diseases contexts remains unfeasible. Therefore, there is 46 
+
+a need for computational methods that leverage the existing data to predict pertur-47 
+
+bation effects across different conditions and data types [17, 18]. Such models would 48 
+
+be crucial for efficiently exploring the vast perturbational space and prioritizing the 49 
+
+most informative experiments to perform. The urgency of this need is reflected in 50 
+
+two recent community efforts: the Cell Perturbation Prediction Challenge launched 51 
+
+in 2023 with a first competition focused on predicting gene perturbation effects on 52 
+
+T-cell state distributions [19]; and the Virtual Cell Challenge, launched in 2025 to 53 
+
+benchmark cross-context generalization at scale [20]. 54 
+
+Current methods for this task [21, 22] perform well in approximating the state 55 
+
+of perturbed cells on average but struggle to capture the full distribution of cellular 56 
+
+responses, and often rely on randomly pairing control and perturbed cells to address 57 
+
+the inherent unpaired nature of high-throughput sequencing data—a fundamental 58 
+
+challenge arising from the destructive nature of these assays. Additionally, many exist-59 
+
+ing methods assume that the effects of gene perturbations are additive [23, 24], limiting 60 
+
+their ability to capture complex, non-additive interactions. More recently, methods 61 
+
+developed concurrently with this work [25], have demonstrated that out-of-distribution 62 
+
+prediction and transfer to unseen cell lines are achievable for transcriptomic data. How-63 
+
+ever, the ability to predict the perturbation outcomes measured in modalities other 64 
+
+than transcriptomics remains largely unexplored, as does the question of model inter-65 
+
+pretability: the extent to which learned representations reflect biologically meaningful 66 
+
+gene relationships rather than opaque mappings. 67 
+
+To address these challenges, we developed MORPH, a MOdular framework for pre-68 
+
+dicting Responses to Perturbational cHanges. Its modular design enables MORPH to 69 
+
+adapt seamlessly to various data modalities, such as transcriptomic or imaging data. 70 
+
+Given single-cell data on control cells and prior knowledge of gene perturbations, 71 
+
+MORPH leverages a conditional variational autoencoder with an attention mechanism 72 
+
+to predict the distribution of cellular responses to unseen perturbations either in tran-73 
+
+scriptomic or imaging modality. We demonstrate that MORPH generalizes to unseen 74 
+
+single and combinatorial perturbations, transfers to new cell lines using only control 75 
+
+2
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+cell data, and guides experimental design by identifying informative perturbation tar-76 
+
+gets. Building on our previous theoretical work [26], which proved that causal effects 77 
+
+can be reliably estimated even when datasets are not directly matched cell-by-cell, we 78 
+
+show that MORPH’s attention mechanism captures functional—rather than merely 79 
+
+co-expression—relationships among genes, enabling interpretable inference of gene reg-80 
+
+ulatory structure. We validated MORPH on five Perturb-seq datasets [5, 7, 19] and an 81 
+
+image-based optical pooled screen [10], outperforming available baselines throughout. 82 
+
+In two applications, we show how MORPH’s different capabilities can be used syner-83 
+
+gistically for biological discovery. In the first, we leveraged the OPS dataset on HeLa 84 
+
+cells infected with the Ebola virus [10] and in a simulated experiment, we showed that 85 
+
+MORPH successfully nominated the top perturbation that shift the cell infection stage 86 
+
+toward earlier stages. In the second, by pretraining on public data and fine-tuning on 87 
+
+an in-house CD8 T-cell Perturb-seq dataset, MORPH successfully predicted a gene 88 
+
+target ( Batf ) that could potentially enhance anti-tumor immunity by increasing the 89 
+
+proportion of progenitor-like T cells, a result validated in an independent dataset. 90 
+
+Overall, our results highlight MORPH’s versatility and potential to guide the 91 
+
+design of future perturbation experiments to enable more efficient and targeted 92 
+
+perturbation screens. 93 
+
+# 2 Results 94 
+
+MORPH enables the prediction of cellular responses to genetic 95 
+
+perturbations at single-cell level 96 
+
+MORPH is designed to predict the effect of a genetic perturbation on an individual 97 
+
+cell. We represent a cell as a vector X· encoding any high-dimensional readout, such 98 
+
+as gene expression profiles from RNA sequencing or morphological features extracted 99 
+
+from imaging. We encode prior knowledge about a gene g of interest (such as pathway 100 
+
+associations, gene interactions, etc.) and its perturbation effect as an embedding vector 101 
+
+vg . This embedding allows MORPH to relate unseen perturbations to previously seen 102 
+
+ones, based on the intuition that perturbations with similar biological properties tend 103 
+
+to have similar effects. Crucially, these embeddings are derived from external data 104 
+
+sources and do not use the target Perturb-seq data, ensuring no leakage of single-cell 105 
+
+perturbation–response information from held-out perturbations. Since these priors are 106 
+
+defined at the level of individual genes and do not encode multi-gene perturbations, 107 
+
+MORPH models combinatorial perturbations by composing individual latent gene 108 
+
+representations within its architecture (Figure 1a). 109 
+
+Formally, given a control cell X∅, an embedding vg for gene g, MORPH learns 110 
+
+a function f that maps the pair ( X∅, vg ) to the predicted perturbed cell ˆXg , i.e., 111 
+
+f (X∅, vg ) = ˆXg . For each gene perturbation in the dataset, MORPH compares the 112 
+
+predicted perturbed distribution of ˆXg to the actual perturbed distribution of Xg ,113 
+
+enabling it to learn the mapping f from unpaired data. This is achieved using max-114 
+
+imum mean discrepancy (MMD) between the predicted cell distribution ˆXg and the 115 
+
+actual cell distribution of Xg (Methods). If combinatorial perturbation data is avail-116 
+
+able (e.g. on genes g1 and g2), this is generalized by comparing f (X∅, vg1 , vg2 ) = 117 
+
+ˆXg1,g 2 to the actual perturbed distribution of Xg1,g 2 .118 
+
+3
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+To realize the mapping f , MORPH adopts a variational autoencoder (VAE)-based 119 
+
+architecture. A control cell X∅ and gene perturbation embedding vector vg are first 120 
+
+embedded into latent spaces using two separate encoders. To enhance interpretability 121 
+
+and reliability, these latent representations are passed through an attention mecha-122 
+
+nism that guides the model to focus on the most relevant aspects of the input data, 123 
+
+before being decoded into the predicted perturbed cell ˆXg . All encoders and decoders 124 
+
+are implemented as multi-layer perceptrons (MLPs) (Figure 1a, Methods). The model 125 
+
+is trained using a variational autoencoder loss on the control cells X∅ and MMD 126 
+
+between the predicted control/perturbed cell distributions and the actual control/per-127 
+
+turbed cell distributions (Methods). Using MMD also for the control cells promotes 128 
+
+attention score changes that more faithfully reflect the magnitude of perturbation 129 
+
+effects (Supplemental Fig. 1). 130 
+
+The design of our attention mechanism was motivated by a previous study [2] 131 
+
+that had represented the effects of genetic perturbations using a bipartite regulatory 132 
+
+network, where perturbations influence the expression of regulated genes. Clustering 133 
+
+perturbations based on shared regulated genes reveals perturbation modules — groups 134 
+
+of perturbations that produce similar cellular effects. Similarly, clustering genes based 135 
+
+on their co-regulation by perturbations yields gene programs — sets of genes that 136 
+
+respond in a coordinated way. These perturbation modules and gene programs reflect 137 
+
+the underlying structure of gene regulation. MORPH integrates a cross-attention 138 
+
+mechanism to capture the regulation from perturbations to gene programs (Meth-139 
+
+ods). It constructs queries by concatenating the latent vectors obtained by encoding 140 
+
+the control cell and the perturbation embedding. These queries attend to a learned 141 
+
+gene-program matrix that serves as keys and values, producing attention scores that 142 
+
+modulate the influence of each gene program on the final prediction through the 143 
+
+network’s non-linear feed-forward layers (Figure 1a). To biologically interpret this non-144 
+
+linear process, we utilized an end-to-end probing procedure that maps these programs 145 
+
+directly to gene expression (Methods). The gene-program matrix is shared across all 146 
+
+cells of the same type and remains fixed at inference time, under the assumption that 147 
+
+gene programs are relatively stable within a given cell type, while their activation 148 
+
+depends on the specific perturbation and the initial state of a cell. 149 
+
+These design choices enable MORPH to address fundamental questions about 150 
+
+genetic perturbations. We demonstrate that MORPH can predict cellular responses to 151 
+
+unseen perturbations in both transcriptomic and imaging data, highlighting its ver-152 
+
+satility in handling various data modalities. Moreover, it can transfer perturbation 153 
+
+effects across cell types, extrapolate genetic interaction types, optimize the design 154 
+
+of genetic perturbations, and facilitate the investigation of genetic regulatory net-155 
+
+works (Figure 1b). In the following sections, we evaluate each of these capabilities and 156 
+
+illustrate how they can be combined for practical applications. 157 
+
+MORPH generalizes to predict the effect of unseen single-gene 158 
+
+Perturb-seq experiments with high accuracy 159 
+
+We evaluated the ability of MORPH to predict cellular responses to unseen single-gene 160 
+
+perturbations using single-cell Perturb-seq data from the three screens in [7]: K562-EG, 161 
+
+4
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+a screen of 2,033 essential-gene perturbations across over 310,000 K562 cells; RPE1-162 
+
+EG, a screen of 2,264 perturbations across over 240,000 RPE1 cells; and K562-GW, 163 
+
+a genome-wide perturbation screen comprising 9,823 individual gene perturbations 164 
+
+across over 1,900,000 K562 cells. The model was trained separately on each dataset, 165 
+
+and predictions were compared against held-out perturbations not seen during training 166 
+
+(Figure 2a). 167 
+
+We tested the model on two types of data splits (Figure 2b-c and Supplemental 168 
+
+Figure 2). The first uses a standard 5-fold cross-validation, where the dataset was 169 
+
+divided into five equal sets of perturbations. In each iteration, one set of perturbations 170 
+
+served as the test set, and the remaining four were used for training. This process 171 
+
+was repeated for all five folds, and the performance metrics were averaged to evaluate 172 
+
+the model. The second, termed the “outlier distribution split”, specifically included 173 
+
+perturbations producing phenotypes that were most distinct from the control distri-174 
+
+bution in the test split. This was achieved by performing Leiden clustering on the 175 
+
+pseudo-bulk profiles of each perturbation and identifying the clusters whose centers 176 
+
+were farthest from the cluster that contained control, measured by Euclidean distance 177 
+
+between averaged bulk expressions. This split was designed to assess the ability of 178 
+
+the model to generalize to unseen perturbations that induce significantly distinct pro-179 
+
+files, providing a stricter stress test for generalization beyond standard cross-validation 180 
+
+(Supplemental Figure 2). 181 
+
+To assess performance, we used three primary metrics (Figure 2b-c, Methods). 182 
+
+Root mean squared error (RMSE) was used to quantify the mean difference between 183 
+
+predictions and observations; Pearson correlation (delta) was used to measure the 184 
+
+agreement between predicted and observed mean changes relative to the mean of 185 
+
+perturbed training cells [27]; Spearman correlation was used as a complementary rank-186 
+
+based metric. In Supplemental Figures 3–6, we also reported the retrieval rank, defined 187 
+
+as the fraction of other perturbations whose correlation with a predicted effect does not 188 
+
+exceed its self-correlation (Methods), yielding scores between 0 and 1. In addition to 189 
+
+these mean-based metrics, we calculated the maximum mean discrepancy (MMD) to 190 
+
+evaluate distributional differences between predicted and true effects in gene expression 191 
+
+observed in individual perturbed cells. Lower MMD values indicate closer alignment 192 
+
+between the two cell distributions. This metric offers more fine-grained information 193 
+
+than metrics that compare only mean gene expression. We calculated these metrics 194 
+
+using the top 50 differentially expressed (DE) genes for each perturbation for a more 195 
+
+focused evaluation (Figure 2 and Supplemental Figures 4-5) as well as using all genes 196 
+
+(Supplemental Figure 6). 197 
+
+We experimented with four types of prior knowledge on genes for the pertur-198 
+
+bation embedding vg : control gene expression from unperturbed cells, gene embed-199 
+
+dings derived from the Geneformer single-cell foundation model [28], language-based 200 
+
+embeddings obtained by GenePT [29], and embeddings derived from the DepMap 201 
+
+database [12] containing cell viability scores across cell lines (Figure 2a). Among 202 
+
+these priors, DepMap embeddings consistently yielded the best performance, par-203 
+
+ticularly in the outlier distribution split, a trend observed across different screens 204 
+
+(Figure 2b and Supplemental Figures 4-5). This result is notable because DepMap 205 
+
+is the only prior based directly on experimental perturbation data, highlighting the 206 
+
+5
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+value of using functionally grounded information to improve generalization. To confirm 207 
+
+that informative priors are necessary for generalization, we performed ablations using 208 
+
+non-informative perturbation embeddings (random, identity, and permuted DepMap), 209 
+
+which markedly reduced performance under 5-fold cross-validation on K562-EG (Sup-210 
+
+plemental Figure 3a). We additionally evaluated a prior-only variant of MORPH in 211 
+
+which the control-cell gene expression input was fully masked (set to zero), such 212 
+
+that predictions relied exclusively on the DepMap embedding (MORPH (DepMap, 213 
+
+prior-only) in Supplemental Figure 3a). Although this model underperformed the full 214 
+
+version, the drop was smaller than when informative gene priors were replaced with 215 
+
+non-informative embeddings. This indicates that MORPH leverages both inputs, but 216 
+
+that performance is more sensitive to degradation of the gene prior than to mask-217 
+
+ing the control-cell input. Furthermore, to ensure that performance was not driven 218 
+
+by matched cell-line correlations between CRISPR viability screens and Perturb-seq 219 
+
+experiments, we performed targeted ablations in which the corresponding cell-line data 220 
+
+(K562 or RPE1 lineage variants) were removed for constructing the DepMap prior. 221 
+
+MORPH maintained strong predictive performance on both K562-EG and RPE1-EG 222 
+
+datasets [7] and continued to outperform the perturbed-mean baseline (Supplemental 223 
+
+Figure 3b–c). These results indicate that MORPH learns transferable representa-224 
+
+tions that generalize across cancer cell lines, rather than relying on cell-line–specific 225 
+
+memorization. 226 
+
+We compared our method using the DepMap prior to a range of existing methods, 227 
+
+including a simple baseline that assumes no perturbation effects (Control distribu-228 
+
+tion), a perturbed-mean baseline that predicts the average gene expression across all 229 
+
+perturbed training cells (Perturbed mean), as well as two state-of-the-art models: 230 
+
+GEARS [21], a graph-based deep learning model, and a linear model [24], which we 231 
+
+adapted to incorporate the DepMap embeddings as prior knowledge. 1 When evaluated 232 
+
+on the prediction of top 50 differentially expressed genes per perturbation (Fig. 2c, 233 
+
+Supplemental Fig. 4-5), MORPH outperformed all baselines across all metrics in the 234 
+
+K562-EG and RPE1-EG datasets, in both types of data splits (5-fold cross validation 235 
+
+and outlier distribution split). On the K562-GW dataset, the simpler linear baseline 236 
+
+performed competitively with MORPH. This is expected because the genome-wide 237 
+
+screen includes many perturbations for which the top 50 DE genes show little change 238 
+
+in expression compared to control, making near-average predictions competitive. Sim-239 
+
+ilarly, while MORPH is competitive on distribution-level metrics when evaluating 240 
+
+predictions across all expressed genes for each perturbation (Supplemental Fig. 6), 241 
+
+the simpler perturbation-mean baseline performed better for average-based metrics 242 
+
+such as RMSE, likely reflecting that in this setting the average transcriptomic effect 243 
+
+of perturbations is diluted by the large number of genes that are only minimally 244 
+
+affected. These results indicate that MORPH’s improvements over baselines are most 245 
+
+pronounced at the distribution level as well as for perturbations with strong transcrip-246 
+
+tional effects. Consistent with this observation, UMAP visualizations of the MORPH 247 
+
+> 1[24] proposed to use PCA-derived embeddings of target genes from the training data to predict the effect of unseen perturbations. However, we observed that DepMap embeddings capture more relevant information about gene-gene similarity with respect to their perturbation effects. To ensure that we compare our model to the strongest version of this baseline, we adapted the linear model to use DepMap embeddings instead.
+
+6
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+predictions for perturbations with the largest effects in the test set align closely with 248 
+
+the observed perturbed cell states (Figure 2d and Supplemental Figure 7). 249 
+
+As mentioned above, the choice of prior knowledge influenced prediction accu-250 
+
+racy. To better understand the impact of prior knowledge on the prediction accuracy, 251 
+
+we analyzed gene-specific performance differences (Figure 2e-f and Supplemental 252 
+
+Figure 8). For each dataset, we identified target genes for which a specific prior out-253 
+
+performed others and performed gene set enrichment analysis on these subsets of 254 
+
+perturbations (Methods). We then evaluated the performance of different priors among 255 
+
+the significantly enriched gene sets. In the RPE1 cells, DepMap embeddings achieved 256 
+
+the best performance across all significantly enriched gene sets (Figure 2e). GenePT 257 
+
+language-based embeddings, particularly those incorporating information from both 258 
+
+NCBI and UniProt, outperformed versions based solely on NCBI or STRING data 259 
+
+(Figure 2e). In the K562 cells, DepMap embeddings also exhibited consistently strong 260 
+
+performances, with 2 exceptions: the “ribosomal small subunit biogenesis” and the 261 
+
+“maturation of SSU-rRNA” for which GenePT embeddings (NCBI+UniProt) led to 262 
+
+better performance (Figure 2f). This variation may reflect context-dependent differ-263 
+
+ences in how prior knowledge informs predictions. To test whether combining multiple 264 
+
+strong priors could improve performance, we implemented a mixture-of-experts (MoE) 265 
+
+model that integrates the language-based and DepMap priors. While the MoE model 266 
+
+did not show substantial improvement over individual priors when evaluated on this 267 
+
+dataset (Supplemental Table 1), it may offer more balanced performance across a 268 
+
+broader range of genes, which could be advantageous in settings where consistency 269 
+
+across various targets is important. 270 
+
+Finally, we found that MORPH remains robust to statistical perturbations of 271 
+
+the input data. We retrained MORPH on K562-EG under gene masking (randomly 272 
+
+zero-masking 10% or 90% of genes in control cells) and library-size rescaling (total 273 
+
+counts of 20,000 or 100,000). Across all settings, predictive performance remained 274 
+
+strong (Supplemental Table 2). Retrieval rank was evaluated on both the top 50 DE 275 
+
+genes and the full gene set, as this metric is directly comparable across perturbation 276 
+
+settings that alter expression scale. To further assess architectural robustness, we eval-277 
+
+uated MORPH across a range of latent dimensions and decoder depths. Performance 278 
+
+remained stable across configurations, with no single model size consistently outper-279 
+
+forming others (Supplemental Figure 9). Together, these results indicate that MORPH 280 
+
+is robust to relevant variations in both input preprocessing and model capacity. 281 
+
+In summary, we demonstrated that MORPH outperforms prior methods in 282 
+
+predicting cellular responses to unseen single-gene perturbations, achieving robust 283 
+
+performance across all evaluations and particularly excelling at capturing single-cell 284 
+
+response distributions (MMD). DepMap embeddings consistently provided the most 285 
+
+accurate predictions, particularly in challenging scenarios that require generalizing to 286 
+
+outlier distributions. 287 
+
+MORPH enables transferring perturbation effects across cell 288 
+
+lines 289 
+
+With limited perturbation screens and the large number of potential cellular contexts 290 
+
+of interest, it is crucial to determine whether perturbation effects can be transferred 291 
+
+7
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+across distinct contexts. Specifically, we aimed to assess whether a model trained on 292 
+
+a particular perturbation in one context—such as a particular cell line or disease 293 
+
+state—could accurately predict the effects of the same perturbation in a different 294 
+
+cellular context. 295 
+
+To evaluate MORPH’s ability to transfer perturbation effects across contexts, we 296 
+
+trained it on RPE1-EG perturbation data and assessed its transferability to K562-EG 297 
+
+(both datasets were obtained from Replogle et al. [7]). The model was first trained on 298 
+
+all RPE1 perturbations, then fine-tuned using only K562 control cells by minimizing 299 
+
+reconstruction loss (Methods). Fine-tuning on the control cells helps the model adapt 300 
+
+to the new cell line’s basal state. For comparison, we included two baseline models: (1) 301 
+
+the control distribution, which predicts the control cells in K562 without perturbation 302 
+
+effects, and (2) the mean shift model, which applies the same perturbation-induced 303 
+
+pseudobulk changes from RPE1 controls to K562 controls to predict perturbed cells in 304 
+
+K562. Our results demonstrate that MORPH trained on RPE1 and fine-tuned on the 305 
+
+control cells from K562 substantially outperforms both baseline models (Figure 3a). 306 
+
+In fact, this model achieves performance comparable to MORPH trained directly on a 307 
+
+subset of random 100 perturbations from K562. Furthermore, MORPH pretrained on 308 
+
+RPE1 and then fine-tuned on 100 perturbations from K562 improves the performance 309 
+
+to a level similar to MORPH trained on 1,500 perturbations from K562, suggesting 310 
+
+that this transfer learning scheme enables MORPH to reach similar performance using 311 
+
+only 7% (100/1,500) of the data. 312 
+
+By default, all model parameters were updated during this fine-tuning process. To 313 
+
+identify which components drive successful transfer, we conducted an ablation study 314 
+
+by fine-tuning specific modules independently. We found that fine-tuning only the 315 
+
+decoder achieved performance comparable to updating the full model, whereas fine-316 
+
+tuning only the encoder or the gene-program matrix was insufficient (Supplemental 317 
+
+Figure 10). This indicates that adapting the mapping from latent representations to 318 
+
+gene expression in the target cell line (i.e., the decoder) is critical for effective transfer. 319 
+
+We hypothesized that perturbations transferring well across cell lines are those 320 
+
+involving pathways or gene sets that are more similar between the cell lines. To test 321 
+
+this hypothesis, we defined a cell line disagreement metric by calculating the Euclidean 322 
+
+distance between the mean shift vectors for each perturbation in K562 and RPE1. We 323 
+
+then compared the prediction performance of the model fine-tuned only on control cells 324 
+
+with this cell line disagreement metric. We observed a positive correlation between 325 
+
+cell line disagreement and prediction loss (Pearson correlation = 0.52, p-value < 0.05), 326 
+
+indicating that perturbations affecting pathways with dissimilar effects between the 327 
+
+two cell lines are harder to predict (Figure 3b). 328 
+
+By analyzing the gene sets with higher cell line disagreement, we identified path-329 
+
+ways such as exosome and mRNA turnover, erythroid differentiation, FACT complex, 330 
+
+40S ribosomal subunit, cytoplasmic processes, and the mediator complex (Figure 3b). 331 
+
+Among these, erythroid differentiation appears to be particularly cell-line-specific. 332 
+
+K562 cells are derived from chronic myeloid leukemia [30] and retain erythroid differ-333 
+
+entiation potential [31, 32]. In contrast, RPE1 cells are non-cancerous immortalized 334 
+
+retinal pigment epithelial cells that lack these erythroid features, likely contributing 335 
+
+to the higher divergence in pathways related to erythroid differentiation between the 336 
+
+two cell lines. 337 
+
+8
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+Pathways with higher similarity between K562 and RPE1 include ubiquitous and 338 
+
+essential cellular processes, such as post-translational modifications and microRNA 339 
+
+biogenesis, which regulate gene expression and protein function. Likewise, the 28S/39S 340 
+
+ribosomal subunit and mitochondrial, critical for metabolism and protein synthesis, 341 
+
+are more preserved across these cell lines (Figure 3b). 342 
+
+Overall, these analyses show that perturbation effects learned on one cell line 343 
+
+can be transferred to a different cell line by fine-tuning the model using only con-344 
+
+trol data from the new cell line. This approach outperforms baseline methods and 345 
+
+reduces data requirements while maintaining high prediction accuracy. Transferabil-346 
+
+ity depends on pathway similarity between the two cell lines: conserved processes 347 
+
+like mitochondrial functions generalize well, while cell-type-specific pathways, like 348 
+
+erythroid differentiation, are harder to predict. 349 
+
+MORPH generalizes to predict the effect of unseen 350 
+
+combinatorial gene perturbations 351 
+
+With ongoing technological advances, it is plausible that experimental data for single-352 
+
+gene perturbations across a broad range of genes and cell lines will become increasingly 353 
+
+accessible over time. However, generating experimental data for a comprehensive set of 354 
+
+combinatorial perturbations will remain a significant challenge; for example, even con-355 
+
+sidering perturbations involving only up to 5 genes out of around 20,000 in the human 356 
+
+genome in one cellular context yields over 2 .97 × 10 19 combinations. Computational 357 
+
+methods that can efficiently generate potential responses to combinatorial perturba-358 
+
+tions could offer a scalable alternative that could reduce the burden of exhaustive 359 
+
+experimentation. 360 
+
+To evaluate MORPH’s ability to predict combinatorial perturbations, we investi-361 
+
+gated multi-gene perturbations from Norman et al. [5], which includes 234 single-gene 362 
+
+and double-gene perturbations across 110,000 cells in the K562 cell line. We assessed 363 
+
+performance under varying levels of difficulty: In the simplest case, both genes in a 364 
+
+double perturbation had been individually perturbed and observed during training 365 
+
+(referred to as 0/2 unseen). More challenging settings included cases where only one 366 
+
+(1/2 unseen) or neither (2/2 unseen) of the single-gene perturbations had been seen 367 
+
+during training. 368 
+
+As baselines, we compared MORPH to the control distribution, the perturbed 369 
+
+mean, GEARS, and a family of simple additive models for double-gene perturbations. 370 
+
+SALT [23] predicts double-gene perturbations by summing the single-gene shifts from 371 
+
+the control mean and adding the result back to the control state, assuming additive 372 
+
+effects, and thus requires both constituent single-gene perturbations to be observed 373 
+
+during training. To handle settings where one or both single-gene perturbations are 374 
+
+unseen, we used SALT+, our extension of SALT, which applies the same additive rule 375 
+
+but falls back to the perturbed-mean baseline whenever a required single-gene pro-376 
+
+file is unavailable. Finally, we evaluated a linear-additive model, which also assumes 377 
+
+additivity, but uses the previously described linear regression model (trained to map 378 
+
+DepMap gene embeddings to single-gene expression profiles) to supply missing single-379 
+
+gene effects, enabling predictions when one or both single-gene perturbations are 380 
+
+unseen. 381 
+
+9
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+Comparing against the control baseline, perturbed mean, SALT+, GEARS, and 382 
+
+the linear-additive model, we found that MORPH consistently outperforms the cur-383 
+
+rent state-of-the-art approaches across all key metrics, improving performance by 33% 384 
+
+in MMD and 22% in RMSE (Figure 3c, Supplemental Figure 5d and Supplemental 385 
+
+Figure 11a). SALT was not included in this evaluation, since it requires that both 386 
+
+single-gene perturbations be observed during training. Visualizing the UMAP projec-387 
+
+tions of the perturbations with maximal effects in the test set, we also observed that 388 
+
+MORPH’s predictions align more closely with the observed perturbed cells (Figure 3d 389 
+
+and Supplemental Figure 11b). 390 
+
+As highlighted by Norman et al. [5], gene interaction (GI) types vary, and the effects 391 
+
+of double-gene perturbations are not always simple additive combinations of single-392 
+
+gene effects. To assess how GI types influence prediction performance, we conducted 393 
+
+a 5-fold cross-validation experiment. For each fold, MORPH was trained on all single-394 
+
+gene perturbations and 4/5 of the double-gene perturbations, with the remaining 395 
+
+1/5 of the double-gene perturbations reserved for testing. After gathering predictions 396 
+
+across all folds, we reported the performance stratified by GI type. In this setting, all 397 
+
+single-gene perturbations are observed during training, which implies that the addi-398 
+
+tive baselines (SALT, SALT+, and the linear-additive model) become equivalent; we 399 
+
+therefore reported SALT only. We found that the GI types, potentiation and redun-400 
+
+dancy, posed the greatest challenges for prediction across all methods (Figure 3e). 401 
+
+Notably, current SOTA methods showed a substantial drop in performance for these 402 
+
+GI types, while MORPH remained more robust. For instance, in redundant interac-403 
+
+tions, MORPH improved prediction performance by approximately 40% compared to 404 
+
+the best SOTA methods. 405 
+
+Finally, we tested whether MORPH’s predictions could accurately classify gene 406 
+
+pairs into their correct GI types. By comparing gene interaction scores derived from 407 
+
+model predictions to those based on observed data (Methods and Supplemental 408 
+
+Note 2), we found that MORPH achieved the highest Pearson correlation between 409 
+
+predicted and true scores (Figure 3f). Additionally, when using the predictions to clas-410 
+
+sify gene pairs into GI types with a threshold derived from the given labels in [5], 411 
+
+MORPH achieved the highest area under the receiver operating characteristic curve 412 
+
+(AUC-ROC) (Figure 3f). These results highlight the utility of our approach in not 413 
+
+only predicting perturbation effects but also understanding and classifying the nature 414 
+
+of complex genetic interactions. 415 
+
+MORPH provides an informative gene embedding for optimal 416 
+
+design of perturbations 417 
+
+Perturbation screens are costly and time-intensive. This highlights the need for strate-418 
+
+gies to optimize experimental design. We assessed MORPH’s performance on the 419 
+
+problem of selecting perturbations to accelerate learning across the entire perturbation 420 
+
+space. Specifically, we aimed to achieve accurate predictions across all perturbations 421 
+
+from screening only a limited subset. Towards this, we adopted an iterative lab-in-the-422 
+
+loop framework [33, 34]; namely, we selected perturbations based on the score of an 423 
+
+10 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+acquisition function computed using MORPH trained on existing data, these pertur-424 
+
+bations were then added to the dataset, and MORPH was updated using both new 425 
+
+and existing data for the next round (Figure 4a). 426 
+
+The key principle of this approach is to identify the most informative pertur-427 
+
+bations that help the model generalize more efficiently. The acquisition function 428 
+
+facilitates this selection by evaluating and ranking the unscreened perturbations based 429 
+
+on their potential to improve model performance. We first considered two acquisition 430 
+
+strategies commonly used in the active learning literature: prioritizing perturbations 431 
+
+with high uncertainty [35–38] and prioritizing perturbations with dissimilar effects 432 
+
+[39, 40]. However, these approaches performed similar to random selection (Sup-433 
+
+plemental Figure 12a-d, Methods). To overcome the limitation of these approaches 434 
+
+that they may not capture the information in deep generative models, we adopted a 435 
+
+learning-based approach, originally developed in the context of computer vision [41] 436 
+
+(Methods). Specifically, to estimate the challenging perturbations for the model, 437 
+
+we trained a light-weight auxiliary model to predict the prediction loss for each 438 
+
+unscreened perturbation. We evaluated two ways to train the auxiliary model for loss 439 
+
+prediction: (1) using representations learned by MORPH (referred to as “adaptively 440 
+
+selected perturbations using learned representations”), and (2) using fixed, prior-441 
+
+knowledge representations (referred to as “adaptively selected perturbations using 442 
+
+prior-knowledge representations”). 443 
+
+Using the K562-EG dataset from Replogle et al. [7], we reported the prediction 444 
+
+loss on the held-out test set of 204 perturbations, as a measure of how well the 445 
+
+model generalizes. The strategy of “adaptively selected perturbations using learned 446 
+
+representations” outperformed both the random baseline and “adaptively selected per-447 
+
+turbations using prior-knowledge representations” in test-set prediction performance, 448 
+
+as measured by MMD (Figure 4b, Supplemental Figure 12e) and RMSE (Figure 4c, 449 
+
+Supplemental Figure 12f). To further assess the contribution of the learned represen-450 
+
+tations and model architecture, we also evaluated GEARS under both random and 451 
+
+adaptive selection. Across both prediction metrics - MMD and RMSE (Figure 4b–c) 452 
+
+- MORPH consistently outperformed GEARS, suggesting that MORPH more effec-453 
+
+tively captured the overall perturbation space. Overall, the performance gap between 454 
+
+MORPH and GEARS was larger than the differences among active learning strategies 455 
+
+within each model. 456 
+
+We further evaluated the selection strategies on a second downstream task: iden-457 
+
+tifying perturbations with the most significant effects on cells. Since most single-gene 458 
+
+perturbations have minimal impact on cells, identifying those with strong effects could 459 
+
+highlight valuable experimental targets. To assess MORPH’s performance on this task, 460 
+
+we ranked perturbations in the test set based on their predicted impact, measured 461 
+
+by the distributional distance (MMD) between predicted perturbed and control dis-462 
+
+tributions. We then calculated the precision of detecting the top 25 and 35 most 463 
+
+impactful perturbations for each selection strategy. Also in this task, MORPH consis-464 
+
+tently outperformed GEARS, and the adaptive method using learned representations 465 
+
+still outperformed the baseline and prior-only method (Figure 4d-e, Supplemental 466 
+
+Figure 12g–h). 467 
+
+11 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+Finally, we investigated the impact of different allocations of a fixed experimen-468 
+
+tal budget (here we considered 500 perturbations) on MORPH’s performance across 469 
+
+the previous two tasks: predicting cellular responses and identifying perturbations 470 
+
+with significant effects. Using the strategy of adaptively selecting perturbations using 471 
+
+learned representations, we observed that allocating more perturbations to later active 472 
+
+learning rounds generally improved predictive performance compared to front-loading 473 
+
+them in the initial round. For instance, randomly selecting 100 perturbations in the 474 
+
+first round (red lines) outperformed randomly selecting 300 perturbations in the first 475 
+
+round (purple line) in terms of predictive performance measured by MMD on the 476 
+
+test set (Figure 4f). This is likely because more strategically chosen perturbations 477 
+
+lead to better overall performance. While going beyond two active learning rounds, 478 
+
+performance differences among allocation strategies became negligible (different types 479 
+
+of red lines), performing only one round without active learning (blue dot) yielded 480 
+
+significantly worse results (Figure 4f). We observed similar trends when evaluating 481 
+
+the model’s ability to identify high-impact perturbations: more strategically selected 482 
+
+perturbations led to better identification performance. Having three rounds (red dot-483 
+
+ted line) outperformed two rounds (red dashed line). And five rounds (red solid line) 484 
+
+achieved the best performance, though the difference between three and five rounds 485 
+
+was marginal (Figure 4g). Overall, active learning with few rounds of experiments 486 
+
+consistently enhanced the predictive performance within the fixed budget. 487 
+
+MORPH’s attention-based framework allows the inference of 488 
+
+gene regulatory programs 489 
+
+To enhance the interpretability and reliability of MORPH, we aimed to extract the 490 
+
+mechanisms that it learned through training. Specifically, we sought to determine 491 
+
+whether analyzing the weights of the different components learned by MORPH from 492 
+
+the Perturb-seq data (Figure 1a) could reveal the underlying gene regulatory network. 493 
+
+As in prior work [2], we modeled gene regulation via a bipartite network, where pertur-494 
+
+bations act as parent nodes and regulated genes as child nodes. Clustering the parent 495 
+
+nodes gives rise to “perturbation modules” such that perturbations within the same 496 
+
+module induce similar effects. Clustering the child nodes gives rise to “gene programs,” 497 
+
+where genes within the same program exhibit similar responses to shared perturba-498 
+
+tions. The directed edges between modules (parent nodes) and programs (children 499 
+
+nodes) represent regulatory effects, providing insights into how perturbations influence 500 
+
+gene expression patterns. 501 
+
+Notably, MORPH is based on a formal causal framework: The proposed regula-502 
+
+tory bipartite network model can be formalized as a causal structural equation model, 503 
+
+and we proved identifiability of the causal regulatory effects in this model (Supple-504 
+
+mental Note 4). In addition, we demonstrated on simulated data, where the bipartite 505 
+
+network structure is known, how MORPH’s attention-based framework can recover 506 
+
+it; more precisely, we simulated control and perturbed gene expression data based on 507 
+
+a given bipartite network, trained MORPH on the simulated data, and analyzed the 508 
+
+learned weights (Figure 5a; Methods). To identify perturbation modules, we clustered 509 
+
+perturbations in the latent space generated by the perturbation encoder (Figure 1a, 510 
+
+bottom panel of the encoder). This analysis showed that perturbations within different 511 
+
+12 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+modules formed distinct clusters in the learned embedding space (Figure 5b). Next, 512 
+
+we mapped gene programs to expressed genes by perturbing the attention maps to 513 
+
+determine which genes had the highest scores within each learned program (Figure 1a, 514 
+
+attention block and decoder; Methods). Genes corresponding to different ground-truth 515 
+
+programs were grouped into distinct clusters (Figure 5c). Finally, we reconstructed 516 
+
+the bipartite graph by connecting perturbation modules to gene programs using the 517 
+
+learned attention maps (Figure 1a, attention block; Methods). This analysis showed 518 
+
+that the reconstructed bipartite network closely resembled the data-generating net-519 
+
+work and accurately captured both positive and negative regulation (Figure 5d). These 520 
+
+results together demonstrate that MORPH can successfully recover the true underly-521 
+
+ing regulatory network on simulated data by analyzing the weights of each component 522 
+
+of MORPH. 2
+
+> 523
+
+We then applied the same analysis to Perturb-seq data from Replogle et al. [7] and 524 
+
+validated our findings against the structures reported in the original study. Cluster-525 
+
+ing perturbations in the latent space consistently revealed perturbation modules that 526 
+
+aligned with those identified in [7] (Figure 5e). Similarly, clustering the program-to-527 
+
+gene mappings uncovered gene clusters that corresponded to the provided labels in 528 
+
+[7] (Figure 5f). Finally, we compared the model’s learned regulatory edges between 529 
+
+modules and programs, represented as attention scores, to the bipartite structure 530 
+
+reported in [7]. On average, the model assigned greater attention to programs that 531 
+
+were up-regulated after perturbation when predicting perturbation outcomes, whereas 532 
+
+down-regulated programs received less attention compared to control reconstruction. 533 
+
+(Figure 5g). These results suggest that MORPH effectively captured biologically 534 
+
+meaningful regulatory patterns. 535 
+
+As a robustness check, we retrained MORPH under gene masking in control cells 536 
+
+and library-size rescaling and re-ran the interpretability readouts. While masking 537 
+
+the control anchor weakened the alignment between attention differences and regula-538 
+
+tion effects defined from the unperturbed data, the inferred gene programs remained 539 
+
+largely stable across perturbations, with a drop only under extreme (90%) masking 540 
+
+(Supplemental Figure 14a-d). As an additional sanity check, we compared the trained 541 
+
+model to a randomized-weight model with identical architecture. Under randomiza-542 
+
+tion, the structured relationship between attention and gene regulation disappeared, 543 
+
+and alignment with annotated gene programs decreased substantially (per-latent 544 
+
+AUROC: 0.949 vs. 0.590; Methods, Supplemental Fig. 14e), indicating that these 545 
+
+patterns reflect learned biological structure rather than architectural artifacts. To fur-546 
+
+ther assess whether attention contributes beyond interpretability, we performed an 547 
+
+explicit ablation in which the attention blocks were removed and the control-cell latent 548 
+
+and perturbation latent embeddings were concatenated and fused using an MLP. To 549 
+
+ensure a fair comparison, we matched model capacity by increasing the decoder depth 550 
+
+and latent dimensionality of the non-attention model such that the total number of 551 
+
+> 2We found that residual connections in the attention layers, while beneficial for prediction performance, diluted the signal when interpreting the gene regulatory network (GRN). Specifically, removing the residual connections in the first attention layer led to a clearer readout of program-to-gene mappings, improving interpretability at the cost of slightly reduced prediction accuracy (Methods, Supplemental Table 5 and Supplemental Note 3). Given that our primary interest here is GRN inference, we focus on this variant of MORPH for the remainder of the interpretability analysis. Results using the full model can be found in Supplemental Figure 13.
+
+13 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint parameters was comparable (attention-based MORPH: 3,485,876 parameters; concate-552 
+
+nation+MLP: 3,509,192 parameters). Using 5-fold cross-validation on three datasets 553 
+
+(Norman K562, Replogle K562-EG, and Replogle RPE1-EG), we found that incorpo-554 
+
+rating attention provides a consistent benefit, improving several key evaluation metrics 555 
+
+across datasets while maintaining comparable performance on others (Supplemental 556 
+
+Table 6). Together, these results indicate that the attention mechanism serves both as 557 
+
+an interpretable structural component and as a beneficial inductive bias for predictive 558 
+
+performance. 559 
+
+MORPH is generally applicable to single-cell data including 560 
+
+imaging-based read-outs 561 
+
+To evaluate the modularity of MORPH, we applied it to imaging data from an opti-562 
+
+cal pooled screen [10]. To minimize batch effects, we used data from a single plate; 563 
+
+this included 5,230,322 HeLa-TetR-Cas9 cells transduced with guide RNAs targeting 564 
+
+20,336 genes. These cells were infected with the Ebola virus and underwent genome-565 
+
+wide perturbations. Measurements were taken across six different imaging channels 566 
+
+post-perturbation. The authors classified the cells into four infection states—“Faint”, 567 
+
+“Punctate”, “Cytoplasmic”, and “Peripheral”—representing progression from the 568 
+
+earliest to the latest stages of infection. The primary objective was to identify 569 
+
+perturbations that significantly alter the distribution of infection states. 570 
+
+To extract features from the images, we fine-tuned a pretrained Vision Trans-571 
+
+former (ViT) [42] (originally trained on ImageNet-21k, containing 14 million images 572 
+
+[43]) using an auxiliary task of classifying the segmented single-cell images from the 573 
+
+optical pooled screen into the four infection stages (Methods). The extracted image 574 
+
+features were then used as input to MORPH (Figure 6a). To assess sensitivity to the 575 
+
+choice of image representation, we also evaluated MORPH using unsupervised image 576 
+
+embeddings, including DINO [44], scDINO [45], and CNN (Methods). Relative to the 577 
+
+supervised ViT features, the unsupervised embeddings showed reduced separability of 578 
+
+infection states and led to decreased performance for predicting perturbations with 579 
+
+large effects (Supplemental Figure 15). By visualizing the extracted ViT features, we 580 
+
+observed that most cells were in the cytoplasmic and peripheral states, indicative of 581 
+
+later infection stages. Only a small subset of perturbations significantly shifted cells 582 
+
+toward earlier infection states, such as faint or punctate (Figure 6b). 583 
+
+To evaluate model performance, we employed 5-fold cross-validation at the per-584 
+
+turbation level, in which genetic perturbations were randomly partitioned into five 585 
+
+folds. In each run, MORPH was trained on four folds and evaluated on the held-586 
+
+out fold, ensuring that test perturbations were not observed during training. For the 587 
+
+held-out predictions, we classified the predicted perturbed cell features into the four 588 
+
+infection states using logistic regression and computed the normalized L1 loss between 589 
+
+the predicted and observed infection state distribution vectors. For comparison, we 590 
+
+benchmarked MORPH against three baseline models: a control-distribution baseline 591 
+
+that predicts the infection-state distribution of control cells; a perturbed-mean base-592 
+
+line that predicts the average distribution across perturbed cells in the training set; 593 
+
+and a linear model that predicts infection-state distributions using prior-knowledge-594 
+
+based embeddings. Since GEARS cannot be applied to imaging data, we excluded it 595 
+
+14 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+from this analysis. Both the linear model and MORPH utilized the same prior knowl-596 
+
+edge (DepMap), which we identified as the strongest prior knowledge source based on 597 
+
+the analyses in the previous sections. 598 
+
+Since most perturbations did not significantly affect infection states, the control 599 
+
+distribution baseline performed well when considering genome-wide perturbations. For 600 
+
+evaluation purpose, we performed a chi-squared test comparing the perturbed state 601 
+
+distribution to the control state distribution for each perturbation and ranked the 602 
+
+perturbations based on their impact on infection states. Notably, MORPH outper-603 
+
+formed the baselines by 33% for the top-ranked genes, i.e., perturbations that most 604 
+
+significantly affect infection state. Furthermore, MORPH remained competitive when 605 
+
+considering all genes (Figure 6c-d and Supplemental Figure 16). 606 
+
+To assess generalization to phenotypically distinct conditions, we evaluated 607 
+
+MORPH on a challenging outlier-distribution split where perturbations causing sub-608 
+
+stantial phenotypic shifts were concentrated in the test set (Supplemental Figure 17a). 609 
+
+All models showed reduced performance in this difficult regime, while MORPH and 610 
+
+the linear model still outperformed the control-distribution and perturbed-mean base-611 
+
+lines (Supplemental Figure 17b). This regime naturally motivates active experimental 612 
+
+design. As demonstrated in Figure 4d-e, MORPH can actively propose perturbations 613 
+
+that drive the largest phenotypic shifts away from the control state, enabling targeted 614 
+
+data acquisition to populate these outlier regions. 615 
+
+Finally, we evaluated whether MORPH can support a target-nomination workflow. 616 
+
+Our goal was to identify perturbations that shift the state distribution toward earlier 617 
+
+infection, quantified as the early-state fraction (the sum of “Faint” and “Punctate” 618 
+
+states). To mimic a perturbation nomination experiment, we restricted the train-619 
+
+ing data to a small, 3,000-perturbation expert-guided pilot screen and treated the 620 
+
+remaining 14,973 perturbations with available DepMap embeddings as held out (Meth-621 
+
+ods). By ranking the held-out perturbations using their predicted early-state fraction, 622 
+
+we obtained the following top 10 candidates: ARPC4 , RAB7A , GET4 , PMM2 ,623 
+
+ATP6V0E1 , NRF1 , CCDC115 , WDR7 , UNC50 , and AIFM1 . We evaluated MORPH’s 624 
+
+nominations using ground-truth measurements from the genome-wide screen. The top 625 
+
+10 nominated genes outperformed most genes in both the held-out test set (Fig. 6d) 626 
+
+and the pilot set (Supplemental Figure 18), with RAB7A ranking 2 nd in MORPH pre-627 
+
+dictions and 1 st in the test-set ground truth (across 14,973 perturbations). MORPH 628 
+
+also identified CCDC115 and GET4 among the held-out genes, ranking them 7 th 
+
+> 629
+
+and 3 rd by prediction compared with ground-truth ranks of 4 th and 5 th , respectively. 630 
+
+The original study validated some of the identified genes in a targeted secondary 631 
+
+screen, noting that GET4 had not previously been reported to regulate EBOV infec-632 
+
+tion [10]. Together, these results demonstrate MORPH’s applicability across different 633 
+
+data modalities and its capability to guide large-scale target discovery. 634 
+
+The application of MORPH to imaging data extends beyond single-gene predictions 635 
+
+and target nomination demonstrated here. Following the same framework, MORPH 636 
+
+can also be used for cross-context transfer and active experimental design to efficiently 637 
+
+explore the entire morphological phenotype space. In addition, the approach natu-638 
+
+rally extends to predicting unseen double-gene perturbations to guide combinatorial 639 
+
+15 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+imaging screens as these become available. However, interpreting the inferred regula-640 
+
+tory network is less straightforward since the inferred graph describes a mapping from 641 
+
+genetic perturbations to phenotypic features (rather than genes). 642 
+
+MORPH identifies candidate genetic targets to mitigate T-cell 643 
+
+exhaustion 644 
+
+To further demonstrate MORPH’s capacity for biological discovery, we applied it to a 645 
+
+challenging biomedical problem, which was the core of our recent Cancer Immunother-646 
+
+apy Machine Learning Challenge ([46], manuscript in preparation): identifying new 647 
+
+genetic targets to prevent T-cell exhaustion. Cytotoxic CD8+ T cells play a key 648 
+
+role in removing abnormal/cancerous cells. However, chronic exposure to weakly 649 
+
+immunogenic tumor-associated self-antigens along with other immunosuppressive sig-650 
+
+nals progressively differentiates naive CD8+ T cells into a spectrum of exhausted T cell 651 
+
+states. Transiently increasing the proportion of progenitor-like cells has been shown 652 
+
+to improve outcomes under immune checkpoint blockade [47]. Our goal was to predict 653 
+
+gene perturbation targets that could shift T cell states to increase the progenitor-like 654 
+
+cell ratio. To this end, we synergistically employed three of MORPH’s capabilities: 655 
+
+transfer perturbation effects across cell lines, perform perturbation prediction, and 656 
+
+perform experiment design to identify optimal perturbations (Figure 7a). 657 
+
+First, we pretrained MORPH using as input the K562-GW dataset from [7], and 658 
+
+a T-cell gene prior that we assembled by extracting data from prior literature. This 659 
+
+included data on perturbations in T cells from proliferation [48–50], production [51– 660 
+
+53], and bulk RNA-seq screens [54], but no Perturb-seq data (Methods). Next, we fine-661 
+
+tuned MORPH to predict perturbation effects using the in-house generated single-cell 662 
+
+Perturb-seq dataset on CD8 T cells generated for our Challenge. This dataset measures 663 
+
+the transcriptional effect of 73 gene knockouts on T cells in vivo after injection into 664 
+
+a mouse harboring melanoma for 14 days. By annotating each single cell as one of 665 
+
+five T cell states: “Progenitor”, “Effector”, “Cycling”, “Terminal exhausted”, and 666 
+
+“Other” (Figure 7b), we summarized the Perturb-seq data for each of the 73 perturbed 667 
+
+genes by a five-dimensional proportion vector of perturbed cells in each state. We 668 
+
+then utilized the fine-tuned MORPH model to predict unseen perturbation effects. 669 
+
+For all 15,006 genes with expression measured in the 73-gene-knockout Perturb-seq 670 
+
+data but not perturbed among the 73 genes, we generated predicted perturbed cells 671 
+
+under the corresponding perturbations. Each predicted perturbed cell was mapped to 672 
+
+one of the five T cell states using an MLP classifier trained on the 73-gene-knockout 673 
+
+data, yielding a predicted cell state proportion for each untested gene. Finally, we 674 
+
+designed targets with potentially improved objectives by ranking the untested genes. 675 
+
+The objective function was designed to capture the increased proportion of progenitor 676 
+
+cells. Specifically, the objective function for a given perturbation was the fraction of 677 
+
+progenitor cells it produces, provided that the proportion of cycling cells was predicted 678 
+
+to exceed 5%; otherwise, the objective was set to zero. The constraint on cycling cells 679 
+
+ensured that the perturbed cells retained differentiation capabilities. 680 
+
+Applying this four-step approach, we nominated untested targets with poten-681 
+
+tially improved objectives compared to the 73 tested genes. This task was challenging 682 
+
+because the 73 genes in our Perturb-seq panel were expert-curated based on domain 683 
+
+16 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+knowledge of genes that strongly affect T cell differentiation, representing the best-684 
+
+known targets to date. As shown in Figure 7c, the top 10 nominated genes (out of 685 
+
+15,006) were: Tsta3 (0.7688), Rasa1 (0.7656), Penk (0.7250), Xcl1 (0.6406), Ifitm2 686 
+
+(0.6281), Irf4 (0.6188), Batf (0.6094), Cdk6 (0.6094), Rps5 (0.5875), and Hmmr 687 
+
+(0.5813). Notably, Batf (ranked 7/15,006 by MORPH) is a transcription factor that 688 
+
+was validated by an independent Perturb-seq screen on CD8 T cells [55]. By annotat-689 
+
+ing cells using the same cell state definitions as in the 73-Perturb-seq dataset used for 690 
+
+training, we obtained scores for all genes in the independent screen. In this independent 691 
+
+screen, Batf achieved higher objective values (0.6061) than 72 of the 73 genes in the 692 
+
+73-Perturb-seq dataset used for training (top two scores: 0.6429 and 0.6) (Figure 7d). 693 
+
+Importantly, the independent screen was not used during MORPH training, which 694 
+
+relied solely on our T-cell gene prior, the K562-GW dataset, and the in-house generated 695 
+
+73-Perturb-seq dataset. Therefore, the identification of Batf provides independent val-696 
+
+idation of MORPH’s ability to nominate targets with the potential to improve cancer 697 
+
+immunotherapy. 698 
+
+# 3 Discussion 699 
+
+In this study, we presented MORPH, a deep-learning framework designed to predict 700 
+
+the single-cell distribution of transcriptional or phenotypic outcomes resulting from 701 
+
+unseen genetic perturbations. By combining prior biological knowledge on genetic per-702 
+
+turbations with transcriptomic or phenotypic information from control cells, MORPH 703 
+
+effectively extrapolates perturbation effects beyond observed data in both sequencing 704 
+
+and imaging modalities. Concurrently and independently, TxPert [25] advanced the 705 
+
+state of the art for transcriptomic perturbation prediction by leveraging multiple bio-706 
+
+logical knowledge graphs, demonstrating that cross-context transfer is achievable for 707 
+
+sequencing-based data. Because this work was developed in parallel with ours, a direct 708 
+
+benchmarking comparison was not included; MORPH’s contributions are best under-709 
+
+stood as complementary: where TxPert focuses on transcriptomic prediction accuracy, 710 
+
+MORPH uniquely addresses cross-modality prediction—extending to imaging pheno-711 
+
+types—and the interpretability of learned gene relationships, enabling inference of the 712 
+
+underlying gene regulatory structure from perturbation responses. Through simula-713 
+
+tion and empirical validation, we found that MORPH learns perturbation-response 714 
+
+patterns by attending to groups of genes that are regulated similarly in response to 715 
+
+a perturbation. This capacity enables MORPH to extrapolate perturbation responses 716 
+
+to unseen single or combinatorial perturbations, leveraging similarities with perturba-717 
+
+tions seen in training or captured in prior biological knowledge. Furthermore, MORPH 718 
+
+can transfer the learned perturbation-response patterns to unseen cell lines using only 719 
+
+control cell data in the new context. We demonstrated that the gene relationships cap-720 
+
+tured by MORPH’s attention framework are biologically meaningful and offer insights 721 
+
+into the cell line-specific underlying gene regulatory networks—a feature not available 722 
+
+in previous methods for predicting perturbation effects. 723 
+
+MORPH’s modular design allows for easy integration of different prior knowledge 724 
+
+sources, making the framework highly adaptable and extensible. Among all sources 725 
+
+of prior knowledge, we identified DepMap [12] as the most informative database on 726 
+
+17 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+the perturbation screens considered in this paper, possibly because it is the only 727 
+
+database built directly from perturbation experiments supporting the notion that 728 
+
+perturbational relevance matters more than data quantity — a finding that is consis-729 
+
+tent with results from the first Competition within our Cell Perturbation Prediction 730 
+
+Challenge [19], where features derived from perturbational data systematically outper-731 
+
+formed those from observational databases. As an example of adapting MORPH using 732 
+
+a context-relevant dataset, in our T cell application, MORPH pretrained on the human 733 
+
+K562 genome-wide perturbation data was fine-tuned on an in-house mouse CD8 T-734 
+
+cell Perturb-seq dataset of 73 selected perturbations. Despite the limited amount of 735 
+
+context-relevant perturbation data, MORPH was able to transfer the perturbation-736 
+
+response structure learned on K562 cells to mouse T cells and effectively predict the 737 
+
+effects of unseen perturbations, which we then ranked using an objective function to 738 
+
+quantify the increased ratio of progenitor cells. A target identified by MORPH was 739 
+
+able to shift T-cell states towards the desired ratio more effectively than majority of 740 
+
+the expert-designed gene perturbation panel, as confirmed on an independent dataset. 741 
+
+In a separate application on OPS data, we demonstrated MORPH’s cross-modality 742 
+
+robustness. When trained on a fraction of the available OPS data, MORPH was able 743 
+
+to effectively predict genes that could impair the Ebola virus infection progression in 744 
+
+HeLa cells, as confirmed using the held-out data. Another key advantage of MORPH 745 
+
+over previous approaches is its ability to predict perturbation effects at the distribu-746 
+
+tional level, rather than only estimating average responses. This enables the model to 747 
+
+capture heterogeneous cellular responses that are often obscured by mean-based pre-748 
+
+dictions. Notably, MORPH shows the largest performance gains for genes with the 749 
+
+strongest perturbation effects. As a result, MORPH predictions are particularly well 750 
+
+suited to identify perturbations capable of driving cells away from baseline states. 751 
+
+This ability can be leveraged to efficiently guide the targeted acquisition of context-752 
+
+relevant perturbational data to rapidly expand coverage of the perturbation space. At 753 
+
+the same time, MORPH further benefits from carefully selected additional perturba-754 
+
+tions, with performance improving at a faster rate than the state-of-the-art method 755 
+
+GEARS [21]. In summary, these two applications (T-cell and OPS) demonstrate how 756 
+
+MORPH’s capacities can be used synergistically to identify targets predicted to move 757 
+
+the cells to a desired state, supporting both biological discovery and potential target 758 
+
+identification. 759 
+
+Looking ahead, MORPH is expected to improve as more perturbation screening 760 
+
+data becomes available. Its iterative framework could be used to efficiently general-761 
+
+ize to new cellular contexts by leveraging the perturbation embeddings learned in 762 
+
+one context to iteratively identify and prioritize the most informative perturbations 763 
+
+in another context. Furthermore, MORPH could directly be extended beyond genetic 764 
+
+perturbations to model the effects of chemical perturbations, enabling applications 765 
+
+in drug discovery [56]. Overall, MORPH provides a versatile framework for modeling 766 
+
+perturbation effects across different modalities, with broad applications to interrogat-767 
+
+ing biological mechanisms and aiding in the development of more precise and effective 768 
+
+treatments. 769 
+
+18 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+# 4 Resource availability 770 
+
+Lead contact 771 
+
+Further information and requests for resources should be directed to and will be 772 
+
+fulfilled by the lead contact, Caroline Uhler (cuhler@mit.edu). 773 
+
+Data and code availability 774 
+
+Data: The datasets analyzed in this paper are publicly available and include Perturb-775 
+
+seq datasets from Norman et al. [5], Replogle et al. [7], and Dixit et al. [2], 776 
+
+as well as the optical pooled screen dataset from Carlson et al. [10]. In addi-777 
+
+tion, we used gene embeddings derived from Geneformer [28], GenePT [29], and 778 
+
+DepMap [12]. The corresponding accession numbers of the single-cell datasets are 779 
+
+listed in the attached Key Resources Table. A processed version of the Norman [5] and 780 
+
+DepMap [12] datasets can be retrieved from: https://drive.google.com/drive/folders/ 781 
+
+1TQJE281q4xH7HcNHMg1v0urD99EDj5bO?usp=drive link. 782 
+
+Code: All original code is publicly available and has been deposited at https: 783 
+
+//github.com/uhlerlab/MORPH. The repository also contains the open-source soft-784 
+
+ware packages used, a detailed description on how to reproduce all our results, as well 785 
+
+as a demo application and instructions on how to apply our pipeline to user-provided 786 
+
+datasets. 787 
+
+# 5 Acknowledgments 788 
+
+We would like to thank E. Forte for valuable discussions and feedback on the 789 
+
+manuscript, and J. Weissman for helpful discussions. C.H, J.Z. and M.D. were 790 
+
+supported by the Eric and Wendy Schmidt Center at the Broad Institute. J.Z. was par-791 
+
+tially supported by an Apple AI/ML PhD Fellowship. C.U. was partially supported by 792 
+
+NCCIH/NIH (1DP2AT012345), NIDDK/NIH (5RC2DK135492-02), ONR (N00014-793 
+
+24-1-2687), AstraZeneca, the United States Department of Energy (DE-SC0023187), 794 
+
+and MIT J-Clinic for Machine Learning and Health. 795 
+
+# 6 Author contributions 796 
+
+All authors designed the research. C.H. and J.Z. developed and implemented the 797 
+
+algorithms. C.H., J.Z., performed model and data analysis. M.D. and C.U. supervised 798 
+
+the study. All authors wrote the paper. 799 
+
+# 7 Declaration of interests 800 
+
+The authors declare no competing interests. 801 
+
+# 8 Figures 802 
+
+19 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+Input Encoder 
+
+Query 
+
+Gene program matrix 
+
+Key 
+
+Value 
+
+Attention block (×N) 
+
+Attention map 
+
+Genetic 
+
+perturbation 
+
+Decoder Output 
+
+> 𝑔 !
+
+Add &
+
+Norm 
+
+> Feed  forward
+
+Add &
+
+Norm 
+
+> Prior
+> biological
+> knowledge
+> 𝑽 "
+
+a 
+
+> Image Gene
+> expression
+> cell
+> gene
+
+Predicted perturbed 
+
+cell "𝑋 "     
+
+> Gene
+> expression
+> cell
+> gene
+> Perturbation prediction
+> Control
+> cells
+> Perturbed
+> cells
+> Control
+> cells
+> Train on a set of perturbations
+> Predict on unseen perturbations
+
+f
+
+b                 
+
+> Predicted
+> perturbed cells
+> Train on cell line 1
+> Control
+> cells
+> Predicted
+> perturbed cells
+> Predict on cell line 2
+> Transfer of perturbation
+> effects across cell lines
+> 𝒈 𝟐
+> 𝒈 𝟏
+> 𝒈 𝟏 +𝒈 𝟐
+
+Genetic interaction 
+
+prediction 
+
+> Synergy
+> Suppression
+> Potentiation
+
+Update 
+
+model 
+
+Select perturbation 
+
+Obtain 
+
+sample 
+
+Design of 
+
+perturbations        
+
+> P2
+> Gene 13
+> Gene 14
+> Gene 15
+> M1
+> Gene 1
+> Gene 2
+> M2
+> Gene 3
+> Gene 1+3
+
+Modules      
+
+> P1
+> Gene 10
+> Gene 11
+> P3
+> Gene 16
+> Gene 17
+> Gene 18
+
+Programs  
+
+> Activate Inhibit
+
+Gene regulatory 
+
+network inference 
+
+> Image
+
+Control cell 𝑋 ∅
+
+> Control
+> cells
+> Perturbed
+> cells
+
+f
+
+f f
+
+> 𝑔 &
+
+Fig. 1 Overview of MORPH and its applications. a , Model architecture. For each pair of control cell and genetic perturbation, the model maps them into latent representations using sepa-rate encoders. In the latent space, attention modules dynamically identify the most relevant features for the given perturbation. The resulting attention output is then passed to a decoder to generate the predicted perturbed cell. We demonstrate MORPH on both transcriptomic and imaging modali-ties. b, Downstream applications. MORPH can be applied to a variety of tasks, including predicting unseen genetic effects, transferring perturbation effects across cell lines, predicting genetic interac-tions, designing perturbation experiments, and inferring gene regulatory networks. 
+
+20 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint Control             
+
+> cells
+> Perturbed cells
+> Train on a set of perturbations
+> p1
+> p2
+> Gene
+> embedding
+> from single -cell
+> foundation
+> model
+> Gene
+> expression in
+> control cells
+> cell
+> gene
+> Text embedding
+> about gene
+> functionalities
+> Prior biological knowledge
+> DepMap
+> cell  line
+> gene
+> Predicted perturbed cells
+> Predict on unseen perturbations
+> p4
+> Control
+> cells
+
+a
+
+d               
+
+> 5-fold splits outlier distribution splits
+> Prediction accuracy (normalized)
+> Dataset: Replogle et al. K562 -EG Dataset: Replogle et al. RPE1 -EG MED9
+
+e
+
+> p5
+> p6p3
+
+b 
+
+> ff
+
+c
+
+f      
+
+> UMAP UMAP
+> GEARS MORPH
+> (DepMap )
+> Dataset: Replogle et al. K562 -EG
+
+Fig. 2 Predicting responses to unseen single-gene perturbations. a, Workflow of single-gene perturbation predictions. Different sources of prior knowledge were explored, such as gene embedding vectors derived from single-cell foundation models and perturbation-specific databases like DepMap. 
+
+b-d, Evaluation results on the K562-EG dataset. Sources of prior knowledge ( b) and models ( c)were evaluated using a distributional distance (MMD), average RMSE between the mean predicted and observed gene expression profiles, and Pearson correlation between the mean predicted and observed perturbation gene expression changes relative to the training-set perturbed mean. Pearson correlation values were clipped at 0 for visualization purposes. Metrics were calculated using the top 50 differentially expressed (DE) genes for each perturbation. Evaluations were performed across 5-fold cross-validation splits and outlier distribution splits. Hatched bars indicate metrics that are not applicable. MMD is not reported for Perturbed mean and the linear model because they predict only mean expression profiles and do not generate single-cell distributions. Arrows indicate the direction of improvement ( → higher is better; ← lower is better). d, UMAPs of observed perturbed cells and cells predicted by MORPH (on the right) and the current state-of-the-art model that predicts single-cell level response, GEARS (on the left). e-f, Spider plots summarizing the prediction accuracy using each prior knowledge base across the top 8 enriched gene sets. These gene sets were identified through gene set enrichment analysis on the union of genes where one prior outperformed the other. Prediction accuracy was computed as 1 − MMD mean  
+
+> max(MMD mean )
+
+, where MMD mean is the mean prediction loss (MMD) for each gene set under a given prior, and max(MMD mean ) is the highest mean prediction loss across all gene sets. 
+
+21 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint GATA1              
+
+> Transfer perturbation effects from RPE1 to K562
+> Dataset: Norman et al. K562
+> (two -gene perturbations: 0,1,2/2 unseen)
+
+a b
+
+c d
+
+e fPrediction stratified by GI type s                  
+
+> (two -gene perturbations: 0/2 unseen)
+> JUN+CEBPA
+> (2/2 unseen)
+> FEV+ISL2
+> (1 /2 unseen,
+> potentiation)
+> CEBPE+SPI1
+> (0/2 unseen,
+> redundant)
+> Prediction of GI type s
+> (two -gene perturbations: 0/2 unseen)
+> Gene sets
+> Different across cell lines
+> Similar across cell lines
+> AUC -ROC Pearson correlation with true scores
+> GEARS MORPH (DepMap )
+> UMAP
+> UMAP
+> UMAP UMAP
+> UMAP
+> UMAP
+
+Fig. 3 MORPH effectively transfers perturbation effects across cell lines and predicts double-gene perturbations. a, Evaluation of model performance in transferring perturbation effects from RPE1-EG to K562-EG [7], using MMD and RMSE metrics. Baseline models include the control distribution and mean shift, which applies the same mean change vector from control in the training cell line to the test cell line. The figure compared the performance of different training strate-gies of MORPH, including a model trained on the training cell line and fine-tuned using only control cells from the test cell line (“Fine-tuned on control”), a model fine-tuned on 100 perturbations from the test cell line (“Fine-tuned on 100 perturbations”), a model trained from scratch on 100 pertur-bations in the test cell line (“Trained on 100 perturbations”), and a reference model trained on 1,500 (75%) perturbations in the test cell line. b, Comparison of the performance of the model fine-tuned on control cells (K562), measured using MMD, and the cell line disagreement, calculated as the Euclidean distance between shift vectors for each perturbation in training (RPE1) and test (K562) cell lines. Pearson correlation = 0.52, p-value < 0.05. Genes are colored by gene sets representing varying levels of similarity across cell lines. c, Box plots showing model performance in predicting cellular responses to double-gene perturbations on the Norman dataset [5], averaged across scenarios where 0, 1, or 2 genes in the pair are unseen during training. Hatched bars indicate metrics that are not applicable. MMD is not reported for the Perturbed mean, SALT+ and linear-additive models, which predict only mean expression profiles. d, UMAP visualization of top perturbations with maximal effects in the test set. e, Analysis on double-gene perturbations where both single genes were observed during training, stratified by gene interaction types. Box plots comparing model performance across different interaction types. f, Box plots evaluating model performance in predicting genetic interaction types. Evaluation metrics include Pearson correlation and the area under the receiver operating character-istic curve (AUC-ROC). These metrics are computed based on gene interaction scores derived from model predictions and corresponding scores from observed data. AUC-ROC values indicate classifi-cation performance, where a random classifier would achieve an AUC-ROC of 0.5. Arrows indicate the direction of improvement ( → higher is better; ← lower is better). 
+
+22 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint a b    
+
+> f
+> Select
+> perturbation
+> Obtain
+> sample
+> Update
+> model
+> Latent -based acquisition
+> function score
+> Perturbation
+> p1
+> p2
+> p3
+> p4
+> pn…
+> Selected
+> perturbation
+> experiments
+> c
+> dge
+
+Fig. 4 MORPH can be used for optimal design of perturbations. a, Iterative perturbation design framework. Perturbations are selected via an acquisition function, experimentally screened, and used to update the model with newly acquired data for the next round. b-e, Line plots com-paring acquisition strategies and models for efficiently covering the perturbation space as measured by prediction over a held-out test set. The green line with ‘X’ markers represents MORPH with randomly selected perturbations. The green line with circle markers corresponds to MORPH using an adaptive strategy that selects perturbations with the highest predicted loss based on its learned latent representations. The green line with triangle markers shows a variant of MORPH that selects perturbations using a fixed, prior-based latent space. For comparison, the blue lines with ‘X’ and circle markers show GEARS with randomly selected and adaptively selected perturbations based on its learned latent representations, respectively. Lines indicate mean performance and shaded regions show ±1 standard deviations across 5 runs with different random seeds. Evaluation metrics include MMD ( b) and RMSE ( c) calculated on the top 50 DE genes on a set of perturbations withheld for testing. d-e shows the precision of using the predictions to identify the top 25 and 35 perturbations that shifted cells farthest from the control state. f-g, Line plots showing performance improvements of MORPH with adaptively selected perturbations using learned representations across different allo-cations of initial perturbations and rounds, under a fixed experimental budget. Shaded regions show 
+
+±1 standard deviations across 5 runs using different random seeds. 
+
+23 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint P2        
+
+> Genes 51 -70
+> M1
+> Genes 1-10
+> M2
+> Genes 11 -20
+> Modules
+> P3
+> Genes 71 -90
+> Programs
+> Activation Inhibition
+> M3
+> Genes 21 -30
+> P1
+> Genes 31 -50
+
+a b Activation 
+
+> Inhibition
+
+e f
+
+g
+
+> Programs
+> programs
+
+c d 
+
+> Modules
+> gene
+> latent
+> P2 P1 P3
+> programs
+> gene
+> latent
+> UMAP
+> UMAP
+> Programs
+> Per -program AUROC: 0.904
+> Per -latent AUROC:0.949
+
+Fig. 5 MORPH’s attention-based framework enables gene regulatory network inference. a, The gene regulatory network used to generate the simulated data, where perturbation modules (M) are clusters of genes that induce similar effects when perturbed and gene programs (P) are genes that exhibit similar response to perturbations. b, UMAP visualization of the learned perturbation latent space colored by perturbation modules on the simulated data. c, Hierarchically clustered genes into programs using the learned mapping from latent representations to genes, colored by true gene programs, on the simulated data. d, Heatmap representing the recovered gene regulatory structures inferred from the learned attention maps on the simulated data. e-g, Same analysis for MORPH trained on [7]: e, UMAP of the learned perturbation latent space colored by perturbation modules reported in [7]; f Hierarchically clustered heatmap of a subset of the gene–latent attribution matrix 
+
+M, in which rows represent latent programs and columns represent genes. For visualization, we dis-play only genes annotated in curated gene programs from [7]; annotated gene programs are indicated by the color bar. To quantify alignment between learned latent programs and annotated gene sets, we computed the area under the receiver operating characteristic curve (AUROC), treating attri-bution scores in M as continuous predictors and gene-set membership as binary labels. AUROC values were calculated using all genes. Because latent programs are learned without predefined cor-respondence to annotated gene sets, we applied a best-match strategy to compute per-latent and per-program AUROC scores (see Methods). Numerical AUROC values are indicated. g, box plots of rank-normalized attention score changes for reported up- and down-regulated programs post-perturbation from [7]. 
+
+24 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint a b
+
+c d          
+
+> DAPI VP35
+> RNA
+> VP35
+> Protein
+> Auxiliary task:
+> Classification
+> faint punctate cytoplasmic peripheral
+> Genetic
+> perturbation Prior
+> knowledge
+> database
+> search
+> Attention -based
+> network
+> Extract features
+> Control
+> cell
+> Predicted
+> perturbed cell
+> Classification
+> faint
+> punctate
+> cytoplasmic
+> peripheral
+> Step 1
+> Step 2
+> Maximal impact
+> perturbation
+> Minimal impact
+> perturbation (log scale)
+> Adjusted
+> p-value <0.01
+> NPC1
+> UMAP
+> UMAP
+> Faint
+> Punctate Cytoplasmic
+> +Peripheral
+> RAB7A
+> CCDC115
+> GET4
+> WDR7
+> UNC50
+> PMM2
+> Objective
+
+Fig. 6 Application to imaging modality for perturbation outcome prediction using opti-cal pooled screens. a, Workflow of predicting perturbation outcomes using an optical pooled screen of cells infected with the Ebola virus and subjected to genome-wide perturbations. In step 1, a pre-trained Vision Transformer was fine-tuned on an auxiliary task to classify segmented cell images into four infection stages. In step 2, image-based features were extracted and used as inputs to MORPH, which was trained to predict imaging features after perturbations. Finally, a logistic regression model classified the predicted perturbed cell features into four infection stages. b, UMAP visualizations of extracted image features colored by infection state (top), or to highlight the image features extracted from NPC1 knockout cells, a perturbation that significantly alters cell infection states, versus those extracted from cells receiving a non-targeting guide RNA (bottom). c, Model performance evaluation using the normalized ℓ1 loss between predicted and true infection state distribution vectors. Pertur-bations on the x-axis are ranked by their impact on infection states based on chi-squared test, with genes having maximal impact on the left and minimal impact on the right. The y-axis shows the cumulative mean ℓ1 loss for each method. The dotted line indicates perturbations with a Bonferroni-corrected p-value < 0.01. d, Ternary plot showing the ground-truth cell state distributions for genetic perturbations. The three axes represent the proportion of cells in the “Faint”, “Punctate”, and com-bined “Cytoplasmic” and “Peripheral” stages of infection. The background gradient visualizes the optimization objective, defined as the early-state fraction (the sum of “Faint” and “Punctate” states). Blue points represent the 14,973 held-out perturbations (test set). Pink points indicate the top 10 candidate genes nominated by MORPH from this held-out set. 
+
+25 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint a
+
+b c   
+
+> Pret ra in on K562 (GW)
+> Control
+> cells
+> Perturbed cells
+
+f 
+
+> Step 1
+> T-cell gene prior from
+> existing databases
+> Control
+> cells
+> Predicted
+> perturbed cells
+
+f    
+
+> Finetune on T cells (77 gene KOs)
+> Step 2
+> T-cell gene prior from
+> existing databases
+> Step 3
+> Predict on unseen
+> perturbations on T cells
+> Control
+> cells
+
+f      
+
+> T-cell gene prior from
+> existing databases
+> Step 4
+> p1p2p3p4pn…
+> Selected
+> top perturbations
+> Design perturbatio ns
+> Train MORPH
+> Select perturbation
+> Obtain T
+> cell data
+
+d Progenitor   
+
+> Cycling Term. exh .
+> + Effector + Other
+> Objective
+> Batf
+
+Fig. 7 Application of MORPH to T cell differentiation. a, Utilizing MORPH’s capabilities to transfer across cell lines, perform perturbation prediction, and perform experiment design to identify optimal perturbations, we applied MORPH in four steps: pretraining on a genome-wide Perturb-seq dataset in K562, finetuning on an in-house generated 73-gene-knockout Perturb-seq dataset in CD8 T cells, predicting the effect of 15,006 unseen perturbations in CD8 T cells, and designing perturbations with predicted improved objective function values. Across all steps, MORPH uses the same T-cell gene prior that we collected from existing datasets. b, Cells in the in-house generated 73-gene-knockout Perturb-seq experiment are annotated by five possible states. c, MORPH computes an objective function value from the predicted perturbed cell states, for each unseen perturbation. The top 10 genes predicted to achieve the highest objective function value are highlighted. d, MORPH identifies 1 novel gene, Batf , with overall better objective function value than the targets tested in the expert-curated 73-gene-knockout Perturb-seq screen (indicated by the green dots in the ternary plot). 
+
+26 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint 9 Methods 803 
+
+Learning framework of MORPH 804 
+
+Single-cell RNA sequencing and other sequencing-based assays are inherently destruc-805 
+
+tive, where each cell is usually only measured either before or after a perturbation, 806 
+
+but not both. Consequently, we only have access to distribution-level data rather than 807 
+
+paired individual measurements from before and after perturbation. Thus, MORPH 808 
+
+considers a setting where unpaired samples are drawn from control and perturbed dis-809 
+
+tributions: P(X∅) and P(Xg ), where P(X∅) represents the control distribution and 810 
+
+P(Xg ) represents the distribution under perturbation on gene g. Each sample X· ∈ RD
+
+> 811
+
+from these distributions represents features of a cell, such as its gene expression levels 812 
+
+across D genes or its image features of dimension D.813 
+
+Given a control sample X∅ and a perturbation embedding vg ∈ RDg for a gene g814 
+
+(see the following section for details on how to obtain the perturbation embedding), 815 
+
+the goal is to learn a function 816 
+
+f (X∅, vg ) = ˆXg , (1) that predicts the perturbed outcome ˆXg , which can be applied to both “seen” gene 817 
+
+perturbations (i.e., perturbations that have been tested and are in the dataset) 818 
+
+and “unseen” gene perturbations. Building on [26], we learn the function f via a 819 
+
+discrepancy-based variational autoencoder (VAE), which minimizes a distributional 820 
+
+loss between the predicted perturbed samples ˆXg and the real perturbed samples Xg .821 
+
+To be more precise, in this framework, the control distribution P(X∅) is modeled 822 
+
+using a VAE. Let Z denote the latent variables that generate the cell features X∅ and 823 
+
+p(Z) be their prior distribution, realized using a standard Gaussian. The VAE consists 824 
+
+of two components: an encoder qϕ(Z|X∅), parameterized by ϕ, which approximates 825 
+
+the posterior distribution of the latent variables given X∅; and a decoder pθ (X∅|Z), 826 
+
+parameterized by θ, which approximates the conditional distribution of X∅ given 827 
+
+Z under no perturbation. The Evidence Lower Bound (ELBO) for the likelihood of 828 
+
+observing a sample X∅ is: 829 
+
+log pθ,ϕ (X∅) ≥ −L recon  
+
+> θ,ϕ
+
+(X∅) − L KL  
+
+> ϕ
+
+(X∅), (2) where 830 
+
+Lrecon  
+
+> θ,ϕ
+
+(X∅) = −EZ∼qϕ(Z|X∅) log pθ (X∅|Z) (3) and 831 
+
+LKL  
+
+> ϕ
+
+(X∅) = DKL (qϕ(Z|X∅)∥p(Z)) . (4) Here, the encoder qϕ(Z|X∅) is realized via a Gaussian distribution, where the mean 832 
+
+and standard deviation are parameterized by ϕ. The sampling of Z from qϕ(Z|X∅)833 
+
+is implemented via the reparamterization trick for back-propagation [57]. The term 834 
+
+DKL (·∥· ) represents the Kullback–Leibler (KL) divergence, which regularizes the latent 835 
+
+space by encouraging the marginal approximate posterior qϕ(Z|X∅) to be close to 836 
+
+the prior p(Z). We use a deterministic decoder, where denoting the output as ˆX∅
+
+> 837
+
+27 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+after decoding Z sampled from qϕ(Z|X∅), and it reduces to an l2 loss for sample 838 
+
+reconstruction of the control cells: 839 
+
+∥ ˆX∅ − X∅∥2. (5) To model the perturbation effects, MORPH uses a discrepancy-based component. 840 
+
+Specifically, MORPH encodes X∅ into Z and vg into a latent representation, and 841 
+
+concatenates them into a joint latent representation Zg . The decoder then generates 842 
+
+samples ˆXg using Zg , simulating the effect of perturbing gene g on the control cells 843 
+
+X∅. We measure the discrepency between the distribution of generated perturbed 844 
+
+samples ˆXg and real perturbed samples Xg using maximum mean discrepancy (MMD) 845 
+
+[58], which is defined as 846 
+
+MMD( p, q) = Ex,x ′i.i.d  
+
+> ∼p
+
+[k(x, x ′)] + Ey,y ′i.i.d  
+
+> ∼q
+
+[k(y, y ′)] − 2Ex∼p,y ∼q[k(x, y )] , (6) for two arbitrary distributions p and q, where k denotes a kernel function. Denoting 847 
+
+by G the set of all genes that were pertrubed in a dataset, MORPH uses the following 848 
+
+discrepency loss: 849 
+
+Ldiscrep  
+
+> θ,ϕ
+
+= X
+
+> g∈G
+
+MMD( P( ˆXg ), P(Xg )) . (7) We also calculated an MMD loss for the control cell distributions, since we observed 850 
+
+that this made attention score shifts more reflective of the perturbation effects magni-851 
+
+tude (Supplemental Figure 1). Therefore, the total loss for reconstructing the control 852 
+
+cells is: 853 
+
+Lhybrid recon  
+
+> θ,ϕ
+
+(X∅) = γ∥ ˆX∅ − X∅∥2 + (1 − γ)MMD( P( ˆX∅), P(X∅)) , (8) where γ is a tunable hyperparameter. 854 
+
+The full objective function minimized by MORPH for model training is: 855 
+
+Lθ,ϕ = αLdiscrep  
+
+> θ,ϕ
+
++ EX∅ [Lhybrid recon  
+
+> θ,ϕ
+
++ βLKL  
+
+> ϕ
+
+], (9) where α, β, γ are hyperparameters controlling the balance among alignment between 856 
+
+predicted and observed perturbation distributions, regularization of the latent space, 857 
+
+and accurate reconstruction of control states. The selection of hyparameters is 858 
+
+discussed in Supplemental Note 2. 859 
+
+Incorporating biological knowledge to represent perturbations 860 
+
+To generalize to unseen perturbations, MORPH represents each gene perturbation 861 
+
+using a feature vector, i.e., vg ∈ RDg , which represents prior knowledge of gene g and 862 
+
+its perturbation effect. The feature vector allows MORPH to relate unseen perturba-863 
+
+tions to previously seen ones, based on the intuition that perturbations with similar 864 
+
+biological properties tend to have similar effects. We explored multiple sources of prior 865 
+
+knowledge to construct these vectors. 866 
+
+28 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+Control gene expression: The simplest form of prior knowledge leverages gene 867 
+
+expression profiles from control cells. Let Vcontrol ∈ RNcell ×D denote the gene expres-868 
+
+sion matrix of control cells, where Ncell denotes the number of control cells and D869 
+
+is the number of genes measured in each cell as defined in the previous section. To 870 
+
+obtain a feature vector for perturbing gene g, the gth column of Vcontrol is extracted, 871 
+
+i.e., vg = Vcontrol  
+
+> g
+
+. This approach is based on the hypothesis that genes with similar 872 
+
+expression patterns in the control cell may exhibit similar effects when being per-873 
+
+turbed. In our experiments, we randomly sampled Ncell = 1 , 500 from the control cells 874 
+
+to obtain a 1 , 500-dimensional feature vector for each gene. 875 
+
+Geneformer: The emergence of single-cell foundation models derived from large-scale 876 
+
+single-cell datasets provide new approaches to obtain gene feature vectors. Specifically, 877 
+
+we utilized the gene embeddings from Geneformer [28], which offer the advantage of 878 
+
+context-dependent representations. In particular, we fed control cell data into the pre-879 
+
+trained foundation model and extracted the second-to-last layer’s 3 output for each 880 
+
+gene per control cell. We then averaged these vectors across all control cells to obtain 881 
+
+a 256-dimensional feature vector for each gene. 882 
+
+GenePT and GPT: As proposed in [29], we defined another prior by leverag-883 
+
+ing OpenAI’s ChatGPT text embedding [59]. We obtained the gene embeddings 884 
+
+shared by the authors, which were derived from gene summaries in NCBI [60] and 885 
+
+UniProt [61]. Beyond these sources, we also explored generating embeddings using 886 
+
+the same approach but incorporating information from STRING [62]. This resulted in 887 
+
+three different text-based priors, namely, a 1 , 536-dimensional gene feature for NCBI, 888 
+
+a 3 , 072-dimensional gene feature for NCBI and UniProt, and a 1 , 536-dimensional 889 
+
+gene feature for STRING. 890 
+
+DepMap: Finally, we explored gene embeddings derived from the DepMap database. 891 
+
+DepMap provides a matrix Vdepmap ∈ RNcell-line ×D , where Ncell-line = 1 , 100 is the 892 
+
+number of cell lines in the dataset. Each entry Vdepmap  
+
+> i,j
+
+represents the viability of 893 
+
+cell line i under perturbation j. To represent a specific perturbation on gene g, we 894 
+
+extracted the gth column of the matrix Vdepmap , i.e., vg = Vdepmap  
+
+> g
+
+, resulting in a 895 
+
+1, 100-dimensional feature vector vg .896 
+
+MORPH’s attention mechanism 897 
+
+To refine the joint latent embedding Zg of a control cell and a gene feature vector, 898 
+
+MORPH employs a cross-attention mechanism [63] in the latent space. Toward this, 899 
+
+the DZ -dimensional joint embedding Zg ∈ RDZ serves as the query, and to construct 900 
+
+keys and values, MORPH learns a latent gene program matrix G ∈ RNfactor ×Dfactor ,901 
+
+where we chose Nfactor = 50 4 gene factors each of dimension Dfactor = 50. The 902 
+
+attention mechanism integrates information from the matrix G into Zg dynamically, 903 
+
+allowing the model to capture complex dependencies between perturbations and gene 904 
+
+programs. The model has 2 attention layers, with the output Zgj of the jth layer for 905 
+
+j ∈ { 1, 2} computed using: 906   
+
+> 3We used the second-to-last layer since the final layer tends to encode task-specific features, whereas the second-to-last layer captures more generalizable representations [28].
+> 4We set Nfactor = 100 for the genome-wide Perturb-seq dataset. See Supplemental Note 1 for details.
+
+29 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint Qj (Zgj−1) = Zgj−1W qj , Kj = GW kj , V j = GW vj ,Aj (Zgj−1) = softmax Qj (Zgj−1)K⊤
+
+> j
+
+√DZ
+
+!
+
+, (10) where Zg 
+
+> 0
+
+= Zg ; Qj (Zg ) ∈ R1×DZ , Kj ∈ RNfactor ×DZ , Vj ∈ RNfactor ×DZ represent the 907 
+
+query, key and value matrices; W qj ∈ RDZ ×DZ , W kj ∈ RDfactor ×DZ , W vj ∈ RDfactor ×DZ
+
+> 908
+
+are the learnable weight matrices. 909 
+
+The attended output Aj (Zgj−1)Vj is added to Zgj−1 using a residual connection: 910 
+
+Zgj−1 + Aj (Zgj−1)Vj , (11) and is then passed into an MLP to obtain Zgj , similar to a standard transformer block; 911 
+
+see e.g. [63]. Finally, the refined latent representation Zg 
+
+> 2
+
+after 2 attention layers is 912 
+
+decoded using an MLP to predict the post-perturbational cellular response ˆXg ∈ RD .913 
+
+Transfer of perturbation effects across cell lines 914 
+
+To transfer perturbation effects from cell line 1 to cell line 2, we first trained MORPH 915 
+
+on all perturbation data from cell line 1. This yielded a mapping f1, which is trained 916 
+
+on and models the perturbation response in cell line 1. 917 
+
+Next, we fine-tuned f1 by minimizing the reconstruction loss in equation (9) using 918 
+
+only the control cells from cell line 2. This step ensures that the model aligns its latent 919 
+
+space to the new cell line’s distribution. Finally, we used the finetuned model, denoted 920 
+
+by f1→2, to predict the effect of perturbing gene g in cell line 2; i.e., f1→2(X∅ 
+
+> 2
+
+, vg ), 921 
+
+where X∅ 
+
+> 2
+
+denotes the control cell from cell line 2 and vg is the feature vector for 922 
+
+gene g.923 
+
+In the evaluations, we also considered fine-tuning f1 using a subset of perturba-924 
+
+tions from cell line 2. This alters the procedure described above by obtaining f1→2925 
+
+using additionally this subset of perturbations by minimizing the full objective in 926 
+
+equation (9). 927 
+
+Genetic interaction prediction 928 
+
+For model evaluation, we performed 5-fold cross-validation by splitting the double-929 
+
+gene perturbations into five equal folds. In each iteration, the model was trained on 930 
+
+all single-gene perturbations and four of the five double-gene perturbation folds, while 931 
+
+the remaining fold was used for testing. This process was repeated across all five folds. 932 
+
+The same procedure was also applied to evaluate the baseline models. 933 
+
+After training, we computed gene interaction scores for the test set perturbations 934 
+
+following the approach described in [5] and then classified each gene pair into a specific 935 
+
+GI subtype (Supplemental Note 2). This was performed on the predicted and true 936 
+
+observed gene expression data. Model performance was assessed using two metrics: 937 
+
+(1) Pearson correlation between predicted and observed GI scores, and (2) the area 938 
+
+under the receiver operating characteristic curve (AUC-ROC) for classifying gene pairs 939 
+
+into GI subtypes. 940 
+
+30 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+Adaptive design of perturbation experiments 941 
+
+To investigate whether MORPH can help with designing an efficient strategy for adap-942 
+
+tively selecting perturbations, we considered the problem of minimizing the model’s 943 
+
+prediction error on unseen perturbations given a fixed budged of perturbations that 944 
+
+could be performed. Towards this, we adapted three prominent experimental design 945 
+
+strategies described below and compared these to a random baseline, which consists 946 
+
+of choosing random perturbations in every experimental round. 947 
+
+Selection strategy based on prediction error maximization [41] 948 
+
+The active learning process iteratively updates the learned perturbation prediction 949 
+
+model over R rounds. In round 1, a random subset of genes is selected for which per-950 
+
+turbation experiments are performed. These experiments, together with control cells, 951 
+
+are used as warm-up to obtain f (1) . In round i+1, denote the perturbations performed 952 
+
+so far as P(i)selected and the current model as f (i). The perturbations P(i+1) selected in the next 953 
+
+batch of experiments are chosen, which maximize the prediction error; prediction error 954 
+
+is estimated as follows, adapted from [41]. 955 
+
+Let l(i) 
+
+> g
+
+be the ground-truth prediction error of the current model f (i) on gene 956 
+
+g ∈ P (i)selected , evaluated using the MMD between the observed and predicted per-957 
+
+turbed cells. In order to extrapolate the prediction error to unseen genes, a light-weight 958 
+
+prediction model h(i) is trained to minimize the mean squared error (MSE) loss: 959 
+
+LMSE (h(i)) = X
+
+> g∈P (i)selected
+
+(h(i)(g) − l(i) 
+
+> g
+
+)2, (12) as described in the following paragraph. All perturbations are ranked using h(i) and 960 
+
+the perturbations with highest prediction error as measured by h(i) are selected for 961 
+
+the next batch of experiments P(i+1) selected . The model is then updated from f (i) to f (i+1) 
+
+> 962
+
+using the additional perturbation data. 963 
+
+We considered two approaches for obtaining h(i): (1) using the learned perturbation 964 
+
+representation, which is obtained by passing vg through the perturbation encoder of 965 
+
+f (i), as input to h(i), and (2) using the prior-knowledge perturbation representation, 966 
+
+i.e., vg , as input to h(i).5 This comparison allowed us to evaluate whether incorporating 967 
+
+a dynamically learned latent space improves the selection of perturbations over a static 968 
+
+prior-based representation. 969 
+
+Selection strategy based on coverage maximization [39, 40] 970 
+
+We also explored a coverage-based strategy [39, 40] (Supplemental Figure 12). To 971 
+
+estimate coverage, we applied k-means clustering to the learned perturbation repre-972 
+
+sentation, which is obtained by passing vg through the perturbation encoder of f (i),973 
+
+at each round i, for all genes g. The number of clusters was set equal to the num-974 
+
+ber of perturbations we can select in round i + 1, and the perturbations closest to 975 
+
+the cluster centers were selected for the next batch of experiments P(i)selected . Similarly, 976 
+
+> 5We did not apply this to GEARS, since the input gene embeddings for GEARS are initialized randomly.
+
+31 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+we also benchmarked this strategy by applying the same k-means clustering method 977 
+
+directly to the prior-knowledge perturbation representation vg , which remains fixed 978 
+
+during training. 979 
+
+Selection strategy based on uncertainty maximization 980 
+
+The last strategy we explored involves selecting the most uncertain samples by esti-981 
+
+mating uncertainty within the learned perturbation representation, which is obtained 982 
+
+by passing vg through the perturbation encoder of f (i) (Supplemental Figure 12). To 983 
+
+assess uncertainty, we measured the sensitivity of the latent representation to per-984 
+
+turbation inputs. Specifically, for each g, we quantified uncertainty as the magnitude 985 
+
+of the rate of change in the latent space, evaluated by the difference of the encoded 986 
+
+perturbation representation at two consecutive training epochs. To obtain a scalar 987 
+
+measure, we computed its l2-norm and averaged across epochs. This approach is based 988 
+
+on the intuition that if the model has effectively learned the effect of a perturbation, 989 
+
+its corresponding latent representation should remain relatively stable. 990 
+
+Evaluation 991 
+
+To assess performance of each approach, we considered two types of evaluations. First, 992 
+
+we evaluated the model prediction on a held-out set of perturbations, Ptest , across all 993 
+
+rounds using MMD and RMSE between the predicted and observed perturbed cell 994 
+
+distributions; see the evaluation section below for more details. 995 
+
+Second, we considered the downstream task of identifying perturbations with the 996 
+
+most significant effect. Let ˆSN be the set of perturbations predicted to have the top 997 
+
+N largest MMD distance from the control distribution and SN be the corresponding 998 
+
+set based on the observed data. We compared these sets using 999 
+
+| ˆSN ∩ SN |
+
+N . (13) 
+
+Data simulation for gene regulatory network inference 1000 
+
+To generate simulated data based on a bipartite structure, we first constructed a 1001 
+
+colored directed bipartite graph G, as shown in Figure 5a. This graph consists of two 1002 
+
+disjoint sets of nodes: parent nodes, partitioned into clusters M1, M 2, M 3, and child 1003 
+
+nodes, partitioned into clusters P1, P 2, P 3. Regulatory relationships between parent 1004 
+
+and child nodes are represented by colored directed edges, where blue edges denote 1005 
+
+activation effects and red edges denote inhibitory effects. If a cluster Mk is connected 1006 
+
+to a cluster Pℓ, then every node in Mk regulates every node in Pℓ.1007 
+
+We obtained the regulation matrix R ∈ RNparent ×Nchild , where each entry Ri,j 1008 
+
+represents the regulatory effect of parent node i on child node j, as follows: 1009 
+
+Ri,j =
+
+
+
+Unif(1 , 3) , if i activates j in G,
+
+Unif( −3, −1) , if i inhibits j in G,
+
+N (0 , 0.5) , if no direct edge exists between i, j in G.
+
+32 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+Let Xparent denote the vector of parent nodes. The value of each parent node i was 1010 
+
+sampled independently from a normal distribution: 1011 
+
+Xparent  
+
+> i
+
+∼ N (μi, σ i),
+
+where μi ∼ Unif(0 , 3) and σi ∼ Unif(0 , 1). The values of the child nodes were computed 1012 
+
+as a weighted sum of the parent nodes: 1013 
+
+Xchild = R⊤Xparent + ϵ, ϵ ∼ N (0 , 0.5I).
+
+To simulate single-gene perturbations, we applied soft interventions on individual 1014 
+
+parent nodes as follows. For each intervention I applied to a parent node i, the value 1015 
+
+was modified as: 1016 
+
+Xparent ,I i = Xparent  
+
+> i
+
++ I, I ∼ N (4 , 0.1) .
+
+The child node values were then recalculated based on the perturbed parent nodes: 1017 
+
+Xchild ,I = R⊤Xparent ,I + ϵ.
+
+We sampled 6 , 500 cells, trained MORPH on this simulated data, and evaluated the 1018 
+
+inferred bipartite regulatory network by comparing it to the ground-truth network G.1019 
+
+Interpreting model predictions through gene programs 1020 
+
+To identify the gene programs, we manipulated the attention scores and observed their 1021 
+
+resulting changes in the output space. Let M ∈ RD×Nfactor denote a mapping matrix, 1022 
+
+where each entry Mij quantifies the attribution of gene i to factor j. M is obtained 1023 
+
+as follows and is used to estimate the gene programs from the learned gene program 1024 
+
+matrix G.1025 
+
+We manipulated the first attention map A1 ∈ R1×Nfactor defined in Equation (10) 1026 
+
+by setting the attention weight corresponding to factor j in G to 1 and all other 1027 
+
+attention weights to 0. This operation simulates a scenario where the model focuses 1028 
+
+entirely on factor j when generating the predicted gene expression profile. We set 1029 
+
+column j in M to the model’s predicted output under this manipulation. To obtain 1030 
+
+the gene programs, we performed hierarchical clustering on the rows of M.1031 
+
+To identify the bipartite regulatory network connecting perturbation modules and 1032 
+
+gene programs, we leveraged the learned attention weights. As before, we used the 1033 
+
+first attention layer A1. For each control cell X∅ and perturbation g, the trained 1034 
+
+model produces an attention map A1(Zg ) that guides the prediction of a perturbed 1035 
+
+cell, and a control attention map A1(Z∅) that guides the prediction of a control 1036 
+
+cell. Averaging across Ng samples yields the mean attention map ¯Ag 
+
+> 1
+
+for a pertur-1037 
+
+bation g, where Ng denotes the number of cells with perturbation g. To emphasize 1038 
+
+relative reweighting across factors, the mean attention scores were rank-normalized 1039 
+
+across factors within each perturbation. We then quantified the effect of the per-1040 
+
+turbation by computing the difference between rank-normalized attention scores: 1041 
+
+∆Ag 
+
+> 1
+
+= ˜Ag 
+
+> 1
+
+− ˜A∅ 
+
+> 1
+
+, where ˜Ag 
+
+> 1
+
+denotes the rank-normalized attention profile. This map 1042 
+
+33 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+reveals how the model shifts its focus across gene programs when predicting the per-1043 
+
+turbed state. To propagate perturbation effects from gene programs to downstream 1044 
+
+genes, we multiplied the perturbation-induced attention shift with the program–to-1045 
+
+gene mapping matrix. Specifically, for a perturbation g, we computed ∆ Xg = ∆ Ag
+
+> 1
+
+M,1046 
+
+where ∆ Ag 
+
+> 1
+
+∈ R1×Nfactor captures the perturbation-induced change in factor attention 1047 
+
+and M ∈ RNfactor ×D maps factors to gene expression outputs. The resulting vector 1048 
+
+∆Xg ∈ R1×D quantifies predicted up- and down-regulation of individual genes induced 1049 
+
+by perturbation g. To obtain module-to-program regulation, we first averaged ∆ Ag
+
+> 11050
+
+across perturbations within the same module to compute ∆ Amodule 1 , propagated this 1051 
+
+through the factor–gene mapping via ∆ Xmodule 1 = ∆ Amodule 1 M, and finally averaged 1052 
+
+the gene-level scores across genes belonging to each program. 1053 
+
+Quantification of gene program alignment 1054 
+
+To quantify alignment between latent gene programs and annotated gene sets, we 1055 
+
+computed the area under the receiver operating characteristic (AUROC) scores. For 1056 
+
+each latent program j, we used the corresponding column of the mapping matrix M,1057 
+
+where Mij denotes the attribution score of gene i to latent program j, as continuous 1058 
+
+gene-level scores. For each pair of latent program and annotated gene set, AUROC 1059 
+
+was calculated by treating these attribution scores as predictors and membership in 1060 
+
+the annotated set as binary ground-truth labels. 1061 
+
+Because the latent programs are learned in an unsupervised manner and have no 1062 
+
+predefined correspondence to annotated programs, we adopted a best-match strategy. 1063 
+
+Each latent program was assigned to the annotated gene set with which it achieved the 1064 
+
+highest AUROC. Averaging these best-match AUROC values across latent programs 1065 
+
+yielded the per-latent AUROC. Conversely, each annotated gene set was assigned 1066 
+
+to the latent program achieving the highest AUROC. Averaging these values across 1067 
+
+annotated gene sets yielded the per-program AUROC. 1068 
+
+Application to imaging data 1069 
+
+To demonstrate the applicability of MORPH on imaging data, we applied it to 1070 
+
+predict the infection state distribution of Ebola-virus-infected cells under different 1071 
+
+perturbations based on an optical pooled screening dataset [10]. 1072 
+
+To extract image features that are then inputted into MORPH, we selected the 1073 
+
+three most relevant imaging channels: DAPI, VP35 RNA, and VP35 protein. We 1074 
+
+inputted these channels into a Vision Transformer (ViT) [42], which was pretrained 1075 
+
+on ImageNet-21k with 14 million images. We finetuned the resulting embeddings 1076 
+
+using an auxiliary classification task, where the images of control cells were classified 1077 
+
+into four infection states—“Faint”, “Punctate”, “Cytoplasmic”, and “Peripheral”—as 1078 
+
+labeled in [10]. This auxiliary task was trained by minimizing the following supervised 1079 
+
+contrastive loss [64]: 1080 
+
+Lsup = X
+
+> i∈I
+
+−1
+
+|P (i)|
+
+X 
+
+> g∈P(i)
+
+log exp( Xi · Xg /τ )
+
+P 
+
+> a∈A(i)
+
+exp( Xi · Xa/τ ) , (14) 34 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+where I is the collection of indices i for all images in the batch, P (i) is the set of indices 1081 
+
+of images that belong to the same infection state as the i-th image, A(i) = I \{ i} is the 1082 
+
+set of indices of all images in the batch except the i-th image, τ > 0 is a temperature 1083 
+
+parameter, and Xi is the feature representation of image i, which serves as input to 1084 
+
+MORPH. 1085 
+
+To assess the impact of the representation on downstream perturbation prediction, 1086 
+
+we additionally evaluated alternative feature extractors based on fully unsupervised 1087 
+
+learning. Specifically, we considered representations from DINO [44], scDINO [45], and 1088 
+
+a convolutional autoencoder (CNN). For DINO and scDINO, pretrained models were 1089 
+
+applied directly to the optical pooled screening images to extract fixed feature embed-1090 
+
+dings. For the CNN baseline, we trained a convolutional autoencoder to reconstruct 1091 
+
+the input images and used the latent representations from the encoder as features. For 1092 
+
+consistency across methods, all representations were computed using the same three 1093 
+
+imaging channels (DAPI, VP35 RNA, and VP35 Protein). These features were used 1094 
+
+as inputs to MORPH. 1095 
+
+To evaluate the capability of MORPH to predict infection states under unseen 1096 
+
+perturbations, we fit a logistic regression on the extracted image features of the train-1097 
+
+ing cells to classify them into the four infection states, and we applied this logistic 1098 
+
+regression model to the image features predicted by MORPH for unseen perturba-1099 
+
+tions. Since most perturbations resulted in a cell state distribution nearly identical to 1100 
+
+the control distribution, we applied a chi-squared test, as described in the following 1101 
+
+paragraph, on the predicted state distribution to de-noise the predictions: if the test 1102 
+
+statistic was below a threshold, the prediction was set to the control state distribution 1103 
+
+vector. These de-noised predicted state distribution vectors were then compared with 1104 
+
+the ground-truth state distribution vector. 1105 
+
+For each perturbation, the chi-squared test compared its (predicted) state dis-1106 
+
+tribution to that of the control cells. Given four possible infection states—“Faint”, 1107 
+
+“Punctate”, “Cytoplasmic”, and “Peripheral”—the chi-squared statistic was com-1108 
+
+puted with three degrees of freedom as: χ2 = P4   
+
+> j=1 (O1j−E1j)2
+> E1j
+
++ (O2j −E2j )2 
+
+> E2j
+
+where Oij 1109 
+
+represents the count of cells in state j for control ( i = 1) and perturbation ( i = 2). 1110 
+
+The expected counts, Eij , were calculated as Eij = Ri·Cj 
+
+> G
+
+, where Ri = P4 
+
+> j=1
+
+Oij ,1111 
+
+Cj = O1j + O2j , and G = R1 + R2. To account for multiple hypothesis testing, we 1112 
+
+applied a Bonferroni correction to adjust the resulting p-values. 1113 
+
+Simulation of target nomination. 1114 
+
+To evaluate MORPH in a perturbation nomination setting, we implemented the fol-1115 
+
+lowing steps. We assembled a training set starting with 18 known Ebola regulators, 1116 
+
+including NPC1 , DHODH , CAD , UMPS , VPS11 , VPS16 , VPS18 , VPS33A , VPS39 ,1117 
+
+VPS41 , CTSB , CTSL , SPNS1 , GNPTAB , UVRAG , PIKFYVE , FIG4 , and EXT1 [10]. 1118 
+
+We then supplemented these with 1,491 perturbations randomly sampled from the top 1119 
+
+30% of all 20,336 genome-wide perturbations ranked by early-state fraction (the sum of 1120 
+
+“Faint” and “Punctate”), and 1,491 perturbations randomly sampled from the remain-1121 
+
+ing pool. This resulted in a training set of 3,000 perturbations in total. We then trained 1122 
+
+a Vision Transformer (ViT) on the pilot screen and used it to extract image embed-1123 
+
+dings, which were then used to train MORPH following the same pipeline as previously 1124 
+
+35 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+described. For the remaining 14,973 held-out genes with available DepMap embed-1125 
+
+dings, we used MORPH to generate predicted perturbed cell features. We mapped 1126 
+
+each predicted cell to one of the four infection states using a softmax regression model 1127 
+
+trained on the pilot data, yielding a predicted cell state proportion for each held-1128 
+
+out gene. Finally, we ranked the held-out perturbations by their predicted early-state 1129 
+
+fraction to identify the top candidates for validation against the ground truth. 1130 
+
+Application to T cell differentiation 1131 
+
+For pretraining, we used the K562-GW dataset [7], containing 9,823 perturbations 1132 
+
+measuring the expression of 8,248 genes across over 1,900,000 cells (after quality con-1133 
+
+trol). To ensure that the pretrained model can be transferred to the target cell line 1134 
+
+(i.e., the in-house 73-gene-knockout Perturb-seq data in CD8 T cells in mouse), we 1135 
+
+subsampled the measured genes to the top 5000 highly variable genes that are present 1136 
+
+in both datasets after standard library size normalization and log transformation. Note 1137 
+
+that K562 is a human cell line, whereas the target cell line is in the mouse; therefore, 1138 
+
+a gene is considered shared if its human ortholog is measured in K562 and its mouse 1139 
+
+ortholog is measured in the target cell line. After preprocessing the datasets, we pre-1140 
+
+trained MORPH using the same hyperparameters and setup as used for perturbation 1141 
+
+prediction on K562 (Supplemental Note 1), except that the held-out test set is set to 1142 
+
+none to ensure all perturbations are used either in the training set or in the validation 1143 
+
+set. After pretraining, we finetuned MORPH on the target cell line using the same 1144 
+
+setup as in the transferring across cell line experiments, using randomly selected 85% 1145 
+
+of the 73 perturbations for training and the remaining 15% for validation. 1146 
+
+The T-cell gene prior used in both the pretraining and finetuning steps is con-1147 
+
+structed by concatenating after minimax normalization each individual feature from 1148 
+
+various sources: proliferation scores under various conditions [48–50], production scores 1149 
+
+of various markers [51–53], and time-coarse bulk differential expression [54]. 1150 
+
+The independent Perturb-seq dataset from [55] measures the effect of 180 transcrip-1151 
+
+tion factor knockouts, amongst which 30 are overlapping with the in-house generated 1152 
+
+73-gene-knockout Perturb-seq dataset. To compute the objective function on this 1153 
+
+dataset, we first used Harmony [65] to remove batch effects between this dataset and 1154 
+
+the in-house generated dataset, we then assigned each cell in this dataset to the major-1155 
+
+ity cell state of its neighboring cells in our annotated in-house generated dataset. The 1156 
+
+neighboring cells were defined using Leiden clustering, where a cell’s neighboring cells 1157 
+
+are defined to be the other cells in its Leiden cluster. Cells with no neighboring cells 1158 
+
+in our in-house generated dataset were excluded from the analysis. 1159 
+
+Datasets and preprocessing 1160 
+
+Single-cell RNA sequencing data: For the Replogle [7], Dixit [2] and in-house 1161 
+
+Perturb-seq datasets, the Scanpy toolbox [66] was used to perform cell and gene filter-1162 
+
+ing, library size normalization, and log1p transformation. For all datasets, the 5,000 1163 
+
+most highly variable genes, identified using the highly variable genes function [66], 1164 
+
+were selected to reduce the complexity of the prediction problem, following preprocess-1165 
+
+ing approaches similar to [21, 67]. For cell-line transfer experiments, datasets were first 1166 
+
+36 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+restricted to the intersection of commonly measured genes across cell lines, after which 1167 
+
+the top 5,000 highly variable genes were selected using the source dataset together 1168 
+
+with control cells from the target dataset. Preprocessing for the Norman [5] dataset 1169 
+
+was inherited from [67]. To ensure sufficient data for learning a distribution, perturba-1170 
+
+tions with fewer than 16 cells were filtered out from the datasets. Perturbations with 1171 
+
+between 16 and 32 cells were upsampled (with replacement) to 32 cells. 1172 
+
+Optical pooled screening data: The processed imaging data, single-cell masks, and 1173 
+
+metadata were obtained from the Google Cloud Storage provided by [10]. For each 1174 
+
+train-test split, the ViT model was fine-tuned on the training set using an auxiliary 1175 
+
+task of classifying images into different infection states, and the fine-tuned ViT model 1176 
+
+was then applied to the entire dataset to extract image features; see the previous 1177 
+
+section for more details. Since the dataset is highly imbalanced—most perturbations 1178 
+
+exhibit phenotypes similar to the control distribution—the training set features were 1179 
+
+balanced by up-sampling perturbations with significant effects. Perturbations with 1180 
+
+significant effects were identified using a a chi-squared test, comparing infection states 1181 
+
+with and without perturbations, based solely on the training set. 1182 
+
+Evaluation 1183 
+
+Single-cell RNA-seq data: 1184 
+
+We evaluated MORPH by comparing the distribution of real and predicted gene 1185 
+
+expression of perturbed cells. We used three metrics for this: root mean squared error 1186 
+
+(RMSE ) of feature means, Pearson correlation between the predicted and true mean 1187 
+
+post-perturbation gene expression changes relative to the control, and maximum mean 1188 
+
+discrepancy (MMD ) between the real and predicted gene expression distributions of 1189 
+
+the perturbed cells . 1190 
+
+RMSE: It measures the root mean squared error between the means of the observed 1191 
+
+and predicted cell distributions as 1192 
+
+RM SE ( ¯ˆXg , ¯Xg ) = 
+
+vuut 1
+
+D
+
+> D
+
+X
+
+> i=1
+
+( ¯ˆXgi − ¯Xgi )2, (15) where ¯ˆXgi and ¯Xgi denote the predicted and observed mean of feature i in the perturbed 1193 
+
+cells (where gene g was perturbed), and D is the number of total features in a cell. 1194 
+
+Pearson correlation (delta): It quantifies the relationship between the observed 1195 
+
+and predicted mean changes from the training-set perturbed mean as 1196 
+
+r(δ ¯ˆXg , δ ¯Xg ) = 
+
+PDi=1 (δ ¯ˆXgi − μδ ¯ˆXg )( δ ¯Xgi − μδ ¯Xg )
+
+qPDi=1 (δ ¯ˆXgi − μδ ¯ˆXg )2
+
+qPDi=1 (δ ¯Xgi − μδ ¯Xg )2
+
+, (16) where δ ¯ˆXgi = ¯ˆXgi − ¯Xtrain ,ptb  
+
+> i
+
+and δ ¯Xgi = ¯Xgi − ¯Xtrain ,ptb  
+
+> i
+
+represent the predicted 1197 
+
+and observed mean changes in feature i following perturbation g, relative to its mean 1198 
+
+37 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+value across all perturbed cells in the training set, ¯Xtrain ,ptb  
+
+> i
+
+. Here, μδ ¯ˆXg and μδ ¯Xg are 1199 
+
+the averages of δ ¯ˆXgi and δ ¯Xgi across features i, respectively. This metric follows the 1200 
+
+evaluation protocol of [27] and reduces the influence of global transcriptional shifts 1201 
+
+shared across perturbations (e.g., stress or cell-cycle effects), thereby emphasizing 1202 
+
+perturbation-specific structure. 1203 
+
+Spearman correlation (delta): We additionally computed the Spearman rank 1204 
+
+correlation to evaluate the agreement between predictions and observations. It is cal-1205 
+
+culated identically to Equation 16, but replacing the raw predicted and observed mean 1206 
+
+changes, δ ¯ˆXgi and δ ¯Xgi , with their respective ranks across features. 1207 
+
+Retrieval rank: For each perturbation g, let δ ¯ˆXg = ¯ˆXg − ¯Xtrain ,ptb and δ ¯Xg = ¯Xg −1208 
+
+¯Xtrain ,ptb represent the predicted and observed mean changes following perturbation 1209 
+
+g, relative to the mean across all perturbed cells in the training set, ¯Xtrain ,ptb . The 1210 
+
+retrieval rank of g is defined as 1211 
+
+Retrieval rank( p) = 1
+
+|P| − 1
+
+X 
+
+> q∈P ,q ̸=g
+
+1r(δ ¯ˆXg ,δ ¯Xg )≥r(δ ¯ˆXg ,δ ¯Xq ), (17) where P denotes the set of evaluated perturbations and r denotes the Pearson cor-1212 
+
+relation. The score therefore represents the fraction of other perturbations whose 1213 
+
+correlation with the predicted effect of g does not exceed the self-correlation. Values 1214 
+
+range from 0 (worst) to 1 (best). 1215 
+
+MMD: Metrics based solely on feature means can be insensitive to distributional het-1216 
+
+erogeneity, potentially favoring predictions that capture only the average rather than 1217 
+
+the full complexity of the underlying distribution. To address this limitation, we incor-1218 
+
+porated a distributional distance measure—maximum mean discrepancy (MMD) [58] 1219 
+
+—which captures differences beyond the mean by considering higher-order moments. 1220 
+
+We used an unbiased estimate of MMD by averaging kernel similarities over the cells 1221 
+
+in each set (Equation (6)). The Gaussian kernel was used, and the MMD is reported 1222 
+
+as an average over multiple bandwidths, similar to [56]. 1223 
+
+We reported all metrics using the top 50 marker genes as well as using all genes. 1224 
+
+Marker genes are computed for each perturbation with the scanpy [66] function 1225 
+
+rank genes groups , using the untreated control cells as reference. 1226 
+
+Imaging data: 1227 
+
+We evaluated the model based on its ability to distinguish between biologically relevant 1228 
+
+cell states. Specifically, we computed the L1 loss between the predicted and observed 1229 
+
+cell state vectors for each perturbation, normalizing it by 2 to ensure a range between 1230 
+
+0 to 1: 1231 
+
+L1( ˆSg , S g ) = 12
+
+> 4
+
+X
+
+> i=1
+
+ˆSgi − Sgi , (18) 38 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+where ˆSg and Sg represent the predicted and observed cell state distribution vectors 1232 
+
+for cells subjected to perturbation g, with Sgi showing the proportion of perturbed 1233 
+
+cells in state i.1234 
+
+Implementation details 1235 
+
+We used PyTorch [68] to implement the MORPH neural network model. Hyperpa-1236 
+
+rameter search is discussed in Supplemental Note 1. Detailed computational budgets 1237 
+
+are provided in Supplemental Table 7. Pathway enrichment analysis was implemented 1238 
+
+using the GSEApy package [69]. 1239 
+
+39 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint References 1240 
+
+[1] A focus on single-cell omics. Nature Reviews Genetics 24 , 485–485 (2023) 1241 
+
+[2] Dixit, A., Parnas, O., Li, B., Chen, J., Fulco, C.P., Jerby-Arnon, L., Marjanovic, 1242 
+
+N.D., Dionne, D., Burks, T., Raychowdhury, R., et al. : Perturb-seq: dissecting 1243 
+
+molecular circuits with scalable single-cell RNA profiling of pooled genetic screens. 1244 
+
+Cell 167 (7), 1853–1866 (2016) 1245 
+
+[3] Adamson, B., Norman, T.M., Jost, M., Cho, M.Y., Nu˜ nez, J.K., Chen, Y., Vil-1246 
+
+lalta, J.E., Gilbert, L.A., Horlbeck, M.A., Hein, M.Y., et al. : A multiplexed 1247 
+
+single-cell crispr screening platform enables systematic dissection of the unfolded 1248 
+
+protein response. Cell 167 (7), 1867–1882 (2016) 1249 
+
+[4] Horlbeck, M.A., Xu, A., Wang, M., Bennett, N.K., Park, C.Y., Bogdanoff, D., 1250 
+
+Adamson, B., Chow, E.D., Kampmann, M., Peterson, T.R., et al. : Mapping the 1251 
+
+genetic landscape of human cells. Cell 174 (4), 953–967 (2018) 1252 
+
+[5] Norman, T.M., Horlbeck, M.A., Replogle, J.M., Ge, A.Y., Xu, A., Jost, M., 1253 
+
+Gilbert, L.A., Weissman, J.S.: Exploring genetic interaction manifolds con-1254 
+
+structed from rich single-cell phenotypes. Science 365 (6455), 786–793 (2019) 1255 
+
+[6] Frangieh, C.J., Melms, J.C., Thakore, P.I., Geiger-Schuller, K.R., Ho, P., Luoma, 1256 
+
+A.M., Cleary, B., Jerby-Arnon, L., Malu, S., Cuoco, M.S., et al. : Multimodal 1257 
+
+pooled Perturb-CITE-seq screens in patient models define mechanisms of cancer 1258 
+
+immune evasion. Nature genetics 53 (3), 332–341 (2021) 1259 
+
+[7] Replogle, J.M., Saunders, R.A., Pogson, A.N., Hussmann, J.A., Lenail, A., 1260 
+
+Guna, A., Mascibroda, L., Wagner, E.J., Adelman, K., Lithwick-Yanai, G., et 1261 
+
+al. : Mapping information-rich genotype-phenotype landscapes with genome-scale 1262 
+
+Perturb-seq. Cell 185 (14), 2559–2575 (2022) 1263 
+
+[8] Feldman, D., Funk, L., Le, A., Carlson, R.J., Leiken, M.D., Tsai, F., Soong, B., 1264 
+
+Singh, A., Blainey, P.C.: Pooled genetic perturbation screens with image-based 1265 
+
+phenotypes. Nature protocols 17 (2), 476–512 (2022) 1266 
+
+[9] Carlson, R.J., Leiken, M.D., Guna, A., Hacohen, N., Blainey, P.C.: A genome-wide 1267 
+
+optical pooled screen reveals regulators of cellular antiviral responses. Proceedings 1268 
+
+of the National Academy of Sciences 120 (16), 2210623120 (2023) 1269 
+
+[10] Carlson, R.J., Patten, J., Stefanakis, G., Soong, B.Y., Radhakrishnan, A., Singh, 1270 
+
+A., Thakur, N., Amarasinghe, G.K., Hacohen, N., Basler, C.F., et al.: Single-1271 
+
+cell image-based genetic screens systematically identify regulators of ebola virus 1272 
+
+subcellular infection dynamics. bioRxiv (2024) 1273 
+
+[11] Hart, T., Chandrashekhar, M., Aregger, M., Steinhart, Z., Brown, K.R., 1274 
+
+MacLeod, G., Mis, M., Zimmermann, M., Fradet-Turcotte, A., Sun, S., et al. :1275 
+
+40 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+High-resolution crispr screens reveal fitness genes and genotype-specific cancer 1276 
+
+liabilities. Cell 163 (6), 1515–1526 (2015) 1277 
+
+[12] Tsherniak, A., Vazquez, F., Montgomery, P.G., Weir, B.A., Kryukov, G., Cowley, 1278 
+
+G.S., Gill, S., Harrington, W.F., Pantel, S., Krill-Burger, J.M., et al. : Defining a 1279 
+
+cancer dependency map. Cell 170 (3), 564–576 (2017) 1280 
+
+[13] Wang, T., Yu, H., Hughes, N.W., Liu, B., Kendirli, A., Klein, K., Chen, W.W., 1281 
+
+Lander, E.S., Sabatini, D.M.: Gene essentiality profiling reveals gene networks 1282 
+
+and synthetic lethal interactions with oncogenic Ras. Cell 168 (5), 890–903 (2017) 1283 
+
+[14] Lee, J.S., Nair, N.U., Dinstag, G., Chapman, L., Chung, Y., Wang, K., Sinha, S., 1284 
+
+Cha, H., Kim, D., Schperberg, A.V., et al. : Synthetic lethality-mediated precision 1285 
+
+oncology via the tumor transcriptome. Cell 184 (9), 2487–2502 (2021) 1286 
+
+[15] Katti, A., Diaz, B.J., Caragine, C.M., Sanjana, N.E., Dow, L.E.: CRISPR in 1287 
+
+cancer biology and therapy. Nature Reviews Cancer 22 (5), 259–279 (2022) 1288 
+
+[16] O’Neil, N.J., Bailey, M.L., Hieter, P.: Synthetic lethality and cancer. Nature 1289 
+
+Reviews Genetics 18 (10), 613–623 (2017) 1290 
+
+[17] Uhler, C.: Building a two-way street between cell biology and machine learning. 1291 
+
+Nature cell biology 26 (1), 13–14 (2024) 1292 
+
+[18] Bunne, C., Roohani, Y., Rosen, Y., Gupta, A., Zhang, X., Roed, M., Alexandrov, 1293 
+
+T., AlQuraishi, M., Brennan, P., Burkhardt, D.B., et al. : How to build the virtual 1294 
+
+cell with artificial intelligence: Priorities and opportunities. Cell 187 (25), 7045– 1295 
+
+7063 (2024) 1296 
+
+[19] Zhang, J., Schwartz, M.A., Mutaher, M., Olajide, O., Pritykin, Y., Ashenberg, O., 1297 
+
+Hacohen, N., Uhler, C.: A community machine learning challenge to predict the 1298 
+
+effects of gene perturbations on t cell differentiation for cancer immunotherapy. 1299 
+
+bioRxiv, 2026–05 (2026) 1300 
+
+[20] Arc Institute: Virtual Cell Challenge 2025 Wrap-Up: Winners and Reflections. 1301 
+
+https://arcinstitute.org/news/virtual-cell-challenge-2025-wrap-up. Accessed: 1302 
+
+2026-06-25 (2025) 1303 
+
+[21] Roohani, Y., Huang, K., Leskovec, J.: Predicting transcriptional outcomes of 1304 
+
+novel multigene perturbations with GEARS. Nature Biotechnology 42 (6), 927– 1305 
+
+935 (2024) 1306 
+
+[22] Cui, H., Wang, C., Maan, H., Pang, K., Luo, F., Duan, N., Wang, B.: scGPT: 1307 
+
+toward building a foundation model for single-cell multi-omics using generative 1308 
+
+AI. Nature Methods, 1–11 (2024) 1309 
+
+[23] Gaudelet, T., Del Vecchio, A., Carrami, E.M., Cudini, J., Kapourani, C.-A., 1310 
+
+41 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+Uhler, C., Edwards, L.: Season combinatorial intervention predictions with Salt 1311 
+
+& Peper. arXiv preprint arXiv:2404.16907 (2024) 1312 
+
+[24] Ahlmann-Eltze, C., Huber, W., Anders, S.: Deep learning-based predictions of 1313 
+
+gene perturbation effects do not yet outperform simple linear methods. BioRxiv, 1314 
+
+2024–09 (2024) 1315 
+
+[25] Wenkel, F., Tu, W., Masschelein, C., Shirzad, H., Hodgson, L., Bendidi, I., East-1316 
+
+wood, C., Whitfield, S.T., Russell, C., El Mesbahi, Y., et al.: TxPert: using 1317 
+
+multiple knowledge graphs for prediction of transcriptomic perturbation effects. 1318 
+
+Nature Biotechnology, 1–8 (2026) 1319 
+
+[26] Zhang, J., Greenewald, K., Squires, C., Srivastava, A., Shanmugam, K., Uhler, 1320 
+
+C.: Identifiability guarantees for causal disentanglement from soft interventions. 1321 
+
+Advances in Neural Information Processing Systems 36 (2024) 1322 
+
+[27] Vi˜ nas Torn´ e, R., Wiatrak, M., Piran, Z., Fan, S., Jiang, L., Teichmann, S.A., 1323 
+
+Nitzan, M., Brbi´ c, M.: Systema: a framework for evaluating genetic perturba-1324 
+
+tion response prediction beyond systematic variation. Nature Biotechnology, 1–10 1325 
+
+(2025) 1326 
+
+[28] Theodoris, C.V., Xiao, L., Chopra, A., Chaffin, M.D., Al Sayed, Z.R., Hill, M.C., 1327 
+
+Mantineo, H., Brydon, E.M., Zeng, Z., Liu, X.S., et al. : Transfer learning enables 1328 
+
+predictions in network biology. Nature 618 (7965), 616–624 (2023) 1329 
+
+[29] Chen, Y., Zou, J.: Simple and effective embedding model for single-cell biology 1330 
+
+built from ChatGPT. Nature Biomedical Engineering, 1–11 (2024) 1331 
+
+[30] Gahmberg, C.G., Andersson, L.: K562–a human leukemia cell line with erythroid 1332 
+
+features. In: Seminars in Hematology, vol. 18, pp. 72–77 (1981) 1333 
+
+[31] Andersson, L.C., JOKINEN, M., Gahmberg, C.G.: Induction of erythroid dif-1334 
+
+ferentiation in the human leukaemia cell line K562. Nature 278 (5702), 364–365 1335 
+
+(1979) 1336 
+
+[32] Rutherford, T., Clegg, J., Higgs, D., Jones, R., Thompson, J., Weatherall, 1337 
+
+D.: Embryonic erythroid differentiation in the human leukemic cell line K562. 1338 
+
+Proceedings of the National Academy of Sciences 78 (1), 348–352 (1981) 1339 
+
+[33] Zhang, J., Cammarata, L., Squires, C., Sapsis, T.P., Uhler, C.: Active learning for 1340 
+
+optimal intervention design in causal models. Nature Machine Intelligence 5(10), 1341 
+
+1066–1075 (2023) 1342 
+
+[34] Tosh, C., Tec, M., White, J.B., Quinn, J.F., Ibanez Sanchez, G., Calder, P., 1343 
+
+Kung, A.L., Dela Cruz, F.S., Tansey, W.: A Bayesian active learning platform for 1344 
+
+scalable combination drug screens. Nature Communications 16 (1), 156 (2025) 1345 
+
+42 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+[35] Lewis, D.D.: A sequential algorithm for training text classifiers: Corrigendum and 1346 
+
+additional data. In: Acm Sigir Forum, vol. 29, pp. 13–19 (1995). ACM New York, 1347 
+
+NY, USA 1348 
+
+[36] Joshi, A.J., Porikli, F., Papanikolopoulos, N.: Multi-class active learning for 1349 
+
+image classification. In: 2009 Ieee Conference on Computer Vision and Pattern 1350 
+
+Recognition, pp. 2372–2379 (2009). IEEE 1351 
+
+[37] Wang, K., Zhang, D., Li, Y., Zhang, R., Lin, L.: Cost-effective active learning for 1352 
+
+deep image classification. IEEE Transactions on Circuits and Systems for Video 1353 
+
+Technology 27 (12), 2591–2600 (2016) 1354 
+
+[38] Seung, H.S., Opper, M., Sompolinsky, H.: Query by committee. In: Proceedings 1355 
+
+of the Fifth Annual Workshop on Computational Learning Theory, pp. 287–294 1356 
+
+(1992) 1357 
+
+[39] Sener, O., Savarese, S.: Active learning for convolutional neural networks: A core-1358 
+
+set approach. arXiv preprint arXiv:1708.00489 (2017) 1359 
+
+[40] Nguyen, H.T., Smeulders, A.: Active learning using pre-clustering. In: Proceed-1360 
+
+ings of the Twenty-first International Conference on Machine Learning, p. 79 1361 
+
+(2004) 1362 
+
+[41] Yoo, D., Kweon, I.S.: Learning loss for active learning. In: Proceedings of the 1363 
+
+IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 93–102 1364 
+
+(2019) 1365 
+
+[42] Wu, B., Xu, C., Dai, X., Wan, A., Zhang, P., Yan, Z., Tomizuka, M., Gonzalez, J., 1366 
+
+Keutzer, K., Vajda, P.: Visual Transformers: Token-based Image Representation 1367 
+
+and Processing for Computer Vision (2020) 1368 
+
+[43] Deng, J., Dong, W., Socher, R., Li, L.-J., Li, K., Fei-Fei, L.: Imagenet: A large-1369 
+
+scale hierarchical image database. In: 2009 IEEE Conference on Computer Vision 1370 
+
+and Pattern Recognition, pp. 248–255 (2009). Ieee 1371 
+
+[44] Caron, M., Touvron, H., Misra, I., J´ egou, H., Mairal, J., Bojanowski, P., Joulin, 1372 
+
+A.: Emerging properties in self-supervised vision transformers. In: Proceedings 1373 
+
+of the IEEE/CVF International Conference on Computer Vision, pp. 9650–9660 1374 
+
+(2021) 1375 
+
+[45] Pfaendler, R., Hanimann, J., Lee, S., Snijder, B.: Self-supervised vision trans-1376 
+
+formers accurately decode cellular state heterogeneity. Biorxiv, 2023–01 (2023) 1377 
+
+[46] The Eric and Wendy Schmidt Center: Cancer Immunother-1378 
+
+apy Grand Data Science Challenge. Accessed: 7 March 1379 
+
+2026 (2023). https://www.ericandwendyschmidtcenter.org/ 1380 
+
+cancer-immunotherapy-grand-data-science-challenge 1381 
+
+43 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+[47] Miller, B.C., Sen, D.R., Al Abosy, R., Bi, K., Virkud, Y.V., LaFleur, M.W., Yates, 1382 
+
+K.B., Lako, A., Felt, K., Naik, G.S., et al. : Subsets of exhausted CD8+ T cells 1383 
+
+differentially mediate tumor control and respond to checkpoint blockade. Nature 1384 
+
+immunology 20 (3), 326–336 (2019) 1385 
+
+[48] Wei, J., Long, L., Zheng, W., Dhungana, Y., Lim, S.A., Guy, C., Wang, Y., 1386 
+
+Wang, Y.-D., Qian, C., Xu, B., et al. : Targeting REGNASE-1 programs long-lived 1387 
+
+effector T cells for cancer therapy. Nature 576 (7787), 471–476 (2019) 1388 
+
+[49] Belk, J.A., Yao, W., Ly, N., Freitas, K.A., Chen, Y.-T., Shi, Q., Valencia, A.M., 1389 
+
+Shifrut, E., Kale, N., Yost, K.E., et al. : Genome-wide CRISPR screens of T cell 1390 
+
+exhaustion identify chromatin remodeling factors that limit T cell persistence. 1391 
+
+Cancer cell 40 (7), 768–786 (2022) 1392 
+
+[50] Legut, M., Gajic, Z., Guarino, M., Daniloski, Z., Rahman, J.A., Xue, X., Lu, C., 1393 
+
+Lu, L., Mimitou, E.P., Hao, S., et al. : A genome-scale screen for synthetic drivers 1394 
+
+of T cell proliferation. Nature 603 (7902), 728–735 (2022) 1395 
+
+[51] Schmidt, R., Ward, C.C., Dajani, R., Armour-Garb, Z., Ota, M., Allain, V., 1396 
+
+Hernandez, R., Layeghi, M., Xing, G., Goudy, L., et al. : Base-editing mutagenesis 1397 
+
+maps alleles to tune human T cell functions. Nature 625 (7996), 805–812 (2024) 1398 
+
+[52] Carnevale, J., Shifrut, E., Kale, N., Nyberg, W.A., Blaeschke, F., Chen, Y.Y., 1399 
+
+Li, Z., Bapat, S.P., Diolaiti, M.E., O’Leary, P., et al. : RASA2 ablation in T cells 1400 
+
+boosts antigen sensitivity and long-term function. Nature 609 (7925), 174–182 1401 
+
+(2022) 1402 
+
+[53] Walsh, Z.H., Shah, P., Kothapalli, N., Shah, S.B., Nikolenyi, G., Brodtman, D.Z., 1403 
+
+Leuzzi, G., Rogava, M., Mu, M., Ho, P., et al. : Mapping variant effects on anti-1404 
+
+tumor hallmarks of primary human T cells with base-editing screens. Nature 1405 
+
+biotechnology 43 (3), 384–395 (2025) 1406 
+
+[54] Chen, Z., Arai, E., Khan, O., Zhang, Z., Ngiow, S.F., He, Y., Huang, H., Manne, 1407 
+
+S., Cao, Z., Baxter, A.E., et al. : In vivo CD8+ T cell CRISPR screening reveals 1408 
+
+control by Fli1 in infection and cancer. Cell 184 (5), 1262–1280 (2021) 1409 
+
+[55] Zhou, P., Shi, H., Huang, H., Sun, X., Yuan, S., Chapman, N.M., Connelly, J.P., 1410 
+
+Lim, S.A., Saravia, J., Kc, A., et al. : Single-cell CRISPR screens in vivo map T 1411 
+
+cell fate regulomes in cancer. Nature 624 (7990), 154–163 (2023) 1412 
+
+[56] Bunne, C., Stark, S.G., Gut, G., Del Castillo, J.S., Levesque, M., Lehmann, K.-V., 1413 
+
+Pelkmans, L., Krause, A., R¨ atsch, G.: Learning single-cell perturbation responses 1414 
+
+using neural optimal transport. Nature methods 20 (11), 1759–1768 (2023) 1415 
+
+[57] Kingma, D.P., Welling, M., et al.: Auto-encoding variational bayes. Banff, Canada 1416 
+
+(2013) 1417 
+
+44 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+[58] Gretton, A., Borgwardt, K.M., Rasch, M.J., Sch¨ olkopf, B., Smola, A.: A ker-1418 
+
+nel two-sample test. The Journal of Machine Learning Research 13 (1), 723–773 1419 
+
+(2012) 1420 
+
+[59] OpenAI: New and Improved Embedding Model. Accessed: 2024-05-04 (2024). 1421 
+
+https://openai.com/blog/new-and-improved-embedding-model 1422 
+
+[60] Sayers, E.W., Beck, J., Bolton, E.E., Brister, J.R., Chan, J., Comeau, D.C., Con-1423 
+
+nor, R., DiCuccio, M., Farrell, C.M., Feldgarden, M., et al. : Database resources of 1424 
+
+the national center for biotechnology information. Nucleic Acids Research 52 (D1), 1425 
+
+33 (2024) 1426 
+
+[61] Bateman, A., Martin, M.-J., Orchard, S., Magrane, M., Ahmad, S., Alpi, E., 1427 
+
+Bowler-Barnett, E.H., Britto, R., Cukura, A., Denny, P., et al. : UniProt: the 1428 
+
+universal protein knowledgebase in 2023. Nucleic acids research 51 (D 1), 523–531 1429 
+
+(2023) 1430 
+
+[62] Szklarczyk, D., Kirsch, R., Koutrouli, M., Nastou, K., Mehryary, F., Hachilif, R., 1431 
+
+Gable, A.L., Fang, T., Doncheva, N.T., Pyysalo, S., et al. : The STRING database 1432 
+
+in 2023: protein–protein association networks and functional enrichment analyses 1433 
+
+for any sequenced genome of interest. Nucleic acids research 51 (D1), 638–646 1434 
+
+(2023) 1435 
+
+[63] Vaswani, A.: Attention is all you need. Advances in Neural Information Processing 1436 
+
+Systems (2017) 1437 
+
+[64] Khosla, P., Teterwak, P., Wang, C., Sarna, A., Tian, Y., Isola, P., Maschinot, 1438 
+
+A., Liu, C., Krishnan, D.: Supervised contrastive learning. Advances in neural 1439 
+
+information processing systems 33 , 18661–18673 (2020) 1440 
+
+[65] Korsunsky, I., Millard, N., Fan, J., Slowikowski, K., Zhang, F., Wei, K., 1441 
+
+Baglaenko, Y., Brenner, M., Loh, P.-r., Raychaudhuri, S.: Fast, sensitive and 1442 
+
+accurate integration of single-cell data with Harmony. Nature methods 16 (12), 1443 
+
+1289–1296 (2019) 1444 
+
+[66] Wolf, F.A., Angerer, P., Theis, F.J.: SCANPY: large-scale single-cell gene 1445 
+
+expression data analysis. Genome biology 19 , 1–5 (2018) 1446 
+
+[67] Lotfollahi, M., Klimovskaia Susmelj, A., De Donno, C., Hetzel, L., Ji, Y., Ibarra, 1447 
+
+I.L., Srivatsan, S.R., Naghipourfar, M., Daza, R.M., Martin, B., et al. : Predicting 1448 
+
+cellular responses to complex perturbations in high-throughput screens. Molecular 1449 
+
+systems biology 19 (6), 11517 (2023) 1450 
+
+[68] Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J., Chanan, G., Killeen, 1451 
+
+T., Lin, Z., Gimelshein, N., Antiga, L., et al.: Pytorch: An imperative style, high-1452 
+
+performance deep learning library. Advances in neural information processing 1453 
+
+systems 32 (2019) 1454 
+
+45 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint
+
+[69] Fang, Z., Liu, X., Peltz, G.: GSEApy: a comprehensive package for performing 1455 
+
+gene set enrichment analysis in python. Bioinformatics 39 (1), 757 (2023) 1456 
+
+46 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 1, 2026. ;https://doi.org/10.1101/2025.06.27.661992 doi: bioRxiv preprint

@@ -1,0 +1,2858 @@
+Title: Back to basics: Observed statistics are sufficient to predict drug responses
+
+URL Source: https://www.biorxiv.org/content/10.64898/2026.06.09.731197v1.full.pdf
+
+Published Time: Tue, 07 Jul 2026 05:01:01 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+P R E P R I N T 
+
+# Back to basics: Observed statistics are 
+
+# sufficient to predict drug responses 
+
+Valentine Svensson 1, Umair Khan 1, Hamed Heydari 1, Airol A. Ubas 1, Nicole Thomas 1, Daniele Merico 1, Hani 
+
+Goodarzi 1, John Yu 1, Nima Alidoust 1, Shreshth Gandhi 1
+
+1 Tahoe Therapeutics, South San Francisco, CA, USA 
+
+A B S T R A C T  Predicting how cells, tissues, and patients will respond to a drug, cytokine, or genetic per 
+
+turbation is central to biological and clinical reasoning. The practical goal is to estimate 
+
+the analysis  ready readouts that support this reasoning: which cellular responses are 
+
+context  dependent, which perturbations reveal shared or divergent mechanisms, and 
+
+which observations should become the basis for the next experiment. 
+
+Here we introduce Rhaister, a perturbation  response predictor that operates directly on 
+
+screen  level summary statistics. By measuring just a few perturbations in a new biolog 
+
+ical context, Rhaister predicts the unmeasured perturbations by learning how response 
+
+patterns vary across reference contexts. This formulation applies to both fine  grained 
+
+molecular readouts, such as transcriptional responses from Tahoe  100M or other large 
+
+perturbation screen, or on phenotypic endpoints. To train and apply Rhaister on pheno 
+
+typic endpoints we created Emerald Bay, a purpose  built Tahoe dataset that unifies multi 
+
+day cancer drug perturbation, pooled Mosaic tumor contexts, and paired transcriptomic 
+
+response measurements *.
+
+Across these settings, Rhaister matches or exceeds substantially more expensive virtual 
+
+cell models, often achieving the highest values possible in evaluation metrics, while 
+
+training in seconds and running predictions in milliseconds. On Emerald Bay, Rhaister 
+
+predicts context  specific drug phenotypes from sensitivity measurements alone and 
+
+improves further when including transcriptomic information. We also introduce Rhais 
+
+ter  O, predicting drug responses in new contexts from baseline expression alone and, 
+
+to our knowledge, provides the first zero  shot model for this task. Rhaister establishes 
+
+summary  statistic perturbation modeling as a fast, interpretable framework for predict 
+
+ing biological response across new contexts.  
+
+> *
+
+https://huggingface.co/collections/tahoebio/rhaister 
+
+.CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S 
+
+# Introduction 
+
+Predicting how a sample (a cell population, a tissue, 
+
+a patient) responds to a perturbation sits at the core 
+
+of biological reasoning. Nominating targets, finding selec 
+
+tive perturbations, identifying which patients they should 
+
+reach, and reasoning through how a perturbation acts and 
+
+how resistance emerges all leverage this prediction among 
+
+others. 
+
+In practice we do this in two steps. We measure how 
+
+perturbations act in disease models that are accessible 
+
+and scalable enough to reason through, and we use that 
+
+to predict what happens in contexts we cannot reach as 
+
+easily. 
+
+Both steps are bounded. Running perturbations in acces 
+
+sible models is feasible but slow. It ranges from weeks 
+
+to months per screen, and for longer across the tens or 
+
+hundreds of thousands of perturbations we would want to 
+
+probe. As biological data and simulators become coupled 
+
+to agents that reason in seconds, that latency becomes dis 
+
+qualifying. The contexts that matter most are harder still: 
+
+rare cell types, tissues that will not grow outside the body, 
+
+diseased cells that resist culture, and cells inside patients 
+
+reachable only through clinical trials. Even if time wouldn’t 
+
+be a limiting factor, perturbing these at scale would be 
+
+impossible. 
+
+For broad value in reasoning, we need diverse readouts. 
+
+Often we want the response of specific pathways; just as 
+
+often we want direct phenotypic endpoints that matter 
+
+for discovery, e.g., cell death across cancer cells of many 
+
+genetic backgrounds. 
+
+Together, these define the problem: infer diverse pheno 
+
+types from perturbations in new biological samples. 
+
+There have been many attempts using various innovative 
+
+“virtual cell models” for this purpose  [1] , [2] , [3] , [4] , [5] ,
+
+[6] , [7] . These models are used to simulate single  cell 
+
+data of perturbations in new contexts. Three gaps remain: 
+
+zero  shot prediction, reaching more complex phenotypes, 
+
+and pace of training / prediction for integration of these 
+
+models as grounding data in agentic reasoning  [8] , [9] .
+
+Furthermore, no model has shown clear scaling with more 
+
+perturbations of samples. 
+
+Here we present our modeling framework “Rhaister”, de 
+
+signed to predict transcriptional perturbation responses 
+
+and other phenotypes. Our process inverts the typical 
+
+single  cell perturbation modeling workflow ( Figure 1 , top 
+
+right). Rhaister operates on aggregated summary statis 
+
+tics directly from large and diverse data to enable training 
+
+and prediction at the speed of agentic reasoning systems. 
+
+To enable modeling of phenotypic readout, we created 
+
+Emerald Bay, a new perturbation atlas of cancer therapeu 
+
+tics applied to a large number of biological contexts, pro 
+
+viding drug phenotype readout with paired transcriptional 
+
+readout from two million single cells. Using this data, we 
+
+apply Rhaister to the task of drug phenotype prediction, 
+
+where it substantially outperforms baselines. 
+
+Using only summary statistics, the Rhaister model 
+
+achieves state of the art performance in general across 
+
+evaluation metrics, and in many cases saturating perfor 
+
+mance. Rhaisters performance is in large part enabled by 
+
+rich and diverse training data. Structurally, Rhaister learns 
+
+to predict perturbation responses as combinations of 
+
+panel perturbations. With a large and sufficiently diverse 
+
+training set, this straightforward strategy is sufficient to 
+
+saturate predictive performance using a small panel of 
+
+observed drugs. 
+
+Finally, having achieved maximal possible performance 
+
+when predicting perturbation responses from a drug panel 
+
+using Rhaister, we moved to the more ambitious task of 
+
+“zeroshot” prediction. We developed “Rhaister  O”, a vari 
+
+ation on Rhaister predicting perturbation responses using 
+
+baseline transcriptomic features alone. This would enable 
+
+translation of perturbation effects from accessible in vitro 
+
+models to inaccessible arbitrary biological contexts. 
+
+Rhaister  O is the first model to meaningfully improve over 
+
+simple baseline models for the baseline  only perturbation 
+
+prediction task, and outperforming complex prior state of 
+
+the art virtual cell models for this task. 
+
+By changing the focus from accurately simulating single 
+
+cells for the sake of downstream analysis, to modeling 
+
+analysis results, we can make more effective use of large 
+
+perturbation screens. Screens with high diversity and rich 
+
+readouts like  Tahoe-100M  and  Emerald Bay  provide strong 
+
+predictive signals when focusing on the effects of pertur 
+
+bations.   
+
+> T A H O E B I O . A I 2 / 16
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint
+
+P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S Perturbation extrapolation 
+
+Tahoe-100M drug screen 
+
+Observed 
+
+Cells 
+
+Virtual cell 
+
+model 
+
+> M O D E L
+> M O D E L
+
+S T A N D A R D 
+
+W O R K F L O W 
+
+R H A I S T E R 
+
+W O R K F L O W 
+
+> A N A L Y S I S
+> A N A L Y S I S
+
+Counterfactual 
+
+cells Stats 
+
+pipeline Stat 
+
+predictions 
+
+Stat 
+
+predictions 
+
+Observed 
+
+stats Rhaister Stats 
+
+pipeline 
+
+Perturbation 
+
+panel Out of-panel perturbations Reference contexts 
+
+Query contexts Predicted perturbations Global Mean 
+
+Ctx. Mean 
+
+Pert. Mean 
+
+Additive 
+
+STATE 
+
+Rhaister 
+
+Half-sample 
+
+reference 
+
+> .50
+> .64
+> .69
+> .82
+> .93
+> .96
+> .93
+> .19
+> .39
+> .45
+> .55
+> .81
+> .87
+> .77
+> .34
+> .51
+> .40
+> .55
+> .51
+> .73
+> .62
+> .27
+> .49
+> .48
+> .61
+> .57
+> .81
+> .67
+> .26
+> .38
+> .30
+> .43
+> .40
+> .59
+> .52
+> .00
+> .46
+> .67
+> .85
+> .89
+> .96
+> .97
+
+Discrimination Pearson PR-AUC Spearman LFC DE overlap Spearman ES 
+
+Global Mean 
+
+Ctx. Mean 
+
+Pert. Mean 
+
+Additive 
+
+STATE 
+
+Rhaister 
+
+Half-sample 
+
+reference 
+
+> .50
+> .59
+> .54
+> .64
+> .57
+> .65
+> .74
+> .02
+> .31
+> .27
+> .43
+> .25
+> .46
+> .43
+> .36
+> .37
+> .33
+> .42
+> .20
+> .40
+> .48
+> .20
+> .50
+> .39
+> .63
+> .34
+> .59
+> .61
+> .10
+> .27
+> .19
+> .31
+> .08
+> .28
+> .38
+> .00
+> .67
+> .31
+> .77
+> .66
+> .79
+> .92
+
+0.0 0.5 1.0 
+
+Global Mean 
+
+Ctx. Mean 
+
+Pert. Mean 
+
+Additive 
+
+STATE 
+
+Rhaister 
+
+Half-sample 
+
+reference 
+
+> .50
+> .50
+> .70
+> .74
+> .73
+> .78
+> .85
+
+0.0 0.5 1.0 
+
+> .31
+> .37
+> .34
+> .39
+> .37
+> .41
+> .43
+
+0.0 0.5 1.0 
+
+> .01
+> .05
+> .03
+> .08
+> .07
+> .08
+> .06
+
+0.0 0.5 1.0 
+
+> .18
+> .74
+> .19
+> .66
+> .78
+> .63
+> .42
+
+0.0 0.5 1.0 
+
+> .06
+> .11
+> .06
+> .14
+> .06
+> .14
+> .07
+
+0.0 0.5 1.0 
+
+> .00
+> .19
+> .22
+> .44
+> .23
+> .41
+
+metric value 
+
+Parse-PBMC cytokine screen 
+
+Replogle-Nadig genetic screen 
+
+Figure 1.  Perturbation extrapolation, top left:  Schematic of the perturbation extrapolation task. Our goal is to predict how a 
+
+new biological context will respond to  any  drug in our library given how that context responds to a small panel of drugs.  Top right :
+
+Schematic of our modeling workflow, contrasted against typical perturbation prediction workflows.  Tahoe-100M drug screen: 
+
+Results on Tahoe  100M using six evaluation metrics reflecting downstream analysis tasks. Confidence intervals represent  ± 1SD 
+
+across train/test splits.  Parse-PBMC cytokine screen , Replogle-Nadig genetic screen:  Performance on additional perturbation 
+
+screen data using the same evaluation metrics. 
+
+T A H O E B I O . A I 3 / 16 
+
+.CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S 
+
+# Rhaister saturates transcriptional 
+
+# perturbation prediction evaluation 
+
+# metric performance 
+
+Transcriptional perturbation responses of gene regulation 
+
+are reflected in three units that are output from statisti 
+
+cal analysis of single  cell gene expression data: log2 fold 
+
+change, Mann  Whitney  𝑈  test p  values, and expression 
+
+delta. These summary statistics are estimated by compar 
+
+ing a perturbation to a corresponding negative control for 
+
+each biological context. They are the typical output arti 
+
+facts a researcher uses to interpret the results of a pertur 
+
+bation, reflecting which genes’ expressions are affected 
+
+by the perturbation, how strongly, and to what degree of 
+
+certainty. 
+
+The summary statistics for each combination of (context, 
+
+perturbation, gene) are treated as different views of the 
+
+data, and our goal is to predict all three views, for all 
+
+genes, in unseen (context, perturbation) combinations, 
+
+given seen combinations of (context, perturbation). 
+
+The Rhaister model expresses the summary statistics of 
+
+non-panel perturbations  as linear combinations of summary 
+
+statistics of  panel perturbations . The linear weights are 
+
+trained using  reference contexts  where the full perturbation 
+
+screen of both non  panel and panel perturbations are 
+
+available. The model can then be applied to  query contexts 
+
+where only panel perturbations have been observed to 
+
+produce predictions of the summary statistics. 
+
+We applied the Rhaister model to Tahoe  100M drug 
+
+screening data  [10] . Evaluating prediction using six 
+
+metrics reflecting properties important for downstream 
+
+computational biology analysis  [2] , shows Rhaister as 
+
+overcoming naive group  mean baselines and an additive 
+
+baseline, as well as the state  of  the  art virtual cell model 
+
+STATE ( Figure 1 ). The Rhaister model performance is on 
+
+par with half  sample reference performance, a measure 
+
+of how well the observed data can  predict itself , indicating 
+
+that performance on these evaluation metrics is satu 
+
+rated, with no meaningful benefit to improving upon them. 
+
+The rich combinations of contexts and perturbations avail 
+
+able in the Tahoe  100M data enable this straightforward 
+
+yet successful framing: unseen perturbations as linear 
+
+combinations of seen perturbations. Having access to 
+
+many reference contexts allows the model to accurately 
+
+learn which perturbations are informative in which con 
+
+texts. 
+
+To evaluate broad applicability of Rhaister, we applied 
+
+it to predict donor  specific perturbation responses in a 
+
+cytokine screen on peripheral blood from human donors 
+
+[11] . In the cytokine screen dataset, an additive base 
+
+line showed strong performance across the evaluation 
+
+metrics. The Rhaister model slightly outperformed the 
+
+additive baseline, approaching half  sample reference per 
+
+formance. Both the additive baseline and Rhaister outper 
+
+formed the STATE model ( Figure 1  Parse  PBMC cytokine 
+
+screen). 
+
+Finally, we also applied the Rhaister model to a gene edit 
+
+ing CRISPR screen dataset limited to only four biological 
+
+contexts  [12] , [13] . In this case Rhaister achieves saturated 
+
+performance on several evaluation metrics, but under 
+
+performs on other metrics relative to STATE ( Figure 1 
+
+Replogle  Nadig genetic screen). This is consistent with 
+
+predictive performance being enabled by having access to 
+
+a large number of reference contexts for training.           
+
+> T A H O E B I O . A I 4 / 16
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S
+
+# Emerald Bay enables drug 
+
+# phenotype prediction 
+
+In the context of cancer, the role of therapeutics is to kill 
+
+cancer cells, or at least inhibit their growth. The key drug 
+
+phenotype is sensitivity to drugs in these effects. Defining 
+
+drug sensitivity by relative growth rate inhibition (relative 
+
+decrease in cell count compared to vehicle) is frequently 
+
+used as the primary phenotype. Context  specific drug 
+
+sensitivity is of particular interest, since selectivity for 
+
+certain cancer subtypes based on shared genetics or tran 
+
+scriptional states is used as a proxy for selectivity for those 
+
+cancers. 
+
+To train models for drug sensitivity prediction, we created 
+
+Emerald Bay, a dataset from a multi  day treatment of bio 
+
+logically pooled Mosaic tumors  [10] , [14]  against a battery 
+
+of cancer therapeutics. Emerald Bay contained a curated 
+
+set of anticancer agents at multiple doses treated across 
+
+a Mosaic tumor pool optimized for five  day culture condi 
+
+tions. The Mosaic tumor pool represents a diverse set of 
+
+solid tumors ( Figure 2  Emerald Bay cancer models). Emer 
+
+ald Bay data is available on HuggingFace 1.
+
+We applied Rhaister to Emerald Bay, to predict drug sensi 
+
+tivity as a summary statistic per context and perturbation. 
+
+In Emerald Bay, each combination of (context, perturba 
+
+tion) has a sensitivity summary statistic. Our goal is to 
+
+learn from observed (context, perturbation) combinations 
+
+with a panel of drugs, what will happen for unseen pertur 
+
+bations (drugs treatments) in new cell contexts. No naive 
+
+baselines perform successfully (coefficient of determina 
+
+tion,  𝑅 2, of ~0), while Rhaister predictions have  𝑅 2, of 0.26 
+
+(Figure 2  Emerald Bay sensitivity prediction). 
+
+In addition to context  specific sensitivity, the Emerald Bay 
+
+dataset has single  cell whole transcriptome gene expres 
+
+sion in 1,800,000 cells. From these we can derive summary 
+
+statistics of transcriptomic changes due to the drug per 
+
+turbations serving as additional predictors of drug sensi 
+
+tivity. When Including transcriptional response summary 
+
+statistics 2 from the drug panel as additional predictors, 
+
+Rhaister performance increases to 0.31  𝑅 2.
+
+> 1https://huggingface.co/datasets/tahoebio/EmeraldBay
+> 2expression delta, differential expression, MWU statistics
+
+Rhaister also outperforms naive baselines on the PRISM 
+
+drug sensitivity screen data, with an  𝑅 2 of 0.87. In the 
+
+PRISM sensitivity data, the perturbation mean baseline 
+
+show high performance ( 𝑅 2 of 0.81), with better predictive 
+
+performance on the secondary screen than the primary 
+
+screen results ( 𝑅 2 of 0.42) or the adjacent dose of the 
+
+same drug ( 𝑅 2 of 0.30). This likely reflects the focus on 
+
+broadly effective drugs in this dataset, without specificity 
+
+to biological contexts. Several drugs are either systemat 
+
+ically ineffective across contexts or systematically effec 
+
+tive across contexts (especially chemotherapeutics at high 
+
+dose). 
+
+Together, these results highlight Emerald Bay as a uniquely 
+
+enabling dataset for learning context  specific drug sen 
+
+sitivity from paired perturbational phenotypes and tran 
+
+scriptional responses. By supporting multi  day drug per 
+
+turbations across diverse pooled cancer contexts, the 
+
+Mosaic platform provides a scalable experimental frame 
+
+work for evaluating and improving predictive models of 
+
+therapeutic response such as Rhaister. Prediction of drug 
+
+sensitivity is important for therapeutic pipelines, and we 
+
+are making the Emerald Bay dataset publicly available for 
+
+the community to train models and evaluate models with.   
+
+> T A H O E B I O . A I 5 / 16
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint
+
+P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S Cell lines GDC-6036 
+
+Adagrasib 
+
+Sotorasib 
+
+RMC-6236 
+
+Encorafenib 
+
+Cetuximab 
+
+Lapatinib 
+
+Panitumumab 
+
+Pertuzumab 
+
+Capecitabine 
+
+Oxaliplatin 
+
+Irinotecan 
+
+Gemcitabine 
+
+Fluorouracil 
+
+Paclitaxel 
+
+LY3200882 
+
+Galunisertib 
+
+Regorafenib 
+
+Vociprotafib 
+
+more resistant more sensitive low high 
+
+dose 
+
+Emerald Bay cancer models 
+
+Emerald Bay data generation 
+
+5 days 
+
+Gene 
+
+expression 
+
+Sensitivity 050 
+
+> TMB
+> NA NA
+
+TGFBR2 PRDM2 MSH6 CTNNB1 PIK3CB NRAS ERBB2 BRCA2 B2M STK11 SETD1B RNF43 MET FBXW7 EP300 ATM WNK2 TERT NF1 MTOR APC PIK3CA ZFHX3 BRAF KMT2D ARID1A SMARCA4 KRAS CDKN2A TP53 
+
+10% 10% 10% 10% 12% 12% 12% 12% 12% 14% 14% 14% 14% 14% 14% 14% 16% 16% 16% 16% 16% 20% 22% 24% 26% 30% 32% 44% 48% 62%  
+
+> 031 No. of samples
+
+Organ_of_origin 
+
+Splice_Site Missense_Mutation Nonsense_Mutation Frame_Shift_Del Frame_Shift_Ins In_Frame_Del Nonstop_Mutation In_Frame_Ins Del Amp Multi_Hit Complex_Event Organ_of_origin Lung (27%) Bowel (17%) Pancreas (15%) Skin (10%) CNS/Brain (8%) Breast (4%) Esophagus/Stomach (4%) Liver (4%) Uterus (4%) Bladder/Urinary Tract (2%) Cervix (2%) Kidney (2%) Peripheral Nervous System (2%) 
+
+> 0
+> 50
+> TMB
+
+TGFBR2 
+
+PRDM2 
+
+MSH6 
+
+CTNNB1 
+
+PIK3CB 
+
+NRAS 
+
+ERBB2 
+
+BRCA2 
+
+B2M 
+
+STK11 
+
+SETD1B 
+
+RNF43 
+
+MET 
+
+FBXW7 
+
+EP300 
+
+ATM 
+
+WNK2 
+
+TERT 
+
+NF1 
+
+MTOR 
+
+APC 
+
+PIK3CA 
+
+ZFHX3 
+
+BRAF 
+
+KMT2D 
+
+ARID1A 
+
+SMARCA4 
+
+KRAS 
+
+CDKN2A 
+
+TP53 
+
+10% 
+
+10% 
+
+10% 
+
+10% 
+
+12% 
+
+12% 
+
+12% 
+
+12% 
+
+12% 
+
+14% 
+
+14% 
+
+14% 
+
+14% 
+
+14% 
+
+14% 
+
+14% 
+
+16% 
+
+16% 
+
+16% 
+
+16% 
+
+16% 
+
+20% 
+
+22% 
+
+24% 
+
+26% 
+
+30% 
+
+32% 
+
+44% 
+
+48% 
+
+62%  
+
+> 031
+> No. of samples
+
+Organ of origin 
+
+Splice Site 
+
+Missense Mutation 
+
+Nonsense Mutation 
+
+Frame Shift Del 
+
+Frame Shift Ins 
+
+In Frame Del 
+
+Nonstop Mutation 
+
+In Frame Ins 
+
+Del 
+
+Amp 
+
+Multi Hit 
+
+Complex Event 
+
+Organ of origin 
+
+Lung (27%) 
+
+Bowel (17%) 
+
+Pancreas (15%) 
+
+Skin (10%) 
+
+CNS/Brain (8%) 
+
+Breast (4%) 
+
+Esophagus/Stomach (4%) 
+
+Liver (4%) 
+
+Uterus (4%) 
+
+Bladder/Urinary Tract (2%) 
+
+Cervix (2%) 
+
+Kidney (2%) 
+
+Peripheral Nervous System (2%) 
+
+Splice Site 
+
+Missense Mutation 
+
+Nonsense Mutation 
+
+Frame Shift Del 
+
+Frame Shift Ins 
+
+In Frame Del 
+
+Nonstop Mutation 
+
+In Frame Ins 
+
+Del 
+
+Amp 
+
+Multi Hit 
+
+Complex Event 
+
+Organ of origin 
+
+Lung (27%) 
+
+Bowel (17%) 
+
+Pancreas (15%) 
+
+Skin (10%) 
+
+CNS/Brain (8%) 
+
+Breast (4%) 
+
+Esophagus/Stomach (4%) 
+
+Liver (4%) 
+
+Uterus (4%) 
+
+Bladder/Urinary Tract (2%) 
+
+Cervix (2%) 
+
+Kidney (2%) 
+
+Peripheral Nervous System (2%) 
+
+Splice Site 
+
+Missense Mutation 
+
+Nonsense Mutation 
+
+Frame Shift Del 
+
+Frame Shift Ins 
+
+In Frame Del 
+
+Nonstop Mutation 
+
+In Frame Ins 
+
+Del 
+
+Amp 
+
+Multi Hit 
+
+Complex Event 
+
+Organ of origin 
+
+Lung (27%) 
+
+Bowel (17%) 
+
+Pancreas (15%) 
+
+Skin (10%) 
+
+CNS/Brain (8%) 
+
+Breast (4%) 
+
+Esophagus/Stomach (4%) 
+
+Liver (4%) 
+
+Uterus (4%) 
+
+Bladder/Urinary Tract (2%) 
+
+Cervix (2%) 
+
+Kidney (2%) 
+
+Peripheral Nervous System (2%) 
+
+Emerald Bay gene 
+
+expression data 0.0 0.5 1.0 
+
+R² 
+
+Global Mean 
+
+Context Mean 
+
+Perturbation Mean 
+
+Additive 
+
+Rhaister (sensitivity only) 
+
+Rhaister (sensitivity + tx) 
+
+Half-sample reference 
+
+-.04 
+
+-.02 
+
+-.04 
+
+.99 
+
+-.06 
+
+.31 
+
+.26 
+
+0.0 0.5 1.0 
+
+R² 
+
+Global Mean 
+
+Context Mean 
+
+Perturbation Mean 
+
+Additive 
+
+Rhaister 
+
+Primary Secondary 
+
+Adjacent dose 
+
+.82 
+
+.30 
+
+.01 
+
+.00 
+
+.81 
+
+.42 
+
+.87 
+
+PRISM sensitivity prediction 
+
+Emerald Bay sensitivity data 
+
+Emerald Bay sensitivity prediction 
+
+Figure 2.  Emerald Bay data generation:  Schematic of the Mosaic data generation process.  Emerald Bay cancer models:  Oncoplot 
+
+of the cell lines showing tumor mutational burden (TMB), recurrent driver alterations, and tissue of origin.  Emerald Bay gene 
+
+expression data:  TSNE visualization of the single cell gene expression data.  Emerald Bay sensitivity data:  Drug sensitivity 
+
+phenotypic data from the Emerald Bay dataset.  Emerald Bay sensitivity prediction:  Predictive performance on Emerald Bay 
+
+sensitivity data. Confidence intervals represent  ±1SD across five train/test splits.  PRISM sensitivity prediction:  Similar for the 
+
+PRISM dataset. 
+
+T A H O E B I O . A I 6 / 16 
+
+.CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S 
+
+# Performance of perturbation 
+
+# prediction scales with the 
+
+# perturbation panel size 
+
+The number of panel drugs needed to predict a full drug 
+
+library is a key design factor governing the scalability and 
+
+economics of collecting data. Smaller panels need less ma 
+
+terial simplifies the logistics of data collection. 
+
+Predictive information available for the Rhaister model 
+
+scales directly with the number of panel perturbations 
+
+used for prediction. The Rhaister model expresses each 
+
+non  panel perturbation as a linear combination of panel 
+
+perturbations. With larger panels, more types of pertur 
+
+bation responses can be represented. 
+
+To quantify the information gained by increasing the num 
+
+ber of panel perturbations, we subsampled the number of 
+
+drugs (each at three doses) available in the observed panel 
+
+to use for predictions of the non  panel perturbations in 
+
+the Tahoe  100M dataset. Across all evaluation metrics, we 
+
+do not reach diminishing returns on increasing the size of 
+
+the panel ( Figure 3  Left). On average, halving the number 
+
+of drugs in the panel reduced the performance by ~1.5%. 
+
+The number of perturbations to use in a panel should 
+
+be balanced between desired performance and available 
+
+budget. 
+
+This is in contrast with results from subsampling the num 
+
+ber of reference contexts used for training. We subsam 
+
+pled the number of cell lines available as reference during 
+
+training. The relative increase in performance is marginal 
+
+after ~20 reference contexts are available ( Figure 3  Right). 
+
+Even with a small panel of a single drug at three doses, per 
+
+turbation prediction performance reach the level of the 
+
+half  sample reference performance across the metrics. 
+
+This predictive performance is reached using 10 cell lines 
+
+as reference contexts. 97          
+
+> 98
+> 99
+> 100
+> 92.5
+> 95.0
+> 97.5
+> 100.0
+> 90.0
+> 92.5
+> 95.0
+> 97.5
+> 100.0
+> 90
+> 95
+> 100
+> 85
+> 90
+> 95
+> 100
+> 13610 20 60 120
+> 96
+> 97
+> 98
+> 99
+> 100
+> Perturbation
+> panel size
+> % of full-panel performance
+> Discrimination
+> Pearson
+> PR-AUC
+> Spearman LFC
+> DE overlap
+> Spearman ES 99.2
+> 99.6
+> 100.0
+> 85
+> 90
+> 95
+> 100
+> 92.5
+> 95.0
+> 97.5
+> 100.0
+> 97
+> 98
+> 99
+> 100
+> 90.0
+> 92.5
+> 95.0
+> 97.5
+> 100.0
+> 510 20 45
+> 97
+> 98
+> 99
+> 100
+> Reference
+> contexts
+> % of all-context performance
+> Discrimination
+> Pearson
+> PR-AUC
+> Spearman LFC
+> DE overlap
+> Spearman ES
+
+Perturbation panel 
+
+size subsampling 
+
+Reference context 
+
+number subsampling 
+
+Figure 3.  Left:  Relative improvement in performance metrics 
+
+with increasing numbers of unique drug responses used as 
+
+predictors.  Right:  Relative improvement in performance with 
+
+increasing numbers of reference contexts used for training. 
+
+T A H O E B I O . A I 7 / 16 
+
+.CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S 
+
+# Rhaister outperforms virtual cell 
+
+# modeling in predicting perturbation 
+
+# from basal state data alone 
+
+An ultimate and ambitious goal for perturbation modeling 
+
+is to predict perturbation responses given  only  basal state 
+
+gene expression. This would enable prediction of pertur 
+
+bation responses in vast catalogs and atlases of available 
+
+baseline gene expression data. 
+
+As a separate task branch in the Rhaister modeling 
+
+framework, we formulated Rhaister  O, to specifically use 
+
+only information available from unperturbed controls to 
+
+predict responses. We refer to this variation as ‘zeroshot’ 
+
+since we have seen zero perturbation responses from a 
+
+query context, and cannot make use of similarity between 
+
+perturbations. 
+
+Our summary statistics  based zeroshot prediction model 
+
+outperforms the state of the art virtual cell model STATE 
+
+for this zeroshot prediction task across all evaluation met 
+
+rics ( Figure 4 ). 
+
+We subsampled the number of reference context used for 
+
+training of the Rhaister  O model. While the results show a 
+
+pattern of diminishing returns across metrics, the metrics 
+
+do not appear to have plateaued. 
+
+Increasing the number of reference contexts available for 
+
+training the perturbation response prediction model is 
+
+likely to improve performance in the zeroshot setting. 
+
+The gap in performance could be interpreted in how infor 
+
+mation is used by the models. In the fewshot setting, each 
+
+query perturbation is interpreted as a combination of ref 
+
+erence perturbations. While in the zeroshot setting, there 
+
+is no such direct relation between predictors. 85           
+
+> 90
+> 95
+> 100
+> 40
+> 60
+> 80
+> 100
+> 60
+> 70
+> 80
+> 90
+> 100
+> 60
+> 70
+> 80
+> 90
+> 100
+> 510 15 20 30 45
+> 40
+> 60
+> 80
+> 100
+> 510 15 20 30 45
+> 90
+> 100
+> 110
+
+Number of reference cell lines 
+
+> % of full-panel performance (zeroshot)
+
+Discrimination Pearson 
+
+PR-AUC Spearman LFC 
+
+DE overlap Spearman ES Zeroshot performance Global Mean     
+
+> Pert. Mean
+> STATE
+> Rhaister-O
+> Half-sample
+> .50
+> .69
+> .86
+> .85
+> .93
+> .19
+> .44
+> .32
+> .63
+> .77
+> Global Mean
+> Pert. Mean
+> STATE
+> Rhaister-O
+> Half-sample
+> .14
+> .14
+> .25
+> .52
+> .62
+> .27
+> .48
+> .35
+> .49
+> .67
+> 0.0 0.5 1.0
+> Global Mean
+> Pert. Mean
+> STATE
+> Rhaister-O
+> Half-sample
+> .00
+> .00
+> .09
+> .34
+> .52
+> 0.0 0.5 1.0
+> .00
+> .06
+> .50
+> .70
+> .97
+
+metric value    
+
+> Discrimination Pearson
+> PR-AUC Spearman LFC
+> DE overlap Spearman ES
+
+Figure 4.  Top:  Performance of zeroshot perturbation predic 
+
+tion in new contexts with only baseline expression data. 
+
+Confidence intervals reflect  ±1SD across five train/test splits. 
+
+Bottom:  Relative improvement in performance with increas 
+
+ing number reference contexts used for training. 
+
+T A H O E B I O . A I 8 / 16 
+
+.CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S 
+
+# Discussion 
+
+Reasoning models now generate hypotheses and insights 
+
+from the existing literature in seconds. What they cannot 
+
+generate is the novel ground truth those hypotheses must 
+
+be tested against. In biology that ground truth is expensive 
+
+and slow to produce, so a large corpus of high  quality 
+
+data, already generated and ready to be consumed, is what 
+
+keeps verification from becoming the bottleneck. 
+
+No corpus, however large or diverse, will cover every 
+
+context, and the contexts that matter most are often the 
+
+hardest to measure. This is our motivation: to build the 
+
+datasets, such as Tahoe  100M and Emerald Bay, and, on 
+
+top of them, models that generalize their signals to unseen 
+
+harder  to  reach  contexts. 
+
+Virtual cell models have promised exactly this, operating 
+
+on individual cells and aggregating up the readouts used 
+
+for downstream analysis. Even where they succeed, they 
+
+fall short on the dimensions that matter for reasoning at 
+
+scale: they are slow to train and to run, they do not extend 
+
+readily to direct phenotypes, and they have not delivered 
+
+zero  shot prediction. At points, they have struggled to 
+
+improve on simple baselines at all. 
+
+This motivated us to go back to basics. Rather than simu 
+
+late cells and aggregate, we model the observed statistics 
+
+directly. 
+
+We present a new modeling strategy for predicting drug 
+
+treatment effects using drug panels from large scale per 
+
+turbation data. A key insight is to move predictive model 
+
+ing from biological primitives to summary statistics. This 
+
+simplifies data management and enables straightforward 
+
+models to achieve good predictive performance. 
+
+This limits the strategy from the ability to perform arbi 
+
+trary single  cell level tasks based on simulated data, as is 
+
+the goal for virtual cell models. It is possible to imagine sce 
+
+narios where counterfactual simulation produces distrib 
+
+utional properties of interest (emergence of previously 
+
+unknown cell types, novel lineage commitment biases, 
+
+unexpected synergistic gene module coexpression, etc). 
+
+In practical terms however, vast amounts of perturbation 
+
+responses that are important and useful for follow  up dis 
+
+cussion occur in static, pre  defined, cellular contexts. 
+
+The Rhaister 3 modeling framework operates directly on 
+
+precisely the summary statistics that are already of inter 
+
+est for downstream analysis. The same summary statistics 
+
+that would be of interest from a new screening data batch 
+
+for a researcher are the ones that can be predicted from a 
+
+panel with the Rhaister framework. 
+
+Through the Emerald Bay data, we have seen that this is 
+
+not limited to transcriptional responses. While a model 
+
+that works within a summary statistic view saturates 
+
+performance for transcriptional drug response data, the 
+
+increased performance on the sensitivity prediction task 
+
+points to other cases and summary statistics of interest 
+
+where information can be shared between summary sta 
+
+tistics to improve predictive performance. 
+
+A related observation is for the Rhaister  O case of “ze 
+
+roshot” prediction. It is likely possible to obtain good 
+
+population  level predictors for new contexts by leverag 
+
+ing other predictors available from different biological 
+
+contexts at baseline untreated states. 
+
+A key problem remains: expanding Rhaister to predicting 
+
+response in harder to perturb biological samples, which is 
+
+the subject of subsequent studies. In the meantime, Rhais 
+
+ter provides a framework for interpretable predictions 
+
+of biological phenotypes in unseen biological samples 
+
+rapidly. It transfers the bottleneck in prediction from 
+
+complexity in modeling methods towards scaling data 
+
+generation, with accuracies comparable to experimental 
+
+variation, expanding the ground truth data available for 
+
+verifying output of reasoning models in different biologi 
+
+cal tasks.   
+
+> 3https://huggingface.co/tahoebio/Rhaister
+> T A H O E B I O . A I 9 / 16
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint
+
+P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S 
+
+# References 
+
+[1]  C. Bunne  et al. , “How to build the virtual cell with artificial 
+
+intelligence: Priorities and opportunities,”  Cell , vol. 187, no. 
+
+25, pp. 7045–7063, Dec. 2024. 
+
+[2]  A. K. Adduri  et al. , “Predicting cellular responses to pertur 
+
+bation across diverse contexts with State,”  bioRxiv , June 
+
+2025. 
+
+[3]  Y. Roohani, K. Huang, and J. Leskovec, “Predicting transcrip 
+
+tional outcomes of novel multigene perturbations with 
+
+GEARS,”  Nat. Biotechnol. , vol. 42, no. 6, pp. 927–935, June 
+
+2024. 
+
+[4]  M. Lotfollahi  et al. , “Predicting cellular responses to com 
+
+plex perturbations in high  throughput screens,”  Mol. Syst. 
+
+Biol. , vol. 19, no. 6, p. e11517, June 2023. 
+
+[5]  H. Cui  et al. , “scGPT: toward building a foundation model for 
+
+single  cell multi  omics using generative AI,”  Nat. Methods ,
+
+Feb. 2024. 
+
+[6]  D. Klein  et al. , “CellFlow enables generative single  cell phe 
+
+notype modeling with flow matching,”  bioRxiv , Apr. 2025. 
+
+[7]  Z. Yan  et al. , “PRiMeFlow: Capturing complex expression 
+
+heterogeneity in perturbation response modelling,”  arXiv 
+
+[cs.LG] , Apr. 2026. 
+
+[8]  A. E. Ghareeb  et al. , “A multi  agent system for automating 
+
+scientific discovery,”  Nature , pp. 1–3, May 2026. 
+
+[9]  K. Huang  et al. , “Biomni: A general  purpose biomedical AI 
+
+agent,”  bioRxivorg , p. 2025.05.30.656746, June 2025. 
+
+[10]  J. Zhang  et al. , “Tahoe  100M: A Giga  scale single  cell 
+
+perturbation atlas for context  dependent gene function 
+
+and cellular modeling,”  bioRxiv , p. 2025.02.20.639398, Feb. 
+
+2025. 
+
+[11]  L. Oesinghaus  et al. , “A single  cell cytokine dictionary of hu 
+
+man peripheral blood,”  bioRxivorg , p. 2025.12.12.693897, 
+
+Dec. 2025. 
+
+[12]  J. M. Replogle  et al. , “Mapping information  rich genotype 
+
+phenotype landscapes with genome  scale Perturb  seq,” 
+
+Cell , vol. 185, no. 14, pp. 2559–2575.e28, July 2022. 
+
+[13]  A. Nadig  et al. , “Transcriptome  wide analysis of differential 
+
+expression in perturbation atlases,”  Nat. Genet. , vol. 57, no. 
+
+5, pp. 1228–1237, Apr. 2025. 
+
+[14]  J. X. Yu  et al. , “The GENEVA platform models tumor mo 
+
+saicism to reveal variations of responses to KRAS inhibitors 
+
+and identify improved drug combinations,”  Nat. Cancer , vol. 
+
+7, no. 3, pp. 522–537, Mar. 2026. 
+
+[15]  S. M. Corsello  et al. , “Discovering the anti  cancer potential 
+
+of non  oncology drugs by systematic viability profiling,”  Nat. 
+
+Cancer , vol. 1, no. 2, pp. 235–248, Feb. 2020. 
+
+[16]  Y. Wu  et al. , “PerturBench: Benchmarking machine learning 
+
+models for cellular perturbation analysis,”  arXiv [cs.LG] , Aug. 
+
+2024. 
+
+T A H O E B I O . A I 10 / 16 
+
+.CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S 
+
+# Details 
+
+The Rhaister model 
+
+The goal of the Rhaister model is to learn how contexts 
+
+and perturbations interact to produce perturbation re 
+
+sponses. As a starting point, we fit a non  interaction, 
+
+purely additive model 
+
+𝑦 𝑐 ,𝑝 ,𝑔  = 𝜇 𝑔  + 𝛼 𝑐 ,𝑔  + 𝛽 𝑝 ,𝑔  , (1) 
+
+where  𝑐  indexes contexts,  𝑝  indexes perturbations, and  𝑔 
+
+indexes genes. The additive model is fitted using alternat 
+
+ing least squares. 
+
+Additive predictions for an unseen combination  (𝑐 ⋆, 𝑝 ⋆) a
+
+query context  𝑐 ⋆, and a non  panel perturbation  𝑝 ⋆, can be 
+
+made by ̂
+
+𝑦 add  
+
+> 𝑐 ⋆,𝑝 ⋆,𝑔
+
+= 𝜇 𝑔  + 𝛼 𝑐 ⋆,𝑔  + 𝛽 𝑝 ⋆,𝑔  . (2) 
+
+For a query context,  𝑐 ⋆, we form a ridge regression prob 
+
+lem that predicts an unseen perturbation  𝑝 ⋆ as a linear 
+
+combination of observed perturbations in  𝑐 ⋆. Let  𝐷 𝑥  =𝒫︀  𝑐 ⋆
+
+be perturbations observed for reference contexts  𝒞︀  ref .
+
+Then we stack refence context observations into  𝑋  ∈
+
+ℝ|𝒞︀  ref | × |𝐷 𝑥 | ×𝐺 , and the targets for the unseen perturbation 
+
+𝑝 ⋆ into  𝑌  ∈ ℝ|𝒞︀  ref | ×𝐺 , letting us solve ̂
+
+𝑊  = arg min 
+
+> 𝑊 ∈ℝ|𝐷 𝑥 |×𝐺
+
+∑ 
+
+> 𝑐 ∈𝒞︀ ref
+
+‖ 𝑌 𝑐  − 𝑊 𝑇  𝑋 𝑐 ‖2 
+
+> 2
+
++ 𝜆  ⋅ ‖𝑊 ‖2 
+
+> 𝐹
+
+. (3) 
+
+Predictions can then be made by ̂
+
+𝑦 ridge  
+
+> 𝑐 ⋆,𝑝 ⋆,𝑔
+
+= ∑
+
+> 𝑞 ∈𝐷 𝑥
+
+̂
+
+𝑊 𝑞 ,𝑔 𝑦 𝑐 ⋆,𝑞 ,𝑔  . (4) 
+
+In cases where we are lacking coverage in reference data, 
+
+we fall back to additive predictions: ̂
+
+𝑦 𝑐 ∗,𝑝 ∗,𝑔  = {̂
+
+𝑦 ridge  
+
+> 𝑐 ∗,𝑝 ∗,𝑔
+
+(𝑐 ∗, 𝑝 ∗) ∈ coverage, ̂
+
+𝑦 add  
+
+> 𝑐 ∗,𝑝 ∗,𝑔
+
+otherwise. 
+
+(5) 
+
+For perturbation responses, we have access to multi 
+
+view data reflecting different aspects of responses: log 
+
+fold change,  𝑌 LFC ; Mann  Whitney U  test (MWU) p  values, 
+
+𝑌 MWU , and expression deltas,  𝑌 Δ. Specifically for the MWU 
+
+view, predictions are calibrated using a small multilayer 
+
+perceptron, taking as input a number of available summary 
+
+statistics, 
+
+− log 10̂ 𝑦 MWU-cal  
+
+> 𝑐 ,𝑝 ,𝑔
+
+=
+
+−ℎ(|̂𝑦 FC 
+
+> 𝑐 ,𝑝 ,𝑔
+
+|,̂ 𝑦 MWU-ridge  
+
+> 𝑐 ,𝑝 ,𝑔
+
+, log (1 + 𝑅 𝑐 ,𝑔 ),
+
+𝜇 MWU  
+
+> 𝑔
+
+, 𝜎 LFC  
+
+> 𝑔
+
+, log (1 + 𝑅 𝑐 )).
+
+(6) 
+
+Here  𝑅 𝑐 ,𝑔  is the baseline unperturbed gene expression 
+
+of gene  𝑔  in context  𝑐 , 𝜇 MWU  
+
+> 𝑔
+
+is the mean MWU p  value 
+
+per gene across training samples,  𝜎 LFC  
+
+> 𝑔
+
+is the standard 
+
+deviation of fold changes across training samples, and 
+
+log (1 + 𝑅 𝑐 ) is averaged over genes. 
+
+Calibration predictions are evenly blended with regres 
+
+sion  based MWU predictions: ̂
+
+𝑦 MWU-final  
+
+> 𝑐 ⋆,𝑝 ⋆,𝑔
+
+=̂
+
+𝑦 MWU-ridge  
+
+> 𝑐 ⋆,𝑝 ⋆,𝑔
+
++̂ 𝑦 MWU-cal 
+
+> 𝑐 ⋆,𝑝 ⋆,𝑔
+
+2 . (7) 
+
+The Rhaister-O zeroshot model 
+
+The Rhaister model requires having seen target summary 
+
+statistics for a panel of perturbations in a number of refer 
+
+ence contexts. 
+
+A more ambitious goal is to be able to predict pertur 
+
+bations responses from baseline expression alone. This 
+
+would enable perturbation response predictions in a vast 
+
+catalog of available baseline gene expression data. 
+
+The Rhaister  O variation of the modeling framework as 
+
+sumes we have no panel perturbations to reference, but 
+
+we do instead have access to baseline expression summary 
+
+statistics. Using baseline pseudobulk gene expression  𝑥  as 
+
+predictor summary statistics, we can fit a model 
+
+𝑦 𝑐 ,𝑝 ,𝑔  = 𝛽 𝑝 ,𝑔  + 𝛾 𝑝 ,𝑔  ⋅ 𝑥 𝑐 ,𝑔  , (8) 
+
+using reference contexts  𝑐 , where all perturbations have 
+
+been observed. From this model, predictions can be made 
+
+through 
+
+𝑦 𝑐 ⋆,𝑝 ⋆,𝑔  = 𝛽 𝑝 ⋆,𝑔  + 𝛾 𝑝 ⋆,𝑔  ⋅ 𝑥 𝑐 ⋆,𝑔  , (9) 
+
+since we are assuming that we can obtain untreated con 
+
+trol expression data  𝑥 𝑐 ⋆,𝑔  from a new (query) context  𝑐 ⋆.
+
+T A H O E B I O . A I 11 / 16 
+
+.CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S 
+
+Baselines and reference models 
+
+Unless otherwise noted, models are trained on the training 
+
+fraction of a dataset and train/test split. 
+
+Global mean 
+
+The global mean baseline assumes that perturbation re 
+
+sponses look the same regardless of which context or 
+
+perturbation the data is from, 
+
+𝑦 𝑐 ,𝑝 ,𝑔  = 𝜇 𝑔 . (10) 
+
+Global means fitted to the training data is used for predic 
+
+tions, ̂
+
+𝑦 𝑐 ⋆,𝑝 ⋆,𝑔  = 𝜇 𝑔 . (11) 
+
+Context mean 
+
+The context mean baseline assumes that different biolog 
+
+ical contexts respond the same way to different perturba 
+
+tions, regardless of what the perturbation is, 
+
+𝑦 𝑐 ,𝑝 ,𝑔  = 𝛼 𝑐 ,𝑔 . (12) 
+
+Predictions are the per  context mean responses fitted 
+
+from the training data, ̂
+
+𝑦 𝑐 ⋆,𝑝 ⋆,𝑔  = 𝛼 𝑐 ⋆,𝑔 . (13) 
+
+Perturbation mean 
+
+Analogously to context mean, the perturbation mean 
+
+baseline assumes that a perturbation will have the same 
+
+effect regardless of biological context of the cells it is 
+
+applied to, 
+
+𝑦 𝑐 ,𝑝 ,𝑔  = 𝛽 𝑝 ,𝑔 . (14) 
+
+Predictions are the per  perturbation mean responses fit 
+
+ted from the training data, ̂
+
+𝑦 𝑐 ⋆,𝑝 ⋆,𝑔  = 𝛽 𝑝 ⋆,𝑔 . (15) 
+
+Additive 
+
+Assuming perturbation responses depend on both biolog 
+
+ical context and perturbation, but these effects being 
+
+independent, leads to an additive baseline model, 
+
+𝑦 𝑐 ,𝑝 ,𝑔  = 𝜇 𝑔  + 𝛼 𝑐 ,𝑔  + 𝛽 𝑝 ,𝑔 . (16) 
+
+The additive baseline model is fitted through alternating 
+
+least squares (ALS) on the training data, and predictions 
+
+can be made for unseen  (𝑐 ⋆, 𝑝 ⋆) combinations through ̂
+
+𝑦 𝑐 ⋆,𝑝 ⋆,𝑔  = 𝜇 𝑔  + 𝛼 𝑐 ⋆,𝑔  + 𝛽 𝑝 ⋆,𝑔 . (17) 
+
+State Transport 
+
+State Transport (STATE) is a conditional set transport 
+
+model operating on sets of single cells. Given gene expres 
+
+sion profiles for a set of (observed) unperturbed, cells, 
+
+and a conditioning signal (e.g., perturbation identity), the 
+
+individual cells are transported to gene expression profiles 
+
+compatible with perturbed cells. 
+
+Transported, counterfactual, cells from unobserved per 
+
+turbations can subsequently be passed through the same 
+
+summary statistics pipeline as cells from observed pertur 
+
+bations, resulting in summary statistics predictions  ̂  𝑦 𝑐 ⋆,𝑝 ⋆,𝑔 .
+
+Half-sample reference 
+
+Single cells from original single  cell data were divided into 
+
+two equally sized parallel datasets per context, perturba 
+
+tion, and batch. These two datasets have the same possible 
+
+groupings as the original dataset, and can be passed 
+
+through the same summary statistics pipeline to produce 
+
+results  𝑌 𝐴  and  𝑌 𝐵 .
+
+By evaluating ‘predictions’  ̂  𝑦 𝐴  
+
+> 𝑐 ⋆,𝑝 ⋆,𝑔
+
+= 𝑦 𝐵  
+
+> 𝑐 ⋆,𝑝 ⋆,𝑔
+
+(and vice versa) 
+
+for the test set of a dataset and split, we can learn approxi 
+
+mately optimal performance for a combination of dataset, 
+
+metric, and statistical pipeline. 
+
+It is worth noting that assignment of cells in to parallel sets 
+
+is stochastic, and each of  𝑌 𝐴  and  𝑌 𝐵  will be the result of half 
+
+as much input data as original summary statistics  𝑌 . This 
+
+means that half  sample reference performance values are 
+
+not hard ceilings on performance. 
+
+Permute Context & Permute Perturbation 
+
+To confirm that the Rhaister model is learning interaction 
+
+signals based on the training set, we perform ablation of 
+
+the information content in the training data by randomly 
+
+permuting either context labels or perturbation labels in 
+
+the training data. Models trained on permuted data are 
+
+applied to unpermuted test data. 
+
+Primary  → Secondary 
+
+In high throughput drug screens, such as PRISM, results 
+
+from a primary screen is used to nominate follow  up per 
+
+turbations in a secondary screen. As a baseline, we use 
+
+the results of the primary screen as a prediction for the 
+
+secondary screen (which we use for Rhaister modeling),  ̂ 
+
+𝑦 secondary  
+
+> 𝑐 ⋆,𝑝 ⋆
+
+= 𝑦 primary  
+
+> 𝑐 ⋆,𝑝 ⋆
+
+.          
+
+> T A H O E B I O . A I 12 / 16
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S
+
+Adjacent dose 
+
+As an alternative positive control baseline in the PRISM 
+
+dataset, we use adjacent dose results of a matched drug 
+
+as predictors for the drug, dose  combination to be pre 
+
+dicted. 
+
+Data 
+
+The Rhaister model is applied to summary statistics from 
+
+multiple perturbation datasets. 
+
+Tahoe-100M drug perturbation screen 
+
+The Tahoe  100M dataset is an scRNA  seq dataset of 
+
+100 million cells from 50 different cell lines having been 
+
+exposed to 384 different drugs at three different concen 
+
+trations  [10] . Each cell line is treated as a biological 
+
+context. Perturbation effects were quantified by perform 
+
+ing comparative analysis between treatment and negative 
+
+control independently for each cell line, within each plate, 
+
+to ensure that batch  matched samples are compared. 
+
+We create five independent train  test splits on the context 
+
+level, in each defining five cell lines a as query contexts 
+
+and the remaining 45 cell lines as reference contexts. 
+
+For those five query contexts, 120 drugs were defined 
+
+as panel perturbations, reserving 240 drugs as non  panel 
+
+perturbations. Each dosage of each of the drugs is treated 
+
+as an independent perturbation in practice, leaving a total 
+
+of 360 panel perturbations and 720 non  panel perturba 
+
+tions. 
+
+Parse-PBMC cytokine screen 
+
+The Parse  PBMC dataset consist of scRNA  seq data mea 
+
+suring the response of 90 cytokines in 18 peripheral blood 
+
+cell types collected from 12 donors  [11] . The combina 
+
+tions of donor and cell type are considered as biological 
+
+contexts. We made use of a previously defined split where 
+
+all cell types from four donors are held out as query 
+
+contexts 4. Of the cytokines, 28 are defined as panel  per 
+
+turbations, leaving 62 non  panel perturbations. Cytokine 
+
+treatment vs untreated comparisons were used to create 
+
+perturbations response statistics for each donor and cell 
+
+type combination independently. 
+
+Replogle-Nadig genetic peturbation screen 
+
+The Replogle  Nadig dataset is a combination of multiple 
+
+CRISPR genetic screen datasets using a shared set of 
+
+> 4https://github.com/ArcInstitute/state/blob/main/state_
+> preprint_toml_files/parse_tomls/donor.toml
+
+1,700 genetic perturbations  [12] , [13] . The combined 
+
+dataset consist of four different cell lines which we treated 
+
+as biological context. Differential expression and expres 
+
+sion deltas were estimated using non  targeting guides as 
+
+negative control for each target, using cells matched by 
+
+cell line and GEM group as a batch identifier. Summary 
+
+statistics were averaged over batches for each cell line, 
+
+gDNA target  combination. 
+
+We used four previously defined train  test splits, where in 
+
+each split one cell line is held out as query context using 
+
+the other three cell lines as reference contexts. In each 
+
+split, between 400 and 500 CRISPR targets were used as 
+
+panel perturbations, while keeping 1,000 CRISPR targets 
+
+as non  panel perturbations to be predicted. 
+
+The combined dataset was obtained from HuggingFace 5.
+
+Emerald Bay 
+
+A new dataset generated with the MOSAIC platform, sim 
+
+ilar to Tahoe  100M  [10]  but smaller  scale and customized 
+
+for long  duration drug treament was used for sensitivity 
+
+prediction. Emerald Bay contained 91 drug treatments 
+
+(including combination treatments) across 52 cell lines. 
+
+Cells were harvested 5 days after drug or DMSO treat 
+
+ments, yielding 1,831,648 cells passing full QC filters 
+
+and an extra 291,765 passing minimal QC filters. Bioinfor 
+
+matics processing was similar to Tahoe  100M, with fastq 
+
+files first processed using split  pipe followed by genotype 
+
+based cell line demultiplexing based on Demuxlet. Cell 
+
+counts used for sensitivity quantification uses the minimal 
+
+QC filters, while gene expression data used for additional 
+
+predictors of sensitivity uses full QC filters. 
+
+Sensitivity for each context (cell line) and perturbation 
+
+combination was estimated as 
+
+𝑃 𝑐 , group  =
+
+𝑛 𝑐 , group 
+
+∑𝑐  𝑛 𝑐 , group 
+
+,
+
+sensitivity 𝑐 ,𝑝  = log 2(
+
+𝑃 𝑐 ,𝑝 
+
+𝑃 𝑐 , control 
+
+).
+
+(18) 
+
+For Rhaister modeling, the dataset was filtered to 45 sin 
+
+gle  drug perturbations, covering 19 unique drugs at 2  3
+
+doses.            
+
+> 5https://huggingface.co/datasets/arcinstitute/State Replogle
+> Filtered
+> T A H O E B I O . A I 13 / 16
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S
+
+We created five independent train  test splits on the con 
+
+text level, in each defining five cell lines as query contexts 
+
+and the remaining 47 cell lines as reference contexts. 
+
+For those five query contexts, six unique drugs with their 
+
+2 3 different doses were defined as panel perturbations, 
+
+reserving 14 unique drugs (with their 2  3 doses) as non 
+
+panel perturbations serving as targets for prediction. 
+
+Summary statistics for Emerald Bay are available on 
+
+HuggingFace 6.
+
+PRISM sensitivity screen 
+
+The PRISM sensitivity screen is a dataset using a molec 
+
+ular barcoding method to to measure growth inhibition 
+
+activity of drugs in human cancer cell lines  [15] .
+
+As a summary statistic for sensitivity, we used the log2FC 
+
+(log2 fold  change) as provided in the PRISM dataset 7,
+
+which corresponds to the log treatment/DMSO ratio of 
+
+the cell line abundance estimate (based on normalized 
+
+Luminex median fluorescence intensity). 
+
+Summary statistics 
+
+There are many proposed statistical pipelines to produce 
+
+different summary statistics for perturbation responses. 
+
+The choice of summary statistics depends on the specific 
+
+properties of a perturbation of interest. 
+
+Log2 fold change 
+
+This statistic is meant to indicate the relative difference 
+
+in expression levels between perturbed and unperturbed 
+
+cells. We use log2 fold change (L2FC) for gene expression 
+
+of each gene  𝑔  as defined by the software package  pdex  8,
+
+where it is estimated by ̄
+
+𝑥 group  
+
+> 𝑔
+
+= exp ( 1
+
+|group | ⋅ ∑ 
+
+> 𝑖 ∈group
+
+log (𝑥 𝑖 ,𝑔  + 1)) − 1,
+
+L2FC 𝑔  = log 2(̄
+
+𝑥 perturbation 
+
+> 𝑔
+
+̄
+
+𝑥 control 
+
+> 𝑔
+
+),
+
+(19) 
+
+where  𝑥 𝑖 ,𝑔  are UMI counts of gene  𝑔  in cell  𝑖 .
+
+Mann-Whitney U-test p-value 
+
+An alternative quantification of perturbation response is 
+
+through relative ordering of expression levels among cells, 
+
+> 6https://huggingface.co/datasets/tahoebio/EmeraldBay
+> 7https://depmap.org/repurposing/
+> 8https://github.com/ArcInstitute/pdex
+
+quantified through a Mann  Whitney U  test (MWU) from 
+
+the  pdex  software package. The  pdex  package uses stan 
+
+dard two  sided MWU with tie  correction and continuity 
+
+correction. If perturbed cells are systematically ranked 
+
+high or low, the null hypothesis can be rejected according 
+
+to the MWU statistic, which is converted to a p  value, and 
+
+further adjusted through FDR correction. 
+
+Expression delta 
+
+An alternative to log2 fold change is often used in single 
+
+cell perturbation screens known as  expression delta , Δ, de 
+
+fined in the  cell-eval  9 software package as ̄
+
+𝑥 group  
+
+> 𝑔
+
+= 1
+
+|group | ⋅ ∑ 
+
+> 𝑖 ∈group
+
+log (
+
+𝐶  ⋅ 𝑥 𝑖 ,𝑔 
+
+𝐿 𝑖 
+
++ 1),
+
+Δ𝑝 ,𝑔  =̄ 𝑥 perturbation  
+
+> 𝑔
+
+−̄ 𝑥 control  
+
+> 𝑔
+
+,
+
+(20) 
+
+where  𝐿 𝑖  = ∑𝑔 ′ 𝑥 𝑖 ,𝑔 ′ is each cell’s raw library size and  𝐶  is a 
+
+scaling constant. 
+
+Sensitivity 
+
+Sensitivity measures the effectivity of a drug inhibiting 
+
+growth rate of a cell context. Sensitivity statistics are de 
+
+fined separately for the Emerald Bay and PRISM datasets, 
+
+and used as  is from the input data. 
+
+Evaluation metrics 
+
+In most cases, evaluation metrics are calculated indepen 
+
+dently for each combination  (𝑐 ⋆, 𝑝 ⋆) of query contexts and 
+
+non  panel perturbations, followed by arithmetic mean av 
+
+eraging across the combinations. 
+
+Pearson correlation of  Δ
+
+This quantifies consistency of relative magnitudes be 
+
+tween observed gene expression Deltas  Δ𝑐 ⋆,𝑝 ⋆ and pre 
+
+dicted gene expression Deltas  ̂  Δ𝐶 ⋆,𝑝 ⋆ ,  
+
+> pearson_delta 𝑐 ⋆,𝑝 ⋆
+
+= corr (̂Δ𝑐 ⋆,𝑝 ⋆ , Δ𝑐 ⋆,𝑝 ⋆ ). (21) 
+
+Perturbation discrimination 
+
+We adapt the perturbation discrimnation score  [16]  for 
+
+the setting of perturbation effects using observed and 
+
+predicted gene expression Deltas,    
+
+> 9https://github.com/ArcInstitute/cell eval
+> T A H O E B I O . A I 14 / 16
+> .CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint
+
+P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S 
+
+𝑑 𝑐 ⋆,𝑝 ⋆,𝑝 ′ = ‖Δ𝑐 ⋆,𝑝 ′ −̂ Δ𝑐 ⋆,𝑝 ⋆ ‖1,
+
+𝜋 𝑐 ⋆ (𝑝 ⋆) = |{𝑝 ′ ∈ 𝑃  : 𝑑 𝑐 ⋆,𝑝 ⋆,𝑝 ′ < 𝑑 𝑐 ⋆,𝑝 ⋆,𝑝 ⋆ }|,  
+
+> discrimination 𝑐 ⋆,𝑝 ⋆
+
+= 1 − 𝜋 𝑐 ⋆ (𝑝 ⋆)
+
+|𝑃 | .
+
+(22) 
+
+This metric reflects relative ranking of similarity from a 
+
+predicted perturbation to observed perturbations. A high 
+
+score indicates that even though absolute similarity to a 
+
+true perturbation is poor, the prediction is more similar to 
+
+the correct perturbation than other perturbations. 
+
+PR-AUC of differential expression classification 
+
+Differential expression classification quantifies whether 
+
+predicted per  gene Mann  Whitney U  test p  values falling 
+
+under a certain threshold matches true genes’ MWU p 
+
+values falling under the same threshold: 
+
+𝑦 𝑐 ,𝑝 ,𝑔  = 𝟙 [𝑞 𝑐 ,𝑝 ,𝑔  < 0.05],
+
+𝑠 𝑐 ,𝑝 ,𝑔  = − log 10̂ 𝑞 𝑐 ,𝑝 ,𝑔 ,
+
+PR-AUC 𝑐 ,𝑝  = ∑
+
+> 𝑘
+
+(Recall 𝑐 ,𝑝 ,𝑘  − Recall 𝑐 ,𝑝 ,𝑘 −1) ⋅ Precision 𝑐 ,𝑝 ,𝑘 
+
+(23) 
+
+We use the threshold of 0.05 on the FDR transformed 
+
+scale of the p  values. 
+
+Spearman LFC 
+
+The Spearman LFC metric quantifies whether genes pass 
+
+ing an MWU p  value threshold have a consistent rank 
+
+ordering of log2 fold changes between true and predicted 
+
+perturbation results, 𝒮︀  
+
+> 𝑝
+
+= {𝑔  : 𝑞 𝑝 ,𝑔  < 0.05},  
+
+> spearman_lfc 𝑝
+
+= 𝜌 Spearman ({(LFC 𝑝 ,𝑔 ,̂ LFC 𝑝 ,𝑔 )}𝑔 ∈𝒮︀  𝑝 
+
+),
+
+(24) 
+
+DE overlap 𝒯︀  
+
+> real
+> 𝑝
+
+= top 𝑘 {𝑔  ∈𝒮︀  𝑝  : |LFC 𝑝 ,𝑔 |} (25) 𝒯︀  
+
+> pred
+> 𝑝
+
+= top 𝑘 {𝑔  ∈̂𝒮︀  𝑝  : |̂LFC 𝑝 ,𝑔 |} (26) 
+
+Overlap 𝑝  = |𝒯︀  real  
+
+> 𝑝
+
+∩𝒯︀  pred 
+
+> 𝑝
+
+|
+
+𝑘  , 𝑘  = |𝒮︀  𝑝 | (27) 
+
+de_overlap_mean  = 1
+
+|𝑃 | ∑
+
+> 𝑝 ∈𝑃
+
+Overlap 𝑝  (28) 
+
+Spearman effect size 
+
+The authors of STATE defined transcriptome wide pertur 
+
+bation ‘effect size’ as the number of genes that pass 
+
+a MWU p  value threshold. This metric quantifies rank 
+
+ordering of effect sizes for perturbations per biological 
+
+context, 
+
+𝑛 real  
+
+> 𝑝
+
+= |𝒮︀  𝑝 |, 𝑛 pred  
+
+> 𝑝
+
+= |̂𝒮︀  𝑝 |, 
+
+> de_spearman_sig
+
+= 𝜌 Spearman ({(𝑛 real  
+
+> 𝑝
+
+, 𝑛 pred  
+
+> 𝑝
+
+)}𝑝 ∈𝑃 
+
+).
+
+(29) 
+
+Coefficient of determination ( 𝑅 2)
+
+The coefficient of determination  𝑅 2 measures the propor 
+
+tion of residual variance after applying predictions over 
+
+the the total variance of the observed data, 
+
+𝑆 𝑆 res  = ∑
+
+> 𝑖
+
+(𝑦 𝑖  −̂ 𝑦 𝑖 )2,
+
+𝑆 𝑆 tot  = ∑
+
+> 𝑖
+
+(𝑦 𝑖  − 𝑦 )2, 
+
+> R2
+
+= 1 − 𝑆 𝑆 res 
+
+𝑆 𝑆 tot 
+
+.
+
+(30) 
+
+T A H O E B I O . A I 15 / 16 
+
+.CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint P R E P R I N T O B S E R V E D S T A T I S T I C S A R E S U F F I C I E N T T O P R E D I C T D R U G R E S P O N S E S 
+
+# Additional material Global Mean 
+
+Ctx. Mean 
+
+Pert. Mean 
+
+Additive 
+
+STATE 
+
+Rhaister 
+
+Half-sample 
+
+Rhaister (permute pert.) 
+
+Rhaister (permute ctx.) 
+
+> .50
+> .64
+> .69
+> .82
+> .93
+> .96
+> .66
+> .69
+> .93
+> .19
+> .39
+> .45
+> .55
+> .81
+> .87
+> .22
+> .40
+> .77
+
+Global Mean 
+
+Ctx. Mean 
+
+Pert. Mean 
+
+Additive 
+
+STATE 
+
+Rhaister 
+
+Half-sample 
+
+Rhaister (permute pert.) 
+
+Rhaister (permute ctx.) 
+
+> .34
+> .51
+> .40
+> .55
+> .51
+> .73
+> .44
+> .47
+> .62
+> .27
+> .49
+> .48
+> .61
+> .57
+> .81
+> .42
+> .40
+> .67
+
+0.0 0.5 1.0 
+
+Global Mean 
+
+Ctx. Mean 
+
+Pert. Mean 
+
+Additive 
+
+STATE 
+
+Rhaister 
+
+Half-sample 
+
+Rhaister (permute pert.) 
+
+Rhaister (permute ctx.) 
+
+> .26
+> .38
+> .30
+> .43
+> .40
+> .59
+> .33
+> .31
+> .52
+
+0.0 0.5 1.0 
+
+> .00
+> .46
+> .67
+> .85
+> .89
+> .96
+> .40
+> .71
+> .97
+
+metric value 
+
+Discrimination Pearson 
+
+PR-AUC Spearman LFC 
+
+DE overlap Spearman ES 
+
+Figure S1.  Performance comparison with training signal ablations for Rhaister. 
+
+T A H O E B I O . A I 16 / 16 
+
+.CC-BY 4.0 International license available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint this version posted June 12, 2026. ;https://doi.org/10.64898/2026.06.09.731197 doi: bioRxiv preprint
