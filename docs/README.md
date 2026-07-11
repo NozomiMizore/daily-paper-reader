@@ -6,34 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-10
-- 运行时间：2026-07-10 21:44:24 UTC
+- 最新运行日期：2026-07-11
+- 运行时间：2026-07-11 21:16:15 UTC
 - 运行状态：成功
-- 本次总论文数：4
+- 本次总论文数：2
 - 精读区：1
-- 速读区：3
+- 速读区：1
 
 ### 今日简报（AI）
-今日精读发现生物网络特异结构比通用图拓扑更能预测基因必需性，速读关注细胞信号适应学习和空间转录组细胞互作因果分析。  
-最值得细读的是精读论文提出的网络组织驱动预测结论，以及速读中细胞学习与信号波动的关系。  
-建议后续可结合生物网络特征优化预测模型，并探索单细胞数据生成与空间互作分析的工具融合。
-- 详情：[/202607/10/README](/202607/10/README)
+今日精读Perturb-seq联合分析提升统计效力与成本效率，速读肿瘤单细胞多模态状态转变。最值得看Perturb-seq方法优化，可降低实验成本并提高检测灵敏度。建议关注单细胞扰动数据整合技巧，应用到自身研究中可提升分析效能。
+- 详情：[/202607/11/README](/202607/11/README)
 
 ### 精读区论文标签
-1. [Biological Network Organization, Not Generic Graph Topology, Drives Graph-Based Gene Essentiality Prediction](/202607/10/biorxiv-10-64898-2026-06-30-735480-v1-biological-network-organization-not-generic-graph-topology-drives-graph-based-gene-essentiality-prediction)  
+1. [Joint analysis of multiply perturbed cells improves statistical power and cost efficiency in Perturb-seq](/202607/11/biorxiv-10-64898-2026-07-10-737863-v1-joint-analysis-of-multiply-perturbed-cells-improves-statistical-power-and-cost-efficiency-in-perturb-seq)  
    标签：评分：8.0/10、query:virtual-cell
-   evidence：预测基因必需性作为对遗传扰动的细胞响应
+   evidence：分析Perturb-seq中多次扰动细胞的扰动响应
 
 ### 速读区论文标签
-1. [Cellular Adaptation to Signal Fluctuations as Learning](/202607/10/2607.03545v1-cellular-adaptation-to-signal-fluctuations-as-learning)  
-   标签：评分：7.0/10、query:virtual-cell
-   evidence：开发了细胞通路的多尺度模型作为适应性虚拟细胞模型
-2. [A Counterfactual Framework for Directional Cell-Cell Interaction Analysis in Spatial Transcriptomics](/202607/10/biorxiv-10-64898-2026-04-05-716510-v4-a-counterfactual-framework-for-directional-cell-cell-interaction-analysis-in-spatial-transcriptomics)  
+1. [Identifying cancer cell-state transitions from multimodal single-cell data](/202607/11/biorxiv-10-64898-2026-03-02-708945-v2-identifying-cancer-cell-state-transitions-from-multimodal-single-cell-data)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：反事实框架预测细胞状态变化，适用于虚拟细胞模型中的扰动模拟
-3. [scJET: Full-gene Space Single-cell Expression Generation with Patch-based Transformer Modeling](/202607/10/biorxiv-10-64898-2026-07-06-736701-v1-scjet-full-gene-space-single-cell-expression-generation-with-patch-based-transformer-modeling)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：全基因空间单细胞生成模型，可用于扰动响应预测
+   evidence：利用多模态单细胞数据识别癌症细胞状态转变，与扰动响应动态相关
 
 
 <div class="dpr-home-promo-card">
