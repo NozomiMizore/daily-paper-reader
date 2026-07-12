@@ -6,26 +6,27 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-11
-- 运行时间：2026-07-11 21:16:15 UTC
+- 最新运行日期：2026-07-12
+- 运行时间：2026-07-12 20:34:07 UTC
 - 运行状态：成功
 - 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-今日精读Perturb-seq联合分析提升统计效力与成本效率，速读肿瘤单细胞多模态状态转变。最值得看Perturb-seq方法优化，可降低实验成本并提高检测灵敏度。建议关注单细胞扰动数据整合技巧，应用到自身研究中可提升分析效能。
-- 详情：[/202607/11/README](/202607/11/README)
+今日速读两篇7分论文，分别关注单细胞多组学中细胞状态依赖的调控时滞建模和可扩展的生物物理约束代谢状态推断。值得关注的方向是：通过不对称跨模态注意力学习动态调控关系，以及利用可扩展约束提升生理一致性的代谢模型。建议优先消化这两篇的方法框架，后续可尝试将调控时滞与代谢约束结合分析。
+- 详情：[/202607/12/README](/202607/12/README)
 
 ### 精读区论文标签
-1. [Joint analysis of multiply perturbed cells improves statistical power and cost efficiency in Perturb-seq](/202607/11/biorxiv-10-64898-2026-07-10-737863-v1-joint-analysis-of-multiply-perturbed-cells-improves-statistical-power-and-cost-efficiency-in-perturb-seq)  
-   标签：评分：8.0/10、query:virtual-cell
-   evidence：分析Perturb-seq中多次扰动细胞的扰动响应
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Identifying cancer cell-state transitions from multimodal single-cell data](/202607/11/biorxiv-10-64898-2026-03-02-708945-v2-identifying-cancer-cell-state-transitions-from-multimodal-single-cell-data)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：利用多模态单细胞数据识别癌症细胞状态转变，与扰动响应动态相关
+1. [TMO: ASYMMETRIC CROSS-MODAL ATTENTION FOR LEARNING CELL-STATE-DEPENDENT REGULATORY LAGS FROM SINGLE-CELL MULTIOMIC DATA](/202607/12/biorxiv-10-64898-2026-06-08-730880-v2-tmo-asymmetric-cross-modal-attention-for-learning-cell-state-dependent-regulatory-lags-from-single-cell-multiomic-data)  
+   标签：评分：7.0/10、query:virtual-cell
+   evidence：学习细胞状态依赖的调控动态，与虚拟细胞模型相关
+2. [Scalable biophysical constraints for physiologically consistent metabolic states](/202607/12/biorxiv-10-64898-2026-07-03-736321-v1-scalable-biophysical-constraints-for-physiologically-consistent-metabolic-states)  
+   标签：评分：7.0/10、query:virtual-cell
+   evidence：代谢建模与生物物理约束支持虚拟细胞构建
 
 
 <div class="dpr-home-promo-card">

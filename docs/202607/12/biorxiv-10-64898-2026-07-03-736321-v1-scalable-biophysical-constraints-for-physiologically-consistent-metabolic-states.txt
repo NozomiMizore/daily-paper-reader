@@ -1,0 +1,820 @@
+Title: Scalable biophysical constraints for physiologically consistent metabolic states
+
+URL Source: https://www.biorxiv.org/content/10.64898/2026.07.03.736321v1.full.pdf
+
+Number of Pages: 36
+
+Markdown Content:
+# Scalable biophysical constraints for physiologically consistent 
+
+# metabolic states 
+
+Ilias Toumpe 1, Daniel R. Weilandt 1,3 , Bharath Narayanan 1,4 , Georgios Fengos 1,5 , Vassily Hatzimanikatis 1,Ljubisa Miskovic 1,2,*  
+
+> 1
+
+Laboratory of Computational Systems Biology (LCSB), Ecole Polytechnique Fédérale de Lausanne (EPFL), CH-1015 Lausanne, Switzerland.  
+
+> 2
+
+AI Center, EPFL, CH-1015 Lausanne, Switzerland.  
+
+> 3
+
+Current address: Lewis-Sigler Institute for Integrative Genomics, Princeton University, Princeton, NJ 08544.  
+
+> 4
+
+Current address: Department of Public Health and Primary Care, University of Cambridge, CB1 8RN.  
+
+> 5
+
+Current address: EMBION Technologies S.A., Switzerland. 
+
+> *
+
+Correspondence: Ljubisa Miskovic, Email: ljubisa.miskovic@epfl.ch Phone: + 41 (0)21 693 98 92; + 41 (0)21 693 28 35 
+
+.CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint Abstract 
+
+Systems biology aims to develop predictive models that connect molecular mechanisms to cellular behavior. Genome-scale metabolic models are among the most widely used frameworks for integrating stoichiometric, thermodynamic, and omics-derived information to predict feasible metabolic phenotypes. However, cellular metabolism operates on timescales governed by enzyme kinetics and by the relationship between metabolic fluxes and metabolite pool sizes. In steady-state metabolic models, this relationship can be expressed in terms of metabolite turnover rates, defined as flux-to-pool-size ratios that quantify how rapidly metabolite pools are renewed . As a result, physiologically consistent steady-state solutions should not only satisfy mass-balance and thermodynamic constraints but also exhibit turnover rates consistent with enzyme-mediated cellular dynamics. Current constraint-based approaches can admit many steady-state flux-concentration states that do not account for turnover rates, resulting in phenotypes incompatible with realistic metabolic dynamics, even when multiple types of data are imposed. Here, we present METEOR-K, an optimization framework that links steady-state metabolic fluxes to metabolite concentrations via turnover rate constraints to identify dynamically plausible flux-concentration reference states. Because these constraints reshape the feasible solution space, we also introduce turnover-rate-aware sampling strategies to efficiently explore the resulting feasible region. We applied METEOR-K to models of increasing scope and scale, including a reduced glycolysis pathway, anaerobic E. coli , and near-genome-scale ovarian cancer models. METEOR-K narrowed the admissible steady-state solution space, reduced uncertainty in feasible flux-concentration states, and improved local dynamic behavior. In nonlinear ODE simulations of bioreactor cultivation and drug-response scenarios, METEOR-K-derived states produced intracellular response times compatible with growth-supporting metabolic operation and perturbation recovery. Overall, these results establish metabolite turnover rates as scalable biophysical constraints that improve the physiological consistency of steady-state metabolic modeling. Because turnover rates encode flux-to-pool-size timescale constraints, METEOR-K moves part of physiological-consistency assessment upstream of kinetic parameterization, yielding better-suited flux-concentration reference states for kinetic modeling and dynamic prediction. 
+
+Keywords: constraint-based modeling, metabolite turnover, flux-concentration coupling, metabolic timescales, kinetic/dynamic modeling 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+# Introduction 
+
+Cellular metabolism is complex and exhibits various nonlinear dynamic phenomena, including negative feedback and feedforward loops 1,2 , oscillations 3–5 , and multiple steady states 6–9 . Computational models help interpret these behaviors by linking metabolic network structure and biochemical regulation to physiological function. Constraint-based modeling has been central to this effort because it enables large-scale analysis of steady-state metabolic fluxes under physicochemical and physiological constraints. These methods identify flux states consistent with mass balance 10 , thermodynamics 11–14 , resource allocation 15,16 , and multi-omics data integration 17–20 . However, even with these extensions, the feasible solution space often remains large, and not all admissible flux states correspond to physiologically plausible metabolic behavior. A key limitation is that steady-state formulations generally do not constrain how flux magnitudes scale with metabolite pool sizes 21,22 . For example, thermodynamics-based formulations 11–14 incorporate metabolite concentrations via Gibbs-energy constraints, but these primarily restrict reaction directionality and feasible concentration ranges. They do not determine whether a flux magnitude is kinetically plausible for the corresponding metabolite pool size. Thus, flux distributions that satisfy mass balance, thermodynamic feasibility, and other imposed constraints can still imply unrealistic biochemical dynamics. This limitation matters because metabolite concentrations are physiologically constrained, whereas metabolic fluxes must adjust over a broader range to support growth and environmental responses. When metabolic demand increases, cells cannot simply increase metabolite pools in direct proportion to flux. Instead, higher flux through constrained pools requires faster metabolite renewal, linking flux-concentration relationships to metabolic timescales 23 . For example, in growing cells, a steady-state flux-concentration pair that implies metabolite renewal timescales much slower than the growth process is dynamically inconsistent with the physiology it is intended to represent, even if it satisfies mass balance and thermodynamic feasibility. 
+
+Metabolite turnover rates provide a direct measure of this renewal. For a metabolite, the turnover rate is the ratio of the cumulative production or consumption rate to its concentration, and the corresponding turnover time is its inverse. This ratio links a steady-state flux-concentration pair to an implied pool-renewal 
+
+timescale. In the simplest first-order case, where the flux, 𝑣 , is a linear function of the metabolite concentration, 𝑥 , ( 𝑣 = 𝑘 ∙ 𝑥 ), the ratio 𝑣 /𝑥 is the kinetic constant 𝑘 . Thus, a flux-concentration pair already encodes a characteristic timescale without requiring a full kinetic model (Figure 1). A physiologically plausible steady state should also be compatible with realistic local dynamic behavior, which is governed by the Jacobian evaluated at that state. Because Jacobian entries scale with flux-to-concentration ratios (Supplementary Note 1), turnover rates constrain the range of attainable relaxation timescales. However, they do not capture all determinants of dynamic behavior, including how reaction 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+rates respond to metabolite changes, regulatory couplings, conserved pools, or network interactions, which determine how individual dynamic modes are realized within that range. Consequently, turnover-rate constraints provide a dynamic screen: low turnover can indicate steady states likely to support slow local responses, whereas high turnover permits, but does not guarantee, fast dynamics. We therefore asked whether constraints on metabolite turnover rates could help generate steady-state flux-concentration states that are dynamically plausible while preserving the scalability and modularity of genome-scale constraint-based modeling. This motivated us to develop METEOR-K (MEtabolite Turnover-rate Enabled Optimization for Relevant Kinetics), an optimization framework that links steady-state metabolic fluxes to metabolite concentrations through turnover rate constraints (Figure 1). This coupling is inherently nonlinear, since turnover rates depend on flux-to-pool-size ratios. Enforcing it directly would therefore require nonlinear optimization and mixed-integer nonlinear programming, limiting scalability in large metabolic networks. METEOR-K addresses this by reformulating turnover constraints as a mixed-integer linear program (MILP), using constant-bin and piecewise-linear approximations. This reformulation allows METEOR-K to exclude steady-state flux-concentration states with biologically implausible implied turnover rates. We developed turnover-aware sampling strategies to efficiently explore the resulting turnover-constrained feasible region. For large-scale models, where enforcing turnover constraints uniformly across all metabolites can be overly restrictive, METEOR-K uses modal analysis of kinetic-model ensembles to identify metabolite pools associated with slow modes. Selectively imposing turnover at these pools focuses enforcement on dynamically informative parts of the network, while also making constraint enforcement tractable in large-scale networks. We evaluate METEOR-K across networks that differ in topology and scale, including a reduced-glycolysis model, an anaerobic E. coli model, and a very large-scale ovarian cancer metabolism model. Together, these applications show that METEOR-K provides a scalable route for incorporating dynamic plausibility into steady-state metabolic modeling by constraining turnover-consistent flux-concentration states and prioritizing the constraints most relevant to local metabolic timescales. 
+
+# Results 
+
+## Turnover rates limit accessible local timescales 
+
+Using a reduced glycolysis model, we tested whether turnover rates computed from steady-state flux– concentration pairs can identify metabolite pools that limit attainable local dynamics. We quantify flux-to-concentration coupling by defining the turnover rate of metabolite 𝑖 , 𝑇 𝑅 !, as: 
+
+𝑇 𝑅 ! = ∑ ∣"∈$! 𝑛 !" 𝑣 " ∣
+
+𝑥 !
+
+(1) 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+where 𝑥 ! is the metabolite concentration, 𝑣 " is the flux through reaction 𝑗 , 𝑛 !" is the stoichiometric coefficient of metabolite 𝑖 in reaction 𝑗 , and 𝐾 ! is the set of reactions that consume metabolite 𝑖 at the considered steady state. Thus, 𝑇 𝑅 ! has units of inverse time and quantifies how rapidly a metabolite pool is renewed relative to its size. Equivalently, 1/𝑇 𝑅 ! is the characteristic time required to replace that pool at the given steady-state fluxes. At steady-state, total production and total consumption are equal in magnitude, so the turnover can be computed from either the producing or consuming flux set. The link between turnover and local dynamics follows from the structure of the Jacobian: its entries scale with flux-to-concentration ratios, while reaction-rate sensitivities and network coupling determine how individual modes are realized (Supplementary Notes 1 and 2). Thus, turnover rates provide an indicator of the timescale range accessible to the linearized system. In particular, when the Jacobian is weakly coupled or diagonally dominant, turnover rates can track the eigenvalue scale and therefore the attainable local dynamic response. In strongly coupled networks, however, turnover rates constrain the range of attainable local timescales rather than directly determining individual eigenvalues, because reaction-rate sensitivities and off-diagonal interactions also contribute to the Jacobian. We illustrate the effects of the turnover rate using a reduced glycolysis model (Figure 2A). The network describes glucose uptake, conversion to glucose-6-phosphate (g6p), a lumped glycolytic step to phosphoenolpyruvate (pep), and subsequent conversion to pyruvate (pyr), which then branches toward lactate and acetyl-CoA (accoa). This branching structure creates a potential slow pool, because accoa can receive only a fraction of upstream carbon flux while remaining within its feasible concentration range. To test whether local dynamic behavior is shaped by the underlying flux-concentration state, we sampled 5,000 feasible steady states spanning the network’s solution space and built an ensemble of 100 kinetic models consistent with each sample using the ORACLE framework 24 , retaining only dynamically stable models (Methods). We converted the eigenvalue with the largest real part of each stable kinetic model into a characteristic relaxation time and used the median characteristic time across models to summarize each steady state. Different regions of the steady-state solution space corresponded to markedly different characteristic times, producing a gradient across the PCA projection of sampled states (Figure 2B). The same trend was observed when using the fastest sampled characteristic time for each steady state (Figure S1), indicating that the effect does not depend on the aggregation metric. To identify which metabolite pools were associated with these differences, we compared the turnover rate distributions of the 20 fastest (Figure 2C, blue) and 20 slowest (Figure 2C, red) steady states. Pep and pyr showed overlapping distributions, and g6p displayed only partial separation. In contrast, accoa showed a pronounced shift: slow steady states were consistently associated with very low accoa turnover, whereas fast states exhibited substantially higher values. Thus, in this simple network, the metabolite with the lowest turnover sets the slowest accessible local timescale. This correspondence is expected from the network 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+structure, because accoa lies in a simple linear branch directly linked to the turnover of that pool, as shown analytically in Supplementary Note 2. We next tested how increasing accoa turnover affected local dynamics. We constrained the turnover rates of all metabolites to a characteristic time of 2 s, except for accoa, which we systematically varied from 500 s to 1 s. For each case, we generated a representative steady state, sampled 1,000 kinetic models around it, and quantified the resulting characteristic times (Figure 2D). As accoa turnover increased, the system's fastest attainable dynamics accelerated accordingly, until accoa no longer represented the slowest pool. At 2 s and 1 s of accoa’s turnover time, g6p became the new bottleneck. Modal analysis confirmed this bottleneck shift: the slowest mode was associated with accoa when its turnover remained slow and with g6p once accoa turnover was increased (Figure 2E). This analysis indicates that slow turnover of a specific metabolite pool can limit the fastest accessible local timescale in this reduced network. Finally, when we pushed all metabolite turnover rates toward their highest feasible values, the system approached a theoretical upper bound on attainable local dynamics, jointly set by thermodynamic constraints, mass balance, and flux bounds (Supplementary Note 3). Together, these results show that steady-state flux–concentration pairs already encode constraints on attainable kinetic timescales . Turnover rates, therefore, provide an interpretable way to identify metabolite pools that make otherwise feasible steady states dynamically slow. We next formalize this principle as a mixed-integer optimization problem to identify turnover-constrained, dynamically plausible steady-state metabolic states. 
+
+## Formulation of turnover-constrained, dynamically plausible metabolic states 
+
+METEOR-K constrains steady-state metabolic states by combining mass-balance constraints, thermodynamic feasibility, and metabolite turnover-rate constraints into a single mixed-integer linear programming (MILP) optimization problem. The feasible steady-state flux space is first defined by mass-balance, flux bounds and any additional linear constraints from measured exchange rates or data-integration procedures: 
+
+𝑁𝑣 = 0 (2) 
+
+𝑣 ",&' ≤ 𝑣 " ≤ 𝑣 ",(' (3) 
+
+𝐴𝑣 ≤ 𝑏 (4) where 𝑁 ∈ ℝ)×+ is the stoichiometric matrix, 𝑣 ∈ ℝ+ the vector of reaction fluxes, and Eq. 4 stems from additional physiological or data-derived constraints. Thermodynamic feasibility is imposed using the standard Thermodynamics Flux Analysis (TFA) 11 
+
+formulation, which couples reaction directionality to transformed Gibbs free energies and metabolite concentrations through mixed-integer constraints. For each metabolite 𝑖 , METEOR-K uses log-transformed concentrations 
+
+𝐶 ! = ln (𝑥 !) (5) with bounds 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+𝐶 !,&' ≤ 𝐶 ! ≤ 𝐶 !,(' (6) 
+
+For each reaction 𝑗 , the reaction Gibbs free energy is linked to the log-concentrations by 
+
+Δ,𝐺 " 
+
+> -
+
+− 𝑅𝑇 @ 𝑛 !" 𝐶 !
+
+> )
+> !./
+
+− Δ,𝐺 "
+
+> ∘"
+
+= 0 (7) where 𝑅 is the gas constant, 𝑇 is the temperature, and 𝑛 !" is the stoichiometric coefficient of metabolite 𝑖 in reaction 𝑗 . Reaction directionality is then constrained by the sign of Δ,𝐺 "
+
+> -
+
+, using the standard TFA binary-variable formulation described in the Methods. These thermodynamic constraints exclude flux states that violate reaction energetics, but they do not constrain how fast metabolite pools are replenished. Thus, two steady-state solutions can satisfy the same mass-balance and thermodynamic constraints while differing substantially in metabolite pool size relative to consuming flux. Large metabolite pools relative to their consuming fluxes imply slow turnover and potentially implausible metabolic timescales. METEOR-K addresses this limitation by requiring selected metabolites to satisfy turnover-rate bounds. For metabolite 𝑖 , we define the total consuming flux as: 
+
+𝑉 !12+3 = @ B𝑛 !" 𝑣 "B
+
+> "∈$!
+
+= @ −𝑛 !" 𝑣 " 
+
+> 4
+> "∈$!
+> #
+
++ @ 𝑛 !" 𝑣 " 
+
+> 5
+> "∈$!
+> $
+
+(8) where 𝐾 ! is the set of reactions that consume metabolite 𝑖 at the considered steady state. The flux variables can be split into non-negative variables representing the forward D𝑣 "
+
+> 4
+
+E and reverse directionality D𝑣 "
+
+> 5
+
+E. 𝐾 !4
+
+contains reactions that consume metabolite 𝑖 , i.e., 𝑛 !" < 0, whereas 𝐾 !5 contains reactions for which reverse flux consumes metabolite 𝑖 , i.e., 𝑛 !" > 0. This representation makes 𝑉 !12+3 linear in the split-flux variables 
+
+𝑣 " 
+
+> 4
+
+and 𝑣 "
+
+> 5
+
+. We impose metabolite-specific turnover intervals of the form 
+
+𝜀 ! 
+
+> &'
+
+≤ 𝑇 𝑅 ! = 𝑉 !12+3 
+
+𝑥 !
+
+≤ 𝜀 ! 
+
+> ('
+
+(9) where 𝜀 ! 
+
+> &'
+
+and 𝜀 ! 
+
+> ('
+
+define lower and upper physiological turnover-rate bounds for metabolite 𝑖 . Combining Eq. 5 and Eq. 9 yields: 
+
+𝜀 ! 
+
+> &'
+
+∙ exp (𝐶 !) ≤ 𝑉 !12+3 ≤ 𝜀 ! 
+
+> ('
+
+∙ exp (𝐶 !) (10) These constraints are nonlinear. To retain an MILP formulation, METEOR-K approximates the exponential term using either concentration-bin variables or a piecewise-linear approximation over the feasible log-concentration range. The full formulation, including thermodynamic constraints, turnover-constraint linearization, approximation-error analysis, and computational trade-offs, is described in the Methods. 
+
+## Turnover rate constraints restrict the steady-state space and accelerate metabolic response times in anaerobic E. coli 
+
+We next moved beyond the reduced network to test whether turnover-rate constraints restrict the admissible steady-state space, reduce flux–concentration uncertainty, and select states with faster local and nonlinear metabolic responses in a larger metabolic model. We tested this formulation on the published anaerobic E. coli metabolic model 25 . The stoichiometric network contains 180 reactions and 141 metabolites, and the 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+associated kinetic model includes 63 ODEs and 601 kinetic parameters (Methods). We constrained the model to the experimentally measured anaerobic growth rate and imposed lower bounds on metabolite turnover rates using the cell doubling time as a reference timescale. Because these bounds define minimum turnover rates, metabolites whose feasible turnover rates were already higher than the inverse doubling-time reference remained effectively unconstrained. For example, in this E. coli model, ATP could reach TR values more than 200-fold higher than the doubling time. We generated 100 alternative steady-state solutions for increasingly stringent lower bounds on TR, corresponding to timescales 5-, 10-, 50-, and 100-fold higher than the cell's doubling time (Figure 3A). For each steady-state solution, we sampled 100 kinetic parameter sets and computed the corresponding characteristic times. The resulting steady states occupied distinct regions of the feasible space in the PCA projection (Figure 3A) and, on average, exhibited different linear dynamics (Figure 3B). As TR lower bounds became increasingly tighter, both the fastest attainable and median characteristic times decreased. However, the median characteristic time plateaued at approximately the 10-fold cutoff, whereas the fastest achievable characteristic time continued to decrease as the cutoff became stricter (Figure 3B). This pattern indicates that TR constraints shift the system's accessible timescales, but beyond a threshold, the median timescale is influenced more by kinetic-parameter variability, thermodynamic constraints, and network topology than by the global TR cutoff. These results show that TR lower bounds shift both the location of feasible steady states and the distribution of accessible linear timescales. To quantify how strongly TR constraints reshape the broader admissible flux-concentration space, we compared TR-constrained and unconstrained steady-state ensembles using turnover-aware sampling, applying a global TR lower bound corresponding to turnover times 10-fold shorter than the cell doubling time (Methods). TR constraints produced substantial changes in the sampled distributions: the average Jensen-Shannon (JS) divergence (computed with the natural logarithm) was 0.301, corresponding to approximately 43% of the theoretical maximum, and only 27% of variables had JS divergence ≤ 0.1, indicating substantial shifts in the sampled distributions. Representative examples are shown in Figure 3C. To understand which parts of the network drove these distributional shifts, we compared extracellular exchange fluxes, intracellular fluxes, and metabolite concentrations between unconstrained and TR-constrained samples. Extracellular exchange fluxes were largely unchanged: glucose uptake and, more generally, secretion and uptake rates showed similar distributions across the two sampling regimes (Supplementary Table 1). This limited change likely reflects, in part, the model’s prior integration of experimentally measured uptake and secretion rates, although not all exchange fluxes were directly constrained by these data. In contrast, many intracellular pathways differed markedly. For example, fluxes in pyruvate metabolism had an average JS divergence of 0.258. PYK, the terminal glycolytic step that produces pyruvate, exhibited a pronounced shift, with lower fluxes in samples generated under TR 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+constraints (Figure 3C). Because turnover depends on the ratio between flux and pool size, a TR lower bound can be satisfied either by increasing consuming flux or by decreasing metabolite concentration. In this case , the constraint is met largely by lowering pyruvate concentrations, so the smaller pool satisfies the turnover bound at a correspondingly lower PYK flux. Metabolite concentration distributions also shifted, with TR-constrained samples showing lower intracellular concentrations on average, consistent with the exclusion of high-pool states that cannot be supported by sufficient consuming flux (Figure 3C). TR constraints also reduced uncertainty in intracellular metabolite concentrations by excluding high-pool/low-consuming-flux regions that remain feasible under mass-balance and thermodynamic constraints alone. To make this exclusion explicit, we plotted, for each metabolite, its total consuming flux against its sampled concentration. An imposed TR lower bound defines a clear exclusion region in the flux-concentration plane, corresponding to metabolite pools too large to be renewed by the available consuming flux. Glycolate illustrates this behavior: TR-constrained samples occupied a distinct region from unconstrained samples (Figure 3D), and the same qualitative pattern was observed for other metabolites. To quantify the associated reduction in marginal uncertainty across the network, we used thermodynamic variability analysis to compute the feasible ranges of all fluxes and concentrations with and without TR constraints and expressed the effect as the fractional reduction in the feasible range. For the 10-fold TR lower bound cutoff, concentration ranges showed measurable reductions, whereas flux-range changes were negligible (Supplementary note 6 ). This asymmetry is informative: in this model, fluxes were already strongly constrained by stoichiometry, thermodynamics, and measured exchange rates, whereas metabolite concentrations retained broader feasible ranges. Adding TR constraints, therefore, primarily refined the admissible concentration space. For example, the GTP concentration range was reduced by 69%. When we sampled 100 kinetic parameter sets for each of the two steady-state ensembles, the resulting kinetic models differed markedly in their dynamical timescales. Models generated from TR-constrained steady states exhibited an approximately one order of magnitude shorter median characteristic time, i.e., faster local dynamics (Figure 3E). To ensure that these distributional changes arise from the TR constraints rather than from artifacts of the modified sampling procedure, we compared the TR-aware sampler against a baseline approach that uses a standard sampler with accept-reject filtering based on the same TR constraints. The two approaches produced nearly identical distributions for all variables, with an average JS divergence of 0.0308 and more than 95% of variables showing JS divergence ≤ 0.1. This agreement suggests that the modified sampler does not introduce additional sampling bias beyond enforcing feasibility under TR constraints. We next tested whether constraining metabolite turnover rates also affects system behavior in a nonlinear setting using batch bioreactor simulations. We simulated biomass accumulation by coupling each kinetic model to an exponential biomass-growth equation and parameterized the initial batch conditions using experimental data 26 . To generate the kinetic models used in these simulations, we sampled steady states 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+under TR constraints corresponding to turnover times equal to the doubling time and 5- and 10-fold shorter than the doubling-time reference. To ensure favorable initial conditions for the reactor simulations, we enforced high steady-state concentration ranges for biomass precursors identically across all TR cutoffs, so that differences between cutoffs reflect the turnover constraint rather than the precursor enrichment (Supplementary Note 4). We integrated each batch bioreactor simulation for 15 hours; in the reference experimental setting, cultures reached the stationary phase at approximately 10.5 hours. As the primary readout, we report the average growth rate, which is directly comparable to the experimentally measured rate, and treat the biomass concentration at 10.5 hours as a complementary check. Outcomes varied substantially across simulations, attributable to both the steady-state sample used to initialize the inoculum and the sampled kinetic parameter values governing carbon and energy flow through the network. Despite this variability, increasing the TR cutoff consistently increased the emergent average growth rate (Figure 4A). The experimentally measured anaerobic growth rate is shown as a physiological reference but was not used to fit or select the TR cutoff. Rather, the result shows that steady states constrained to faster metabolite turnover yield kinetic models with faster growth dynamics in nonlinear bioreactor simulations. Biomass titer followed the same ordering (Figure 4B), but with greater scatter because titer also depends on the initial biomass associated with each steady-state sample. This trend persisted after stratifying simulations by their initial maximum eigenvalue, indicating that the TR lower bound, rather than the initial characteristic time alone, explains the increase in biomass titer (Figure 4C). Together, these results show that turnover constraints that accelerate local relaxation timescales also shift emergent nonlinear growth behavior, providing a biophysically interpretable connection between steady-state flux–concentration structure and dynamic phenotype. 
+
+## Targeted turnover-rate enforcement preserves multi-omics constraints while accelerating local dynamics in a large-scale cancer model 
+
+We next asked whether METEOR-K can be applied when the feasible space is already tightly constrained by thermodynamics and multi-omics data. This setting is important because a single stringent TR lower bound applied uniformly across all metabolite pools can conflict with existing data-derived and thermodynamic constraints. We therefore used a large-scale ovarian cancer metabolic model developed in our previous work 27 to test the targeted mode of METEOR-K, in which turnover constraints are imposed only on metabolite pools associated with slow relaxation modes. The ovarian cancer model had already been constrained by thermodynamic feasibility and by multi-omics data integration, including metabolomics, exchange-flux measurements, and transcriptomics (Methods). These constraints defined a reduced feasible space of fluxes and concentrations consistent with the available biochemical and experimental evidence. The model has broad network coverage, with 2137 intracellular reactions and 974 metabolites 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+spanning 8 compartments, and the accompanying kinetic model comprises 716 ODEs and 9594 kinetic parameters. Within this already restricted feasible space, enforcing a sufficiently stringent TR lower bound uniformly across all metabolite pools would overconstrain the current data-integrated formulation. Restoring feasibility would require changing the model assumptions, for example by lowering concentration bounds for metabolites with slow-consuming fluxes or by relaxing thermodynamic constraints that restrict the feasible concentration space. Because these bounds and constraints encode the integrated data and thermodynamic prior information, we retained them unchanged and instead applied targeted, modal-analysis-guided turnover enforcement. This strategy applies turnover constraints where they are most dynamically informative, rather than uniformly across the network (Figure 1, Methods). The targeted workflow is iterative (Figure 1). We first generate an initial set of steady-state samples and parameterize kinetic models around each sample, allowing characteristic times and modal contributions to be computed . We then impose TR lower bounds on the metabolite pools most consistently associated with slow modes. Because this identification is statistical and depends on the current ensemble, the procedure is repeated for a few iterations until the set of slow modes stabilizes or the median characteristic time improves only marginally (Methods). Applying this iterative procedure to the cancer model, modal analysis identified 705 metabolite pools that repeatedly contributed to slow modes. We imposed a TR lower bound corresponding to a turnover of 15-fold shorter than the cell doubling time. This progressively shortened the median characteristic time of the kinetic-model ensembles to nearly an order of magnitude below the unconstrained baseline (Figure 5A). The TR lower bound is a tunable parameter, and we recommend a stricter cutoff for large networks because the probability of sampling dynamically favorable steady states falls as network size grows. Raising the lower bound biases the feasible region toward states with faster local turnover and increases the chance that randomly parameterized kinetic models initialized at these states exhibit acceptable timescales. Most of this improvement was achieved within the first two iterations: beyond the second, the median characteristic time no longer improved appreciably, although the fastest sampled characteristic times continued to decrease. This plateau indicated that the 15-fold cutoff, rather than the number of iterations, had become the limiting factor. Thus, additional iterations at the same cutoff would yield only diminishing improvements in the median characteristic time. We therefore raised the TR lower bound for the 705 identified metabolites from 15- to 30-fold, which shifted the ensemble toward faster attainable dynamics (Figure 5A). Applying a pruning criterion that required the characteristic time to be at least 3 times faster than the cell doubling time, 169 kinetic models (from 14 of 100 steady-state samples) were eligible at the 15-fold TR cutoff and 367 models (from 23 of 100 samples) at the 30-fold TR cutoff. Thus, once additional iterations at the same cutoff produced diminishing returns, increasing the TR lower bound improved the yield of dynamically acceptable kinetic models. 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+## Targeted turnover-rate enforcement enriches cancer-model ensembles for nonlinear drug-response recovery and reduces the feasible flux-concentration space 
+
+TR constraints do not create dynamic behavior absent from the original feasible space. Rather, they exclude flux-concentration states with necessarily slow pool renewal and bias sampling toward regions more likely to yield physiologically relevant dynamics after kinetic parameterization. The dynamics ultimately realized still depend on kinetic parameters, elasticities, and network topology, which TR does not determine. In principle, unconstrained sampling can also generate steady states with favorable dynamic properties; in practice, this becomes increasingly unlikely in large networks, where the feasible space is high-dimensional and most unconstrained samples fall in regions associated with slow local dynamics, as illustrated by the initial distribution in Figure 5A. We therefore asked whether kinetic models parameterized from the unconstrained sampling distribution provide suitable starting points for nonlinear simulations. To evaluate this, we simulated drug administration in which thymidylate synthase (TMDS) activity was reduced exponentially 10-fold over an 8-hour window and then held at the reduced level for the remainder of the simulation (Methods). We integrated each kinetic model for 600 simulation hours, allowing both the growth-rate reaction and intracellular metabolism to adapt to a new operating steady state. We compared the 169 TR-constrained models obtained after the third iteration that also satisfied the characteristic-time pruning criterion with 150 models drawn from the unconstrained ensemble, selected to span the original characteristic-time distribution. Because no unconstrained models satisfied the same pruning criterion, this comparison tests unconstrained models across their available timescale range rather than as a matched fast-timescale control. We monitored the growth-rate reaction and recorded the time required to reach a new steady value. The TR-constrained models typically stabilized within a few hours (Figure 5B). In contrast, none of the unconstrained models reached a stable growth rate within 600 simulation hours, including those drawn from the fastest available part of the unconstrained distribution (Figure 5B). Thus, targeted TR enforcement enriched the ensemble for recovery-capable models that were not accessed by unconstrained sampling. To assess convergence of the whole intracellular network, we also applied an equilibrium-detection algorithm to determine when all intracellular concentrations and fluxes reached a new steady state (Methods). Using this criterion, 60% of the TR-constrained models achieved a complete intracellular steady state within 600 (simulation) hours, whereas none of the unconstrained models did, consistent with the slow growth-rate trajectories shown in Figure 5B. Targeted TR enforcement therefore improved both output-level recovery of the growth rate and, for a subset of models, whole-network equilibration. We next quantified how much the TR constraints reduced the feasible solution space of the human cancer model. Starting from the original model with baseline flux and concentration bounds, we imposed TR 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+constraints on all metabolites identified up to the third iteration of the modal-analysis workflow, using the 15-fold lower-bound cutoff. We then performed variability analysis to estimate the feasible ranges of all concentrations and fluxes. As an aggregate view of this targeted 15-fold enforcement, we also estimated the contraction of the joint feasible flux-concentration space using a bounding-box approximation based on the flux and concentration ranges obtained from variability analysis (Supplementary Note 6). 
+
+To assess the local effect of each TR constraint, we calculated the area of the total consuming flux-concentration plane for each constrained metabolite before and after TR enforcement. Specifically, this plane was defined by the metabolite’s feasible concentration range and by the feasible range of total consuming flux at each concentration value. We estimated the fractional reduction in this plane by comparing the feasible area retained after imposing the TR boundary with the original area defined by the baseline variability ranges. This metric summarizes how strongly the TR constraint restricts the joint flux-concentration combinations available to each metabolite. Across the constrained metabolites, most individual reductions were small (Figure 5C). Approximately 70% of metabolites showed less than a 1% reduction in their flux-concentration plane, 25% showed reductions between 1% and 10%, and 5% showed reductions greater than 10%. Thus, for most metabolites, the imposed TR constraint removed only a small fraction of the local flux-concentration plane. Yet, their cumulative effect across the solution space was reflected in shifted characteristic-time distributions and improved nonlinear recovery. Figures 5D and 5E show representative examples of how TR constraints reduce flux-concentration planes for individual metabolites. The feasible concentration ranges for 4-hydroxybenzoate and dTTP were similar, but their feasible consuming flux ranges differed by approximately four orders of magnitude. For 4-hydroxybenzoate, the consuming-flux range was high enough that the TR constraint was nearly redundant and only combinations of very low consuming flux and high concentration violated the TR lower bound (Figure 5D). In contrast, dTTP had a much lower consuming flux range, so the TR constraint substantially reduced its feasible concentration range (Figure 5E). This behavior indicates that metabolites in low-activity regions of the network cannot simultaneously maintain large pool sizes and satisfy fast turnover requirements. Together, these results show that modal-analysis-guided TR enforcement extends METEOR-K to very-large-scale kinetic models by selectively restricting turnover-inconsistent flux-concentration states, reducing the incidence of slow local modes, and enriching kinetic-model ensembles for faster drug-response recovery. 
+
+# Discussion 
+
+METEOR-K addresses a missing link in steady-state constraint-based modeling: feasible flux states are rarely coupled to metabolite pool sizes, so admissible solutions can imply metabolic timescales that conflict 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+with enzyme-mediated dynamics. By imposing turnover-rate constraints through a mixed-integer linear formulation, METEOR-K ties flux-concentration relationships to physiologically plausible pool renewal and excludes states that are mathematically feasible but dynamically implausible. Across the systems studied here, these constraints reduced the feasible steady-state space, shifted flux and concentration distributions, and biased downstream kinetic models toward faster local dynamics and more plausible nonlinear transients. Turnover rates thus provide a biologically interpretable constraint layer that complements mass balance, thermodynamics, concentration bounds, and data-derived constraints, and integrates directly into existing workflows such as the COBRA Toolbox 28 .Turnover constraints are a physiological screen, not a guarantee of full dynamic plausibility. They act on the flux-to-pool-size component of the Jacobian. Low turnover identifies states with necessarily slow pool renewal, whereas high turnover only makes fast relaxation possible. Whether fast relaxation is realized still depends on reaction-rate sensitivities, conserved pools, regulatory coupling, network topology, and the sampled kinetic parameters. Consistent with this, in the anaerobic E. coli model progressively stricter lower bounds produced diminishing gains in median characteristic time, confirming that turnover constrains the attainable range while these factors determine where within it the dynamics fall. Turnover constraints therefore improve the reference steady-state ensemble without replacing kinetic parameterization or dynamic analysis, and the lower bound requires biological justification rather than a default value. In high-dimensional models, stricter TR lower bounds can be useful when unconstrained sampling rarely accesses dynamically favorable states, because they bias the feasible region toward states with faster pool renewal. However, the chosen bound should be supported by physiological priors, sensitivity analysis, or the intended modeling objective. The role of turnover constraints in screening dynamically implausible flux-concentration states also guides how these constraints are applied in practice. When data integration and thermodynamics have already tightened the feasible space, a uniform global TR lower bound can overconstrain the model, leaving no solution that simultaneously satisfies the data-derived bounds, thermodynamic constraints, and imposed turnover requirement. This reflects a specification conflict between constraints, not a failure of the turnover principle. Rather than relaxing the data-derived or thermodynamic priors, METEOR-K can instead enforce turnover selectively on the metabolite pools that modal analysis links to slow modes. In the cancer model, this targeted mode allowed turnover constraints to be added while preserving the existing data-derived and thermodynamic priors and still produced dynamics compatible with growth and perturbation recovery. Its value at this scale is one of accessibility: in a high-dimensional feasible space, recovery-capable kinetic models were not accessed by unconstrained sampling, whereas targeted enforcement brought them within reach. METEOR-K therefore offers two complementary modes: a global formulation to broadly filter implausible flux-concentration relationships, and a targeted formulation to place turnover constraints where they are dynamically most informative. 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+METEOR-K also changes how kinetic modeling workflows can use steady-state information. Ensembles kinetic modeling workflows 24,29–32 use sampled steady-state fluxes and metabolite concentrations as reference states for rate-law parameterization, stability analysis, and dynamic simulation. If these reference states imply unrealistic turnover, the resulting kinetic models can inherit poor local behavior and unreliable transient responses. Conversely, constraining turnover at the steady-state level can bias sampled states toward physiologically plausible dynamics before kinetic parameters are fitted or sampled. In its targeted mode, METEOR-K goes one step further by using their local dynamic information to decide which steady-state constraints matter most, closing a feedback loop between kinetic analysis and constraint-based state selection. Whereas previous efforts to manage uncertainty in such models addressed parameter identifiability, observability, prediction uncertainty, and post-parameterization ensemble selection 33–36 ,METEOR-K intervenes upstream,at the level of reference-state selection. The same framework can also incorporate experimental turnover information directly. Turnover times known for individual metabolites, subsystems, or pathway scales, whether from isotope-labeling time courses 37– 39 , flux measurements combined with metabolite pool sizes 40 , or curated quantitative estimates of metabolite turnover times 23,41,42 , can be imposed as physiological priors in place of uniform thresholds, tightening both the steady-state ensemble and its downstream dynamics. Together, these results establish metabolite turnover as a tractable bridge between steady-state feasibility and kinetic plausibility. By adding flux-to-pool-size constraints to standard steady-state formulations, METEOR-K supplies a scalable physiological layer for steady-state modeling and a practical route to more reliable nonlinear simulations of growth and perturbation responses. 
+
+# Methods 
+
+Implementation of turnover rate (TR) constraints 
+
+The turnover rate constraint defined in Eq. 10 was implemented in the TFA variable space, as described in the Results section. Because TFA uses log-concentration variables 𝐶 !, and to keep the optimization formulation as an MILP, we represented the TR constraints in an MILP-compatible form. In the applications presented in this study, we imposed only lower bounds, but the same linearization strategies can be adapted to equality constraints or upper bounds by replacing the lower-bound inequality with the corresponding equality or upper-bound inequality. For simplicity, we present both discretization strategies below using the lower-bound constraint 
+
+𝑇 𝑅 ! = 𝑉 !12+3 
+
+𝑥 !
+
+≥ 𝜀 !
+
+> &'
+
+.
+
+METEOR-K implements two MILP-compatible alternatives for this transformation: a concentration-bin-based approximation and a piecewise-linear approximation of the exponential concentration mapping. 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+Piecewise discretization based on concentration binning: For a metabolite 𝑥 ! with a concentration range [𝑙𝑏, 𝑢𝑏] we partition this range into N bins indexed by m = 1, …, N, with bounds [𝑙𝑏 ), 𝑢𝑏 )]. Assume we impose a lower bound on the turnover rate of the metabolite 𝜀 ! 
+
+> &'
+
+> 0. We also introduce binary variables 
+
+𝐵 ) ∈ {0, 1} indicating whether bin 𝑚 is active, auxiliary concentrations 𝐴𝐶 ), and log concentrations 𝐿 𝐶 ).The nonlinear TR constraint from Eq. 10 can then be transformed to 
+
+𝑉 !12+3 
+
+𝑥 !
+
+≥ 𝜀 ! 
+
+> &'
+
+⇒ 𝑉 !12+3 
+
+𝑒 6! ≥ 𝜀 ! 
+
+> &'
+
+⇒ 𝑉 !12+3 − 𝜀 ! 
+
+> &'
+
+@ 𝐴𝐶 )
+
+> 7
+> )./
+
+≥ 0 (11) 
+
+𝐶 ! = @ 𝐿 𝐶 )
+
+> 7
+> )./
+
+(12) 
+
+∑ 𝐵 ) 
+
+> 7
+> )./
+
+= 1, 𝐵 ) ∈ {0,1} ∀𝑚 (13) 
+
+lb ) 𝐵 ) ≤ 𝐴𝐶 ) ≤ ub ) 𝐵 ) ∀𝑚 (14) 
+
+ln (lb )) 𝐵 ) ≤ 𝐿 𝐶 ) ≤ ln (ub )) 𝐵 ) ∀𝑚 (15) With this formulation, only one binary variable can be active at a time, constraining the values of the auxiliary log concentration variable 𝐿 𝐶 ) and the approximation variable 𝐴𝐶 ). It is important to note that the active auxiliary variable 𝐴𝐶 ) does not necessarily equal the value implied by 𝐶 !, because the bin constraints restrict only the admissible range within each interval and do not enforce an exact functional relationship between 𝐴𝐶 ) and 𝐶 !. Therefore, the approximation error of this linearization depends on bin width and bin placement. 
+
+Piecewise-linear binning using SOS2-type constraints: We approximate the exponential mapping between log-concentration ( 𝐶 !) and concentration ( 𝑥 !) with a piecewise-linear construction enforced by SOS2-type constraints. We introduce breakpoints in log space 𝑏 / < 𝑏 8 < ⋯ < 𝑏 7 and define the corresponding function values 𝑦 ) = 𝑒 '% . We also create weights 𝑤 ) ∈ [0,1] such that {𝑤 /, … , 𝑤 7} forms an SOS2 set, meaning that at most two adjacent 𝑤 ) can be nonzero. Using this representation, the TR lower-bound constraint is imposed as 
+
+𝑉 !12+3 
+
+𝑥 !
+
+≥ 𝜀 ! 
+
+> &'
+
+⇒ 𝑉 !12+3 
+
+𝑒 6! ≥ 𝜀 ! 
+
+> &'
+
+⇒ 𝑉 !12+3 − 𝜀 ! 
+
+> &'
+
+@ 𝑤 )
+
+> 7
+> )./
+
+𝑦 ) ≥ 0 (16) 
+
+𝐶 ! = @ 𝑤 )
+
+> 7
+> )./
+
+𝑥 ) (17) 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+The SOS2 restriction was implemented by introducing binary variables 𝑧 ) ∈ {0,1} for the 𝑁 − 1 intervals between adjacent breakpoints. Exactly one interval can be selected, and each weight 𝑤 ) was allowed to be nonzero only if one of its adjacent weights was active: 
+
+@ 𝑤 )
+
+> 7
+> )./
+
+= 1 (18) 
+
+@ 𝑧 )
+
+> 75/
+> )./
+
+= 1 (19) 
+
+z9 ∈ {0,1} 𝑚 = 1, … , 𝑁 − 1 (20) 
+
+𝑤 / ≤ 𝑧 / (21) 
+
+𝑤 ) ≤ 𝑧 )5/ + 𝑧 ) 𝑚 = 2, … , 𝑁 − 1 (22) 
+
+𝑤 7 ≤ 𝑧 75/ (23) Because the exponential function is convex, its piecewise linear interpolation overestimates the true function. As a result, for lower-bound TR constraints, the approximated concentration is conservative with respect to the imposed constraint. The approximation error decreases as the number of breakpoints increases. 
+
+Approximation error in both techniques: The approximation error of the exponential mapping depends on the number and spacing of bins and breakpoints, the feasible concentration range, and the tolerated error relative to the imposed TR constraint. We quantify this error and provide guidance for selecting the number of bins, 𝑁 , for both approaches in Supplementary Note 5. 
+
+Unit conversion for turnover rate constraints: In practice, fluxes are commonly expressed in mmol/gDCW/h, concentrations in mol/L, and TR constraints in units of inverse time. To make units consistent, we may need to scale the TR constraint using appropriate conversion factors, including the dry-cell weight-to-wet-cell weight ratio (gDCW/gWCW) and an approximate cell density (gWCW/L). 
+
+TR-aware samplers 
+
+Sampling algorithms such as ACHR 43 and optGpSampler 44 are designed to operate on convex feasible sets. Consequently, they cannot be applied directly to mixed-integer formulations that include binary variables, such as models with thermodynamic constraints coupled to concentrations through linearization, or TR constraints introduced via binning. 
+
+A common workaround is to sample within a single flux directionality profile (FDP) 45 . Fixing all reversible reactions to a chosen direction removes the need for the associated binary variables, enabling convex sampling. This approach also removes the coupling between the flux and concentration spaces created by thermodynamic constraints, because the linking binary variables can be dropped only after directionality is fixed. 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+For TR constraints, assigning an FDP is not sufficient. Even within a single FDP, the TR constraints still rely on piecewise or binned linearization that introduces binary variables. These variables cannot be removed without eliminating the approximation linking the consumption flux term to the concentration variable. To address this, we modified the sampling procedure to generate only steady-state samples from regions that satisfy the TR constraints, while maintaining convex sampling steps wherever possible. We first illustrate the idea with a one-dimensional example, then generalize it to ACHR and optGpSampler steps. 
+
+Example of sampling on a line: Given two points 𝑥 (previous sample) and 𝑤𝑝 (warm-up point), we draw a candidate point 𝑝 on the line segment defined by these points and restricted by the bounds of the convex feasible set, 
+
+𝑝 = 𝑥 + 𝛼 (𝑤𝑝 − 𝑥 ) (24) where 𝛼 is constrained by feasibility in the convex space. Assuming a metabolite subject to a turnover rate lower bound 𝜀 !
+
+> &'
+
+, with 𝑇 𝑅 : ≥ 𝜀 ! 
+
+> &'
+
+and 𝑇 𝑅 ;< ≥ 𝜀 !
+
+> &'
+
+, the following relations hold 
+
+𝑉 < = 𝑉 : + 𝛼 (𝑉 ;< − 𝑉 :) (25) 
+
+𝐶 < = 𝐶 : + 𝛼 (𝐶 ;< − 𝐶 :) ⇒ 𝑒 6& = 𝑒 6'4=(6(& 56') (26) Therefore, the turnover rate of the metabolite at point 𝑝 is 
+
+𝑇 𝑅 < = 𝑉 <
+
+𝑒 6& = (1 − 𝛼 ) 𝑇 𝑅 : 𝑒 5= A + 𝛼 𝑇 𝑅 ;< 𝑒 (/5=) A (27) 
+
+Δ = 𝐶 ;< − 𝐶 : (28) For 𝑎 ∈ [0,1] , 𝑇 𝑅 < will always satisfy the lower bound constraint. For values of 𝛼 smaller than 0 or larger than 1, this does not generalize and will depend on the specific values of 𝑇𝑅 : ,𝑇 𝑅 ;< and Δ. The range of allowed 𝛼 is highly dependent on |Δ| , and as Δ approaches 0, the range becomes larger. 
+
+Sampling in a direction: In ACHR and in each Markov chain of optGpSampler, a sampling step selects a direction defined by the vector (𝑤𝑝 − 𝑐𝑝 ) and proposes a new point 𝑝 starting from the current sample 𝑥 
+
+𝑝 = 𝑥 + 𝛼 (𝑤𝑝 − 𝑐𝑝 ) (29) where the step size 𝛼 is chosen within a feasibility interval determined by the convex constraints. Like in the previous example, the turnover rate at the proposed point can be written as 
+
+𝑇 𝑅 <(𝑎 ) = 𝑇 𝑅 : 𝑒 5BA + 𝑎 𝑇 𝑅 ;< 𝑒 C4(/5B)A − 𝑎 𝑇 𝑅 1< 𝑒 C5BA (30) 
+
+Δ = 𝐶 ;< − 𝐶 1< , Θ = 𝐶 1< − 𝐶 : (31) This creates a much more complex function, 𝑇 𝑅 <(𝑎 ) which can intersect the TR constraint lower bound 𝜀 
+
+at most twice. We ensure TR feasibility during sampling using the following procedure: 1. Determine the feasible interval for 𝑎 imposed by the convex constraints (the standard ACHR bound computation). 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+2. Within this interval, locate up to two roots of 𝑇 𝑅 <(𝑎) − 𝜀 = 0 . We bracket candidate roots by partitioning the interval and searching for sign changes, then apply the Brent method to identify the roots. 3. Restrict sampling of 𝑎 to the sub-intervals where 𝑇 𝑅 < ≥ 𝜀 . Because 𝑇 𝑅 <(𝑎) is concave, these admissible regions are contiguous and well defined. 
+
+Sampling an initial set of warmup points: We generate warmup points directly by solving the MILP formulation, ensuring that each warmup point satisfies the TR constraints. These points are also feasible for the corresponding LP relaxation. We encourage generating more warmup points than the conventional heuristic of 2x(number of variables) to provide a larger set of feasible directions for exploration. In this study, we generated 3x(number of variables) warmup points and a thinning step of 100 points. 
+
+Calculating the initial center point: Assume we have 𝑘 warmup points 𝑤 𝑝 !, each with values (𝑉 ;<! , 𝐶 ;<! ).
+
+The initial center point is defined as the mean of the warmup points 
+
+𝑇 𝑅 1< = 𝑉 1< 
+
+𝑒 6)& =
+
+1
+
+𝑘 ∑ 𝑉 ;<!
+
+> D
+> !./
+
+𝑒 /  
+
+> D∑6(&!
+> *
+> !+,
+
+(32) 
+
+Using 𝑉 ;<! = 𝑇 𝑅 ;<! 𝑒 6(&! , we obtain 
+
+𝑇 𝑅 1< = 1
+
+𝑘 @ 𝑇 𝑅 ;<!
+
+> D
+> !./
+
+𝑒 6(&!56‾ = 1
+
+𝑘 @ 𝑇 
+
+> D
+> !./
+
+𝑅 ;<! 𝑒 A! (33) 
+
+𝐶 ‾ = 1
+
+𝑘 @ 𝐶 ;<-
+
+> D
+> "./
+
+, Δ! = 𝐶 ;<! − 𝐶 ‾ (34) If each warmup point satisfies the turnover constraint 𝑇 𝑅 ;<! ≥ 𝜀 then it can be shown that this holds true for the center point too, as follows: 
+
+𝑇 𝑅 1< ≥ 1
+
+𝑘 @ 𝜀 
+
+> D
+> !./
+
+𝑒 A! = 𝜀 n1
+
+𝑘 @ 𝑒 A!
+
+> D
+> !./
+
+o (35) By Jensen’s inequality, since 𝑒 : is convex, 
+
+𝑒 /   
+
+> D∑A!!
+
+≤ 1
+
+𝑘 @ 𝑒 A!
+
+> !
+
+(36) But / 
+
+> D
+
+∑ Δ !! = 0 by definition, so 
+
+𝑒 G ≤ 1
+
+𝑘 @ 𝑒 A!
+
+> !
+
+⇒ 𝑇 𝑅 1< ≥ 𝜀 (37) The average center point (𝑉 1< , 𝐶 1< ) will always satisfy the turnover constraint 𝑇 𝑅 1< ≥ 𝜀 whenever each warmup point individually satisfies 𝑇 𝑅 ;<! ≥ 𝜀 .
+
+Recalculation of the center point: After each sampling step, the center point is updated recursively as: 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+𝑐 𝑝 (+) = 𝑐 𝑝 (<) + 1
+
+𝑛 + 1 (𝑝 − 𝑐 𝑝 (<)) (38) 
+
+where 𝑐 𝑝 (<) is the previous center point (before adding the 𝑛 -th sample), 𝑝 is the newly generated sample, and 𝑛 is the number of samples produced so far. This update can be seen as a convex combination of the previous center point and the new sample. It is analogous to the formulation of sampling along a line: 
+
+𝑝 = 𝑥 + 𝛼 (𝑤𝑝 − 𝑥 ), 𝛼 = / 
+
+> +4/
+
+(39) Since 𝑛 ≥ 0 it follows that 𝛼 ∈ [0,1], and in this range, the turnover ratio of the interpolated point satisfies 
+
+𝑇 𝑅 1<  
+
+> (+)
+
+≥ 𝜀 ∀ 𝑛 ≥ 0.
+
+Imposing thermodynamic constraints 
+
+Thermodynamics Flux Analysis (TFA) 11 represents each reversible reaction by split, non-negative, forward and backward fluxes, 𝑣 " 
+
+> 4
+
+and 𝑣 "
+
+> 5
+
+. The binary variables 𝑏 " 
+
+> 4
+
+and 𝑏 " 
+
+> 5
+
+indicate whether the forward or backward direction is thermodynamically feasible. To impose thermodynamically feasible directionality, TFA uses equations (5)-(9) and the following constraints: 
+
+Δ,𝐺 " 
+
+> -
+
+− 𝑀 + 𝑀 ⋅ 𝑏 " 
+
+> 4
+
+≤ 0 (40) 
+
+−Δ,𝐺 " 
+
+> -
+
+− 𝑀 + 𝑀 ⋅ 𝑏 " 
+
+> 5
+
+≤ 0 (41) 
+
+𝑣 " 
+
+> 4
+
+− 𝑀 ⋅ 𝑏 " 
+
+> 4
+
+≤ 0 (42) 
+
+𝑣 " 
+
+> 5
+
+− 𝑀 ⋅ 𝑏 " 
+
+> 5
+
+≤ 0 (43) 
+
+𝑏 " 
+
+> 4
+
++ 𝑏 " 
+
+> 5
+
+≤ 1 (44) where 𝑀 is a sufficiently large constant. 
+
+Models used in this study 
+
+Reduced glycolysis: The reduced glycolysis model was generated from the known biochemistry of the E. coli glycolytic pathway. A complete schematic is shown in Figure 2A along with the names and symbols of reactions and metabolites. We do not model metabolites that are not directly related to carbon flow, and we assume that the reactions operate only in the direction of producing metabolites pyr and accoa. We lumped all the steps from g6p to pep into a single, kinetically reversible reaction LmpdG ( 𝑣 8). The remaining reactions exhibit kinetically irreversible rate laws (Supplementary Note 2). The glucose concentration is treated as a parameter and set to 10 g/L, with an uptake rate of 5 mmol gDCW -1 h-1 .
+
+Anaerobic E. coli : We used an existing, previously published kinetic model of anaerobic E. coli central carbon metabolism 25 and briefly summarize its construction here. The model is based on a reduced stoichiometric network generated with redGEM 46 and lumpGEM 47 , covering core pathways and a lumped growth reaction. Anaerobic conditions were enforced by blocking oxygen uptake and oxygen-dependent respiratory reactions. The resulting steady-state model comprised 180 reactions and 141 metabolites. 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+To obtain a context-specific steady-state reference ensemble, we imposed physiological and experimental constraints 26 , including fixed growth and glucose uptake rates, bounds on extracellular exchange consistent with the reported medium and secretions, and thermodynamic feasibility constraints. We then sampled thermodynamically feasible steady-state profiles using pyTFA, each including fluxes, metabolite concentrations, and thermodynamic variables. The kinetic model structure was generated using SKiMpy 48 
+
+and comprises 63 mass balances and 138 reaction rate laws spanning six mechanism families (Convenience, Generalized Reversible Hill, Bi-Uni Reversible Hill, Reversible Michaelis-Menten, Uni-Bi Reversible Hill, and a multi-substrate Monod form for growth), parameterized by 601 kinetic parameters (463 K Ms and 138 V max s). 
+
+Human cancer: We used a previously published reduced ovarian cancer metabolic model with integrated multi-omics constraints 27 . Briefly, the model was derived from Recon3D and contextualized for BRCA1 WT 
+
+and BRCA1 MUT ovarian cancer cells. In this study, we used the model representing the BRCA1 WT physiology with 2,359 reactions and 974 metabolites. The kinetic scaffold was built using SKiMpy and contains 716 mass balances (along with 25 pool-conservation equations) and 2,131 rate laws, requiring parametrization for 7,463 K Ms and 2,131 V max s. 
+
+Parametrization and linear dynamics 
+
+Several approaches can assign kinetic parameter values using information from a reference steady state, including methods such as ORACLE, GRASP, and closed-form parameterizations. Here, we used the ORACLE framework, which samples enzyme saturations around the reference steady-state metabolite concentrations, maps these saturations to Michaelis constants (K Ms), and then back-calculates maximum velocities (v max s) to match the reference fluxes. 
+
+For each parameterized model, we computed the Jacobian matrix (Supplementary Note 1) and its eigenvalues to assess local stability and implied linear timescales. We retained only stable models, which had all eigenvalues with negative real parts. We also pruned them based on relevant linear timescales, estimated from the absolute value of the maximal eigenvalue. We define the characteristic time of the model as 
+
+𝜏 H = 1
+
+min |𝑅𝑒 (𝜆 ! )| (45) where 𝜆 ! are the eigenvalues of the Jacobian. The characteristic time defines the system's slowest timescale and is associated with the TR values of the steady state sample (Supplementary Note 1). This definition was used for characteristic time comparisons in Figures 2-4. 
+
+Modal analysis 
+
+To characterize the local dynamics around a steady state, we performed modal analysis of the nonlinear kinetic system 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+𝑑 x
+
+𝑑𝑡 = Nv (x, p) (46) 
+
+For a steady state solution x∗ (Nv (x∗, p) = 0), we define concentration perturbations as 𝛿 x(𝑡 ) = x(𝑡 ) − x∗
+
+and we linearize around x∗
+
+𝑑 
+
+𝑑𝑡 𝛿 x = J(x∗) 𝛿 x (47) If the Jacobian is diagonalizable, we have: 
+
+J = MΛM5/ (48) where Λ = diag (𝜆 /, … , 𝜆 7) contains the eigenvalues 𝜆 !, and the columns of M are the corresponding right eigenvectors. Substituting this decomposition into the linearized system and introducing the modal mapping 
+
+y = M5/𝛿 x gives: 
+
+𝑑 y
+
+𝑑𝑡 = Λy (49) which decouples into independent scalar equations where each mode evolves as: 
+
+𝑦 !(𝑡 ) = 𝑦 !(0)exp (𝜆 !𝑡 ) (50) Thus, the local relaxation dynamics decompose into independent dynamic modes, each characterized by a specific eigenvalue 𝜆 !. The real part of 𝜆 ! defines the associated timescale 𝜏 ! = − /
+
+> JK (L!)
+
+. Each modal variable 𝑦 ! represents a weighted combination of metabolite perturbations 
+
+𝑦 ! = @ 𝑤 !" 
+
+> "
+
+𝛿 𝑥 " (51) where 𝑤 !" denote the modal weights obtained from M5/. These weights quantify the contribution of metabolite 𝑗 to mode 𝑖 . Consequently, groups of metabolites evolve collectively on the timescale defined by the eigenvalue associated with that mode. To assess dynamical performance, we identified eigenvalues whose associated timescales 𝜏 ! were slower than a designated threshold. For these slow modes, metabolites with large modal weights |𝑤 !" | were interpreted as the primary contributors to the limiting dynamics. This procedure enabled the systematic identification of metabolites governing slow relaxation behavior in the kinetic models. To ensure that we identified structurally limiting metabolite pools rather than artifacts of a single steady state or parameter set, we repeated this procedure across multiple steady states and independently sampled kinetic parameter sets. Aggregating modal contributions across this ensemble enabled the identification of globally persistent slow modes and metabolite pools that consistently govern the network's limiting dynamic behavior. 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+Iterative modal analysis workflow 
+
+To identify and reduce dynamically slow modes in the ovarian cancer kinetic model, we implemented an iterative modal analysis procedure coupled to targeted TR tightening. The goal was to selectively constrain metabolites responsible for undesired slow linear timescales while preserving maximal flexibility elsewhere. 
+
+Initial kinetic-model population: We first generated an unbiased population of kinetic models around the sampled steady states. Specifically, we selected 100 steady-state profiles and, for each, generated 100 independent parameterizations using ORACLE, yielding 10,000 kinetic models. For each model, we computed the Jacobian matrix and its eigenvalues and eigenvectors to characterize local linear dynamics. 
+
+Identification of slow modes: We defined slow modes as those associated with eigenvalues with a real part greater than −0.1 h -1 . This cutoff was chosen relative to the physiological growth-rate scale and served to identify modes operating on timescales incompatible with the intended dynamical regime. For each flagged mode, we examined the corresponding eigenvector and identified metabolites with absolute modal weight greater than 0.1. The union of these metabolites across the population defined the set of dynamically influential species. In addition, all metabolites belonging to strictly linear pathway segments (i.e., only one consuming and one producing reaction) were included, because such metabolites are directly linked to an eigenvalue of the system, as shown in Supplementary Note 2. 
+
+Targeted TR tightening: We imposed a TR cutoff corresponding to a timescale 15-fold faster than the doubling time of the cell on the identified metabolite set and generated a new population of steady state samples. A new kinetic-model population was then generated and re-evaluated via modal analysis. 
+
+Iterative procedure: The above procedure was repeated until the sampled kinetic-model population achieved the targeted linear dynamics, or until the set of metabolites associated with slow modes changed only marginally between successive iterations. In practice, three iterations removed most slow modes while preserving feasible steady-state variability. After convergence, optional global tightening of the TR cutoff was explored to further shift the characteristic time distribution toward faster timescales. 
+
+Nonlinear simulations 
+
+Bioreactor simulations: We simulated batch fermentation of anaerobically grown E. coli using the bioreactor framework described in our prior work 25 . Each intracellular kinetic model was extended with standard bioreactor mass-balance equations, including ODEs for biomass growth (biomass concentration) and extracellular metabolite dynamics based on uptake and secretion fluxes. Simulations were initialized with the steady-state concentrations and fluxes used for parameterization, together with the inoculum size and medium composition reported by Varma and Palsson 26 .
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+In silico drug administration simulations: We performed simulations using a procedure described in our prior work 27 . Briefly, we modeled drug action as a first-order process that reduces the target enzyme activity 
+
+𝐸 MNM toward a prescribed fractional level (TMDS enzyme; 10-fold reduction over an 8-hour window). For the simulation, we used (i) all kinetic models obtained after the third iteration of the iterative workflow that satisfied the characteristic-time pruning criterion (169) and (ii) a representative subset of the initial unconstrained ensemble (150 models selected so that their characteristic times were evenly spaced across the original distribution). Each model was integrated from its reference steady state until it reached a new steady state or 600 simulation hours, whichever occurred first. We quantified the post-perturbation response from the growth-rate trajectory and the time required to reach a new steady value. 
+
+Equilibrium detection algorithm 
+
+To quantify the time required for the perturbed system to reach a new operating point, we implemented an equilibrium (steady state) detection algorithm. A post-perturbation equilibrium corresponds to any state 𝑥 ∗
+
+satisfying: 
+
+𝑁 𝑣 (𝑥 ∗, 𝑝 ) = 0 (52) Because numerical trajectories never yield an exact zero derivative, we formulated equilibrium detection using scaled, persistent criteria evaluated over a time window of length Δ. At time 𝑡 , we define the residual vector 𝑟 (𝑡 ) = 𝑁𝑣 (𝑥 (𝑡 ), 𝑝 ) and the scaled residual norm: 
+
+𝑅 (𝑡 ) = 1
+
+𝑛   𝑟 !(𝑡 )
+
+𝑎 MNO ,! + 𝑟 MNO ,! ∣ 𝑥 !(𝑡 ) ∣
+
+> 8
+> +
+> !./
+
+(53) where 𝑎 MNO ,! and 𝑟 MNO ,! are metabolite-specific absolute and relative scaling parameters. This norm measures whether the instantaneous rates of change are small compared to the scale of each metabolite concentration. To avoid falsely identifying equilibrium when the trajectory only briefly passes near a slow manifold, we require that the residual remain small continuously over the entire time window: 
+
+𝑅 (𝑡 ) ≤ 𝜀 P for all 𝑡 ∈ [𝑇 − Δ, 𝑇 ] (54) where 𝑇 is the current time, and 𝜀 P is a dimensionless threshold. Residual smallness alone can be misleading because cancellations in 𝑁𝑣 (𝑥 , 𝑝 ) may produce small derivatives even while the state drifts slowly. We therefore impose a mandatory drift criterion over the same time window. We define the scaled state change: 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+𝐷 (𝑇 ) = 1
+
+𝑛   𝑥 !(𝑇 ) − 𝑥 !(𝑇 − Δ)
+
+𝑎 MNO ,! + 𝑟 MNO ,! max (∣ 𝑥 !(𝑇 ) ∣, ∣ 𝑥 !(𝑇 − Δ) ∣)
+
+> 8
+> +
+> !./
+
+(55) 
+
+and the corresponding drift rate Q(R) 
+
+> A
+
+. We assume that the system has reached equilibrium at time 𝑇 if and only if both conditions are satisfied: (i) Residual persistence holds over [𝑇 − Δ, 𝑇 ].(ii) Q(R) 
+
+> A
+
+≤ 𝜀 S where 𝜀 S controls the maximum allowed scaled rate of change over the window. The algorithm determines whether the system has stopped evolving, regardless of the specific equilibrium reached. The equilibration time identified by this procedure is governed by the slowest stable dynamical mode of the perturbed system. Because very slow models can exhibit small instantaneous derivatives while still drifting gradually, we imposed a strict drift threshold to avoid falsely declaring equilibrium in such cases. For this study, we used 𝑎 MNO = 𝑟 MNO = 10 5T for all metabolites, a time window of 10 hours, and 𝜀 P = 𝜀 S = 1.
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+# Figures 
+
+Figure 1. Turnover rate (TR) constraints and the METEOR-K workflow . The flux-concentration ratio defines an implied turnover rate for each metabolite pool, linking pool size and consuming flux to local dynamic response timescales. METEOR-K couples flux and concentration variables by enforcing bounds on metabolite TRs, thereby restricting the feasible space to turnover-consistent metabolic states. The framework takes as input a steady-state constraint-based metabolic model with flux and concentration ranges under a given physiology, optionally augmented with thermodynamic, exchange, growth, omics, and pathway-level timescale constraints. METEOR-K can be applied globally using physiologically relevant reference timescales, such as cell doubling time, bioprocess time, or growth-phase timescales, or in a targeted manner by identifying metabolites associated with slow dynamical modes and imposing TR constraints on those pools. The resulting constrained solution space yields tighter feasible regions, more informative steady-state samples, characteristic times closer to physiological regimes, reconciled data, and improved nonlinear ODE simulations. 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+.CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint Figure 2. Turnover rates limit attainable local timescales in a reduced glycolysis model . (A) Schematic of the reduced glycolysis pathway with metabolites and fluxes (V1–V6) connecting glc (S), g6p (X), pep (2Y), pyr (Z), and accoa (T). The pyruvate branch creates a potential low-turnover accoa pool. (B) Principal component analysis (PCA) of 5,000 feasible steady-state samples. Points are colored by the median characteristic time (log 10 ) computed from 100 kinetic models parameterized around each steady state. Blue circles mark the 20 fastest steady states, and red circles mark the 20 slowest steady states by median characteristic time. (C) Turnover rate distributions (1/s) for pep, g6p, pyr, and accoa in the fastest and slowest steady-state groups from panel B. Each subplot shows normalized density for one metabolite; blue indicates the fastest states and red indicates the slowest states. Accoa shows the strongest separation between slow and fast states. (D) Characteristic time distributions for kinetic model populations generated while imposing different accoa turnover time cutoffs. The y-axis shows characteristic time in seconds (log 10 ), and colored dashed horizontal lines indicate the corresponding accoa turnover time cutoff. (E) Modal analysis linking dominant timescales to metabolite pools. Heat maps show modal coefficients for the fastest kinetic models under representative accoa TR time cutoffs (500 s, 10 s, and 1 s). Reported values show the contribution of each metabolite to the mode associated with the indicated timescale. 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+Figure 3. METEOR-K restricts steady-state flux-concentration space and accelerates local dynamics in an anaerobic E. coli model . (A) Principal component analysis of 100 alternative steady-state solutions generated with a global TR lower bound applied to all metabolites at 1-, 5-, 10-, 50-, and 100-fold faster than the cell doubling time. Points are colored by the median characteristic time (log 10 ) computed from kinetic models parameterized around each steady state. (B) Violin plots of characteristic-time distributions for kinetic-model populations generated from steady states in each TR-cutoff group. Black dots mark medians, and dashed lines mark the 25th and 75th percentiles. (C) Representative marginal distributions from 20,000 steady-state samples generated with a TR-aware sampler (green) and a control sampler without TR constraints (blue). Jensen-Shannon divergence values quantify the distributional shift for each variable. (D) Flux-concentration plane for glycolate, showing total consuming flux versus sampled concentration. The dashed curve indicates the imposed TR cutoff boundary; blue points show control samples and green points show TR-aware samples. (E) Characteristic-time distributions for kinetic models generated from the TR-aware and control steady-state sample sets; dashed lines indicate medians. 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+Figure 4. TR constraints accelerate nonlinear growth dynamics in anaerobic E. coli bioreactor simulations. (A-B) Empirical cumulative distributions of average growth rate in bioreactor simulations (A) and biomass concentration at 10.5 h (B) for kinetic models initialized from steady states generated with global TR cutoffs of 1-, 5-, and 10-fold shorter than doubling time. Circles mark medians, and the number of simulated models is given in the legend. The dashed vertical line in (A) indicates the experimentally observed anaerobic growth rate as a physiological reference. (C) Average final biomass grouped by TR cutoff and initial eigenvalue bin. Error bars indicate the standard deviation within each group. 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+Figure 5. Targeted TR enforcement improves local dynamics and accelerates responses in nonlinear ODE simulations in the ovarian cancer model. (A) Violin plots show characteristic time distributions for kinetic model populations generated from steady states at different iterations of the modal analysis workflow. Black dots mark the medians, and dashed lines mark the 25th and 75th percentiles. The green and red distributions use the same targeted metabolite set but different TR lower bounds, corresponding to turnover times 15- and 30-fold shorter than the cell doubling time, respectively. (B) Dynamic drug-administration simulations in which thymidylate synthase activity was reduced, and growth-rate trajectories were followed from initial and TR-modified kinetic model populations. Lines show the mean normalized growth rate relative to the initial value, and shaded regions show one standard deviation. The inset shows the same trajectories over the full 600 h simulation horizon. (C) Empirical cumulative distribution of fractional reductions in flux–concentration plane area across constrained metabolites after applying targeted TR constraints. (D-E) Flux-concentration planes for representative metabolites. The dashed curve marks the TR boundary, with the green shading indicating the TR-feasible region retained after imposing the constraint. 
+
+# Data Availability 
+
+The data generated in this study have been deposited in the Zenodo repository https://doi.org/10.5281/zenodo.21133382. 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+# Code Availability 
+
+The code used to develop the model, perform the analyses, and generate results in this study is publicly available and has been deposited in https://github.com/EPFL-LCSB/METEOR-K under the Apache-2.0 license. The kinetic models were built using SKiMPy (Symbolic Kinetic Models in Python), available at https://github.com/EPFL-LCSB/skimpy. 
+
+# Acknowledgements 
+
+This work was supported by funding from the Swiss National Science Foundation grants 200021_188623 and CRSII5_198543, the European Union’s Horizon 2020 research and innovation programme under grant agreement 814408, and the École Polytechnique Fédérale de Lausanne (EPFL). 
+
+# Author Contributions 
+
+I.T., D.W., G.F, and L.M. conceptualized the overall methodology, V.H. and L.M. acquired funding and supervised the research, I.T. curated the data, models, and computational resources, I.T., D.W., B.N., and G.F. designed the code, I.T., D.W., G.F, B.N., analyzed the data, I.T. validated results, I.T. and L.M. visualized the results, I.T. prepared the original draft of the manuscript, I.T., B.N., and L.M. reviewed and edited the draft. All authors read and commented on the manuscript. 
+
+# Competing Interests 
+
+The authors declare no competing interests. 
+
+# Declaration of generative AI and AI-assisted technologies in the writing process 
+
+During the preparation of this work, the authors used ChatGPT to improve the manuscript's readability and language. After using this tool, the authors reviewed and edited the content as needed and take full responsibility for the content of the published article. 
+
+# References 
+
+1. Sauro, H. M. Control and regulation of pathways via negative feedback. J R Soc Interface 14 , 20160848 (2017). 2. Locasale, J. W. New concepts in feedback regulation of glucose metabolism. Current Opinion in Systems Biology 8, 32–38 (2018). 
+
+.CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint 3. Chance, B., Estabrook, R. W. & Ghosh, A. Damped sinusoidal oscillations of cytoplasmic reduced pyridine nucleotide in yeast cells*. Proceedings of the National Academy of Sciences 51 , 1244–1251 (1964). 4. Rapp, P. E. An Atlas of Cellular Oscillators. J Exp Biol 81 , 281–306 (1979). 5. Termonia, Y. & Ross, J. Oscillations and control features in glycolysis: numerical analysis of a comprehensive model. Proceedings of the National Academy of Sciences 78 , 2952–2956 (1981). 6. Bier, M., Bakker, B. M. & Westerhoff, H. V. How Yeast Cells Synchronize their Glycolytic Oscillations: A Perturbation Analytic Treatment. Biophysical Journal 78 , 1087–1093 (2000). 7. Bruns, D. D., Bailey, J. E. & Luss, D. Steady state multiplicity and stability of enzymatic reaction systems. Biotechnology and Bioengineering 15 , 1131–1145 (1973). 8. Hatzimanikatis, V. & Bailey, J. E. Studies on glycolysis — I. Multiple steady states in bacterial glycolysis. 
+
+Chemical Engineering Science 52 , 2579–2588 (1997). 9. Steuer, R., Gross, T., Selbig, J. & Blasius, B. Structural kinetic modeling of metabolic networks. 
+
+Proceedings of the National Academy of Sciences 103 , 11868–11873 (2006). 10. Orth, J. D., Thiele, I. & Palsson, B. Ø. What is flux balance analysis? Nat Biotechnol 28 , 245–248 (2010). 11. Henry, C. S., Broadbelt, L. J. & Hatzimanikatis, V. Thermodynamics-based metabolic flux analysis. 
+
+Biophys J 92 , 1792–1805 (2007). 12. Noor, E. et al. Pathway Thermodynamics Highlights Kinetic Obstacles in Central Metabolism. PLOS Computational Biology 10 , e1003483 (2014). 13. Mahamkali, V. et al. multiTFA: a Python package for multi-variate thermodynamics-based flux analysis. 
+
+Bioinformatics 37 , 3064–3066 (2021). 14. Hoppe, A., Hoffmann, S. & Holzhütter, H.-G. Including metabolite concentrations into flux balance analysis: thermodynamic realizability as a constraint on flux distributions in metabolic networks. BMC Syst Biol 1, 23 (2007). 15. Salvy, P. & Hatzimanikatis, V. The ETFL formulation allows multi-omics integration in thermodynamics-compliant metabolism and expression models. Nat Commun 11 , 30 (2020). 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+16. Chen, Y. et al. Reconstruction, simulation and analysis of enzyme-constrained metabolic models using GECKO Toolbox 3.0. Nat Protoc 19 , 629–667 (2024). 17. Zur, H., Ruppin, E. & Shlomi, T. iMAT: an integrative metabolic analysis tool. Bioinformatics 26 , 3140– 3142 (2010). 18. Pandey, V., Hadadi, N. & Hatzimanikatis, V. Enhanced flux prediction by integrating relative expression and relative metabolite abundance into thermodynamically consistent metabolic models. PLoS Comput Biol 15 , e1007036 (2019). 19. Gustafsson, J. et al. Generation and analysis of context-specific genome-scale metabolic models derived from single-cell RNA-Seq data. Proceedings of the National Academy of Sciences 120 ,e2217868120 (2023). 20. Becker, S. A. & Palsson, B. O. Context-Specific Metabolic Networks Are Consistent with Experiments. 
+
+PLoS Comput Biol 4, e1000082 (2008). 21. Choudhury, S., Narayanan, B., Moret, M., Hatzimanikatis, V. & Miskovic, L. Generative machine learning produces kinetic models that accurately characterize intracellular metabolic states. Nat Catal 
+
+1–13 (2024) doi:10.1038/s41929-024-01220-6. 22. Toumpe, I., Choudhury, S., Hatzimanikatis, V. & Miskovic, L. The Dawn of High-Throughput and Genome-Scale Kinetic Modeling: Recent Advances and Future Directions. ACS Synth. Biol. 14 , 2906– 2919 (2025). 23. Milo, R. & Phillips, R. Cell Biology by the Numbers . (Garland Science, New York, 2015). doi:10.1201/9780429258770. 24. Miskovic, L. & Hatzimanikatis, V. Production of biofuels and biochemicals: in need of an ORACLE. 
+
+Trends Biotechnol 28 , 391–397 (2010). 25. Choudhury, S. et al. Generative approaches to kinetic parameter inference in metabolic networks via latent space exploration. Nat Commun https://doi.org/10.1038/s41467-026-72184-3 (2026) doi:10.1038/s41467-026-72184-3. 26. Varma, A. & Palsson, B. O. Stoichiometric flux balance models quantitatively predict growth and metabolic by-product secretion in wild-type Escherichia coli W3110. Appl Environ Microbiol 60 , 3724– 3731 (1994). 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+27. Toumpe, I., Masid, M., Hatzimanikatis, V. & Miskovic, L. Multi-omics-driven kinetic modeling reveals metabolic adaptations and vulnerabilities in BRCA1-deficient ovarian cancer. 2025.10.22.682756 Preprint at https://doi.org/10.1101/2025.10.22.682756 (2025). 28. Heirendt, L. et al. Creation and analysis of biochemical constraint-based models using the COBRA Toolbox v.3.0. Nat Protoc 14 , 639–702 (2019). 29. Matos, M. R. A. et al. GRASP: a computational platform for building kinetic models of cellular metabolism. Bioinformatics Advances 2, vbac066 (2022). 30. Choudhury, S. et al. Reconstructing Kinetic Models for Dynamical Studies of Metabolism using Generative Adversarial Networks. Nat. Mach. Intell. 4, 710-+ (2022). 31. Narayanan, B., Weilandt, D., Masid, M., Miskovic, L. & Hatzimanikatis, V. Rational strain design with minimal phenotype perturbation. Nat Commun 15 , 723 (2024). 32. Narayanan, B. et al. Kinetic-model-guided engineering of multiple S. cerevisiae strains improves p-coumaric acid production. Metabolic Engineering 91 , 430–441 (2025). 33. Andreozzi, S., Miskovic, L. & Hatzimanikatis, V. iSCHRUNK--In Silico Approach to Characterization and Reduction of Uncertainty in the Kinetic Models of Genome-scale Metabolic Networks. Metab Eng 
+
+33 , 158–168 (2016). 34. Miskovic, L., Beal, J., Moret, M. & Hatzimanikatis, V. Uncertainty reduction in biochemical kinetic models: Enforcing desired model properties. PLoS Comput. Biol. 15 , e1007242 (2019). 35. Tokic, M., Hatzimanikatis, V. & Miskovic, L. Large-scale kinetic metabolic models of Pseudomonas putida KT2440 for consistent design of metabolic engineering strategies. Biotechnol. Biofuels 13 , 33 (2020). 36. Villaverde, A. F., Raimúndez, E., Hasenauer, J. & Banga, J. R. Assessment of Prediction Uncertainty Quantification Methods in Systems Biology. IEEE/ACM Transactions on Computational Biology and Bioinformatics 20 , 1725–1736 (2023). 37. Yuan, J., Bennett, B. D. & Rabinowitz, J. D. Kinetic flux profiling for quantitation of cellular metabolic fluxes. Nat Protoc 3, 1328–1340 (2008). 38. Abernathy, M., Wan, N., Shui, W. & Tang, Y. J. Dynamic 13C Labeling of Fast Turnover Metabolites for Analysis of Metabolic Fluxes and Metabolite Channeling. in Microbial Metabolomics: Methods and 
+
+> .CC-BY-NC-ND 4.0 International license available under a was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is made The copyright holder for this preprint (which this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.03.736321 doi: bioRxiv preprint
+
+Protocols (ed. Baidoo, E. E. K.) 301–316 (Springer, New York, NY, 2019). doi:10.1007/978-1-4939-8757-3_18. 39. Buescher, J. M. et al. A roadmap for interpreting 13C metabolite labeling patterns from cells. Current Opinion in Biotechnology 34 , 189–201 (2015). 40. Park, J. O. et al. Metabolite concentrations, fluxes and free energies imply efficient enzyme usage. Nat Chem Biol 12 , 482–489 (2016). 41. Heijnen, J. J. Impact of Thermodynamic Principles in Systems Biology. in Biosystems Engineering II: Linking Cellular Networks and Bioprocesses (eds Wittmann, C. & Krull, R.) 139–162 (Springer, Berlin, Heidelberg, 2010). doi:10.1007/10_2009_63. 42. Arrivault, S. et al. Use of reverse-phase liquid chromatography, linked to tandem mass spectrometry, to profile the Calvin cycle and other metabolic intermediates in Arabidopsis rosettes at different carbon dioxide concentrations. The Plant Journal 59 , 826–839 (2009). 43. Kaufman, D. E. & Smith, R. L. Direction Choice for Accelerated Convergence in Hit-and-Run Sampling. 
+
+https://doi.org/10.1287/opre.46.1.84 46 , 84–95 (1998). 44. Megchelenbrink, W., Huynen, M. & Marchiori, E. optGpSampler: An Improved Tool for Uniformly Sampling the Solution-Space of Genome-Scale Metabolic Networks. PLOS ONE 9, e86587 (2014). 45. Hameri, T., Fengos, G., Ataman, M., Miskovic, L. & Hatzimanikatis, V. Kinetic models of metabolism that consider alternative steady-state solutions of intracellular fluxes and concentrations. Metabolic Engineering 52 , 29–41 (2019). 46. Ataman, M., Hernandez Gardiol, D. F., Fengos, G. & Hatzimanikatis, V. redGEM: Systematic reduction and analysis of genome-scale metabolic reconstructions for development of consistent core metabolic models. PLoS Comput Biol 13 , e1005444 (2017). 47. Ataman, M. & Hatzimanikatis, V. lumpGEM: Systematic generation of subnetworks and elementally balanced lumped reactions for the biosynthesis of target metabolites. PLoS Comput Biol 13 , e1005513 (2017). 48. Weilandt, D. R. et al. Symbolic kinetic models in python (SKiMpy): intuitive modeling of large-scale biological kinetic models. Bioinformatics 39 , btac787 (2022).
