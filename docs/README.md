@@ -6,44 +6,27 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-13
-- 运行时间：2026-07-13 21:38:15 UTC
+- 最新运行日期：2026-07-14
+- 运行时间：2026-07-14 21:17:22 UTC
 - 运行状态：成功
-- 本次总论文数：8
-- 精读区：6
+- 本次总论文数：2
+- 精读区：0
 - 速读区：2
 
 ### 今日简报（AI）
-今日精读6篇、速读2篇，聚焦单细胞与空间生物学的语言模型推理及CRISPR筛选的异构体分辨率新发现。最值得关注OCellus框架将自然语言推理融入单细胞、空间和扰动生物学，以及单细胞CRISPR筛选中异构体分辨率揭示的基因扰动隐藏功能后果。建议下一步深入理解OCellus如何整合多模态数据，并探索异构体水平分析对功能基因组学研究的启示。
-- 详情：[/202607/13/README](/202607/13/README)
+今日速读2篇系统生物学论文，得分均为6.0，涵盖黑色素瘤MITF流变群体动力学模型与弱形式科学机器学习教程。最值得关注的方向：基于定量模型解析肿瘤表型异质性，以及利用WENDy方法简化生物系统参数推断。建议普通读者优先了解WENDy教程，可作为非专业人士入门系统生物学计算的实用工具。
+- 详情：[/202607/14/README](/202607/14/README)
 
 ### 精读区论文标签
-1. [OCellus: A Language-Model Framework for Single-Cell, Spatial, and Perturbation Biology with Natural-Language Reasoning](/202607/13/biorxiv-10-64898-2026-07-08-737248-v1-ocellus-a-language-model-framework-for-single-cell-spatial-and-perturbation-biology-with-natural-language-reasoning)  
-   标签：评分：9.0/10、query:virtual-cell
-   evidence：直接涉及虚拟细胞模型和扰动响应预测
-2. [Isoform-level resolution in single-cell CRISPR screens reveals hidden functional consequences of gene perturbation](/202607/13/biorxiv-10-64898-2026-07-09-737410-v1-isoform-level-resolution-in-single-cell-crispr-screens-reveals-hidden-functional-consequences-of-gene-perturbation)  
-   标签：评分：9.0/10、query:virtual-cell
-   evidence：单细胞CRISPR扰动筛选的异构体水平分析
-3. [Reliable mechanistic operator recovery with biologically-informed neural networks: principles for architecture and optimisation design](/202607/13/2607.07425v1-reliable-mechanistic-operator-recovery-with-biologically-informed-neural-networks-principles-for-architecture-and-optimisation-design)  
-   标签：评分：8.0/10、query:virtual-cell
-   evidence：生物信息神经网络用于机制算子恢复，可应用于扰动建模
-4. [Identifying cancer cell-state transitions from multimodal single-cell data](/202607/13/biorxiv-10-64898-2026-03-02-708945-v2-identifying-cancer-cell-state-transitions-from-multimodal-single-cell-data)  
-   标签：评分：8.0/10、query:virtual-cell
-   evidence：利用mRNA与蛋白延迟捕捉单细胞状态转变
-5. [SupeRJump: Determining normal and leukemic differentiation fate through semi-supervised jump diffusion modeling](/202607/13/biorxiv-10-64898-2026-07-01-735284-v1-superjump-determining-normal-and-leukemic-differentiation-fate-through-semi-supervised-jump-diffusion-modeling)  
-   标签：评分：8.0/10、query:virtual-cell
-   evidence：使用半监督跳跃扩散模型从单细胞数据预测细胞命运
-6. [Multi-omics, organoid-based modeling reveals an SRC/mTOR-dependent fetal-like stem cell trajectory in colorectal cancer](/202607/13/biorxiv-10-64898-2026-07-03-735750-v1-multi-omics-organoid-based-modeling-reveals-an-srcmtor-dependent-fetal-like-stem-cell-trajectory-in-colorectal-cancer)  
-   标签：评分：8.0/10、query:virtual-cell
-   evidence：基于类器官的多组学建模预测药物敏感性，涉及细胞状态和扰动响应
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [EpiBinder: a multimodal framework for cell-type-specific prediction and interpretation of transcription factor binding](/202607/13/biorxiv-10-64898-2026-07-06-736502-v1-epibinder-a-multimodal-framework-for-cell-type-specific-prediction-and-interpretation-of-transcription-factor-binding)  
-   标签：评分：7.0/10、query:virtual-cell
-   evidence：用于细胞类型特异性转录因子结合预测的深度学习方法
-2. [Tokenizing single-cell transcriptomes as a native language for large language models](/202607/13/biorxiv-10-1101-2025-10-22-684047-v2-tokenizing-single-cell-transcriptomes-as-a-native-language-for-large-language-models)  
+1. [A quantitative model for the emergent population dynamics of the melanoma MITF rheostat](/202607/14/2607.11820v1-a-quantitative-model-for-the-emergent-population-dynamics-of-the-melanoma-mitf-rheostat)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：将单细胞转录组标记化为LLM可处理的形式，可能用于扰动响应预测
+   evidence：黑色素瘤种群动态多尺度PDE模型
+2. [Weak form Scientific Machine Learning for Systems Biology: A Tutorial on WENDy](/202607/14/biorxiv-10-64898-2026-07-02-735880-v1-weak-form-scientific-machine-learning-for-systems-biology-a-tutorial-on-wendy)  
+   标签：评分：6.0/10、query:virtual-cell
+   evidence：细胞状态转变ODE模型的参数估计
 
 
 <div class="dpr-home-promo-card">

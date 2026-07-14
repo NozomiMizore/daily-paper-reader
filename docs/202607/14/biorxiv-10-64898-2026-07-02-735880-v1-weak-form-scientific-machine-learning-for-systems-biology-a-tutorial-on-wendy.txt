@@ -1,0 +1,854 @@
+Title: Weak form Scientific Machine Learning for Systems Biology: A Tutorial on WENDy
+
+URL Source: https://www.biorxiv.org/content/10.64898/2026.07.02.735880v1.full.pdf
+
+Number of Pages: 26
+
+Markdown Content:
+# Weak form Scientific Machine Learning for Systems Biology: A Tutorial on WENDy 
+
+## Nora Heitzman-Breen 1* †, Rainey Lyons 1* †, Paras Jain 2,Mohit K. Jolly 2, David M. Bortz 1
+
+> 1*
+
+Department of Applied Mathematics, University of Colorado, Boulder, Colorado, 80309-0526, USA. 
+
+> 2
+
+Department of Bioengineering, Indian Institute of Science, Bengaluru, Karnataka, India. *Corresponding author(s). E-mail(s): Nora.Heitzman-Breen@colorado.edu; Rainey.Lyons@colorado.edu; Contributing authors: parasjain@iisc.ac.in; mkjolly@iisc.ac.in; david.bortz@colorado.edu; 
+
+> †
+
+These authors contributed equally to this work. 
+
+Abstract 
+
+Mechanistic ordinary differential equation models are widely used in systems biology to represent biochemical networks, population dynamics, cell-state tran-sitions, and other biological processes; however, their predictive value depends critically on accurate parameter estimation from noisy and often sparse experi-mental data. In this tutorial, we present the Weak-form Estimation of Nonlinear Dynamics (WENDy) method as a forward-solver-free approach that reformulates parameter estimation as a covariance-corrected weak-form regression problem by integrating the model equations against compactly supported test functions. We present the background on the methodology through the lens of the famil-iar logistic equation, and we demonstrate applications of the method on real experimental data through two systems biology examples: a glycolytic oscillator with relatively dense time-course data and a sparse epithelial-mesenchymal cell-state transition model with multiple experimental replicates. Ultimately, using WENDy, we estimate interpretable biological parameters with uncertainty for systems with noisy and sometimes sparse available experimental data. 
+
+Keywords: Parameter estimation, machine learning, weak-form scientific machine learning, data-driven modeling, WENDy 
+
+1
+
+.CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint 1 Introduction 
+
+A central goal of systems biology is to understand how biological function emerges from networks of interacting molecular, cellular, and population-level processes [1]. Mathematical models provide a principled way to encode such interactions as quan-titative hypotheses. In this setting, parameter estimation is not simply a numerical post-processing step, but rather a step that connects proposed mechanisms to experi-mental data. This connection is what determines whether the hypothesized model can make reliable and biologically interpretable predictions. Many models in systems biology can be formulated as systems of ordinary differential equations (ODEs), ˙x(t) = f (x(t); θ),
+
+where x(t) ∈ Rd denotes a vector of measured or latent states and θ denotes a vector of parameters. Such models have been used to study glycolysis [2–5], cell signaling [6–9], circadian rhythm [10, 11], and cell population dynamics [12, 13]. Given experimental observations, the goal of parameter estimation methods is to find an appropriate θ
+
+such that the model trajectory agrees (in some sense) with recorded data. In practice, this is most often posed as an output-error, maximum likelihood, or Bayesian inverse problem in which the ODE model is repeatedly solved for many trial parameter values [14, 15]. This forward-solver based philosophy is a natural and well-studied approach which has shaped much of the computational infrastructure of systems biology. However, this forward-solver structure also introduces significant computational and statistical challenges. Each single objective function evaluation requires solving the ODE system. Moreover, gradient-based methods often require adjoint or sensitiv-ity calculations. For stiff, multiscale, or high-dimensional systems, these hurdles can accumulate into a high computational cost. Additionally, errors associated with exper-imental data can compound these challenges. Biological data, in particular, can be noisy, partially observed, or sampled irregularly or sparsely. There have been several alternatives to repeated forward simulations proposed in the literature. Generalized profiling methods replace direct trajectory matching with a smoothed representation of the state trajectory and enforce the ODE system as a penalty or residual constraint [16]. Related gradient-matching and least-squares-type methods estimate derivatives from smoothed data and then fit the right-hand side of the ODE [17]. These methods can offer substantial speedups, but they intro-duce choices of smoothing parameters, derivative approximations, and regularization weights that can strongly influence performance in the presence of noise. Weak-form Scientific Machine Learning (WSciML) provides a complementary route. Instead of estimating derivatives from the data or repeatedly solving the ODE system, weak-form methods utilize the eponymous weak-form to transfer derivative calculations from noisy data onto analytically known test functions, producing alge-braic equations involving only integrals of the observed state and nonlinear model features. These test functions also play a role similar to a Gaussian smoother and can enable accurate parameter recovery even at high noise levels [18]. Leveraging test functions, also sometimes called modulating functions, in system identification was 2
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+first proposed by Shinbrot [19] and further explored by Loeb and Cahen [20]. Two key methods in WSciML recently developed within our group include the Weak-form Sparse Identification of Nonlinear Dynamics (WSINDy) method for model discov-ery [21, 22] and the Weak-form Estimation of Nonlinear Dynamics (WENDy) [23] method for parameter estimation, the focus of this tutorial. When compared to classi-cal forward-solver approaches, WENDy has been shown to consistently be faster and more accurate at parameter estimation for many systems [23–25]. For an overview of this novel class of methods, we direct the interested reader to [26, 27]. The purpose of this tutorial is to make WENDy accessible to systems biology researchers who routinely fit mechanistic ODE models to experimental data. We present the weak-form construction, explain the role of test functions and noise mod-els, and demonstrate how the method is implemented in code and how uncertainty estimates are generated. Our goal is not to argue that weak-form methods completely replace forward simulation-based methods. Forward solves remain essential for model validation, prediction, experimental design, and comparison of fitted trajectories to observed data. Rather, WENDy provides an efficient parameter estimation mecha-nism that can reduce the computational burden of calibration and make it easier to explore candidate models, initial guesses, constraints, and uncertainty estimates. For systems biology applications where data are noisy, sparse, and expensive to collect, this weak-form perspective offers a useful addition to the existing parameter estimation toolkit. The remainder of this manuscript is structured in the following way. In Section 2, we demonstrate the method on two systems biology examples. The first example considers a glycolytic oscillator, representing a setting with relatively dense time-course data and nonlinear oscillatory dynamics. The second example considers a sparse cell-state transition model for epithelial–mesenchymal heterogeneity, in which only a small number of experimental time points are available across multiple initial culture conditions. In Section 3, we provide a discussion of the results and of some caveats of the method. In Section 4, we provide the details of the WENDy algorithm from the lens of a simple logistic model. We also include artificial experiments on this model showcasing the WENDy method’s performance as the noise level increases and the data sampling coarsens. For a general description of the method, we will direct readers to the works [23–25]. 
+
+# 2 Results 
+
+In this section, we apply WENDy to perform parameter estimation on two sys-tems biology examples and provide a tutorial on the implementation of the WENDy algorithm in MATLAB. Firstly, we demonstrate WENDy in application to single-experiment data with a high collection frequency and minimal measurement noise. Then, we demonstrate WENDy in application to multi-experiment data with a low collection frequency and measurement noise. 3
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+## 2.1 Example 1: Parameter Estimation of Glycolytic Oscillator 
+
+Temporal oscillation of key metabolites of glycolysis can be observed in yeast cells [28–32]. Two such metabolites are NADH and ATP. For this example, we will model these two glycolytic metabolites using the two-compartment cubic order equations given below, ˙x = p1y3 − p2y − p3x2 − p4x3,
+
+˙y = p5x + p6y. 
+
+Here, x represents fluorescence of NADH and y represents fluorescence of ATP. This model is inspired by the cubic model in the original work [2] which was used to successfully model NADH and ATP reaction dynamics. 
+
+## Data Entry 
+
+For this example, we use shifted normalized NADH and ATP fluorescence data gen-erated in [33] and publicly available in [34]. NADH was measured via fluorescence, and ATP was measured via amper-based nanosensor [33]. For this demonstration, we select the first three periods present in the data to perform parameter estimation on model (2.1). The data consists of N=10,000 observations from a single realization of an experiment, where each observation is comprised of two normalized flourescence intensities corresponding to the model compartments for NADH and ATP. We create a wsindy data object from the experimental observations as shown in Listing 1. Here, by default, the wsindy data object will assign an additive Gaussian error structure to the data, which informs the covariance correction as discussed in Section 4. 
+
+Listing 1 Creating a single wsindy data object.  
+
+> 1
+
+% tcell_n - vector containing the time vector  
+
+> 2
+
+% xcell_n - array containing normalized measurements of the two observed  
+
+> 3
+
+% model compartments  
+
+> 4
+
+Uobj = wsindy_data(xcell_n, tcell_n);  
+
+> 5
+
+nstates = Uobj.nstates; 
+
+## Equation Creation and Regression 
+
+Next, we construct a library of model features. We have two options for constructing this library: either calling predefined library terms or manually entering the library terms. For this example, we will call predefined library terms to reconstruct model (2.1). For guidance on manual entry of model terms, see Section 2.2. We assume that all model parameters p = {p1, p 2, p 3, p 4, p 5, p 6} are unknown. Each term in model (2.1) that is associated with a parameter in p will be a feature in the library, and because 4
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+each term is polynomial, we can call a predefined library term using a vector of the polynomial degree of each state variable. For example, the predefined library term, 
+
+x4y2z9, is called by the vector [4 , 2, 9], which contains the polynomial order of the state variables x, y, and z, respectively. We create the feature library corresponding to model (2.1) in Listing 2. Note that the left-hand side of the model equations is assumed to be first-order derivatives of state variables unless otherwise specified. See Section 2.2 for creation of an alternative left-hand side equation. 
+
+Listing 2 Creating right-hand side library object.  
+
+> 1
+
+lib1 = library("tags",{[0,1],[2,0],[3,0],[0,3]}); % x model compartment  
+
+> 2
+
+lib2 = library("tags",{[1,0],[0,1]}); % y model compartment  
+
+> 3
+
+lib = [lib1;lib2]; 
+
+Lastly, the wsindy data and library objects are combined in a regression model 
+
+wendy model and solved using the WENDy algorithm. The wendy model builds the weak-form linear system (7) as described in Section 4. For convenience, we provide a WENDy defaults.m script which handles any hyper-parameters and the test function object creation. We provide more detail on test function customization in Section A. The wendy solver then performs the (IRLS) algo-rithm to produce the coefficient vector WS.weights = [ p1, p 2, p 3, p 4, p 5, p 6]. The code for this is provided in Listing 3. The function WS opt.wendy() performs the WENDy method on the wendy model object. While we make use of only the edited model object and the parameter covariance matrix CovW , the function also outputs other variables which can be used for troubleshooting. We describe these outputs in Table B2. 
+
+Listing 3 Creating wendy model and applying the WENDy method.  
+
+> 1
+
+% for cov_params, tf, and wendy_params see WENDy_defaults.m  
+
+> 2
+
+WS = wendy_model(Uobj,lib,tf,cov_params);  
+
+> 3
+
+[WS,~,~,~,CovW,~] = WS_opt().wendy(WS,wendy_params{:}); 
+
+## WENDy Outputs and Confidence Interval Generation 
+
+The WENDy algorithm provides parameter estimates along with the parameter covari-ance structure, from which confidence intervals can be easily calculated. Figure 1 shows the dynamics of model (2.1) with parameters found using the WENDy algorithm and normalized NADH-ATP fluorescence data [33, 34] match the experiment well. For comparison, we also consider the model fit using the lsqnonlin function in MATLAB [35] with default settings. Both the WENDy and lsqnonlin parameter esti-mates along with their respective 95% confidence intervals are listed in Figure 1. We 5
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+Time (s) 
+
+520 540 560 580 600 620 640 
+
+> Normalized Flourecence
+
+-0.08 -0.06 -0.04 -0.02 00.02 0.04 0.06 0.08 
+
+NADH Data ATP Data NADH WENDy NADH lsqnonlin ATP WENDy ATP lsqnonlin Method p1 p2 p3 p4 p5 RSS oe RSS ee Time WENDy 109 .00 35 .58 30 .73 75 .37 25 .76 0.5670 0.1131 0.0763 s [108 .96 , [35 .56 , [30 .66 , [75 .36 , [25 .74 ,
+
+109 .04] 35 .59] 30 .78] 75 .38] 25 .77] lsqnonlin 131 .10 28 .31 67 .29 71 .97 22 .09 0.1118 0.1201 2.2256 s [129 .72 , [28 .02 , [64 .77 , [71 .75 , [21 .85 ,
+
+132 .49] 28 .60] 69 .83] 72 .19] 22 .32]          
+
+> Fig. 1 Model (2.1) dynamics for parameters p={p1, p 2, p 3, p 4, p 5, p 6}found using WENDy describes glycolitic oscillations well and performs faster compared to the output error based method. (Top) Normalized NADH and ATP fluorescence over 120 minutes from data gener-ated in [33]. Data was obtained from the [34]. Dynamics given by the model (2.1) for NADH (blue lines) and ATP (red lines) using parameters found from WENDy (solid lines) and from lsqnonlin
+> (dotted lines) versus normalized experimental fluorescence data for NADH (black dots) and ATP (grey dots). (Bottom) Table of parameter estimates and corresponding 95% confidence intervals.
+
+additionally calculate the residual sum of squares considering both the output error (RSS oe ) and (weak-form) equation error (RSS ee ) residuals. Note that, as expected, the RSS ee is lower for the WENDy parameter estimate, as this method is based on opti-mization of equation error. The RSS oe is lower for the lsqnonlin parameter estimate, as this method is based on optimization of output error. In general, the parameter estimates are similar between the two methods and produce similar model dynamics, as demonstrated in Figure 1. However, for this oscillatory system, the WENDy algo-rithm is ∼ 3 times faster than the default lsqnonlin implementation, 2.43 s versus 7.46 s. It should also be noted that the lsqnonlin method was initialized with the recovered WENDy parameters to avoid convergence failures of the method. 6
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+## 2.2 Example 2: Parameter Estimation of Cell State Transition Model 
+
+For this example, we consider two population models of epithelial-mesenchymal cancer cell state transitions. We first model the ephithelial cell fraction ( E) and mesenchymal (M ) fraction using the growth and transition (G&T) model from [12] is given below, ˙M = ( rm − tm)M + te(1 − M ) − (rmM + re(1 − M )) M. (1) Here, rm represents the mesenchymal cell growth rate per unit time, tm represents the mesenchymal-to-epithelial transition rate per unit time, te represents the epithelial-to-mesenchymal transition rate per unit time, and re represents the epithelial cell growth rate per unit time. We additionally consider the growth, influence, and transition (GI&T) model from [12], which is given below, ˙M =rm(1 − σ(1 − M )) M − tmM + te(1 − M )
+
+− (rm(1 − σ(1 − M )) M + re(1 − μM )(1 − M )) M. (2) Here, σ and μ are unitless parameters that represent the strength of reduction in mesenchymal or epithelial cell growth in the presence of the other cell population. Note that we assume all cells are either epithelial or mesenchymal, i.e. 1 = E + M. 
+
+## Data Entry and Interpolation 
+
+The data used in this example contains three observations of two experiments, giving a multi-trajectory WENDy problem with six trajectories (three realizations × two ini-tial culture conditions). The data is observed as cell fractions, where Culture 1 starts with a high initial mesenchymal fraction (assumed M0 = 0 .999), and Culture 2 starts with a low mesenchymal fraction ( M0 = 0 .001). Each realization of the experiment occurs two weeks apart over an 8-week time frame. To apply the WENDy method in this low collection frequency system, we interpolate the sparse data to provide the necessary state data required to form the weak-form integrals. More information on the validity of pre-processing sparse data through interpolation in conjunction with the WENDy algorithm is provided in Section 4. We call the realizations of the exper-iment trajectories, each of which becomes its own wsindy data object, and are then combined into an array (see Listing 4). This array of data objects prompts WENDy to consider multiple trajectories. In this data object, we pass the estimated noise type (multiplicative lognormal in this case), which informs the covariance correction discussed in Section 4. 
+
+## Equation Creation and Regression 
+
+Once the data object array is created, we then construct the library features. In [12], there are multiple models considered, but for the sake of the tutorial, we consider the 7
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+Listing 4 Creating wsindy data object array.  
+
+> 1
+
+% tcell - cell array containing interpolated time vectors for each trajectory  
+
+> 2
+
+% xcell - cell array containing interpolated state trajectories  
+
+> 3
+
+ntraj = numel(xcell);  
+
+> 4
+
+Uobj = arrayfun(@(i)wsindy_data(xcell{i}, tcell{i},...  
+
+> 5
+
+'noise_type','logn'), (1:ntraj)');  
+
+> 6
+
+nstates = Uobj.nstates; 
+
+G&T model for mesenchymal fraction: ˙M + rmM 2 = w1M + w2(1 − M ) − w3(1 − M )M, (3) where rm is a known proliferation rate fixed using the same value as in [12] and 
+
+w := ( w1 = tm, w 2 = te, w 3 = re)T are the unknown parameters to be learned. Note that, unlike in Section 2.1, we cannot use the default left-hand side for this more complex model as the known terms ( rmM 2 in this case) are moved to the left-hand side. In Listing 5, we provide the code to specify the left-hand side object. We once again utilize the predefined library terms. For example, the term ˙M is a first-order polynomial and the only state variable, and is therefore called as a function by using the tag [1] . Here, LHSterm1 has an additional property linOp = [1] , indicating the first derivative. Lastly, LHSterm2 has a coefficient property coeff since rm is a known value in this example. 
+
+Listing 5 Creating left-hand side library object.  
+
+> 1
+
+% rm is a known constant previously defined  
+
+> 2
+
+LHSterm1=term('ftag',[1],'linOp',[1]);  
+
+> 3
+
+LHSterm2=term('ftag',[2],'coeff',rm);  
+
+> 4
+
+LHSterm_tot=addterm(LHSterm1,LHSterm2); 
+
+For this example, we will construct the library of features by manually defining terms rather than using predefined terms. We will need to create a corresponding library term for each term in the right-hand side of model (3) (i.e. M , (1 − M ), and (1 − M )M ). These definitions are made in Listing 6, and are then combined into the feature library object. As done in Section 2.1, the objects are used to construct the regression model 
+
+wendy model , which is then solved using the WENDy algorithm. During the applica-tion of the WENDy algorithm, the data is concatenated across trajectories, stacking all subsystems into a single overdetermined system. Additionally, for this example, we wish to consider biologically informed bounds on the parameter ranges considered for the estimation algorithm. Upper and lower bounds can be provided as vectors with 8
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+Listing 6 Creating right-hand side library object.  
+
+> 1
+
+libterm1=term('fHandle',@(x)x);  
+
+> 2
+
+libterm2=term('fHandle',@(x)1-x);  
+
+> 3
+
+libterm3=term('fHandle',@(x)(1-x).*x);  
+
+> 4
+
+lib = library('terms',{libterm1,libterm2,libterm3}); 
+
+the same size as the unknown parameters. Listing 7 calls the WENDy algorithm with parameter constraints. 
+
+Listing 7 Creating wendy model and applying the WENDy method.  
+
+> 1
+
+% for cov_params, tf, and wendy_params see WENDy_defaults.m  
+
+> 2
+
+WS = wendy_model(Uobj,lib,tf,cov_params,'lhsterms',LHSterm_tot);  
+
+> 3
+
+[WS,w_its,~,~,CovW,RT] = WS_opt().wendy(WS,wendy_params{:},...  
+
+> 4
+
+'linregargs',{'LB',LBvals,'UB',UBvals}); 
+
+## WENDy Outputs and Confidence Interval Generation 
+
+The WENDy algorithm provides parameter estimates. Figure 2 shows that the dynam-ics of models (1) and (2) with parameters found using the WENDy algorithm and mesenchymal cell fraction data match the experiment well. For comparison, we also consider the model fit using the lsqnonlin function in MATLAB [35] with default settings. Both the WENDy and lsqnonlin parameter estimates, along with their respective 95% confidence intervals, are listed in Figure 2. For this example, we calculate confidence intervals by parameteric bootstrapping to avoid overstating certainty in the parameter estimates driven by the addition of data points through the interpolation process. As before, we additionally calculate the residual sum of squares considering both the output error (RSS oe ) and weak-from equation error (RSS ee ) residuals. Once again, the RSS ee is lower for the WENDy parameter estimate, and the RSS oe is lower for the lsqnonlin parameter estimate. In general, the parameter estimates are similar between the two methods and produce similar model dynamics, as demonstrated in Figure 1. Furthermore, both the output error and equation error residuals are in agreement that the GI&T model fits the data better than the G&T model, as found in [12]. Here, the WENDy algorithm performs similarly to the default lsqnonlin implementation in terms of time, 0.5 s versus 1 s. 
+
+# 3 Discussion 
+
+In this tutorial, we presented the WENDy method as a forward-solver-free approach for parameter estimation for models arising in systems biology. The examples consid-ered illustrate two distinct regimes in which weak-form parameter estimation can be 9
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+Weeks       
+
+> 0246810
+> EpCAM low  Fraction
+> 00.2 0.4 0.6 0.8 1
+
+Cell Culture 1 
+
+> WENDy-G&T lsqnonlin-G&T WENDy-GI&T lsqnonlin-GI&T Original Data
+> A.
+
+Weeks       
+
+> 0246810
+> EpCAM low  Fraction
+> 00.2 0.4 0.6 0.8 1
+
+Cell Culture 2 B. Method Model tm × 10 −2 te × 10 −2 re σ μ RSS oe RSS ee Time WENDy G&T 7.91 10 .1 3.39 - - 0.5710 6.070 0.0129 s [5 .39 , [11 .08 , [2 .91 ,
+
+15 .82] 17 .97] 3.59] GI&T 6.58 8.26 fixed 0.496 −0.258 0.5618 6.1602 0.0132 s [5 .83 , [8 .28 , [0 .1978 , [−0.4076 ,
+
+15 .33] 13 .17] 0.9689] −0.1418] lsqnonlin G&T 7.58 10 .2 3.58 - - 0.5234 6.7535 0.0387 s [5 .10 , [3 .96 , [2 .96 ,
+
+15 .08] 17 .71] 4.06] GI&T 6.64 8.91 fixed 0.429 −0.231 0.5259 6.8597 0.1816 s [2 .72 , [8 .76 , [0 .0035 , [−0.4265 ,
+
+13 .27] 17 .77] 0.6850] −0.0839] 
+
+Fig. 2 G&T and GI &T models dynamics for parameters found using WENDy describe mesenchymal cell populations well and are consistent with an output error based method. (Top) Mesenchymal cell populations over 8 weeks for experiments where the initial E-M ratio is (A.) low or predominantly mesenchymal and (B.) high or predominantly epithelial. Dynam-ics given by the G&T model (1) using parameters found from WENDy (solid blue line) and from 
+
+lsqnonlin (dotted blue line) and given by the GI&T model (2) using parameters found from WENDy (dashed red line) and from lsqnonlin (dashed red line) versus experimental data (black dots) from [36]. (Bottom) Parameter estimates and corresponding 95% confidence intervals. For both models, we fix rm = 3 .1 per week, and in the GI&T model, we fix re = 4 .8 per week. 
+
+useful. In the glycolytic oscillator example, the data is relatively dense in time, and the underlying oscillatory dynamics are nonlinear and numerically stiff. In this set-ting, WENDy provides an efficient alternative to output-error methods as the stiff nature of the model causes instabilities in the parameter estimates and can even cause 
+
+lsqnonlin to fail to converge. It is worth noting that this failure of forward solver methods can be partially mitigated and convergence can be substantially accelerated by using the recovered WENDy parameters as the initial guess in forward-solver meth-ods, demonstrated previously in [23, 24]. On the other hand, in the cell state transition example, we demonstrate that WENDy can be used in a low-data setting when the dynamics are sufficiently smooth, and interpolation is a reliable method for filling out the weak-form integrals. 10 
+
+.CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint A common theme across both examples is that WENDy works well for models who are linear in parameters . This includes many polynomial, rational (after rearrange-ments), mass-action, and compartmental transition models. Generally, WENDy works well for any model that can be written in the form ˙x =
+
+> J
+
+X
+
+> j=1
+
+wj fj (x),
+
+where the terms fj (x) can be nonlinear. What is important for the standard WENDy formulation is not that the model is linear in the state x, but linear in the unknown parameters wj . This makes WENDy particularly well matched to many interpretable systems biology models where biological mechanisms are encoded through prescribed terms and the goal is to estimate rates, interaction strengths, or transition parameters. The sparse cell-state transition example also highlights an important practical point. Weak-form methods avoid numerical differentiation of noisy data, but they do not eliminate the need for adequate temporal information. When the data is sparse, the weak-form integrals must still be approximated with low quadrature error from the available measurements. If the dynamics are smooth and slowly varying, as in the cell-state transition model, linear interpolation provides a reasonable reconstruc-tion for quadrature (more detail is provided in Section 4.2). However, interpolation should not be interpreted as generating new independent data. Interpolated points are deterministic functions of the original observations and inherit strong correla-tions. Consequently, uncertainty estimates based on treating interpolated points as independent measurements can be misleading. For this reason, the confidence inter-vals are obtained by bootstrapping the original sparse observations and repeating the interpolation-WENDy estimation pipeline. Despite these advantages, several WENDy-specific limitations should be kept in mind. The standard formulation assumes that the governing equations can be expressed as a linear combination of known feature functions with unknown coeffi-cients; consequently, models involving unknown Hill coefficients, unknown delay times, nonlinear parameter dependencies, or genuinely nonlocal terms require novel exten-sions of WENDy. In addition, the version of WENDy presented in this work assumes that all dynamically relevant state variables are observed, or at least can be recon-structed with sufficient accuracy. If important compartments or latent variables are unobserved, then direct weak-form regression on the measured variables alone can produce biased estimates because the fitted working model is incomplete. Address-ing these issues is an active research direction, with foundational progress reported in [24] for nonlinear parameters and [25] for unobserved compartments. Beyond these method-specific issues, several general considerations apply to WENDy just as they do to forward-solver-based least squares, likelihood-based inference, Bayesian methods, gradient matching, and other approaches. In particular, WENDy does not by itself resolve model misspecification, structural or practical non-identifiability, or mismatch between the assumed and actual noise process. These concerns must still be taken into account when applying WENDy to real problems just as with any parameter estimation method. 11 
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+Some more WENDy-specific limitations concern the construction of the weak-form integrals and how uncertainty quantification interacts with interpolation. The method avoids numerical differentiation by integrating against compactly supported test func-tions, but those integrals still need to be accurately approximated from the data. If the data is too sparse relative to the timescale of the dynamics, if fast transients occur between measurement times, or if non-uniform sampling is not interpolated carefully, the weak-form quantities can be biased. Fig. 5 illustrates this effect for sparse and noisy data: as the number of observations decreases and the noise level increases, parameter error and prediction error generally increase. Below 8 data points model parameters cannot be accurately recovered for the logistic equation, even with interpo-lation. Additionally, interpolated data requires particular care. While interpolation is useful for approximating quadrature when dynamics are smooth, interpolated points are not independent measurements, and treating them as independent in the WENDy covariance calculation artificially increases the effective sample size and can lead to confidence intervals that are far too narrow. For this reason, uncertainty quantification in sparse-data settings should either propagate the original measurement covariance or use a bootstrapping procedure as in Section 2.2 that resamples the original sparse data before repeating the interpolation and WENDy estimation pipeline. We conclude by providing an outlook of the future research directions in weak form scientific machine learning (WSciML). The current frontier for WSciML methods, such as WENDy, is aimed at relaxing data and model assumptions, while preserving the main advantages of the weak-form philosophy (e.g., computational efficiency and robustness to large noise). Current research directions include a deeper exploration of nonlinear parameters in model, delay differential equations, general unobserved com-partmental models, mixed-effects, switching events, and state reconstruction. Progress in these directions would make WENDy applicable to a broader class of biological models. 
+
+# 4 Methods 
+
+In this section, we present a tutorial on the Weak form Estimation of Nonlinear Dynamics (WENDy) method for parameter estimation. To have an illustrative and accessible presentation, we will introduce this method using the classical logistic equation ˙u = r u 
+
+
+
+1 − uK
+
+
+
+= r u − rK u2 (4) as a toy model 1. Here, t ∈ [0 , T ] denotes the time variable, u(t) denotes the state variable (e.g., a population size), and ˙ u denotes its time derivative. The parameters 
+
+r > 0 and K > 0 represent the intrinsic growth rate and the carrying capacity, respectively. The WENDy framework assumes that the dynamics can be expressed as a linear combination of prescribed (possibly nonlinear) basis functions of the state. In the       
+
+> 1For a general presentation of the WENDy method for arbitrary autonomous systems of the form ˙x=PJj=1 wjfj(x),we refer the reader to the original introduction of the method [23] and the subsequent works [24, 25, 37].
+
+12 
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+logistic example, we introduce f1(u) := u and f2(u) := u2, and rewrite (4) as ˙u(t) = w1f1(u(t)) + w2f2(u(t)) ,
+
+where w1 = r and w2 = − rK . In this way, estimating the interpretable parameters (r, K ) is equivalent to estimating the parameters ( w1, w 2) =: wT .Suppose we observe noisy measurements of the state at uniformly spaced time points, 
+
+{um}Mm=1 ≈ { u(tm)}Mm=1 , tm = t0 + ( m − 1) ∆ t, 
+
+with sampling interval ∆ t > 0. The goal of WENDy, in this setting, is to estimate w1 and w2 (and hence r and K)from the time series {um}Mm=1 without directly approximating ˙ u from the data 2. This is implemented by using the weak-form of model (4). That is, by multiplying (4) by a smooth test function ϕ(t) with compact support 3 in (0 , T ), integrating in time, and making use of integration-by-parts, one arrives at the so called weak-form equation: 
+
+−
+
+Z T
+
+> 0
+
+˙ϕ(t)u(t) d t = w1
+
+Z T
+
+> 0
+
+ϕ(t)f1(u(t)) d t + w2
+
+Z T
+
+> 0
+
+ϕ(t)f2(u(t)) d t. (5) Notice that in comparison to equation (4) above, in equation (5), all derivatives have been moved from u to the known test function ϕ. This means that ˙ϕ can be calculated analytically and therefore noisy approximations can be avoided. Moreover, equation (5) is true for any smooth compactly supported ϕ, and so, we can use a collection of (reasonably distinct) test functions {ϕk}Kk=1 to construct a linear system of the form 
+
+b⋆ = G⋆ w, (6) where 
+
+b⋆ := 
+
+
+
+− R T 
+
+> 0
+
+˙ϕ1 u dt
+
+...
+
+− R T 
+
+> 0
+
+˙ϕK u dt
+
+
+
+∈ RK and G⋆ := 
+
+R T 
+
+> 0
+
+ϕ1f1(u) d t R T 
+
+> 0
+
+ϕ1f2(u) d t
+
+... ...
+
+R T 
+
+> 0
+
+ϕK f1(u) d t R T 
+
+> 0
+
+ϕK f2(u) d t
+
+ ∈ RK×2.
+
+In practice, the integration in system (6) is approximated using the data, resulting in the approximated system 
+
+b⋆ ≈ − ˙Φ u 
+
+| {z } 
+
+> =: b
+
+≈ Φ Θ (u)
+
+| {z }
+
+> =: G
+
+w ≈ G⋆w, (7)      
+
+> 2Approximating time derivatives from noisy measurements is notoriously ill-conditioned. Finite-difference schemes amplify high-frequency noise, and even regularized or smoothing-based approaches require delicate tuning of bandwidths or penalty parameters. See, for example, classical discussions of numerical differenti-ation and noise amplification in [38], as well as derivative-based model discovery methods such as SINDy, which are known to degrade in accuracy under moderate noise levels unless sophisticated denoising or total-variation regularization is used [39, 40].
+> 3In other words, ϕis only positive for values of twhich lie in a closed sub-interval of (0 , T ).
+
+13 
+
+.CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint where 
+
+u := 
+
+
+
+u1
+
+...
+
+uM
+
+ ∈ RM
+
+is the vector of state measurements, 
+
+Θ(u) := 
+
+
+
+f1(u1) f2(u2)... ...
+
+f1(uM ) f2(uM )
+
+ ∈ RM ×2
+
+is the feature matrix evaluated at the data, and 
+
+Φ := 
+
+
+
+ϕ1(t1) . . . ϕ1(tM )... . . . ...
+
+ϕK (t1) . . . ϕ K (tM )
+
+ Q ∈ RK×M
+
+is the test function matrix evaluated at the time points multiplied by an appropriate quadrature matrix, Q. In our case, due to the compact support of the test function, the integration error can be mitigated by using the composite trapezoidal rule [21, Lemma 2] for which the corresponding matrix is 
+
+Q := 
+
+ 12 ∆t, ∆t, . . . , ∆t, 12 ∆t
+
+
+
+IM ,
+
+where IM is the M × M identity matrix. WENDy then estimates the true parameters w via a least squares minimization, min  
+
+> w
+
+∥b − G w ∥22.
+
+It is important to note, however, that when noise is present in the system, it appears in both the vector b and in the matrix G. Consequently, this means the least-squares problem above is an errors-in-variables problem and so the ordinary least-squares (OLS) estimator is generally biased, and its usual covariance formulas are invalid. The WENDy method addresses this by (i) approximating the covariance structure of the weak-form residuals and (ii) using an iteratively reweighted least squares (IRLS) procedure together with a covariance correction. Let r(u, w) := Gw −b and say the observed data {um}Mm=1 is noisy measurements of the true (noise-free) signal u⋆. The two most common noise structures are 1. Additive normal noise: Where um = u⋆m + εm with ε ∼ N (0 , σ 2). 2. Multiplicative lognormal noise: Where um = exp( ξm)u⋆m where ξ ∼ N (0 , σ 2). In this case, for small noise levels, we have the first-order expansion 
+
+um ≈ u⋆m + ξmu⋆m,
+
+14 
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+where ξmu⋆m is approximately Gaussian with variance V[ξmu⋆m] ≈ u⋆2 
+
+> m
+
+σ2.Both cases can be handled under the assumption um = u⋆m + εm with E[ε] = 0 and Cov( ε) = Σ u ∈ RM ×M which may depend on the (unknown) signal u⋆. In the additive Gaussian case, Σ u = σ2IM and is independent of the true signal u⋆. On the other hand, for the multiplicative lognormal case, the first-order approximation gives Σ u ≈
+
+diag( u⋆21 σ2, . . . , u⋆2 
+
+> M
+
+σ2), which is further approximated by substituting in the noisy measurements for the unknown true measurements, i.e., Σ u ≈ diag( u21σ2, . . . , u2 
+
+> M
+
+σ2)4.Under this general noise formulation, the weak-form residual 
+
+r(u, w) := G(u) w − b(u)inherits noise from both b and G, since each entry represents a nonlinear functional of the noisy data u. A standard first-order expansion around the noise-free signal u⋆
+
+yields 
+
+r(u, w) ≈ r(u⋆, w) + Ju(w) ε, 
+
+where Ju(w) denotes the Jacobian of r with respect to the data. Consequently, the covariance of the weak-form residuals can be approximated as Cov  r(u, w) ≈ R0(w) := Ju(w) Σ u Ju(w)⊤. (8) In the WENDy framework, this covariance structure is further refined by adding a second-order correction term H(w) that captures curvature effects arising from non-linear transformations of u (see [23] for details), so that the working covariance model is 
+
+R(w) ≈ R0(w) + H(w).
+
+Thus, rather than solving the ordinary least-squares problem min  
+
+> w
+
+∥Gw − b∥22,
+
+WENDy seeks to approximately solve the generalized least-squares (GLS) problem min 
+
+> w
+
+ Gw − b⊤R(w)−1 Gw − b, (9) where R(w) depends on the unknown parameters through (8) and the second-order correction. Since R(w) itself depends on w (and on unknown noise parameters such as σ2), WENDy employs an iteratively reweighted least squares (IRLS) procedure. At each iteration, the residual covariance R(w) is estimated from the current parameter iter-ate, factored (e.g., via a Cholesky decomposition R(w) ≈ RR ⊤), and used correct    
+
+> 4In the instance of multiplicative lognormal noise and strictly positive data, one may perform the parame-ter identification in the log-plane using the transformation y= log( u) to avoid approximating the lognormal covariance. In this case, one would perform the parameter identification on the system ˙y= exp( −y)Θ(u)w.
+
+15 
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+Weak form Estimation of Nonlinear Dynamics (WENDy)   
+
+> Inputs:
+> Noisy Data ( )Model
+> 0. (Optional) Interpolate Sparse Data
+> 1. Convolve Data with Test Functions 2. OLS Regression
+> 3. GLS Regression
+> Apply IRWLS to find the residual covariance matrix:
+> Outputs:
+> Acurate Model Parameters
+
+Fig. 3 Outline of the WENDy algorithm with a simulated logistic example. 
+
+autocorrelations in the residual of the regression system. The resulting transformed problem is an OLS problem: min  
+
+> w
+
+R−1Gw − R−1b 22 ,
+
+which can then be solved efficiently using standard methods. This process is repeated until convergence in w.In the logistic toy problem, the WENDy algorithm proceeds by: (i) constructing the weak-form quantities b and G from the time series {um}Mm=1 , (ii) specifying a noise model (e.g., additive Gaussian or multiplicative lognormal), (iii) iteratively estimating the residual covariance R(w) and updating the parameter estimates w = ( w1, w 2)⊤,and finally (iv) mapping back to the interpretable parameters ( r, K ) via the identities 
+
+w1 = r and w2 = −r/K .
+
+## 4.1 Choice of test functions 
+
+Historically in the WSciML literature, there have been multiple test functions consid-ered. For the methods presented here, we have found success two particular classes of test functions: piecewise polynomials of the form 
+
+ϕpoly (v) := 
+
+(
+
+(1 − v2)p v ∈ (−1, 1) 0 otherwise (10) and smooth “bump” functions of the form 
+
+ϕbump (v) := 
+
+(exp 
+
+
+
+η ( 1 
+
+> v2−1
+
++ 1) 
+
+
+
+v ∈ (−1, 1) 0 otherwise . (11) Here, p, η > 0 represent shape parameters which control the smoothness and decay of the test function as v tends to ±1. The variable v := t/r represents a rescaling of 16 
+
+.CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint the time variable t given some radius r > 0. This radius is a hyperparameter that is chosen from the data using the method presented in [41]. As for the shape parameters 
+
+p and η, we have found that their exact value is of little consequence to the method’s performance, provided they are sufficiently large (e.g., larger than 10) to reduce the quadrature error to a negligible level. These representative test functions are then convolved with the data to construct system (7), effectively filtering out the noise while maintaining the equational relationship (5). This filtering process is demonstrated in Fig. 3(1) where we see how convolution smooths the original noisy data. 
+
+## 4.2 The case of sparse data 
+
+While traditional equation error methods are often benchmarked on chaotic, rapidly evolving systems with abundant data, many real-world applications (e.g., population growth, biochemical signaling pathways, cell-cycle progression, etc.) generate much smoother dynamics, and their experiments result in substantially sparser measure-ments. At first glance, this scarcity of data appears antithetical to weak-form methods, since integrating against test functions effectively reduces the number of data points as demonstrated in Fig. 3(1). However, when the underlying dynamics are smooth and slowly varying, the weak-form formulation provides significant advantages that directly counterbalance these apparent limitations. First, the weak form entirely avoids explicit time-derivative computations. Instead, all terms in the WENDy framework appear inside integrals of the form 
+
+I := 
+
+Z T
+
+> 0
+
+ϕ(t) f (u(t)) d t, 
+
+where we recall that ϕ(t) is a smooth compactly supported test function. Consequently, the data is never differentiated, and the nonlinear terms f (u(t)) are evaluated only at the available discrete time points where their contributions to the regression are 
+
+averaged through numerical quadrature. Moreover, when there are no rapid changes in the state trajectory u(t) (such as in the logistic equation), the integrand ϕ(t) f (u(t)) changes gradually across each test function’s support. This smoothness has an important implication: the reconstruction of u(t) between measurement times does not need to be highly accurate. As long as the interpolation respects the coarse geometry of the trajectory, the quadrature error remains small. More precisely, let ˜ u represent the piecewise linearly interpolated data onto a fine grid of spacing h and let ˜Ih := h X
+
+> i
+
+qiϕ(ti)f (˜ u(ti)) represent the composite trapezoidal rule on the interpolated data with quadrature weights q = ( 12 , 1, . . . , 1, 12 ). Then the total error I − ˜Ih can be decomposed into two contributions: 
+
+I − ˜Ih = I − Ih
+
+| {z } 
+
+> quadrature error
+
++ Ih − ˜Ih
+
+| {z }
+
+> interpolation error
+
+.
+
+17                            
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint 0.05 0.1 0.15 0.2 0.25
+> Fine grid spacing h
+> 10 -15
+> 10 -10
+> 10 -5
+> Quadrature error: |I−Ih|
+> y∝h4
+> y∝h6
+> y∝h8
+> y∝h10
+> y∝h14
+> p = 2
+> p = 4
+> p = 6
+> p = 8
+> p = 12
+> A. 0.5 11.5 2
+> Coarse data spacing ∆t
+> 10 -6
+> 10 -4
+> 10 -2
+> Interpolation error: |Ih−˜Ih|
+> y∝∆t2
+> p = 2
+> p = 4
+> p = 6
+> p = 8
+> p = 12
+> B.
+
+Fig. 4 A. Behavior of the quadrature error |I − Ih| as a function of the interpolation spacing h. B. behavior of the interpolation error |Ih − ˜Ih| as a function of the sampling rate ∆t for h = 10 −4. The data in this plot uses the piecewise polynomial test function (10) and noise-free logistic data. 
+
+The quadrature error component inherits the fast convergence of the trapezoidal rule for periodic functions depending only on the smoothness of the integrand: approxi-mately O(hp+2 ) for even p and O(hp+1 ) for odd p proven in [21, Lemma 2]. On the other hand, the interpolation error trends according to O(∆ t2) consistent with point-wise interpolation theory [42, Section 3.1]. We demonstrate these trends numerically in Fig. 4 for the noise-free logistic data and piecewise polynomial test functions from (10). Thus, for nonchaotic systems, simple piecewise-linear interpolation of the data to “fill out” the integration quadrature is fully adequate. We test the performance of the WENDy method using linear interpolation of the data over various noise levels and number of data points in Fig. 5. Here, we study the change in the ℓ2 parameter error metric 
+
+E2 := ∥w − w⋆∥2
+
+∥w⋆∥2
+
+as both the number of points reduces and as the noise-to-signal e increases. 
+
+## 4.3 Parameter Confidence Intervals 
+
+From the residual covariance matrix, given by equation (8), we can write the approximate parameter covariance matrix 5
+
+Sw ≈ (GT G)−1GT R(w)G(GT G)−1. (12) And, the (1 − α) confidence interval around the parameter estimate ˆ wi
+
+[ ˆ wi ± FSwii (1 − α/ 2)] , (13) 
+
+> 5For a more detailed derivation of the parameter covariance matrix we direct readers to [23].
+
+18 
+
+.CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint E2 for Logistic Equation with Lognormal Noise                             
+
+> 00.05 0.1 0.15 0.2 0.25 0.3
+> Noise ratio
+> 4816 32 64 128 256 512
+> Number of data points
+> A.
+> 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 10 110 210 3
+> Number of Points
+> 10 -2
+> 10 -1
+> 10 0
+> E2
+> B.
+> e= 5 %
+> e= 10 %
+> e= 15 %
+> e= 20 %
+> e= 25 %
+> e= 30 % MSE for Logistic Equation with Lognormal Noise
+> 00.05 0.1 0.15 0.2 0.25 0.3
+> Noise ratio
+> 4816 32 64 128 256 512
+> Number of data points
+> C.
+> 0.005 0.01 0.015 0.02 0.025 10 110 210 3
+> Number of Points
+> 10 -6
+> 10 -5
+> 10 -4
+> 10 -3
+> 10 -2
+> 10 -1
+> MSE
+> D.
+> e= 5 %
+> e= 10 %
+> e= 15 %
+> e= 20 %
+> e= 25 %
+> e= 30 %
+
+Fig. 5 A. Heatmap of mean E2 error over different numbers of data points and noise ratios. B. Trend lines of the mean E2 error as a function of the number of data points. C. Heatmap of mean mean-squared error (MSE) over different numbers of data points and noise ratios. D. Trend lines of the mean MSE as a function of the number of data points. The black dashed line is a reference line of O(N −1/2). For all plots, the mean is taken over 50 realizations of the noise. 
+
+where F is the CDF of the normal distribution with mean zero and variance Swii .The estimated parameter covariance matrix is a default output of the WENDy algo-rithm and generally provides reliable parameter confidence intervals. Table C3 provides a comparison of the covariance approximation and parametric bootstrapping, and demonstrates that the WENDy default confidence intervals are close in magnitude to the confidence intervals generated through repeated simulation. In the case of sparse data, we could interpret the default covariance matrix-based confidence intervals as the confidence interval if the interpolated data were the true data. In order to find the real uncertainty of the estimated parameters accounting for the interpolation step, we employ a parametric bootstrapping procedure. Briefly, we approximate the variance of the residual error using the WENDy parameter estimate. We then generate M = 1 , 000 sets of sparse data from our assumed residual error model; recall we assume the error follows a lognormal distribution. Next, we perform the WENDy algorithm for sparse data, including a linear interpolation step, for each of the simulated data sets. Finally, we obtain the (1 − α) confidence interval for each parameter by recovering the α and (1 − α) quantiles of the set of parameter estimates. Table C4 shows a comparison of the default parameter confidence intervals versus the 19 
+
+.CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint corrected bootstrap parameter confidence intervals for an example system with sparse data collection. 
+
+Acknowledgments: 
+
+The research reported in this publication was supported in part by the NIGMS Divi-sion of Biophysics, Biomedical Technology and Computational Biosciences (grant R35GM149335 to DMB). P.J. and M.K.J were supported by Param Hansa Philan-thropies. 
+
+Author Contributions: 
+
+N.H.B. and R.L. : Methodology, Software, Investigation, Visualization, Validation, Writing - original draft, Writing - review & editing. P.J. : Data curation, Writing -review & editing. M.K.J. : Conceptualization, Data curation, Supervision, Writing -review & editing. D.M.B. : Conceptualization, Supervision, Writing - review & editing. 
+
+Code Availability: 
+
+The code used in this manuscript will be made available at the GitHub repository MathBioCU/WSciML-for-Systems-Biology. 
+
+# References 
+
+[1] Kitano, H.: Systems Biology: A Brief Overview. Science 295 (5560), 1662–1664 (2002) https://doi.org/10.1126/science.1069492 [2] Prokop, B., Gelens, L.: From biological data to oscillator models using SINDy. iScience 27 (4), 109316 (2024) https://doi.org/10.1016/j.isci.2024.109316 [3] Teusink, B., Passarge, J., Reijenga, C.A., Esgalhado, E., Van Der Weijden, C.C., Schepper, M., Walsh, M.C., Bakker, B.M., Van Dam, K., Westerhoff, H.V., Snoep, J.L.: Can yeast glycolysis be understood in terms of in vitro kinetics of the constituent enzymes? Testing biochemistry. European Journal of Biochemistry 
+
+267 (17), 5313–5329 (2000) https://doi.org/10.1046/j.1432-1327.2000.01527.x [4] Wolf, J., Passarge, J., Somsen, O.J.G., Snoep, J.L., Heinrich, R., Westerhoff, H.V.: Transduction of Intracellular and Intercellular Dynamics in Yeast Gly-colytic Oscillations. Biophysical Journal 78 (3), 1145–1153 (2000) https://doi.org/ 10.1016/S0006-3495(00)76672-0 [5] Hauser, M.J.B.: Synchronisation of glycolytic activity in yeast cells. Current Genetics 68 (1), 69–81 (2022) https://doi.org/10.1007/s00294-021-01214-y [6] Geva-Zatorsky, N., Rosenfeld, N., Itzkovitz, S., Milo, R., Sigal, A., Dekel, E., Yarnitzky, T., Liron, Y., Polak, P., Lahav, G., Alon, U.: Oscillations and vari-ability in the p53 system. Molecular Systems Biology 2(1), 2006–0033 (2006) https://doi.org/10.1038/msb4100068 20 
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+[7] Purvis, J.E., Karhohs, K.W., Mock, C., Batchelor, E., Loewer, A., Lahav, G.: P53 Dynamics Control Cell Fate. Science 336 (6087), 1440–1444 (2012) https: //doi.org/10.1126/science.1218351 [8] Simon, M., Konrath, F., Wolf, J.: From regulation of cell fate decisions towards patient-specific treatments, insights from mechanistic models of signalling path-ways. Current Opinion in Systems Biology 39 , 100533 (2024) https://doi.org/10. 1016/j.coisb.2024.100533 [9] Guo, X., Adelaja, A., Singh, A., Wollman, R., Hoffmann, A.: Modeling het-erogeneous signaling dynamics of macrophages reveals principles of information transmission in stimulus responses. Nature Communications 16 (1), 5986 (2025) https://doi.org/10.1038/s41467-025-60901-3 [10] Tyson, J.J., Nov´ ak, B.: Time-keeping and decision-making in the cell cycle. Interface Focus 12 (4), 20210075 (2022) https://doi.org/10.1098/rsfs.2021.0075 [11] Del Olmo, M., Legewie, S., Brunner, M., H¨ ofer, T., Kramer, A., Bl¨ uthgen, N., Herzel, H.: Network switches and their role in circadian clocks. Journal of Biological Chemistry 300 (5), 107220 (2024) https://doi.org/10.1016/j.jbc.2024. 107220 [12] Jain, P., Kizhuttil, R., Nair, M.B., Bhatia, S., Thompson, E.W., George, J.T., Jolly, M.K.: Cell-state transitions and density-dependent interactions together explain the dynamics of spontaneous epithelial-mesenchymal heterogeneity. iScience 27 (7), 110310 (2024) https://doi.org/10.1016/j.isci.2024.110310 [13] Messenger, D.A., Wheeler, G.E., Liu, X., Bortz, D.M.: Learning anisotropic interaction rules from individual trajectories in a heterogeneous cellular popu-lation. Journal of The Royal Society Interface 19 (195), 20220412 (2022) https: //doi.org/10.1098/rsif.2022.0412 [14] Ashyraliyev, M., Fomekong-Nanfack, Y., Kaandorp, J.A., Blom, J.G.: Systems biology: Parameter estimation for biochemical models. The FEBS Journal 276 (4), 886–902 (2009) https://doi.org/10.1111/j.1742-4658.2008.06844.x [15] Banga, J.R., Balsa-Canto, E.: Parameter estimation and optimal experimen-tal design. Essays in Biochemistry 45 , 195–210 (2008) https://doi.org/10.1042/ bse0450195 [16] Ramsay, J.O., Hooker, G., Campbell, D., Cao, J.: Parameter Estimation for Dif-ferential Equations: A Generalized Smoothing Approach. Journal of the Royal Statistical Society Series B: Statistical Methodology 69 (5), 741–796 (2007) https: //doi.org/10.1111/j.1467-9868.2007.00610.x [17] Liang, H., Wu, H.: Parameter Estimation for Differential Equation Models Using 21 
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+a Framework of Measurement Error in Regression Models. Journal of the Ameri-can Statistical Association 103 (484), 1570–1583 (2008) https://doi.org/10.1198/ 016214508000000797 [18] Messenger, D.A., Bortz, D.M.: Asymptotic consistency of the WSINDy algorithm in the limit of continuum data. IMA Journal of Numerical Analysis, 086 (2024) https://doi.org/10.1093/imanum/drae086 [19] Shinbrot, M.: On the analysis of linear and nonlinear dynamical systems for transient-response data. Technical Report NACA TN 3288, Ames Aeronautical Laboratory, Moffett Field, CA (December 1954) [20] Loeb, J.M., Cahen, G.M.: Extraction a partir des enregistrements de mesures, des parametres dynamiques d’un systeme. Automatisme 8, 479–486 (1963) [21] Messenger, D.A., Bortz, D.M.: Weak SINDy: Galerkin-Based Data-Driven Model Selection. Multiscale Modeling & Simulation 19 (3), 1474–1497 (2021) https:// doi.org/10.1137/20M1343166 [22] Messenger, D.A., Bortz, D.M.: Weak SINDy For Partial Differential Equations. Journal of Computational Physics 443 , 110525 (2021) https://doi.org/10.1016/ j.jcp.2021.110525 [23] Bortz, D.M., Messenger, D.A., Dukic, V.: Direct Estimation of Parameters in ODE Models Using WENDy: Weak-form Estimation of Nonlinear Dynam-ics. Bulletin of Mathematical Biology 85 (110) (2023) https://doi.org/10.1007/ S11538-023-01208-6 [24] Rummel, N., Messenger, D.A., Becker, S., Dukic, V., Bortz, D.M.: WENDy for Nonlinear-in-Parameter ODEs. arXiv:2502.08881 (2025) arXiv:2502.08881 [25] Heitzman-Breen, N., Dukic, V., Bortz, D.M.: A Practical Identifiability Criterion Leveraging Weak-Form Parameter Estimation. Bulletin of Mathematical Biology 
+
+88 (5), 70 (2026) https://doi.org/10.1007/s11538-026-01639-x [26] Messenger, D.A., Tran, A., Dukic, V., Bortz, D.M.: The Weak Form Is Stronger Than You Think. SIAM News 57 (8) (2024) [27] Bortz, D.M., Messenger, D.A., Tran, A.: Weak form-based data-driven modeling: Computationally Efficient and Noise Robust Equation Learning and Parameter Inference. In: Mishra, S., Townsend, A. (eds.) Numerical Analysis Meets Machine Learning. Handbook of Numerical Analysis, vol. 25, pp. 54–82. Elsevier, ??? (2024) [28] Richard, P.: The rhythm of yeast. FEMS Microbiology Reviews 27 (4), 547–557 (2003) https://doi.org/10.1016/S0168-6445(03)00065-2 22 
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+[29] Yuan, Z., M¨ uller, S.C., Hess, B.: Oscillating enzyme-bound NADH in glycoly-sis. FEBS Letters 249 (2), 159–162 (1989) https://doi.org/10.1016/0014-5793(89) 80615-5 [30] Hommes, F.A.: Oscillatory reductions of pyridine nucleotides during anaerobic glycolysis in brewers’ yeast. Archives of Biochemistry and Biophysics 108 (1), 36–46 (1964) https://doi.org/10.1016/0003-9861(64)90352-2 [31] Chance, B., Estabrook, R.W., Ghosh, A.: Damped sinusoidal oscillations of cyto-plasmic reduced pyridine nucleotide in yeast cells. Proceedings of the National Academy of Sciences 51 (6), 1244–1251 (1964) https://doi.org/10.1073/pnas.51. 6.1244 [32] Olsen, L.F., Andersen, A.Z., Lunding, A., Brasen, J.C., Poulsen, A.K.: Regulation of Glycolytic Oscillations by Mitochondrial and Plasma Membrane H+-ATPases. Biophysical Journal 96 (9), 3850–3861 (2009) https://doi.org/10.1016/j.bpj.2009. 02.026 [33] ¨Ozalp, V.C., Pedersen, T.R., Nielsen, L.J., Olsen, L.F.: Time-resolved Measure-ments of Intracellular ATP in the Yeast Saccharomyces cerevisiae using a New Type of Nanobiosensor. Journal of Biological Chemistry 285 (48), 37579–37588 (2010) https://doi.org/10.1074/jbc.M110.155119 [34] Prokop, B., Gelens, L.: Replication Data for:”From Biological Data to Oscillator Models Using SINDy”. KU Leuven RDR, V1 (2024). https://doi.org/10.48804/ SB7TNU [35] The MathWorks Inc.: Optimization Toolbox Version: 26.1 (R2026a). https:// www.mathworks.com [36] Bhatia, S., Monkman, J., Blick, T., Pinto, C., Waltham, M., Nagaraj, S.H., Thompson, E.W.: Interrogation of Phenotypic Plasticity between Epithelial and Mesenchymal States in Breast Cancer. Journal of Clinical Medicine 8(6), 893 (2019) https://doi.org/10.3390/jcm8060893 [37] Messenger, D.A., Dwyer, G., Dukic, V.: Weak-form inference for hybrid dynamical systems in ecology. Journal of The Royal Society Interface 21 (221), 20240376 https://doi.org/10.1098/rsif.2024.0376 [38] Engl, H.W., Hanke, M., Neubauer, A.: Regularization of Inverse Problems. Math-ematics and Its Applications, vol. v. 375. Kluwer Academic Publishers, Dordrecht ; Boston (1996) [39] Brunton, S.L., Proctor, J.L., Kutz, J.N.: Discovering governing equations from data by sparse identification of nonlinear dynamical systems. Proceedings of the National Academy of Sciences 113 (15), 3932–3937 (2016) https://doi.org/10. 1073/pnas.1517384113 23 
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+[40] Rudy, S.H., Brunton, S.L., Proctor, J.L., Kutz, J.N.: Data-driven discovery of partial differential equations. Science Advances 3(4), 1602614 (2017) https://doi. org/10.1126/sciadv.1602614 [41] Tran, A., Bortz, D.: Weak Form Scientific Machine Learning: Test Function Construction for System Identification. arXiv (2025). https://doi.org/10.48550/ arXiv.2507.03206 [42] Atkinson, K.: An Introduction to Numerical Analysis, 2nd edn. Wiley, New York, NY (1989) 
+
+# Appendix A Test function customization and other hyperparameters 
+
+The wendy defaults.m script handles the WENDy test function and solver hyper-parameters, both of which could be adjusted for particular problems of interest. The defual functional form of the test function ϕ is the polynomial test function 
+
+ϕpoly (v) = (1 − v2)p. We set as default p = 12 which results in an approximate bump function that is C11 -smooth. Generally, higher values of p result in narrower bumps and therefore more aggressive smoothing. The script builds one testfcn object per trajectory and per state variable. The ‘meth’ parameter (default ‘FFT’ ) tells the con-structor to choose the test function’s support radius using the spectrum of the data, selecting the smallest support that captures the signal content above a threshold (see [21, 22] for a mathematical description). Each testfcn object precomputes and stores the convolution weights for ϕ and its needed derivatives, as well as the set of valid interior grid points where the test function’s support does not extend beyond the data boundaries. Additionally, there are several hyperparameters for the WENDy algorithm whose default values are preset in wendy defaults.m . The max IRLS iteration cap is set by maxits (defualt 100). The ittol parameter (default value 10 −4) sets the relative convergence tolerance, i.e., the iteration terminates when 
+
+∥wn+1 − wn∥2
+
+∥wn∥2
+
+≤ ittol .
+
+The parameter diag reg (default value 0) adds a diagonal regularization to the covari-ance matrix before inversion, the default value being 0 disables this regularization. The boolean parameter trim rows toggles outlier-trimming which removes rows of the weak-form linear system whose leverage or residual exceeds a data-driven thresh-old, improving robustness when individual test function placements are corrupted by boundary effects or data artifacts. Finally, cov params is a 1 × 2 array which toggles statistical corrections in the WENDy algorithm. The first entry tells WENDy to cor-rect for the heteroscedastic residual covariance at each iteration while the second entry tells WENDy to account for the bias introduced by noise in the feature matrix G.24 
+
+> .CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
+
+# Appendix B Code Organization 
+
+Table B1 Description of the objects used in the code for this paper. 
+
+Object Main Responsibilities 
+
+wsindy data Wraps a single trajectory’s observed state vector and time grid. Stores grid metadata (spacing, uniformity, dimension) that downstream objects query when building convolution weights and determining valid index ranges. One object is created per trajectory. 
+
+term Represents a scalar function of the state, optionally paired with a differen-tial operator. Used to define each candidate right-hand side function and each component of the left-hand side. The optional linOp parameter encodes derivative order, triggering integration by parts in the weak form. 
+
+addterm term subclass representing the sum of two term objects. Used in the creation of the left-hand side in Listing 5. 
+
+library Collects the right-hand side term objects into an ordered list. Each term becomes one column of the feature matrix G when the model is assembled. 
+
+testfcn Discretizes the weak-form pairing ⟨ϕ, ·⟩ for a given data object. Precomputes convolution weights from the test function ϕ and its derivatives, determines the support radius, and identifies the valid interior indices. 
+
+wendy model Assembles the weak-form linear system Gw ≈ b from the data, library, test functions, and left-hand side. Concatenates the per-trajectory systems into a single overdetermined problem. Also stores the Hessian factors needed for iterative covariance estimation. Subclass of wsindy model .
+
+WS opt Solver class. Its wendy method runs the iteratively reweighted least squares loop: at each iteration it estimates the residual covariance C(w), whitens the system via its Cholesky factor, and re-solves the GLS problem subject to box constraints. Returns the learned weights, iterate history, asymptotic covariance, and the final Cholesky factor. 
+
+# Appendix C Confidence Interval Generation 
+
+25 
+
+.CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint Table B2 Outputs of WS Opt().wendy 
+
+Variable Shape Description 
+
+w its J × I IRLS history of the weight vector w(i). Column 1 is the OLS ini-tialization and the final column is the terminal weight coinciding with WS.weights .
+
+res K × d Covariance corrected residual history at each IRLS iteration. 
+
+res 0 K × d Uncorrected residual history at each IRLS iteration. 
+
+CovW J × J Estimated parameter covariance matrix. 
+
+RT d × d Lower-triangular Cholesky factor of the residual covariance. When 
+
+cov params(1) = 0, this reduces to a scaled identity matrix. Parameter Method CI Method p1 p2 p3 p4 p5
+
+WENDy covariance matrix [108 .96 , [35 .56 , [30 .66 , [75 .36 , [25 .74 ,
+
+109 .04] 35 .59] 30 .78] 75 .38] 25 .77] bootstrap [108 .95 , [35 .56 , [30 .65 , [75 .36 , [25 .74 ,
+
+109 .05] 35 .30] 30.79] $ 75 .38] 25 .77] lsqnonlin covariance matrix [129 .72 , [28 .02 , [64 .77 , [71 .75 , [21 .85 ,
+
+132 .49] 28 .60] 69 .83] 72 .19] 22 .32] bootstrap [131 .6, [28 .18 , [68 .23 , [71 .99 , [22 .16 ,
+
+137 .03] 28 .35] 78 .65] 72 .32] 22 .36] 
+
+Table C3 Comparison of 95% confidence intervals for parameters estimated via WENDy or lsqnonlin for model (2.1) calculated with covariance matrix approximation or through parametric bootstrapping (see Section 4.3). ParameterMethod CI Method CI Method tm × 10 −2 te × 10 −2 re σ μ                                                
+
+> WENDy G&T covariance matrix [7 .89 ,[10 .06 ,[3 .3851 ,
+> --7.93] 10 .14] 3.3882] bootstrap [5 .39 ,[11 .08 ,[2 .91 ,
+> 15 .82] 17 .97] 3.59] GI&T covariance matrix [6 .56 ,[8 .21 ,
+> fixed [0 .496 ,[−0.2575 ,
+> 6.61] 8.30] 0.496] −0.2575] bootstrap [5 .83 ,[8 .28 ,[0 .1978 ,[−0.4076 ,
+> 15 .33] 13 .17] 0.9689] −0.1418] lsqnonlin G&T covariance matrix [7 .43 ,[10 .03 ,[3 .572 ,
+> --7.72] 10 .36] 3.5926] bootstrap [5 .10 ,[3 .96 ,[2 .96 ,
+> 15 .08] 17 .71] 4.06] GI&T covariance matrix [6 .38 ,[8 .59 ,
+> fixed [0 .4203 ,[−0.2482 ,
+> 6.89] 9.23] 0.4385] −0.2146] bootstrap [2 .72 ,[8 .76 ,[0 .0035 ,[−0.4265 ,
+> 13 .27] 17 .77] 0.6850] −0.0839]
+
+Table C4 Comparison of 95% confidence intervals for parameters estimated via WENDy or lsqnonlin for models (1) and (2) calculated with covariance matrix approximation or through parametric bootstrapping (see Section 4.3). 
+
+26 
+
+.CC-BY-NC 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 3, 2026. ;https://doi.org/10.64898/2026.07.02.735880 doi: bioRxiv preprint
