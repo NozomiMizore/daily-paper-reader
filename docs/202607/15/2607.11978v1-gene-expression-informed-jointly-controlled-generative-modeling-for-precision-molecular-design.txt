@@ -1,0 +1,456 @@
+Title: Gene Expression-Informed Jointly Controlled Generative Modeling for Precision Molecular Design
+
+URL Source: https://arxiv.org/pdf/2607.11978v1
+
+Published Time: Wed, 15 Jul 2026 11:55:17 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Gene Expression–Informed Jointly Controlled Generative Modeling for Precision Molecular Design 
+
+# Hang Yuan 
+
+School of Artificial Intelligence South China Normal University Foshan, Guangdong, China D3 Center The University of Osaka Suita, Osaka, Japan 
+
+# Chen Li ∗
+
+D3 Center The University of Osaka Suita, Osaka, Japan 
+
+# Wenjun Ma 
+
+School of Artificial Intelligence South China Normal University Foshan, Guangdong, China School of Computer Science South China Normal University Guangzhou, Guangdong, China 
+
+# Tadahiko Murata 
+
+D3 Center The University of Osaka Suita, Osaka, Japan 
+
+# Yuncheng Jiang ∗
+
+School of Artificial Intelligence South China Normal University Foshan, Guangdong, China School of Computer Science South China Normal University Guangzhou, Guangdong, China 
+
+## Abstract 
+
+Precision molecular design aims to discover personalized drug can-didates through joint control of multiple conditions, such as biolog-ical relevance and molecular design strategies. Biological relevance reflects cellular functional states under disease or perturbation conditions, while molecular design strategies provide complemen-tary guidance in terms of structural intentions and property opti-mization. In this study, we propose JoPMol , a jo intly controlled 
+
+precision mol ecular generative model that integrates biological states encoded by gene expression profiles with molecular structure information expressed in text, and chemical properties quantified by numerical values within a unified modeling framework. This formulation enables coordinated generation and optimization of candidate molecules under joint condition control. Experimental results show that JoPMol outperforms state-of-the-art methods across multiple evaluation metrics. Moreover, JoPMol demonstrates strong generalization ability in both transfer tasks and biologically grounded simulation scenarios, validating its effectiveness for pre-cision molecular design. The source code is publicly available at https://github.com/hala-yh/JoPMol. 
+
+## 1 Introduction 
+
+Precision molecular design has attracted increasing attention in per-sonalized drug discovery, aiming to generate candidate molecules that are both biologically relevant and chemically feasible under multiple design constraints [ 41 ]. In practice, the effectiveness of a drug candidate depends on several complementary factors, includ-ing its compatibility with biological systems [ 15 , 21 ], its structural information [ 6 , 7], and its chemical properties [ 13 , 29 ]. Capturing these diverse aspects typically requires information from multiple heterogeneous sources that describe different facets of the drug discovery process [ 42 ]. Effectively integrating such heterogeneous information remains a challenge for precision molecular design. 
+
+> ∗Chen Li and Yuncheng Jiang are the corresponding authors.
+
+From a biological perspective, gene expression profiles provide valuable information about disease states and cellular responses to drug perturbations, offering biologically grounded guidance for precision molecular design [ 24 , 27 ]. These genetic signatures cap-ture complex cellular phenotypes and have increasingly been used to inform drug discovery and molecular design [ 15 ]. However, gene expression profiles inherently exhibit high dimensionality, substan-tial noise, and complex inter-gene dependencies without explicit structural correspondence to molecules [ 21 ]. Moreover, expression patterns vary significantly across disease types and individual pa-tients, further increasing variability in the underlying biological signals [ 16 ]. These characteristics make it challenging to extract reliable and structurally relevant features for guiding molecular design when relying solely on gene expression profiles. Beyond biological context, precision molecular design also needs to consider structural design intentions [ 36 ] and chemical property optimization [ 23 ]. One line of research approaches this problem through text-driven molecular design, where natural language de-scriptions are used to express structural requirements such as func-tional groups or molecular structures [ 14 , 25 ]. These descriptions provide an interpretable interface that allows researchers to commu-nicate design intentions in a flexible and human-readable manner [ 39 ]. However, structural design intentions are typically defined at the molecular level and lack explicit alignment with disease-specific biological contexts, limiting their ability to provide precise guidance for therapeutic objectives [ 6]. Consequently, text-driven approaches tend to focus on satisfying structural constraints, while overlooking the optimization of biologically relevant and phar-macologically important properties. Quantitative properties such as solubility, synthesizability, and drug-likeness provide measur-able optimization objectives that encourage generated molecules to satisfy practical design criteria [ 17 ]. Property-guided approaches therefore enable models to explore chemically meaningful regions of the molecular design space [ 12 , 19 ]. Nevertheless, optimizing numerical properties alone often focuses on theoretical objectives 
+
+> 1arXiv:2607.11978v1 [cs.LG] 13 Jul 2026 Yuan et al.
+
+defined in chemical space, without incorporating biological informa-tion from real cellular systems. As a result, designed molecules may satisfy predefined property constraints but remain disconnected from the biological contexts in which drugs ultimately function. These signals indicate the importance of integrating multiple sources of information for precision molecular design. However, most existing molecular design frameworks rely on a single source of information or only partially incorporate multiple design con-ditions [ 28 ]. Biological guidance, structural design intentions, and chemical properties originate from heterogeneous modalities with distinct semantic roles and representation spaces, and are therefore often treated in isolation. Such practices fail to capture their intrin-sic dependencies and complementary effects, leading to suboptimal control over molecular design [ 37 ]. In particular, to the best of our knowledge, there is currently no molecular design framework that jointly integrates gene expression profiles, structural design inten-tions, and chemical properties within a unified generative model. Two key challenges contribute to this limitation. First, these modal-ities are typically collected from independent data sources, lacking unified and well-aligned datasets that jointly capture biological signals, structural intentions, and chemical properties. Second, they differ fundamentally in representation spaces and semantic granu-larities, which makes their coordinated modeling within a unified generative framework inherently challenging. To address these limitations, we propose JoPMol , a jo intly controlled precision mol ecular generative model for precision molecular design. JoPMol jointly conditions molecular design on three complementary sources of information: biological states en-coded by gene expression profiles, structural design intentions expressed in text, and chemical optimization objectives specified by numerical property values. To effectively integrate these hetero-geneous signals, JoPMol employs source-specific feature extractors to learn modality-aware representations and introduces a bidirec-tional cross-attention mechanism to enable cross-modal interaction and information fusion. The resulting unified representation is used to guide a diffusion-based molecular generator, enabling end-to-end molecular design and optimization under multiple design constraints. The main contributions are summarized as follows: 
+
+• Jointly controlled precision molecular design : We introduce a jointly controlled generation approach under a multi-condition setting, enabling precision molecular design that simultaneously accounts for biological relevance, structural design intentions, and property optimization targets. 
+
+• Integration of design and optimization objectives : We pro-pose JoPMol, which learns latent representations of heteroge-neous control signals and incorporates chemical properties as optimization objectives, enabling jointly controlled molecular design and optimization in a unified framework. 
+
+• Superior performance for precision molecular design : JoP-Mol consistently outperforms state-of-the-art (SOTA) baselines across multiple evaluation metrics and diverse experimental set-tings, demonstrating its effectiveness and robustness for preci-sion molecular design. 
+
+## 2 Related Works 2.1 Gene-Guided Molecular Design 
+
+Gene expression profiles characterize cellular responses to molecu-lar perturbations, providing biologically relevant signals for molec-ular design [ 27 ]. These profiles provide a biologically grounded representation of disease states, making them a promising yet chal-lenging signal for guiding molecular design in practice. TRIOMPHE [ 15 ] retrieves proxy molecules associated with gene expression profiles that are most similar to a target profile and uses them as in-puts to a variational autoencoder (VAE) [ 32 ] to generate molecules. Such profiles do not directly participate in the generation process, and similarity-based retrieval provides only a coarse approxima-tion of complex biological conditions. In contrast, Gx2Mol [ 22 ]establishes an end-to-end mapping between genes and molecular structures, while GxVAEs [ 21 ] further extend this line of work by jointly modeling gene expression profiles and inducing molecules using dual VAEs. Although these methods demonstrate the feasi-bility of leveraging biological signals for molecular design, they still treat gene expression profiles as the sole conditioning input and lack explicit mechanisms to jointly integrate structural design intentions and chemical property optimization within a unified generative framework [ 9]. As a result, their ability to support coor-dinated optimization under joint condition control remains limited in precision molecular design. 
+
+## 2.2 Text-Based Molecular Design 
+
+Text-based structural intentions provide an interpretable interface for specifying structural patterns of molecules, enabling control-lable molecular generation beyond purely data-driven representa-tions in a flexible and human-interpretable manner [ 4]. MolT5 [ 6]adopts a Transformer-based architecture to map natural language descriptions into molecular sequences. Notably, its autoregres-sive decoding paradigm often suffers from error sequence sort-ing and limited controllability over fine-grained structural mod-eling. Text+ChemT5 [ 3 ] enhances modeling capability through a multitask framework that jointly integrates chemical and natural language representations, but it remains constrained by autore-gressive generation, making it difficult to balance semantic fidelity and structural consistency. TGM-DLM [ 7 ] adopts a diffusion-based framework to avoid the limitations of autoregressive generation. It realizes text-based molecular design through iterative denoising and conditional guidance, and further applies a nearest-neighbor projection to map continuous latent representations onto discrete molecular tokens, enabling the recovery of molecular sequences. Such methods show the feasibility of using natural language descrip-tions to express structural design intentions for precision molecular design. However, most existing text-guided models do not explicitly coordinate structural intentions with physicochemical property op-timization or biological context, which limits their ability to support coherent and stable control under multiple design objectives. 
+
+## 2.3 Property-Oriented Molecular Design 
+
+Explicit numerical property values provide direct and quantitative optimization targets for molecular design, enabling fine-grained 
+
+> 2Gene Expression–Informed Generative Modeling
+
+Figure 1: Overview of the jointly controlled molecular generation framework for precision molecular design. (a) Joint condition control: Three jointly controlled conditions are extracted, including gene expression profiles, textual structural intentions, and numerical property values. These complementary signals characterize biological relevance and molecular design strategies. (b) Multi-condition learning: Biological and structural representations are used, and then the resulting features are further integrated with chemical property embeddings to form a joint conditional representation. (c) Conditioned diffusion generation. The joint control embedding z𝑐 guides the reverse diffusion process to progressively refine molecular representations, enabling precise molecular design and property optimization. 
+
+control over properties in a controllable and interpretable man-ner [ 10 ]. MolSearch [ 34 ] formulates the generation as a neural search process, iteratively producing and scoring candidate molecules to refine property optimization trajectories, but relies on heuris-tic scoring and does not preserve molecular semantic structures during optimization. DyMol [ 33 ] adopts a reinforcement learning algorithm that updates policies based on oracle feedback to optimize properties under conditions, while the learning process remains sen-sitive to reward design and exhibits limited structural controllability. FRATTVAE [ 13 ] incorporates structure-aware attention into VAEs to improve property-controllable design. Nevertheless, property constraints are not aligned with structural semantics, which limits fine-grained structural control [ 1]. Moreover, such methods focus on single properties or limited property combinations and struggle to effectively coordinate with complex biological signals or design strategies, limiting their application in multi-condition molecular design. In this study, we establish jointly controlled conditions by as-sociating gene expression profiles with structural design intentions, and incorporate numerical property values as explicit optimization objectives into the precision molecular design framework. 
+
+## 3 Methodology 3.1 Problem Definition 
+
+Precision molecular design aims to generate candidate molecules that satisfy multiple objectives under heterogeneous conditions, including biological relevance, structural intentions, and chemical property requirements. We formalize these heterogeneous design conditions as three types of inputs. Specifically, biological relevance is represented by a gene expression profile G = [𝑔 1, 𝑔 2, . . . , 𝑔 𝐾 ] ∈ 
+
+R𝐾 , where 𝐾 denotes the number of genes and 𝑔 𝑘 represents the expression value of the 𝑘 -th gene. Structural intentions are repre-sented as a textual sequence S = [𝑠 1, 𝑠 2, . . . , 𝑠 𝑁 ], where 𝑁 denotes the sequence length and each 𝑠 𝑛 corresponds to a token describ-ing molecular design intent. Chemical property requirements are represented as a property vector P = [𝑝 1, 𝑝 2, . . . , 𝑝 𝐼 ] ∈ R𝐼 , where 
+
+𝐼 denotes the number of selected properties and 𝑝 𝑖 represents a numerical chemical property. The target is a molecular sequence 
+
+X = [𝑥 1, 𝑥 2, . . . , 𝑥 𝑀 ], represented in SELFIES, where 𝑀 denotes the maximum sequence length and 𝑥 𝑚 is a discrete token. The objective is to learn a conditional generative model 𝑝 𝜃 (X | G, S, P), which en-ables controllable molecular generation under jointly conditioned heterogeneous modalities, including gene expression profiles, struc-tural design intentions, and chemical property constraints. 
+
+Theory Motivation : Recent studies in complex systems and representation learning suggest that effective modeling of complex phenomena requires decomposing the system into modules with distinct functional roles [ 2, 8 ]. Instead of forcing heterogeneous signals into a unified representation, a modular and compositional perspective advocates modeling different factors separately accord-ing to their roles in the generation process. We adopt this perspec-tive for precision molecular design. Gene expression profiles G and structural design intent S provide rich semantic information that constrains the space of feasible molecular structures by specifying biological context and structural requirements. In contrast, chemi-cal properties P exhibit a many-to-one relationship with molecular structures, where diverse molecules can share similar property val-ues. As a result, property signals alone are insufficient to determine structure, and instead act as constraints that bias the generation toward desired objectives. This functional distinction leads to a structured formulation: 
+
+𝑝 (X | G, S, P) = 𝑝 (X | Zsem , P), Zsem = 𝑓 (G, S), (1) 
+
+> 3Yuan et al.
+
+where 𝑓 (·) denotes a learnable mapping that integrates gene ex-pression profiles and structural intent into a unified semantic rep-resentation, and Zsem captures the resulting structural semantics under biological context. The property vector P modulates the gen-eration process as a separate conditioning signal without directly determining the structure. Following this observation, JoPMol adopts a hierarchical multi-modal fusion strategy, where the aligned features of gene expression profiles and structural design intentions Zsem are first integrated to construct semantic information, and property signals are intro-duced as optimization objectives to guide the conditional diffusion process, enabling jointly controlled molecular design under het-erogeneous conditions. Figure 1 illustrates the JoPMol framework designed based on this principle, consisting of three key compo-nents. The joint condition control module parses and organizes jointly controlled conditions. The multi-condition learning module performs representation learning over multiple control signals and constructs unified conditional representations. The conditioned diffusion generation module enables precise molecular design and property optimization under joint control. 
+
+## 3.2 Joint Condition Modeling 
+
+We formulate molecular generation under joint control by con-structing a unified condition tuple C = (G, S, P, X), which integrates biological response signals, structural design intent, and property optimization targets. Given an induced molecule, its perturbation elicits transcriptional responses in cells, resulting in a differential gene expression profile G that reflects the underlying biological state. The molecule itself is represented as a SELFIES sequence X
+
+[ 20 ]. To associate biological signals with explicit design strategies, we derive structural intentions and optimization objectives from the molecule. A structural design intent S is generated using BioT5 [ 30 ], adapted using the PubChem database [ 18 ], to express struc-tural patterns and drug-like characteristics. All generated structural descriptions are manually reviewed, with detailed annotation pro-cedures provided in Appendix B. In addition, a set of quantitative chemical properties P is computed to provide interpretable opti-mization targets for molecular design. This joint condition formula-tion establishes a coherent connection between biological response, structural semantics, and property constraints, enabling controlled molecular design under heterogeneous conditions. 
+
+## 3.3 Multi-Condition Learning 
+
+We realize the Zsem = 𝑓 (G, S) by learning a unified representa-tion that integrates biological relevant and structural intent, while treating chemical properties P as separate conditioning signals. 
+
+Biological Representation Learning. Gene expression pro-files exhibit high dimensionality and substantial noise, making it challenging to directly employ them as conditioning signals for generative modeling [ 21 ]. We adopt a VAE to learn a compact and smooth biological latent representation. The VAE encodes G
+
+into a latent variable z𝑔 , which captures essential transcriptomic patterns while filtering out spurious variations. By enforcing a continuous and approximately Gaussian latent manifold, the VAE provides well-behaved conditioning signals that are compatible with diffusion-based generative modeling and improve sampling stability under heterogeneous biological conditions [ 35 ]. The VAE encoder is trained by minimizing the evidence lower bound:                    
+
+> LG=E𝑞 𝜙 (z𝑔 |G)
+> hˆG−G22
+> i
+> +𝛽 KL  𝑞 𝜙 (z𝑔 |G) ∥ 𝑝 (z𝑔 ),(2)
+
+where 𝑞 𝜙 (·) denotes the encoder posterior distribution, ˆG is the reconstructed gene expression, 𝑝 (·) is the prior distribution, and 
+
+𝛽 controls the strength of latent regularization. The learned latent variable z𝑔 provides a continuous and biological embedding space that facilitates interpolation and generalization across heteroge-neous perturbation conditions. For compatibility with token-based attention mechanisms, z𝑔 is further reshaped and projected into a token-level biological embedding Z𝑔 ∈ R𝑇 𝑔 ×𝐷 , where 𝑇 𝑔 represents the number of tokens, and 𝐷 denotes the embedding dimension. 
+
+Structural Design Intention Representation Learning. Struc-tural design intentions are derived from the induced molecule and expressed as semantic descriptions that encode molecular structures. We employ BioLink-BERT [ 40 ] to transform the struc-tural semantic representation S into a contextualized embedding 
+
+Z𝑠 = 𝑓 𝑆 (S) ∈ R𝑇 𝑠 ×𝐷 , where 𝑓 𝑆 (·) denotes the BioLink-BERT en-coder, 𝑇 𝑠 represents the number of structural tokens. The resulting embedding Z𝑠 provides interpretable structural guidance that com-plements the latent biological representation. 
+
+Biological–Structural Semantic Alignment. To construct the unified semantic representation Zsem = 𝑓 (G, S), we employ a bi-directional cross-attention mechanism that enables reciprocal information exchange between Z𝑔 and Z𝑠 . Specifically, biological features attend to structural semantics as Z′ 
+
+> 𝑔
+
+= Z𝑔 + CA (Z𝑔 , Z𝑠 , Z𝑠 ),allowing gene-level representations to absorb structurally relevant information, where CA (·) denotes the multi-head cross-attention operator. Structural features attend to biological representations as Z′ 
+
+> 𝑠
+
+= Z𝑠 + CA (Z𝑠 , Z𝑔 , Z𝑔 ), enabling structural tokens to become aware of underlying biological contexts. This reciprocal interaction promotes mutual calibration between conditions. 
+
+Joint Conditional Representation Construction. Follow-ing the distinction between structural infomation and property constraints, we decouple semantic representation learning from property conditioning. After semantic alignment, biological and structural features are aggregated and normalized to form a unified semantic context. Rather than adopting an early-fusion strategy that entangles heterogeneous modalities, we preserve the semantic hierarchy by isolating structural representation from quantitative objective control. Chemical properties P are projected into the la-tent space via a linear mapping 𝑓 proj (·) to produce property control tokens, which are incorporated as prefix conditioning signals. This design enables explicit and stable regulation of molecular properties without disrupting the underlying semantic structure. The joint conditional representation is constructed as: 
+
+Zc =
+
+h
+
+𝑓 proj (P) ⊕ LN  Z′ 
+
+> 𝑔
+
+⊕ Z′
+
+> 𝑠
+
+i
+
+, (3) where ⊕ denotes concatenation along the token dimension and 
+
+LN (·) denotes layer normalization. The resulting Zc serves as the unified conditioning representation for the subsequent diffusion-based molecular generator, enabling integrated design and property-oriented optimization under jointly controlled conditions. 
+
+> 4Gene Expression–Informed Generative Modeling
+
+## 3.4 Jointly Controlled Generative Modeling 
+
+We embed the SELFIES sequence X of the molecule into a continu-ous latent space and perform diffusion on the resulting embeddings, enabling modeling of discrete molecular sequences. Specifically, the tokens are mapped into embeddings E0 = Emb (X) ∈ R𝐿 ×𝐷 , where 
+
+𝐿 denotes the sequence length. Following the standard forward diffusion process, Gaussian noise is integrated as 
+
+E𝑡 = √ ¯𝛼 𝑡 E0 + √1 − ¯𝛼 𝑡 𝝐 , 𝝐 ∼ N ( 0, I), (4) where ¯𝛼 𝑡 denotes the cumulative noise schedule. JoPMol is trained to learn a jointly conditioned denoising net-work 𝜖 𝜃 (E𝑡 , 𝑡 ; Zc) to predict the noise, conditioned on the joint control representation Zc and the diffusion timestep 𝑡 . Let ˆE0 be the recovered clean embedding. The overall jointly controlled training objective is formulated as 
+
+L = E𝑡, 𝝐 
+
+h
+
+∥𝝐 − 𝜖 𝜃 (E𝑡 , 𝑡 ; Zc)∥ 22 + L con ( ˆE0, X) + L 𝑇 + 𝜆 Lcos 
+
+i
+
+, (5) where the first term corresponds to the standard denoising objective in diffusion models. Lcon enforces discrete token consistency via vocabulary logits, and L𝑇 stabilizes the terminal diffusion We fur-ther introduce a cosine alignment loss Lcos to encourage semantic consistency between the biological-related and structural-related representations in the shared semantic space. The weighting co-efficient 𝜆 controls the contribution of the alignment objective, balancing biological and structural signals in the model. At 𝑡 = 0,we match the predicted embedding with the original embedding to further stabilize discrete reconstruction in JoPMol. 
+
+## 4 Experiments 4.1 Experimental Setup 
+
+Datasets. Three cancer-related datasets were used. Each dataset consists of a 978-dimensional gene expression profile, the corre-sponding molecule represented in SELFIES format, structural design intentions, and numerical chemical property values. Table 1 reports dataset statistics, with more details in Appendix A. 
+
+Table 1: Statistics of the datasets. MLen: average SELFIES length; GDim: gene expression dimensionality; TLen: average structural text length; MW: average molecular weight.                                    
+
+> Dataset MLen GDim TLen MW LogP SA QED TrainSet 254 978 85 432 2.81 3.56 0.59 TestSet 211 978 85 355 3.32 2.80 0.62 TransferSet 249 978 78 397 3.70 2.69 0.56 DiseaseSet 272 884 54 463 0.22 4.30 0.40
+
+• TrainSet and TestSet are collected from a human breast cancer cell line under diverse chemical perturbations, comprising 13,755 small molecules [ 5], randomly split at a ratio of 9:1 for training and evaluation of JoPMol. 
+
+• TransferSet constructed using data from the same breast cancer cell line under genetic perturbations, including gene overexpres-sion (AKT1, AKT2, AURKB, CTSK, EGFR, HDAC1, MTOR, and PIK3CA) and gene knockdown (SMAD3 and TP53), used to ana-lyze the structural consistency between designed molecules and target-associated ligands in transfer tasks. 
+
+• DiseaseSet derived from the CREEDS database [ 38 ], constructed by averaging gene expression profiles from multiple gastric can-cer patients, used as a disease-level case study for evaluating model performance in biologically grounded and clinically rele-vant simulation scenarios. 
+
+Evaluation Measures. We evaluate the quality of the designed molecules from four complementary perspectives, including molec-ular structure, molecular sequence representation, chemical prop-erties, and statistical metrics. 
+
+• Structure consistency : ECFP (extended-connectivity finger-prints) is used to quantify the consistency of local substructures between designed molecules and the targets. APFP (atom pair fingerprints) encodes atom-type pairs together with their topo-logical distances, effectively capturing global structural charac-teristics. Dice is employed to compute the similarity between two APFP representations for structural comparison. 
+
+• Sequence similarity: BLEU measures the n-gram overlap be-tween produced SELFIES sequences and the target sequences. 
+
+Leven (Levenshtein) distance quantifies the minimum number of edit operations required to transform a generated SELFIES into the corresponding target sequence, while LCS (longest common subsequence) evaluates overall sequential consistency. 
+
+• Property optimization: LogP characterizes molecular lipophilic-ity, SA reflects synthetic accessibility, and QED measures overall drug-likeness. These properties are selected as they capture com-plementary aspects of molecular quality, including pharmacoki-netic behavior, synthetic feasibility, and overall drug-likeness, and are widely adopted in molecular generation studies. Greater agreement between the average property values of designed molecules and the corresponding test-set statistics indicates im-proved distributional consistency and controllability. 
+
+• Overall statistics: Diversity measures structural diversity among candidate molecules. Total score integrates validity, uniqueness, and novelty, providing an overall measure of molecular design performance. FCD (Fréchet ChemNet distance) quantifies the dis-tributional similarity between designed molecules and the targets in the learned chemical feature space. Rank is obtained by aver-aging each model’s ranking positions across all metrics, where a lower rank indicates better overall performance. Additional details are provided in Appendix D. 
+
+Implementation Details. JoPMol is implemented in PyTorch. The gene encoder adopts multi-layer feedforward architectures with a final latent embedding dimension of 64. Structural inten-tions are encoded into fixed-length semantic representations, while SELFIES tokens are embedded into a 32-dimensional trainable em-bedding space with a maximum sequence length of 256. The joint conditional diffusion is trained for 2,000 timesteps using a cosine noise schedule and optimized with AdamW at a learning rate of 
+
+1 × 10 −4 and a dropout rate of 0.1 for regularization. A uniform skip-sampling strategy is adopted during reverse diffusion to im-prove sampling efficiency and generation stability. We analyze the sensitivity of the weighting coefficient 𝜆 in Table E.1. We observe that when 𝜆 is set to 0.3, the model achieves the best performance in cross-modal alignment. More details are provided in Appendix E. 
+
+> 5Yuan et al.
+
+Table 2: Comparison of JoPMol with baseline methods across structure consistency, sequence similarity, property optimization, and overall statistics. Best results are highlighted in bold, and second-best results are underlined. 
+
+Method Structure Consistency Sequence Similarity Property Optimization Overall Statistics ECFP ↑ APFP ↑ Dice ↑ BLEU ↑ Leven ↓ LCS ↑ LogP SA QED Diversity ↑ Total ↑ FCD ↓ Rank ↓
+
+TRIOMPHE [15] 0.17 0.32 0.27 0.24 33.53 0.51 3.55 3.40 0.54 80.77 0.35 27.49 7.17 Gx2Mol [22] 0.19 0.36 0.28 0.30 31.32 0.56 2.96 3.51 0.59 85.63 0.55 26.41 5.83 GxVAEs [21] 0.22 0.36 0.26 0.43 30.53 0.58 2.95 3.63 0.59 84.73 0.68 25.54 5.42 Molsearch [34] 0.12 0.26 0.21 0.14 39.41 0.32 4.68 3.29 0.47 86.23 0.82 10.92 7.33 DyMol [33] 0.11 0.24 0.20 0.13 38.99 0.32 2.44 3.09 0.73 87.54 0.82 13.05 7.17 FRATTVAE [13] 0.11 0.25 0.19 0.28 42.03 0.34 3.34 3.23 0.58 88.62 0.93 14.80 6.08 MolT5 [6] 0.21 0.38 0.29 0.47 39.52 0.59 2.87 3.94 0.59 88.91 0.71 8.54 4.58 Text+ChemT5 [3] 0.20 0.38 0.38 0.50 42.11 0.56 3.54 4.00 0.50 87.80 0.63 10.48 5.50 TGM-DLM [7] 0.22 0.40 0.32 0.50 26.07 0.60 2.88 3.77 0.58 89.99 0.71 8.94 3.50 JoPMol 0.33 0.51 0.46 0.61 19.34 0.69 3.27 3.12 0.62 89.04 0.93 7.40 1.25 
+
+## 4.2 Overall Performance under Joint Control 
+
+To the best of our knowledge, there is no unified molecular gener-ation framework that jointly integrates gene expression profiles, structural design intentions, and chemical properties. Therefore, we select baseline models based on their input modalities, including gene-based, text-based, and property-guided approaches. Since JoP-Mol operates under a multi-condition setting, the comparison aims to evaluate the effectiveness of jointly modeling heterogeneous conditions rather than enforcing strict equivalence across inputs. Table 2 presents a comprehensive comparison between JoPMol and multiple baseline models. The results indicate that JoPMol out-performs all baselines on the six metrics related to structural con-sistency and sequence similarity. Among the six metrics associated with chemical property optimization and overall statistics, JoPMol achieves the best performance on three metrics and the second-best performance on the remaining three, demonstrating a clear overall advantage. More specifically, compared with SOTA models such as TGM and GxVAEs, JoPMol improves the ECFP score by approxi-mately 50%, indicating its ability to reliably preserve local chemical structures and design candidate molecules capable of inducing the target gene expression profiles. For property optimization, even under multi-condition control, JoPMol produces molecules whose property distributions closely match those of the test set using only numerical property values as conditioning signals, demonstrating effective property controllability and optimization. Additionally, the overall statistics indicate that JoPMol achieves high validity and novelty and attains the best overall rank among all compared methods. These results show that JoPMol exhibits stable design performance under jointly controlled settings. Furthermore, we validate the biological fidelity of the learned gene representations by reconstructing the latent features through the VAE decoder and comparing them with the original gene expres-sion profiles. The reconstructed profiles exhibit high consistency with the original ones in both distributional patterns and key ex-pression characteristics, supporting the reliability and biological plausibility of the learned representations. Detailed quantitative results and visualizations are reported in Appendix Figure F.6. 
+
+Figure 2: Representative examples of multi-condition con-trolled molecular design under gene expression profiles, structural design intentions, and numerical property val-ues for TP53 and CTSK. 
+
+We further evaluate the distributional quality of the designed molecules using RDKit and MACCS similarity metrics, as summa-rized in Appendix Table F.2. The results demonstrate that JoPMol achieves the best overall performance, indicating close alignment with the empirical molecular distribution in terms of structural coverage and feature overlap. 
+
+## 4.3 Transfer Tasks under Genetic Perturbations 
+
+To further evaluate the generalization capability and transfer sta-bility of JoPMol, we extend JoPMol to ten ligand conditions and assess its performance accordingly. Figure 2 presents two represen-tative cases corresponding to gene knockdown (TP53) and gene overexpression (CTSK) scenarios. In each case, gene expression pro-files induced by the target molecules, together with molecular de-sign strategies, jointly guide the generation of candidate molecules, which are then compared against the target molecules. In the gene knockdown scenario, the designed molecules pre-serve key functional-group patterns and achieve high structural similarity, with ECFP, APFP, and Dice scores of 0.86, 0.72, and 0.93, indicating that JoPMol effectively captures molecular structural characteristics under unseen genetic perturbations. Meanwhile, the three chemical properties of the candidate molecules remain highly consistent with those of the target molecules, demonstrating that JoPMol can effectively control chemical properties while preserving 
+
+> 6Gene Expression–Informed Generative Modeling
+
+Table 3: Ablation results at the overall statistics level under different fusion strategies and control settings. W/concat, W/cross, W/FiLM, and W/adapter denote variants that replace the multimodal fusion in JoPMol with concatenation, cross-attention, FiLM-based modulation, and Adapter-based fusion. W/gene, W/struct, and W/prop correspond to gene-controlled, structure-controlled, and property-controlled settings.                                                          
+
+> Setting Total Validity Uniqueness Novelty Diversity FCD Rank W/concat 0.90 100.0 98.84 91.56 89.02 16.80 3.33 W/cross 0.89 100.0 94.05 94.13 88.61 27.31 4.83 W/FiLM 0.89 100.0 98.11 88.90 89.00 16.07 3.17 W/adapter 0.84 100.0 90.07 94.24 85.05 23.91 6.83 W/gene 0.89 100.0 96.73 92.23 82.81 24.53 5.33 W/struct 0.86 100.0 97.31 88.27 90.58 25.32 5.17 W/prop 0.92 100.0 99.13 92.38 88.39 12.93 2.67 JoPMol 0.93 100.0 98.91 94.29 89.04 7.40 1.33
+
+structural fidelity, enabling integrated molecular generation and optimization. Additionally, in the gene overexpression scenario, JoPMol continues to design molecules with reasonable consistency in structural patterns and local functional-group configurations, achieving ECFP, APFP, and Dice scores of 0.68, 0.77, and 0.81, while maintaining strong property controllability. Experimental results for the remaining eight transfer tasks are provided in Figure F.7. Overall, JoPMol maintains both structural fidelity and property optimization capability under different types of genetic pertur-bations, demonstrating its effectiveness on transfer tasks and its potential for precision molecular design. 
+
+## 4.4 Ablation Studies on Joint Controllability 
+
+To analyze the effectiveness of different fusion strategies and the necessity of joint controllability, we conduct an extended ablation study including both fusion variants (W/concat, W/cross, W/FiLM, and W/PropAdapter) and single-control settings (W/gene, W/struct, and W/prop). Table 3 summarizes the results. 
+
+Fusion Strategies . We examine different fusion strategies and analyze their impact on joint controllability. The concatenation strategy (W/concat) aggregates heterogeneous features without explicit interaction, achieving moderate performance (Total: 0.90, FCD: 16.80) but failing to capture cross-modal dependencies. Cross-attention-based fusion (W/cross) enables dynamic alignment be-tween modalities and improves novelty to 94.13, but leads to a sub-stantially higher FCD of 27.31, indicating degraded distributional consistency. Feature-wise linear modulation (FiLM) [ 31 ] (W/FiLM) incorporates properties through feature-wise transformations and achieves more balanced performance (FCD: 16.07), suggesting im-proved stability. W/adapter injects property conditions via a light-weight adapter module [ 11 ], enhancing novelty to 94.24 but still resulting in a relatively high FCD of 23.91, as it mainly performs lo-cal modulation without global guidance. In contrast, JoPMol adopts a hierarchical fusion strategy by first jointly modeling biological and structural signals through bidirectional cross-modal interaction, and subsequently incorporating property conditions as global guid-ance. This enables stable integration of heterogeneous information 
+
+Figure 3: Ablation results on joint controllability at differ-ent evaluation levels. Left: structure consistency; Middle: sequence similarity; Right: property optimization. 
+
+and leads to improved performance in both structural consistency and distributional alignment. 
+
+Control Settings . We then analyze single-control settings. The results show that JoPMol exhibits advantages under joint condi-tion control and achieves improved overall performance. W/gene, which relies only on gene control, degrades noticeably in diversity and FCD. W/struct, which uses only textual structural intentions, achieves the highest diversity (90.58) but remains limited in Total and FCD. W/prop, which uses only numerical chemical property values, attains the best novelty and a relatively low FCD (12.93), but at the cost of reduced structural consistency and diversity. In contrast, JoPMol achieves the best performance on total, FCD, and rank, indicating a more stable balance between design quality and distributional consistency. Although its diversity is slightly lower than that of W/struct, this mainly results from the contraction of the feasible generation space under multiple control constraints. Figure 3 further presents a comparison between joint condition control and single control in terms of structure, sequence, and property. For structural consistency, JoPMol achieves higher ECFP, APFP, and Dice scores than W/gene. For sequence similarity, JoPMol shows improvements in BLEU and LCS while substantially reducing the Leven distance. For property optimization, JoPMol performs comparably to W/prop on LogP, SA, and QED, with identical QED values, indicating strong alignment with the target distribution. Overall, joint condition control preserves property optimization without sacrificing structural consistency and sequential similarity, enabling precision molecular design. Furthermore, we replace numerical chemical properties with textual property descriptions to investigate the impact of property representation on controllability. The results show that using tex-tual descriptions leads to inferior overall performance compared with numerical values. Detailed results are provided in Table F.3. 
+
+## 4.5 Case Study I: Property Controllability 
+
+To further evaluate the chemical property controllability of JoPMol, Figure 4 presents the distribution-level and instance-level results of the generated molecular properties. Figure 4(a) compares the prop-erty distributions of the test-set molecules (gray curves) with those of the generated molecules (colored curves). For all three properties, the generated distributions closely match the target distributions in both overall shape and mean values, indicating that the model can stably capture and reproduce property targets at the population level without noticeable distribution shift or mode collapse. Addi-tionally, the largest deviation is observed on SA, where the mean value shifts from 2.70 (target) to 3.12 (generated), corresponding to a relative deviation of approximately 15.6%. This deviation is 
+
+> 7Yuan et al.
+
+Figure 4: Evaluation of molecular distribution alignment and property controllability achieved by JoPMol. (a) Distribution-level comparison of logP, SA, and QED between the test molecules and the candidate molecules. (b) Instance-level analysis comparing a randomly selected target molecule with 1,000 designed candidates. 
+
+reasonable given the relatively wide value range of SA, while the deviations of logP and QED remain much smaller. These results indicate that JoPMol preserves the statistical structure of molecular property distributions while maintaining chemical plausibility. Figure 4(b) evaluates JoPMol at the instance level. Given a ran-domly selected target molecule, 1,000 candidate molecules are de-signed under its property constraints. The resulting property dis-tributions are tightly concentrated around the target values, with mean values closely aligned with the specified conditions. The relative deviations between the designed means and the target val-ues for logP, SA, and QED are all controlled within approximately 4-6%, demonstrating accurate and stable conditional generation. Importantly, the narrow variance of the generated distributions suggests that JoPMol not only enforces property alignment but also reduces unnecessary structural dispersion. This behavior reflects the effectiveness of the proposed multimodal fusion and conditional diffusion mechanisms in guiding molecular design. Overall, JoPMol achieves precise and reliable property control-lability at both the distribution and instance levels, successfully balancing global distribution alignment with fine-grained, target-oriented optimization. This capability is critical for precision molec-ular design and provides a strong foundation for customizable molecular generation in downstream drug discovery applications. 
+
+## 4.6 Case Study II: Biological Simulation 
+
+To further evaluate the practical applicability and biological rele-vance of JoPMol, we conduct molecular docking studies under both breast cancer and gastric cancer disease settings. 
+
+Breast cancer. We perform molecular docking against a rep-resentative breast cancer target, HER2 (PDB ID: 3PP0), to evalu-ate the biological plausibility of the designed molecules within a disease-relevant context. As illustrated in Figure 5(a), the designed molecule achieves a binding affinity of -8.8 kcal /mol , outperform-ing a flavonoid-like reference compound COC1=CC=C(C=C1)C2=C( C(=O)C3=CC=CC=C3O2)OC , which obtains -8.4 kcal /mol under the same docking protocol. The enlarged view further shows that the designed molecule is well accommodated within the binding pocket and exhibits favorable spatial complementarity with surrounding residues. Specifically, the aromatic scaffold is positioned within the hydrophobic region of the pocket, enabling favorable van der Waals 
+
+Figure 5: Docking visualization of the designed molecules under (a) breast cancer and (b) gastric cancer settings. The predicted binding poses are shown within the binding pock-ets, with surrounding residues highlighted. The designed molecules achieve binding affinities of -8.8 kcal /mol on HER2 (PDB ID: 3PP0) and -8.6 kcal /mol on tubulin (PDB ID: 1JFF). 
+
+interactions, while the polar functional groups orient toward the pocket periphery, forming plausible hydrogen bonding interactions. Importantly, no obvious steric clashes or unrealistic conformations are observed, indicating a chemically plausible binding mode. 
+
+Gastric cancer. To further assess the generalization ability of JoPMol beyond the training distribution, we conduct a case study in a gastric cancer setting. Tubulin (PDB ID: 1JFF), a canonical target of taxanes widely used in gastric cancer therapy [ 26 ], is selected as the receptor. Molecular docking is performed to evaluate the binding behavior of the designed molecules in a cross-disease sce-nario. As illustrated in Figure 5(b), the designed molecule occupies the binding pocket of the target protein and exhibits reasonable spatial complementarity with surrounding amino acid residues. The docking result indicates a predicted binding energy of -8.6 kcal /mol 
+
+on the 1JFF target, suggesting favorable binding potential. The en-larged view further visualizes the spatial interactions between the ligand and key residues, indicating a plausible binding conforma-tion without apparent steric clashes or unstable orientations. 
+
+> 8
+
+Gene Expression–Informed Generative Modeling 
+
+These results collectively demonstrate that JoPMol not only pro-duces biologically meaningful molecules consistent with the train-ing domain, but also exhibits promising generalization capability to unseen disease contexts, highlighting its potential for cross-disease precision molecular design. 
+
+## 5 Conclusion 
+
+In this study, we propose JoPMol, a jointly controlled molecular generative model for precision molecular design. JoPMol integrates gene expression profiles, textual structural intentions, and property optimization within a unified diffusion-based modeling framework. By aligning multiple control signals, JoPMol enables controllable molecular generation and optimization. Extensive experiments show that JoPMol achieves consistently improved performance compared with baseline methods across multiple controllability and quality metrics under realistic evaluation settings. Despite these results, JoPMol is currently evaluated primarily through in silico analyses and molecular docking, and the designed candidates have not yet been validated in wet-lab experiments. Future work will focus on extending experimental validation, ex-panding to broader disease targets and biological settings, and incorporating downstream biological screening to further exam-ine the practical potential of jointly controlled precision molecular design in drug discovery. 
+
+## References 
+
+[1] Jaqueline S Angelo, Isabella A Guedes, Helio JC Barbosa, and Laurent E Dardenne. 2023. Multi-and many-objective optimization: present and future in de novo drug design. Frontiers in Chemistry 11 (2023), 1288626. [2] Peter W Battaglia, Jessica B Hamrick, Victor Bapst, Alvaro Sanchez-Gonzalez, Vinicius Zambaldi, Mateusz Malinowski, Andrea Tacchetti, David Raposo, Adam Santoro, Ryan Faulkner, et al . 2018. Relational inductive biases, deep learning, and graph networks. arXiv preprint arXiv:1806.01261 (2018). [3] Dimitrios Christofidellis, Giorgio Giannone, Jannis Born, Ole Winther, Teodoro Laino, and Matteo Manica. 2023. Unifying molecular and textual representa-tions via multi-task language modelling. In International Conference on Machine Learning . 6140–6157. [4] Yifan Deng, Spencer S Ericksen, and Anthony Gitter. 2025. Chemical Language Model Linker: blending text and molecules with modular adapters. Journal of Chemical Information and Modeling 65, 17 (2025), 8944–8956. [5] Qiaonan Duan, Corey Flynn, Mario Niepel, Marc Hafner, Jeremy L Muhlich, Nicolas F Fernandez, Andrew D Rouillard, Christopher M Tan, Edward Y Chen, Todd R Golub, et al . 2014. LINCS Canvas Browser: interactive web app to query, browse and interrogate LINCS L1000 gene expression signatures. Nucleic Acids Research 42, W1 (2014), W449–W460. [6] Carl Edwards, Tuan Lai, Kevin Ros, Garrett Honke, Kyunghyun Cho, and Heng Ji. 2022. Translation between molecules and natural language. In Empirical Methods in Natural Language Processing . 375–413. [7] Haisong Gong, Qiang Liu, Shu Wu, and Liang Wang. 2024. Text-guided molecule generation with diffusion language model. In AAAI Conference on Artificial Intelligence . 109–117. [8] Anirudh Goyal and Yoshua Bengio. 2022. Inductive biases for deep learning of higher-level cognition. Proceedings of the Royal Society A 478, 2266 (2022), 20210068. [9] Shenghui Guan and Guanyu Wang. 2024. Drug discovery and development in the era of artificial intelligence: from machine learning to large language models. 
+
+Artificial Intelligence Chemistry 2, 1 (2024), 100070. [10] Junyu Hou. 2025. De novo molecular design enabled by direct preference op-timization and curriculum learning. In Joint European Conference on Machine Learning and Knowledge Discovery in Databases . Springer, 95–111. [11] Neil Houlsby, Andrei Giurgiu, Stanislaw Jastrzebski, Bruna Morrone, Quentin De Laroussilhe, Andrea Gesmundo, Mona Attariyan, and Sylvain Gelly. 2019. Parameter-efficient transfer learning for NLP. In International conference on machine learning . PMLR, 2790–2799. [12] Ilia Igashov, Hannes Stärk, Clément Vignac, Arne Schneuing, Victor Garcia Satorras, Pascal Frossard, Max Welling, Michael Bronstein, and Bruno Correia. 2024. Equivariant 3D-conditional diffusion model for molecular linker design. 
+
+Nature Machine Intelligence 6, 4 (2024), 417–427. [13] Tensei Inukai, Aoi Yamato, Manato Akiyama, and Yasubumi Sakakibara. 2025. Leveraging tree-transformer VAE with fragment tokenization for high-performance large chemical model generation. Communications Chemistry 8, 1 (2025), 228. [14] Wengong Jin, Regina Barzilay, and Tommi Jaakkola. 2018. Junction tree varia-tional autoencoder for molecular graph generation. In International conference on machine learning . PMLR, 2323–2332. [15] Kazuma Kaitoh and Yoshihiro Yamanishi. 2021. TRIOMPHE: transcriptome-based inference and generation of molecules with desired phenotypes by machine learning. Journal of Chemical Information and Modeling 61, 9 (2021), 4303–4320. [16] Soo Im Kang, Jae Hong Shin, Benjamin M Wu, and Hak Soo Choi. 2025. Deep generative AI for multi-arget therapeutic design: toward self-improving drug discovery framework. International Journal of Molecular Sciences 26, 23 (2025), 11443. [17] Tarek Khater, Sara Awni Alkhatib, Aamna AlShehhi, Charalampos Pitsalidis, Anna Maria Pappa, Son Tung Ngo, Vincent Chan, and Vi Khanh Truong. 2025. Generative artificial intelligence based models optimization towards molecule design enhancement. Journal of Cheminformatics 17, 1 (2025), 116. [18] Sunghwan Kim, Paul A Thiessen, Evan E Bolton, Jie Chen, Gang Fu, Asta Gin-dulyte, Lianyi Han, Jane He, Siqian He, Benjamin A Shoemaker, et al . 2016. PubChem substance and compound databases. Nucleic Acids Research 44, D1 (2016), D1202–D1213. [19] Deqian Kong, Yuhao Huang, Jianwen Xie, Edouardo Honig, Ming Xu, Shuanghong Xue, Pei Lin, Sanping Zhou, Sheng Zhong, Nanning Zheng, et al .2024. Molecule design by latent prompt transformer. Advances in Neural Infor-mation Processing Systems 37 (2024), 89069–89097. [20] Mario Krenn, Florian Häse, AkshatKumar Nigam, Pascal Friederich, and Alan Aspuru-Guzik. 2020. Self-referencing embedded strings (SELFIES): a 100% robust molecular string representation. Machine Learning: Science and Technology 1, 4 (2020), 045024. [21] Chen Li and Yoshihiro Yamanishi. 2025. AI-driven transcriptome profile-guided hit molecule generation. Artificial Intelligence 338 (2025), 104239. [22] Chen Li and Yoshihiro Yamanishi. 2025. De novo generation of hit-like molecules from gene expression profiles via deep learning. In European Conference on Machine Learning and Principles and Practice of Knowledge Discovery in Databases .[23] Qi Liu, Miltiadis Allamanis, Marc Brockschmidt, and Alexander Gaunt. 2018. Constrained graph variational autoencoders for molecule design. Advances in Neural Information Processing Systems 31 (2018). [24] Hannes H Loeffler, Jiazhen He, Alessandro Tibo, Jon Paul Janet, Alexey Voronov, Lewis H Mervin, and Ola Engkvist. 2024. Reinvent 4: modern AI–driven genera-tive molecule design. Journal of Cheminformatics 16, 1 (2024), 20. [25] Yanchen Luo, Junfeng Fang, Sihang Li, Zhiyuan Liu, Jiancan Wu, An Zhang, Wenjie Du, and Xiang Wang. 2024. Text-guided small molecule generation via diffusion model. iScience 27, 11 (2024). [26] Xiaoting Ma, Yujian Zhang, Cong Wang, and Jing Yu. 2023. Efficacy and safety of combination chemotherapy regimens containing taxanes for first-line treatment in advanced gastric cancer. Clinical and Experimental Medicine 23, 2 (2023), 381–396. [27] Yuki Matsukiyo, Atsushi Tengeiji, Chen Li, and Yoshihiro Yamanishi. 2024. Tran-scriptionally Conditional Recurrent Neural Network for De Novo Drug Design. 
+
+Journal of Chemical Information and Modeling 64, 15 (2024), 5844–5852. [28] Michael Moret, Lukas Friedrich, Francesca Grisoni, Daniel Merk, and Gisbert Schneider. 2020. Generative molecular design in low data regimes. Nature Machine Intelligence 2, 3 (2020), 171–180. [29] Aditya Pathak, Radhika Theagarajan, Muhammad Miftakhur Rizqi, Ari Satia Nu-graha, Tridip Boruah, Himanshu Kumar, Bindu Naik, Shweta Yadav, Avinash Ku-mar Jha, Ankur Trivedi, et al . 2025. AI-enabled drug and molecular discovery: computational methods, platforms, and translational horizons. Discover Molecules 
+
+2, 1 (2025), 32. [30] Qizhi Pei, Wei Zhang, Jinhua Zhu, Kehan Wu, Kaiyuan Gao, Lijun Wu, Yingce Xia, and Rui Yan. 2023. BioT5: enriching cross-modal integration in biology with chemical knowledge and natural language associations. In Empirical Methods in Natural Language Processing . 1102–1123. [31] Ethan Perez, Florian Strub, Harm De Vries, Vincent Dumoulin, and Aaron Courville. 2018. Film: Visual reasoning with a general conditioning layer. In 
+
+Proceedings of the AAAI conference on artificial intelligence , Vol. 32. [32] Lucas Pinheiro Cinelli, Matheus Araújo Marins, Eduardo Antúnio Barros da Silva, and Sérgio Lima Netto. 2021. Variational autoencoder. In Variational methods for machine learning with applications to deep networks . Springer, 111–149. [33] Dong-Hee Shin, Young-Han Son, Deok-Joong Lee, Ji-Wung Han, and Tae-Eui Kam. 2024. Dynamic many-objective molecular optimization: Unfolding complex-ity with objective decomposition and progressive optimization. In Proceedings of the Thirty-Third International Joint Conference on Artificial Intelligence . 6026– 6034. [34] Mengying Sun, Jing Xing, Han Meng, Huijun Wang, Bin Chen, and Jiayu Zhou. 2022. Molsearch: search-based multi-objective molecular generation and property optimization. In Proceedings of the 28th ACM SIGKDD conference on knowledge discovery and data mining . 4724–4732. 9Yuan et al.                       
+
+> [35] Siddarth Venkatraman, Mohsin Hasan, Minsu Kim, Luca Scimeca, Marcin Sendera, Yoshua Bengio, Glen Berseth, and Nikolay Malkin. [n. d.]. Outsourced Diffusion Sampling: Efficient Posterior Inference in Latent Spaces of Generative Models. In Forty-second International Conference on Machine Learning .[36] Sheng Wang, Yuzhi Guo, Yuhong Wang, Hongmao Sun, and Junzhou Huang. 2019. Smiles-bert: large scale unsupervised pre-training for molecular property predic-tion. In Proceedings of the 10th ACM international conference on bioinformatics, computational biology and health informatics . 429–436. [37] Xiaoqi Wang, Chuanshi Wang, Boya Ji, Junwen Wang, Mingyue Zheng, Lingyun Song, Shaoliang Peng, and Xuequn Shang. 2026. Multimodal pre-training models of molecular representation for drug discovery. National Science Review 13, 1 (2026), nwaf495. [38] Zichen Wang, Caroline D Monteiro, Kathleen M Jagodnik, Nicolas F Fernandez, Gregory W Gundersen, Andrew D Rouillard, Sherry L Jenkins, Axel S Feldmann, Kevin S Hu, Michael G McDermott, et al .2016. Extraction and analysis of signa-tures from the gene expression omnibus by the crowd. Nature Communications
+> 7, 1 (2016), 12846. [39] Wenchao Weng, Hanyu Jiang, Xiangjie Kong, and Giovanni Pau. 2025. Text-guided diverse-expression diffusion model for molecule generation. Chinese Physics B 34, 5 (2025), 050701. [40] Michihiro Yasunaga, Jure Leskovec, and Percy Liang. 2022. LinkBERT: pretrain-ing language models with document links. In Association for Computational Linguistics .[41] Xiangxiang Zeng, Fei Wang, Yuan Luo, Seung-gu Kang, Jian Tang, Felice C Lightstone, Evandro F Fang, Wendy Cornell, Ruth Nussinov, and Feixiong Cheng. 2022. Deep generative molecular design reshapes drug discovery. Cell Reports Medicine 3, 12 (2022). [42] Zhengyang Zhou, Yunrui Li, Pengyu Hong, and Hao Xu. 2025. Multimodal fusion with relational learning for molecular property prediction. Communications Chemistry 8, 1 (2025), 200.
+
+## Appendix A Dataset Details 
+
+To support heterogeneous conditional molecule generation scenar-ios, we construct three transcriptomic datasets corresponding to different biological supervision signals, referred to as Data I, Data II, and Data III. All datasets are uniformly preprocessed by retaining the 978 landmark genes defined in the LINCS L1000 [ 5 ] platform and applying feature-wise normalization to ensure numerical com-parability across conditions. The raw sources of these datasets are publicly available under licenses permitting academic or research use. 
+
+Data I consists of compound-induced gene expression profiles derived from human cell lines under small-molecule perturbations. Each sample reflects a specific experimental setting characterized by the administered compound, dosage, exposure duration, and cellular context. In this study, we focus on profiles collected from a single representative cell line, resulting in a large-scale collec-tion covering more than ten thousand unique compounds. These expression signatures provide supervision signals that capture how molecular interventions reshape transcriptional states, enabling the model to associate chemical structures with downstream cellular responses. 
+
+Data II contains target-level perturbation signatures generated through genetic modulation, including knockdown or overexpres-sion of individual protein targets. Each profile encodes the transcrip-tomic consequence of manipulating a specific biological regulator. We select a subset of biologically meaningful targets spanning ki-nase signaling, epigenetic regulation, and cancer-related pathways. These data enable conditioning molecule generation on desired target-oriented functional effects, supporting controllable structure design driven by mechanistic intervention cues rather than purely chemical similarity. 
+
+Data III is composed of disease-associated transcriptomic signa-tures derived from patient-level expression studies. Each disease signature is obtained by aggregating multiple samples into a rep-resentative profile to reduce individual variability and enhance robustness. In this work, only gastric cancer–related profiles are in-cluded. This dataset allows the model to learn disease-conditioned molecular generation, aligning chemical design with pathological transcriptional patterns. 
+
+## B Annotation Validation Protocol for Structural Design Intent 
+
+To ensure the reliability and consistency of the automatically ex-tracted structural design intents, we adopt a multi-stage human validation protocol involving independent expert review, consensus adjudication, and quality auditing. 
+
+Automatic intent extraction. For each molecule, its SELFIES se-quence is first processed by the BioT5 encoder to generate a candi-date structural intent representation, which summarizes semantic patterns related to functional groups, substructures, and local chem-ical motifs. These automatically generated intents serve as the initial annotations. 
+
+> 10 Gene Expression–Informed Generative Modeling
+
+Independent expert review. Two domain experts with formal train-ing in medicinal chemistry independently examine each candidate intent without access to each other’s judgments. Reviewers are pro-vided with the original molecular structure (rendered from SELF-IES), the predicted intent description, and a standardized checklist covering functional group correctness, structural completeness, chemical plausibility, and semantic consistency. Each intent is la-beled as accepted , minor revision , or rejected , and optional correction notes are recorded when necessary. 
+
+Consensus adjudication. All samples with conflicting labels or revision requests are jointly reviewed in a consensus meeting. Re-viewers discuss discrepancies, reconcile interpretations, and pro-duce a finalized intent annotation. If consensus cannot be reached, the sample is conservatively excluded from downstream training and evaluation to avoid introducing noisy supervision. 
+
+Quality auditing and spot checking. A random subset of finalized annotations is periodically re-evaluated to detect potential system-atic bias or drift in annotation criteria. This auditing step ensures long-term consistency across the dataset and guards against latent labeling artifacts introduced during scaling. 
+
+## C Baseline Models 
+
+To comprehensively evaluate JoPMol, we select representative base-line models from three complementary perspectives: (i) gene expres-sion–conditioned molecular generation, (ii) text-guided molecular generation, and (iii) chemically informed generative modeling. All baselines are configured following their official implementations whenever possible and evaluated under consistent preprocessing and benchmarking settings. 
+
+TRIOMRHE. TRIOMRHE is a Transformer-based framework that learns the mapping between transcriptomic signatures and molec-ular responses through multi-head attention and heterogeneous embedding strategies. It models how gene expression patterns corre-spond to chemical structures at the representation level. We follow the official configuration and apply it to our benchmark data. 
+
+Gx2Mol. Gx2Mol is a hybrid neural architecture designed to gen-erate molecules conditioned on transcriptomic signals. It combines multiple neural components to encode gene expression features and translate them into molecular representations. We apply the released implementation using our normalized gene profiles. 
+
+GxVAEs. GxVAEs formulates transcriptome-guided molecule gen-eration under a conditional variational autoencoder framework, where gene expression vectors and molecular structures are coupled through a shared latent space. This enables the model to reconstruct or sample molecules aligned with specific transcriptional states. Pretrained weights are used for evaluation. 
+
+MolSearch. MolSearch is a retrieval-augmented molecular gen-eration framework that formulates molecule discovery as a neural search problem over a learned chemical space. It iteratively pro-poses candidate molecules and refines them based on similarity and property-driven feedback, enabling efficient exploration of chemi-cally valid regions. We adopt the official implementation and use MolSearch as a representative search-based baseline for property-oriented molecular optimization. 
+
+DyMol. DyMol is a dynamic molecular optimization framework that combines reinforcement learning with oracle-guided evalua-tion to iteratively improve molecular candidates under target prop-erty constraints. It employs adaptive policy updates to balance exploration and exploitation during optimization, enabling flexi-ble control over multiple physicochemical objectives. We use the standard configuration and include DyMol as a representative rein-forcement learning-based baseline for property-driven molecular optimization. 
+
+FRATTVAE. FRATTVAE is a variational autoencoder model that integrates recurrent encoders with attention mechanisms for molec-ular sequence modeling. It learns latent molecular representations and reconstructs valid SMILES through attentive decoding, enabling controllable generation in latent space. We adopt the standard im-plementation and use it as a representative chemically driven gen-erative baseline. 
+
+Mol-T5. Mol-T5 is a Transformer-based large language model pretrained on large-scale molecular SMILES corpora. We employ the mol-t5-base checkpoint and prompt the model directly with target-related textual descriptions to generate candidate molecules without additional fine-tuning. 
+
+Text+ChemT5. This baseline integrates natural language prompts with chemically grounded representations using ChemT5, which is pretrained jointly on textual and molecular modalities. Molecular descriptions and target cues are concatenated and provided as input, and generation is performed in a zero-shot setting. 
+
+TGM-DLM. TGM-DLM is a two-stage diffusion framework for text-conditioned molecular generation. The first stage predicts a coarse molecular scaffold from textual input, while the second stage progressively refines it into a chemically valid molecule via conditional diffusion. Official implementations are adopted for fair comparison. 
+
+## D Metric Details 
+
+To provide a comprehensive evaluation of JoPMol, we report three groups of metrics: (i) structure similarity between generated and reference molecules (ECFP, APFP, Dice), (ii) sequence similarity 
+
+between their SELFIES strings (BLEU, Levenshtein, LCS), and (iii) 
+
+overall statistics that summarize generation quality at the set level (Diversity, Total, and Rank). These metrics jointly reflect struc-tural fidelity, sequence-level consistency, and overall generation reliability. 
+
+ECFP Similarity ( ↑). We compute the Tanimoto similarity be-tween ECFP (extended-connectivity fingerprint) of a generated molecule 𝑔 and its reference 𝑟 :ECFP (𝑔, 𝑟 ) = |f𝑔 ∩ f𝑟 ||f𝑔 ∪ f𝑟 | .
+
+Higher values indicate closer local substructure agreement. 
+
+APFP Similarity ( ↑). APFP (atom-pair fingerprint) captures atom-type pairs and their topological distances, emphasizing more global 
+
+> 11 Yuan et al.
+
+structural relations. We compute the Tanimoto similarity in the same manner as ECFP, but on atom-pair fingerprints. 
+
+Dice Similarity ( ↑). Dice similarity measures fingerprint overlap using: Dice (𝑔, 𝑟 ) = 2|f𝑔 ∩ f𝑟 ||f𝑔 | + | f𝑟 | ,
+
+which is more sensitive to shared features. 
+
+BLEU ( ↑). BLEU evaluates 𝑛 -gram overlap between the gener-ated and reference SELFIES sequences, capturing local token-level agreement. 
+
+Levenshtein ( ↓). Levenshtein distance counts the minimum num-ber of edit operations required to transform the generated SELFIES into the reference sequence. Lower values indicate better sequence consistency. 
+
+LCS ( ↑). LCS (Longest Common Subsequence) measures the length of the longest subsequence shared by two SELFIES strings while preserving order, reflecting long-range sequential consis-tency. 
+
+Diversity ( ↑). Diversity quantifies the heterogeneity of the gener-ated set by measuring average pairwise dissimilarity in fingerprint space (higher is better), indicating broader chemical coverage and reduced mode collapse. 
+
+Total Score ( ↑). Following our benchmark protocol, the overall Total score is defined as the product of three set-level generation metrics: Total = Validity × Novelty × Uniqueness .
+
+This multiplicative form penalizes models that perform poorly in any single aspect and favors methods that simultaneously achieve reliable validity, sufficient novelty, and low redundancy. 
+
+FCD ( ↓). FCD (Fréchet ChemNet Distance) measures the dis-tributional distance between generated molecules and reference molecules in the learned chemical feature space of a pretrained ChemNet model, reflecting the overall similarity of chemical prop-erties and structural characteristics between the two molecule sets. 
+
+Rank ( ↓). To obtain a unified ranking across metrics, we first compute the per-metric rank of each model (with larger-is-better for ↑ metrics and smaller-is-better for ↓ metrics). The final Rank score is then defined as the average of these ranks over the selected metric set M:Rank = 1
+
+|M| ∑︁ 𝑚 ∈ M 
+
+rank 𝑚 ,
+
+where rank 𝑚 denotes the ranking position under metric 𝑚 (ties, if any, are handled by assigning averaged ranks). A lower Rank indicates better overall performance. 
+
+## E Implementation Details. E.1 Experiment Settings 
+
+All experiments are implemented in PyTorch with Python 3.8 and trained on a workstation equipped with an NVIDIA A30 GPU. Molecular structures are encoded as SELFIES sequences, with the maximum sequence length fixed at 256 tokens. Gene expression profiles are projected through a stack of three fully connected layers with hidden dimensions of 512, 256,128 and 64, respectively, yielding a compact latent representation for condi-tional control. The same multilayer configuration is applied sym-metrically during feature reconstruction. The optimization process adopts a learning rate of 1 × 10 −4 and applies dropout with a ratio of 0.2 to stabilize training. For structural semantic conditioning, tokenized SELFIES sequences are embedded into a 32-dimensional trainable embedding space. In parallel, molecular textual descriptions are encoded using a frozen language encoder with a 768-dimensional hidden representation to extract high-level semantic features, which are subsequently aligned with structural intent representations. The generative backbone follows a diffusion-based formulation with 𝑇 = 2000 denoising steps, optimized using a learning rate of 1×
+
+10 −4 and a dropout rate of 0.1. To further accelerate generation over remapped SELFIES sequences, a uniform skip-sampling strategy is applied during the reverse diffusion process. For the relevance alignment mechanism in JoPMol, the weighting coefficient 𝜆 is fixed at 0.3 and used consistently in all experiments. We further investigate the impact of the loss weighting coeffi-cient 𝜆 , which controls the contribution of the relevance-guided objective in JoPMol. As shown in Table E.1, the choice of 𝜆 signifi-cantly influences the trade-off between structural alignment, distri-butional consistency, and diversity. When 𝜆 is small (e.g., 𝜆 = 0.0
+
+or 0.1), the model relies primarily on the unconditional diffusion objective, resulting in high novelty and diversity but relatively weak structural alignment, as reflected by lower fingerprint simi-larities and BLEU scores. Conversely, when 𝜆 becomes large (e.g., 
+
+𝜆 ≥ 0.5), the model is overly constrained by the relevance objective, which leads to degraded distributional consistency (higher FCD) and poorer sequence alignment (higher Levenshtein distance), de-spite maintaining high validity and novelty. A moderate weighting (𝜆 = 0.3) achieves the best balance across multiple criteria. Specifi-cally, it significantly improves structural similarity metrics (Dice, APFP, and ECFP) and sequence-level alignment (BLEU), while also yielding the lowest FCD and Levenshtein distance. These results indicate that an appropriate balance between conditional guidance and generative flexibility is crucial for achieving high-quality and controllable molecular generation. 
+
+## E.2 Use of Large Language Models 
+
+We use a large language model (LLM) solely for language polishing and grammar refinement to improve the clarity and readability of the manuscript. The LLM is not involved in the generation of scientific content, experimental design, data analysis, model im-plementation, or result interpretation. All technical contributions, experiments, and conclusions are conducted and verified by the authors. 
+
+## F Experimental Supplements F.1 Additional Evaluation 
+
+To further examine the robustness and practical utility of JoPMol, we conduct an additional evaluation using complementary metrics that explicitly measure structural similarity, property alignment, and overall generation quality. As summarized in Table F.2, the 
+
+> 12 Gene Expression–Informed Generative Modeling
+
+Table E.1: Effect of the loss weighting coefficient 𝜆 in JoPMol. Moderate weighting ( 𝜆 = 0.3) achieves the best trade-off between structural similarity and distributional consistency. 
+
+## Values Validity(%) ↑ Uniqueness(%) ↑ Novelty(%) ↑ BLEU ↑ FCD ↓ Leven ↓ Dice ↑ APFP ↑ ECFP ↑
+
+## 𝜆 = 0.0 100.0 99.49 100.0 0.43 15.03 28.84 0.27 0.31 0.15 
+
+## 𝜆 = 0.1 100.0 98.33 99.85 0.43 15.84 28.98 0.25 0.31 0.15 
+
+## 𝜆 = 0.3 100.0 98.91 94.29 0.61 7.40 19.34 0.46 0.51 0.33 
+
+## 𝜆 = 0.5 100.0 99.42 100.0 0.42 16.57 29.51 0.25 0.30 0.14 
+
+## 𝜆 = 0.7 100.0 99.49 100.0 0.45 16.32 29.50 0.25 0.31 0.15 
+
+## 𝜆 = 0.9 100.0 99.78 100.0 0.45 15.75 29.47 0.25 0.31 0.15 
+
+## 𝜆 = 1.0 100.0 99.78 99.93 0.44 15.53 29.51 0.26 0.31 0.15 
+
+Table F.2: Additional evaluation of JoPMol and baseline mod-els on structural similarity, property consistency, and overall generation quality.                                                              
+
+> Method Structure similarity Overall statistics RDKit ↑MACCS ↑Validity ↑Unique ↑Novelty ↑
+> TRIOMPHE 0.31 0.39 50.75 78.68 87.57 Gx2Mol 0.36 0.47 87.80 81.42 76.31 GxVAEs 0.36 0.48 86.59 87.57 89.25 Molsearch 0.55 0.60 100.0 93.01 88.10 Dymol 0.23 0.35 100.0 90.23 91.23 FRATTVAE 0.27 0.37 100.0 96.92 95.88 Mol-T5 0.34 0.54 77.88 93.21 97.66 Text+ChemT5 0.35 0.58 67.12 96.01 97.78
+> TGM-DLM 0.37 0.54 82.33 93.74 91.73 JoPMol 0.39 0.61 100.0 98.91 94.29
+
+comparison covers representative transcriptome-guided models (TRIOMPHE, Gx2Mol, GxVAEs), chemically driven generative mod-els (FRATTVAE), text-based generators (Mol-T5, Text+ChemT5), as well as a diffusion-based baseline (TGM-DLM). 
+
+Structural similarity. JoPMol achieves the strongest structural consistency across all evaluated fingerprint-based metrics. Specifi-cally, JoPMol attains the highest RDKit Tanimoto similarity (0.39) and MACCS similarity (0.61), while simultaneously yielding the low-est Fréchet ChemNet Distance (7.40), indicating superior alignment between the generated molecular distribution and the reference set. Compared with the best competing baseline (TGM-DLM with FCD of 8.94 and MACCS of 0.54), JoPMol reduces distributional dis-crepancy by approximately 17% and improves substructure overlap by more than 13%, demonstrating its ability to preserve chemically meaningful structural patterns under multi-conditional guidance. 
+
+Overall generation quality. JoPMol maintains perfect validity (100.0%) and the highest uniqueness (98.91%) among all compared approaches, confirming stable decoding and low redundancy during generation. Although novelty is slightly lower than that of purely text-driven models, it remains at a competitive level (94.29%), in-dicating that JoPMol balances exploration and fidelity rather than 
+
+Figure F.6: Kernel density distributions of raw and recon-structed gene expression profiles for three randomly selected patients. Reconstruction is obtained by encoding the profiles into the latent space and decoding them through the VAE, demonstrating close distributional alignment. 
+
+over-optimizing novelty at the cost of structural plausibility. No-tably, several baselines exhibit trade-offs between validity and nov-elty, whereas JoPMol consistently preserves high-quality generation across all three criteria. Overall, these results demonstrate that JoPMol achieves a favor-able balance between structural fidelity, property alignment, and generative reliability. By jointly integrating transcriptomic signals, semantic structural intent, and chemical property constraints, the model effectively avoids the common failure modes observed in single-modality baselines, such as structural drift, property mis-match, or reduced validity. The supplementary evaluation therefore corroborates the primary experimental conclusions and highlights the practical advantages of multi-source controllable molecular generation. 
+
+## F.2 Gene Expression Reconstruction via VAE. 
+
+To verify that the learned latent representations preserve informa-tive transcriptomic patterns, we conduct a reconstruction-based validation using the gene expression encoder–decoder architec-ture. Specifically, three patient-level gene expression profiles are randomly sampled from the test set and projected into the latent space through the encoder. The corresponding latent embeddings are then decoded back into reconstructed gene expression profiles. Figure F.6 visualizes the empirical distributions of the original and reconstructed gene expression values for the three samples using kernel density estimation. Across all cases, the reconstructed distributions closely match the raw distributions in terms of central 
+
+> 13 Yuan et al.
+
+Figure F.7: Qualitative comparison between known ligands and generated molecules for eight additional targets (AKT1, AKT2, AURKB, EGFR, HDAC1, MTOR, PIK3CA, and SMAD3). 
+
+tendency, spread, and overall shape, indicating that the encoder effectively captures the dominant statistical characteristics of high-dimensional transcriptomic signals. Notably, the reconstructed profiles preserve both the unimodal structure and the tail behavior of the original distributions, suggest-ing that the latent bottleneck does not excessively smooth or distort biologically meaningful variability. Minor deviations observed at extreme value ranges are expected due to stochastic sampling and regularization effects inherent to variational modeling. These results provide qualitative evidence that the learned la-tent representations maintain sufficient fidelity for downstream conditional molecular generation, supporting their use as reliable conditioning signals in JoPMol. 
+
+## F.3 Chemical Property Representation Analysis 
+
+Table F.3 compares the performance of using numerical chemical property values (Value) versus textual property descriptions (Text) as conditional inputs. Both settings achieve similarly high validity and uniqueness, indicating comparable basic generation feasibil-ity. However, the Value setting consistently exhibits more stable performance on structure- and distribution-related metrics. In par-ticular, it achieves a lower FCD score than the Text setting (11.95 vs. 12.22), suggesting closer alignment with the target distribution. Comparable or slightly improved results are also observed on fin-gerprint similarity metrics, including MACCS, RDK, and ECFP. In addition, the Value setting achieves a higher QED score (0.62 vs. 0.61), reflecting more reliable preservation of drug-likeness. In contrast, although the Text setting shows marginally bet-ter BLEU performance, this improvement does not translate into consistent gains in structural or property-level quality and may introduce additional semantic ambiguity and noise. Overall, directly conditioning on numerical chemical properties provides more pre-cise, controllable, and stable optimization signals, and is therefore adopted in our model design. 
+
+## F.4 Additional Cross-Ligand Results 
+
+Figure F.7 further reports qualitative generation results for the re-maining eight ligand conditions, including AKT1, AKT2, AURKB, EGFR, HDAC1, MTOR, PIK3CA, and SMAD3. For each target, the model receives transcriptomic perturbation profiles together with design intents as conditioning signals, and generates candidate molecules that are compared against the corresponding reference ligands in terms of structural similarity and physicochemical con-sistency. Across all eight cases, JoPMol consistently preserves core scaffold patterns and key functional groups, yielding moderate to high structural similarity measured by ECFP (ranging approximately from 0.51 to 0.84). Targets such as MTOR, PIK3CA, and SMAD3 exhibit particularly strong structural transferability, reflecting the model’s ability to capture conserved substructure motifs under distinct biological perturbations. Even for more challenging targets with lower similarity scores (e.g., AKT1 and AKT2), the generated molecules still maintain chemically meaningful backbone alignment rather than degenerate or trivial structures. In addition to structural fidelity, the generated molecules remain well aligned with the reference ligands in major physicochemical properties. The deviations in LogP, synthetic accessibility (SA), and drug-likeness (QED) are generally small across all targets, indicat-ing stable control over lipophilicity, synthetic feasibility, and overall molecular quality. Notably, JoPMol avoids excessive property drift even when moderate structural variations are introduced, suggest-ing a balanced trade-off between transfer flexibility and property preservation. Overall, these supplementary cases demonstrate that JoPMol maintains reliable cross-ligand generalization and transfer stability beyond the examples reported in the main text. The model consis-tently generates chemically plausible candidates that jointly satisfy biological conditioning, structural coherence, and property con-straints, supporting its robustness for precision molecular design in diverse target settings. 
+
+> 14 Gene Expression–Informed Generative Modeling
+
+Table F.3: Comparison between numerical chemical property values (Value) and textual property descriptions (Text) as conditional inputs under the same experimental setting. 
+
+Values Validity ↑ Uniqueness ↑ Novelty ↑ BLEU ↑ FCD ↓ Leven ↓ MACCS ↑ RDK ↑ ECFP ↑ logP SA QED Text 100.0 99.13 92.53 0.53 12.22 21.52 0.51 0.33 0.23 3.05 3.76 0.61 Value 100.0 98.69 91.55 0.54 11.95 21.64 0.52 0.34 0.23 2.71 3.73 0.62
