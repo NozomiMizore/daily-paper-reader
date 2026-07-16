@@ -1,0 +1,1053 @@
+Title: CoDiffGRN: Rethinking Gene Regulatory Network Inference via the BEELINE-KGC Benchmark and Co-evolutionary Discrete Diffusion
+
+URL Source: https://arxiv.org/pdf/2607.13120v1
+
+Published Time: Thu, 16 Jul 2026 00:12:22 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# CoDiffGRN: Rethinking Gene Regulatory Network Inference via the BEELINE-KGC Benchmark and Co-evolutionary Discrete Diffusion 
+
+Jiaze Song 
+
+Peking University 
+
+jzsong25@stu.pku.edu.cn 
+
+Runhao Zhao 
+
+National University of Defense Technology 
+
+runhaozhao@nudt.edu.cn 
+
+Minghao Xu 
+
+Peking University 
+
+minghao.xu@stu.pku.edu.cn 
+
+Bin Cui 
+
+Peking University 
+
+bin.cui@pku.edu.cn 
+
+Wentao Zhang ∗
+
+Peking University 
+
+wentao.zhang@pku.edu.cn 
+
+Abstract 
+
+Inferring gene regulatory networks (GRNs) from single-cell transcriptomic data is crucial for biological discovery, yet existing approaches suffer from a fundamental misalignment with real-world needs. Researchers typically seek a small set of high-confidence regulatory interactions for experimental validation, often involving previously unseen genes. However, current benchmarks rely on transductive splits with global classification metrics, while prevailing models struggle to generalize under inductive settings. To bridge this gap, we reformulate GRN inference as an inductive, ranking-centric graph completion problem and introduce BEELINE-KGC , a new benchmark that incorporates an inductive gene-holdout split together with knowledge graph completion metrics to better evaluate top-ranked predic-tions. Building on this, we propose CoDiffGRN , the first co-evolutionary discrete diffusion framework that jointly models biologically coherent discretized gene expression states and regulatory interactions for robust inductive generalization and improved top-ranked regulatory discovery. We further introduce TF-ALL Subgraph Sampling (TASS) for scalable training. Extensive experiments on BEELINE-KGC show that CoDiffGRN establishes new state-of-the-art performance, significantly outperforming existing methods in novel regulatory discovery, and ablation studies further verify the effectiveness of our design. 
+
+1 Introduction 
+
+Gene regulatory networks (GRNs) dictate cellular identity and physiological function by encoding the complex interactions between transcription factors (TFs) and target genes [ 1 –4 ]. While the advent of single-cell RNA sequencing (scRNA-seq) has fundamentally advanced GRN inference by resolving bulk-level signal averaging [ 5], the resulting data is notoriously heterogeneous and sparse [ 6 , 7]. To tackle these challenges, recent progress has shifted from classical statistical methods to graph neural networks (GNNs), particularly graph autoencoder (GAE) architectures [ 8 –13 ]. Despite these architectural advances, we argue that computational GRN inference suffers from a fundamental misalignment with practical biological discovery in two critical dimensions: 
+
+First, there is an evaluation misalignment. Standard benchmarks such as BEELINE [ 14 ] evaluate GRN inference under transductive settings, where all genes are observed during training. However, 
+
+> ∗Corresponding author Preprint. arXiv:2607.13120v1 [cs.LG] 14 Jul 2026
+
+(a) Current Limitations 
+
+Benchmark Issues 
+
+1) Split: Transductive vs. Inductive       
+
+> Current (Transductive) Real -world (Inductive)
+> Gene TF Train Unknown TF Val Test Unknown
+
+2) Metric: AUPRC limitations     
+
+> Model A Model B
+> Top -K
+> AUPRC(A) ≈ 0.577, AUPRC(B) ≈ 0.464
+> AUPRC(A) > AUPRC(B)
+> Choose model A, Fail!
+> Biologists will only
+> validate top -K
+> predictions
+> G.T. True
+> G.T. False
+> Model C Model D
+> N.S. 1 <
+> >N.S. 2
+
+Model Issues       
+
+> Gene Prior Predicted TP FN
+> Prior Graph Ground Truth GAE -based Prediction Isolated with Unseen Genes
+
+(b) Our Solutions 
+
+BEELINE -KGC Benchmark    
+
+> Pos. Neg. Pos. Neg.
+
+1) Gene -Holdout Split       
+
+> Gene TF Train Val Test
+> Train Split
+> ...
+> Val & Test Split
+> ...
+> Model A Model B
+> Top -K
+> Hits@K(A) = 0.25, Hits@K(B) = 0.5
+> Hits@K(B) > Hits@K(A)
+> Choose model B, Success!
+> G.T. True
+> G.T. False
+
+2) KGC Metrics 
+
+CoDiffGRN 
+
+3) TF -ALL Subgraph Sampling (TASS)     
+
+> ……Train
+> Original Graph Sampled Subgraphs Predicted Subgraphs Final Prediction
+
+2) Co -evolutionary Discrete Diffusion            
+
+> Forward
+> Process
+> Reverse
+> Process
+> 𝑡 =0𝑡 =1𝑡 =T…
+> Gene Edge Noisy Edge Noisy Gene
+> GNN -based Diffusion -based
+> No message
+> passin g
+> Never seen,
+> leading to
+> collapse Seen
+> during
+> training Similar edge features,
+> different node features
+> Edge features
+> remain similar
+> Edge only
+> transition
+> matrix
+
+1) Cell -cluster -based Discretization            
+
+> Continuous gene expression
+> Genes
+> Cells
+> K-means
+> Cluster 1
+> Cluster 0
+> 1
+> 1
+> 0
+> Activation
+> Genes
+> C1
+> One -hot feature
+> 0010
+> 0001
+> 0100
+> 0
+> 1
+> 1
+> C0
+
+Figure 1: Overview of current limitations and our proposed solutions. (a) Current benchmarks mismatch with realistic demand of inductive generalization and top-K ranking quality, while existing methods degrade with unseen genes and fixed edge transitions. (b) Our BEELINE-KGC introduces an inductive, ranking-based evaluation protocol, and CoDiffGRN leverages cell-cluster discretization, co-evolutionary discrete diffusion with TASS. Abbr. , G.T.: Ground-truth, N.S.: Negative Sample. discovering regulatory mechanisms for novel modules or rare cell types inherently requires inductive generalization to unseen genes [ 15 , 16 ]. Moreover, these benchmarks formalize GRN inference as a binary classification task measured by AUROC and AUPRC. In practice, however, biologists rely on AI models to prioritize a small, high-confidence set of novel interactions for costly experimental validation. Global metrics such as AUROC are easily dominated by low-ranked edges, making them poor proxies for the top-K ranking quality that ultimately drives scientific discovery. 
+
+Second, there exists a gene-level inductive generalization gap . Under realistic inductive settings, existing GAE-based methods rely heavily on predefined prior graphs. When holdout genes become disconnected during inference, they lose critical contextual signals and suffer severe performance degradation (Figure 1a). Recent diffusion-based methods partially alleviate this topological isolation, but still fail to generalize effectively to unseen genes, as the highly heterogeneous and sparse nature of scRNA-seq data prevents reliable feature correspondence and can lead to feature collapse. 
+
+More fundamentally, current approaches fail to capture the conditional nature of gene regu-lations. Regulatory interactions are not isolated events, but are conditioned on the paired states of regulator and target genes. Applying a uniform transition to all edges during diffusion, regardless of the activity states of their endpoint genes, violates this fundamental principle of GRNs. To address these limitations, we introduce a new evaluation paradigm alongside a novel generative framework. First, we propose BEELINE-KGC , a systematic extension of BEELINE that enforces an Inductive Gene-Holdout Split . By recasting evaluation as a Knowledge Graph Completion (KGC) task [ 17 ], BEELINE-KGC uses Hits@K and Mean Reciprocal Rank (MRR) to directly measure the top-K ranking consistency of regulatory predictions. Under this rigorous protocol, existing state-of-the-art models exhibit severe generalization bottlenecks. 2On the modeling side, we propose CoDiffGRN , the first gene-regulation co-evolutionary discrete diffusion model for GRN inference. Built upon the D3PM framework [ 18 ], CoDiffGRN departs from prior-dependent paradigms and is designed for robust inductive generalization. To mitigate feature collapse on unseen genes, we introduce a Cell-cluster-based Discretization strategy that transforms scRNA-seq profiles into biologically coherent discrete states, allowing unseen genes to inherit prior distributional structure during diffusion. To capture the conditional nature of gene regulation, we introduce a joint node-edge diffusion process that directly models the co-evolution of discretized gene expression states and network topology at the level of diffusion dynamics. By devising a gene-state-dependent transition matrix , edge transitions are explicitly conditioned on the states of their endpoint genes, promoting the coherent neighborhoods required for top-K regulatory discovery. Furthermore, to enable scalable generative training under data scarcity, we introduce TF-ALL Subgraph Sampling (TASS) , a data augmentation strategy that preserves TF-target integrity while substantially improving scalability and generalization. Comprehensive experimental results on BEELINE-KGC show that CoDiffGRN achieves state-of-the-art performance and consistently outperforms existing models. Extensive ablation studies examine the contributions of the proposed gene-regulation co-evolutionary discrete diffusion and TASS framework. These results collectively support the effectiveness of our approach in improving KGC-based ranking performance, enabling more accurate and reliable biological discovery. 
+
+2 Related Work 
+
+Evaluation protocols for GRN inference. BEELINE [ 14 ] established the standard for GRN inference, primarily utilizing transductive edge-centric splits and global metrics such as AUROC and AUPRC [ 19 ]. To improve discriminative sensitivity, negative sampling has evolved from random selection [ 20 , 21 ] to heuristic strategies [ 10 , 13 ]. However, these protocols exhibit a fundamental misalignment with practical biological discovery: transductive settings neglect the imperative for generalization to unseen genes, while global metrics fail to prioritize the top-K candidates required for experimental validation. In this work, we introduce BEELINE-KGC to bridge this gap by recasting evaluation as an inductive KGC task, utilizing ranking-based metrics (Hits@K, MRR) to assess top-K regulatory predictions. 
+
+Gene regulatory network inference methods. Early GRN inference relied on statistical associations like GENIE3 [ 22 ] and GRNBoost2 [ 20 ], or feature-based deep learning models such as CNNC [ 21 ]and DeepSEM [ 23 ]. Recently, graph representation learning has become the dominant paradigm, with GAE-based frameworks like GENELink [ 8], GENELink+ [ 10 ] and GNNLink [ 9] utilizing prior regulatory graphs, while methods like GCLink [ 12 ] and GRNFormer [ 11 ] introduce contrastive learning and VGAE-based frameworks. More recently, generative models such as RegDiffusion [ 24 ], DigNet [ 25 ], and Planet [ 26 ] have applied continuous and discrete diffusion processes [ 18 , 27 ] to model the evolution nature of gene regulations. However, existing methods face critical limitations: traditional approaches struggle with noisy single-cell data, while graph-based models often hinge on prior-graph connectivity. Furthermore, current generative frameworks struggle with feature collapse in inductive scenarios and fail to capture the essential co-evolution between gene and regulation with severe data scarcity. In this work, we propose CoDiffGRN , which employs cell-cluster discretization and joint discrete diffusion to model regulatory dynamics, alongside TASS specifically designed to address the challenges of data scarcity. 
+
+3 Rethinking for Practical Discovery: The BEELINE-KGC Benchmark 
+
+We introduce BEELINE-KGC, a comprehensive benchmark designed to bridge the gap between computational GRN inference and realistic biological discovery. Built upon the BEELINE [ 14 ] (CC BY-NC 4.0) collection of experimental scRNA-seq datasets, BEELINE-KGC establishes a rigorous evaluation framework tailored to real-world laboratory constraints. 
+
+3.1 Formalization and Problem Setting 
+
+We formalize a gene regulatory network as a directed graph G = ( V, E), where nodes v ∈ V represent genes and edges (u, v ) ∈ E denote regulatory interactions. We partition V into TFs ( VT F ) and target 3Table 1: Statistics of the BEELINE-KGC benchmark. For each cell type and reference network, we report the number of cells, the number of source TFs, and the edge counts under inductive splits. Values are shown as TFs+500 (TFs+1000). Abbr. , S. TFs: Source TFs.                                                                                                                                                                               
+
+> Cell Types #Cells Specific Non-Specific
+> #S. TFs #Genes #Train #Valid #Test #S. TFs #Genes #Train #Valid #Test hESC 758 34 (34) 815 (1260) 3535 (5995) 505 (544) 505 (545) 283 (292) 753 (1138) 2546 (3531) 447 (543) 448 (543) hHEP 425 30 (31) 874 (1331) 7724 (12466) 1107 (1546) 1108 (1546) 322 (332) 825 (1217) 2993 (3490) 568 (930) 568 (931) mDC 383 20 (21) 443 (684) 536 (903) 110 (145) 110 (145) 250 (254) 634 (969) 2115 (2704) 476 (607) 476 (607) mESC 421 88 (89) 977 (1385) 22694 (33645) 3459 (4575) 3460 (4575) 516 (522) 890 (1214) 4677 (5738) 1108 (1146) 1108 (1146) mHSC-E 1071 29 (33) 691 (1177) 9286 (17825) 1135 (2075) 1136 (2075) 144 (147) 442 (674) 1002 (1370) 211 (295) 212 (295) mHSC-GM 889 22 (23) 618 (1089) 5796 (10901) 784 (1617) 784 (1617) 82 (88) 297 (526) 496 (925) 123 (216) 124 (217) mHSC-L 847 16 (16) 525 (640) 3354 (3887) 522 (646) 522 (647) 35 (37) 164 (192) 175 (217) 52 (50) 52 (50)
+> Cell Types #Cells STRING LOF/GOF
+> #S. TFs #Genes #Train #Valid #Test #S. TFs #Genes #Train #Valid #Test hESC 758 343 (351) 511 (695) 2862 (3433) 697 (858) 698 (858) –––––hHEP 425 409 (414) 646 (874) 4960 (6269) 1281 (1367) 1282 (1367) –––––mDC 383 264 (273) 479 (664) 3277 (4066) 769 (916) 769 (916) –––––mESC 421 495 (499) 638 (785) 5099 (5830) 1331 (1324) 1332 (1325) 34 (34) 775 (1099) 3322 (4851) 423 (445) 424 (446) mHSC-E 1071 156 (161) 291 (413) 950 (1330) 210 (248) 211 (248) –––––mHSC-GM 889 92 (100) 201 (344) 505 (1108) 121 (101) 122 (102) –––––mHSC-L 847 39 (40) 70 (81) 89 (101) 24 (26) 24 (27) –––––
+
+genes ( Vtgt ). Within the TFs, we further distinguish source TFs (Vsrc ⊆ V T F ), defined as regulators with at least one observed outgoing edge in the ground truth. The corresponding scRNA-seq data is represented by an expression matrix X ∈ RN ×FX , where Xi,j 
+
+denotes the expression level of gene vi ∈ V in cell j ∈ { 1, . . . , F X }. Given the expression matrix X
+
+and a subset of observed interactions Eobs , the primary objective of GRN inference is to recover the unobserved regulatory structure by predicting potential links in E \ E obs .
+
+3.2 A Unified Framework for Practical GRN Discovery 
+
+Standard GRN inference benchmarks adopt a transductive setting and rely on global metrics such as AUPRC. However, this paradigm fundamentally diverges from the practical demands of real biological discovery, which requires inductive generalization to novel regulators and high top-K
+
+ranking quality under limited experimental budgets. 
+
+Pillar 1: Inductive gene-holdout split. In realistic discovery scenarios, researchers predominantly focus on characterizing novel or unannotated TFs by identifying their downstream regulatory targets, necessitating an inductive setting where models must generalize to unseen regulators [ 15 , 16 , 28 – 33 ]. To simulate this, we extract a subset of Vsrc as holdout TFs ( Vhold ), introducing an inductive protocol: (1) Training : The model observes only the subgraph induced by V \ V hold . Expression profiles and all edges involving holdout TFs are withheld. (2) Evaluation : The model receives the expression profiles for the full gene set V and predicts regulations across the entire network. Performance is evaluated solely on edges involving at least one holdout TF. 
+
+Pillar 2: KGC reformulation and multi-scale ranking protocol. Practical biological discovery is governed by a discrete experimental budget K, where true interactions are useful only if ranked within the top-K and lower ranks are effectively equivalent to being undiscovered. However, global metrics like AUPRC are insensitive to top-ranked precision, and are further distorted by the severe class imbalance in GRNs leaving many candidate pairs unevaluated under standard negative sampling. To resolve this, we reformulate GRN inference as a Knowledge Graph Completion (KGC) problem. Each regulation is modeled as a structural triple (vi, regulates , v j ), where vi is the source TF (head) and vj is the target gene (tail). The task of finding targets for a holdout TF naturally translates to tail entity prediction : given a query (vi, regulates , ?) , the model must rank all candidate tails 
+
+t ∈ V such that the ground-truth targets are placed as high as possible. Aligned with this KGC formulation, we evaluate GRN inference as a resource-constrained ranking problem, adopting Hits@ K for top-K recovery under a fixed validation budget and Mean Reciprocal 4Rank (MRR) for capturing overall ranking quality across heterogeneous budgets: Hits@ K = 1
+
+|Q| 
+
+X
+
+> q∈Q
+
+1[rank (tq ) ≤ K], MRR = 1
+
+|Q| 
+
+X
+
+> q∈Q
+
+1
+
+rank (tq ) , (1) where Q is the set of evaluation queries targeting the holdout TFs, and rank (tq ) is the rank of the ground-truth tail. Following standard KGC practice, we employ the filtered setting , which excludes other known valid targets for the same query when calculating the rank. This reformulation guarantees that our benchmark directly quantifies a model’s practical capacity to accelerate discovery within realistic experimental budgets. 
+
+4 Modeling Gene-Regulation Co-evolution: The CoDiffGRN Framework 
+
+4.1 Preliminaries 
+
+Diffusion models consist of a forward noising process and a reverse denoising process [ 27 ]. The forward process gradually corrupts data x0 into noise xT through a Markov chain q(x1: T | x0) = 
+
+QTt=1 q(xt | xt−1). The reverse Markov process is parameterized by neural networks and progres-sively denoises the latent states from xT to x0. The reverse trajectory is modeled as 
+
+pθ (x0: T ) = q(xT )
+
+> T
+
+Y
+
+> t=1
+
+pθ (xt−1 | xt). (2) 
+
+Diffusion process. We base our formulation on discrete diffusion spaces. Following D3PM [ 18 ], we consider one-hot discrete random variables with K categories, where x0, x1, . . . , xt ∈ { 0, 1}K . The forward transition probabilities are encoded by matrices Qt ∈ RK×K , where [Qt]ij = q(xt = j |
+
+xt−1 = i). The transition distribution is defined as: 
+
+q(xt | xt−1) = Cat( xt; p = xt−1Qt), (3) where Cat( x; p) denotes a categorical distribution over the one-hot vector x with probabilities p.The marginal at timestep t follows directly from the Markov property: 
+
+q(xt | x0) = Cat( xt; p = x0 ¯Qt), where ¯Qt = Q1Q2 · · · Qt. (4) 
+
+Reverse process. The reverse process initializes xT ∼ π(x) and generates x0 by reversing the timesteps t = T, T − 1, . . . , 0. Following prior work [ 18 , 27 ], a neural network nn θ (xt) predicts 
+
+˜pθ (˜ x0 | xt). The reverse transition is then computed as: 
+
+pθ (xt−1 | xt) ∝ X
+
+> ˜x0
+
+q(xt−1, xt | ˜x0)˜ pθ (˜ x0 | xt). (5) By Bayes’ theorem and the Markov property, the joint posterior admits a tractable form: 
+
+q(xt−1, xt | x0) = q(xt−1 | xt, x0)q(xt−1 | x0)
+
+q(xt | x0) = Cat 
+
+
+
+xt−1; p = xtQ⊤ 
+
+> t
+
+⊙ x0 ¯Qt−1
+
+x0 ¯Qtx⊤
+
+> t
+
+
+
+. (6) 
+
+Choice of transition matrix and conditioning. Different designs of Qt induce distinct inductive biases [ 18 ]. A simple yet effective parameterization is Qt = αtI + (1 − αt)1m ⊤, where m denotes the marginal distribution and αt controls the noise scale. The cumulative transition admits a closed form ¯Qt = ¯ αtI + (1 − ¯αt)1m ⊤, where ¯αt = Qtτ =1 ατ . The noise schedule is governed by a cosine function [ 34 ]. Furthermore, to enable conditional generation, the reverse process learns a conditional data distribution pθ (xt−1 | xt, c), where auxiliary condition c is injected into the denoiser to guide the reverse trajectory. 
+
+4.2 Joint Discrete Diffusion on Gene Regulatory Network 
+
+As illustrated in Figure 2, we propose a joint discrete diffusion framework for GRNs. In contrast to prior works that decouple gene features from edge diffusion [ 24 , 25 ], our framework unifies discretized gene expression and regulatory interactions into a single co-evolutionary state space. 5Final prediction   
+
+> (form batch output)
+> Conditional Graph Denoising Backbone
+> Reverse Process of Co -evolutionary Discrete Diffusion
+> Conditioned Input Features
+> Gene
+> Edge
+> Noisy Gene
+> Noisy Edge
+> Feature
+> Fusion
+> &
+> Embedding
+> Noisy node states
+> Noisy edge features
+> Time embedding
+> Continuous expression
+> TF indicator
+> 𝑫 𝒕
+> 𝑬 𝒕
+> 𝒕
+> 𝑿
+> 𝒁 𝑻#
+> GATv2 Layer
+> GATv2 Layer
+> …
+> Multi -Head
+> Attention
+> Residual
+> Connection  Edge Projection
+> Head
+> Node Projection
+> Head
+> BCE Loss
+> (Edges)
+> Aux. MSE Loss
+> (Node)
+> Ground Truth
+
+𝑇 𝑡 𝑡 − 1 0      
+
+> Reverse process
+> Noisy input 𝑮 𝑻
+> (from batch input )
+> TF -Aware Graph Denoising Module Training Objective
+> TASS Reconstruction
+> Reconstructed graph
+> Aggr . &
+> Probability
+> Averaging
+> Predicted subgraphs
+> …
+> TASS Sampling
+> …
+> Original graph Sampled subgraphs
+> TASS
+> Sampling
+> TF -ALL Subgraph Sampling (TASS)
+> Batch
+> Input
+> Batch
+> Output
+
+Figure 2: Overview of the CoDiffGRN framework. The framework combines TF-ALL Subgraph Sampling (TASS) with a co-evolutionary discrete diffusion model. TASS enables efficient training of a multi-conditioned TF-Aware Graph Denoising Module. At inference, predictions from multiple subgraphs are aggregated via the reverse diffusion process. Abbr. , Aggr.: Aggregation. 
+
+Cell-cluster discretization. To mitigate feature collapse on unseen genes, we transform continuous scRNA-seq profiles into biologically coherent discrete states. Prior studies show that discretized gene activation patterns capture stable functional structures across diverse biological settings [ 35 , 36 ]. We cluster cells into k groups and binarize gene expression within each cluster via thresholding, producing a k-bit activation pattern per gene. Each binary pattern is mapped to a categorical variable and represented as a one-hot vector in RFD , where FD = 2 k.
+
+Joint modeling. We follow a joint diffusion formulation [ 37 ] to unify gene expression and regulatory edges. Edges are represented as E ∈ RN ×N ×2 (indicating absence/presence), and node features as D ∈ RN ×FD . The global graph token for each node i is constructed via concatenation: G[i] = di ∥ ei1 ∥ · · · ∥ eiN 
+
+, where di ∈ RFD denotes the discretized node features, and eij ∈ R2 is the one-hot encoding of the edge from node i to node j.
+
+Design of the transition matrix. We formulate a joint transition matrix QG ∈ RFG×FG , con-structed from four component transition probability matrices: QD (gene → gene), QE (regulation →
+
+regulation), QED (regulation → gene), and QDE (gene → regulation): 
+
+QG =
+
+ QD 1⊤
+
+N ⊗ QDE 
+
+1N ⊗ QED 1N ×N ⊗ QE
+
+
+
+, (7) where ⊗ denotes the Kronecker product, and 1N , 1N ×N are all-ones vectors and matrices of appropriate dimensions. Following Vignac et al. [38] , QD and QE are derived from the marginal distributions mD and mE computed from the training data. For the cross-dependencies, mED 
+
+and mDE capture the conditional co-occurrence probabilities between gene expression types and regulation types. This explicitly ensures that edge transitions are biologically conditioned on the states of their endpoint genes. 
+
+Forcing true D technique. During training, the reverse process approximates pθ (Gt−1 | Gt) ∝
+
+P ˜G0 q(Gt−1, G t | ˜G0)˜ pθ ( ˜G0 | Gt). To mitigate error accumulation and sharpen the learning signal for unknown edge structures, we apply a teacher-forcing-style technique that replaces the predicted node component ˜D0 within the generated ˜G0 with the ground-truth D0.64.3 Conditional Graph Denoising Architecture Conditioning mechanism. We incorporate multiple sources of conditioning information into the denoiser to guide the reverse process. Combining sinusoidal timestep embeddings ti, continuous gene expression features xi, noisy discrete node states dt,i , flattened incoming/outgoing edge features 
+
+et,i :, and a boolean TF indicator zTF  
+
+> i
+
+, the conditioned input feature for node i is constructed as: 
+
+h(0)  
+
+> i
+
+= ti ∥ xi ∥ dt,i ∥ et,i : ∥ zTF 
+
+> i
+
+. (8) 
+
+Denoiser backbone. We parameterize the reverse process using a TF-aware graph denoiser built upon GATv2 [39]. Each layer updates node representations dynamically: 
+
+h(l+1)  
+
+> i
+
+= σ
+
+ X 
+
+> j∈N (i)
+
+α(l) 
+
+> ij
+
+W(l)h(l)
+
+> j
+
+ , (9) where the attention coefficients α(l) 
+
+> ij
+
+are computed via: 
+
+α(l) 
+
+> ij
+
+= softmax j
+
+
+
+a⊤ LeakyReLU  W(l)[h(l) 
+
+> i
+
+∥h(l) 
+
+> j
+
+]
+
+. (10) The node representations are then projected into TF-specific ( htf  
+
+> i
+
+) and target-specific ( htg  
+
+> j
+
+) embedding spaces. A score head yields a scalar compatibility score sij = fscore ([ htf  
+
+> i
+
+∥htg  
+
+> j
+
+]) . Binary edge logits are formed as [−sij , s ij ] and added residually to the noisy edge input Et. Node logits are obtained via a linear projection of averaged embeddings with a residual connection to Dt.
+
+Training objective. The denoiser is trained using a weighted combination of discrete edge reconstruc-tion loss ( Ledge ) and a node-level auxiliary regression objective ( Lnode ). Let ˆei,j denote the predicted probability of edge existence and ei,j ∈ { 0, 1} the ground-truth. The total loss is defined as: 
+
+L = − X
+
+> i,j
+
+(ei,j log ˆ ei,j + (1 − ei,j ) log(1 − ˆei,j )) + λ 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+ˆX0,i − Xi
+
+> 22
+
+, (11) where the auxiliary MSE loss preserves continuous biological signals within the discretized space, and λ ≪ 1 controls its strength. 
+
+4.4 TF-ALL Subgraph Sampling (TASS) 
+
+Diffusion models typically require large training datasets, but GRN inference is inherently data-scarce since each dataset constitutes a single large graph. To address this, we propose TF-ALL Subgraph Sampling (TASS), which constructs a training set by sampling subgraphs from the input graph (Figure 1(c)). The model is trained on these subgraphs and, at inference time, repeatedly samples subgraphs, predicts edges, and aggregates results to reconstruct the full graph. This expands effective supervision by exposing diverse gene–topology patterns, improving generalization under limited data. 
+
+Sampling. As shown in Figure 2, we adopt node-based sampling due to the lack of reliable edge priors, following uniform node sampling [ 40 ]. Exploiting the bipartite-like structure of GRNs (TFs → targets), each subgraph of size k is formed by sampling a fraction t (TF-to-ALL ratio) of nodes from the TF set, and the remainder from all genes, with resampling for TF duplicates. Let 
+
+p = k/n . Following theoretical bounds for graph recovery [ 40 ], we set the number of subgraphs to 
+
+m = ⌈p−2 log n log(1 /δ )⌉. In GRNs, this bipartite sampling strategy inherently yields higher edge coverage due to the sparse, hierarchical nature of regulatory interactions. 
+
+Reconstruction. At inference, we apply the same sampling strategy, generate predictions across subgraphs, and map them back to the global edge indices. Outputs are converted to probabilities via softmax, and overlapping predictions are averaged to form the final consensus. Uncovered edges are assigned a default baseline prior. 7Table 2: Benchmark results on BEELINE-KGC ( Specific network). We report mean over runs. The best, second-best, and third-best are denoted by bold , underline , and italic , respectively. ∆
+
+indicates change relative to the baseline: green up, red down. Leading zeros are omitted. Abbr. , Trad.: Traditional methods, DL.: Feature-based deep learning models, GNN.: GNN-based models, Diff.: Diffusion-based models.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+
+> Model hESC hHEP mDC mESC mHSC-E mHSC-GM mHSC-L
+> H@10 H@50 MRR H@10 H@50 MRR H@10 H@50 MRR H@10 H@50 MRR H@10 H@50 MRR H@10 H@50 MRR H@10 H@50 MRR
+> Setting: TFs+500
+> TRAD . GENIE3 .000 .002 .003 .001 .004 .007 .000 .009 .003 .004 .013 .007 .001 .005 .004 .003 .006 .005 .004 .004 .005 GRNBoost2 .000 .002 .003 .000 .004 .006 .000 .009 .003 .001 .013 .006 .000 .005 .004 .003 .006 .006 .000 .004 .004
+> DL.  CNNC .006 .006 .005 .009 .009 .013 .009 .009 .004 .026 .036 .019 .000 .005 .004 .000 .000 .005 .000 .000 .004 DeepSEM .000 .004 .003 .001 .002 .007 .000 .000 .003 .005 .017 .007 .000 .002 .004 .000 .003 .005 .000 .000 .004
+> GNN.  GNNLink .026 .110 .015 .059 .200 .045 .012 .037 .004 .037 .157 .020 .049 .141 .032 .044 .119 .037 .055 .152 .024 GENELink+ .052 .218 .030 .141 .385 .100 .025 .077 .009 .082 .343 .050 .124 .355 .073 .115 .290 .073 .122 .304 .067
+> GRNFormer .036 .150 .020 .093 .248 .072 .017 .047 .006 .061 .250 .030 .076 .189 .052 .069 .172 .044 .077 .216 .038 GCLink .033 .131 .016 .079 .224 .060 .014 .040 .005 .046 .202 .024 .066 .180 .043 .057 .148 .040 .064 .170 .030
+> DIFF . RegDiffusion .033 .151 .021 .077 .230 .058 .023 .071 .009 .051 .195 .033 .133 .362 .074 .094 .249 .065 .066 .162 .036 DigNet .063 .242 .029 .138 .355 .097 .019 .055 .006 .051 .236 .035 .168 .361 .088 .079 .216 .056 .139 .314 .085 CoDiffGRN .079 .264 .034 .173 .499 .126 .028 .122 .014 .123 .412 .060 .175 .407 .099 .167 .463 .108 .162 .361 .111
+> ∆(%) +24.9% +9.1% +13.0% +22.1% +29.6% +25.1% +11.3% +57.1% +52.7% +49.3% +20.1% +20.2% +4.1% +12.6% +11.8% +44.7% +59.5% +48.9% +16.6% +14.8% +30.4%
+> Setting: TFs+1000
+> TRAD . GENIE3 .000 .000 .002 .001 .003 .005 .000 .007 .002 .001 .004 .004 .001 .280 .018 .001 .643 .017 .002 .006 .007 GRNBoost2 .000 .000 .002 .000 .003 .004 .000 .007 .002 .001 .004 .004 .000 .280 .017 .000 .643 .017 .000 .006 .006
+> DL.  CNNC .005 .015 .004 .006 .008 .008 .000 .000 .002 .011 .022 .009 .017 .295 .030 .010 .652 .024 .000 .003 .006 DeepSEM .000 .002 .002 .001 .003 .005 .000 .000 .002 .003 .008 .004 .001 .287 .018 .003 .647 .018 .000 .006 .006
+> GNN.  GNNLink .010 .037 .006 .029 .142 .016 .007 .028 .006 .038 .081 .029 .050 .160 .020 .112 .301 .052 .086 .303 .035 GENELink+ .019 .070 .010 .067 .340 .038 .014 .061 .009 .086 .211 .058 .073 .301 .046 .249 .648 .101 .166 .531 .073 GRNFormer .015 .051 .007 .045 .216 .024 .008 .034 .007 .058 .114 .040 .058 .196 .031 .144 .367 .066 .105 .420 .047 GCLink .012 .043 .006 .035 .163 .021 .007 .031 .006 .044 .093 .035 .055 .186 .025 .129 .333 .062 .098 .361 .038
+> DIFF . RegDiffusion .022 .089 .014 .068 .347 .043 .009 .046 .007 .083 .191 .055 .060 .230 .041 .277 .602 .106 .100 .306 .038 DigNet .021 .071 .011 .067 .335 .044 .013 .065 .009 .117 .266 .077 .063 .249 .039 .217 .609 .089 .135 .441 .055
+> CoDiffGRN .027 .108 .015 .079 .398 .053 .016 .069 .010 .139 .299 .093 .091 .429 .051 .334 .711 .140 .276 .587 .117
+> ∆(%) +23.5% +22.3% +12.3% +15.3% +14.7% +20.2% +13.9% +5.8% +14.1% +19.4% +12.1% +21.1% +25.4% +42.5% +11.7% +20.7% +9.0% +31.4% +66.1% +10.5% +61.6%
+
+5 Experiments 
+
+5.1 Experimental Setup Evaluation protocols. We primarily evaluate performance using Hits@K and MRR on Inductive Gene-Holdout Split introduced in Section 3. To reflect practical experimental settings, we report Hits@10 and Hits@50, corresponding to low- and high-throughput validation regimes. 
+
+Baseline models. We compare against a comprehensive set of baselines, including two traditional methods (GENIE3 [ 22 ], GRNBoost2 [ 20 ]), two feature-based deep learning models (CNNC [ 21 ], DeepSEM [ 23 ]), four graph-based models (GNNLink [ 9], GENELink+ [ 10 ], GRNFormer [ 11 ], GCLink [12]), and two diffusion-based methods (RegDiffusion [24], DigNet [25]). 
+
+Model setups. For fair comparison, all baselines are implemented following their original configura-tions. Our model adopts the TF-Aware Graph Denoiser, built upon a multi-layer GATv2 architecture with three attention heads per layer and progressively reduced hidden dimensions (128, 64, 64, 32), producing a 16-dimensional output embedding. We use a LeakyReLU with negative slope 0.2 and concatenate multi-head outputs. Score head fscore is implemented as a two-layer MLP. 
+
+Training setups. All baselines are trained according to their original protocols. Our model is optimized using AdamW with a learning rate of 1 × 10 −4, weight decay 1 × 10 −3, batch size 64, and trained for 500 epochs. We use a discrete state space with k = 4 clusters (yielding 16 classes) and 500 diffusion steps. Subgraphs are sampled with 100 nodes each. All experiments are conducted on a local server with 100 CPU cores and 4 NVIDIA RTX 4090 GPUs (24 GB), and are run over three random seeds (0, 1, and 2), with both mean and standard deviation reported. 
+
+5.2 Results 
+
+We report the performance of representative models on the Specific network under the proposed BEELINE-KGC in Table 2. Based on these results, we highlight the following key findings: • The proposed BEELINE-KGC benchmark is substantially more challenging than existing protocols. Traditional and feature-based methods largely collapse under inductive gene holdout, yielding near-zero Hits@10 and MRR. Even several GNN-based models degrade substantially, indicating that BEELINE-KGC reveals inductive generalization failures obscured by transductive benchmarks and global metrics. 8CoDiffGRN Edge Only w/o TASS RandSS  
+
+> Hits@10 Hits@50
+
+Figure 3: Ablation study results on BEELINE-KGC ( Specific network). We report mean performance of Hits@10 and Hits@50 over runs, under the TFs+500 (top) and TFs+1000 (bottom) settings. Abbr. ,w/o: without. • GNN-based models show limited inductive generalization. While GENELink+ remains com-petitive, most GNN methods suffer from low performance. Their heavy reliance on predefined prior graphs leads to disconnected components for unseen genes, causing error accumulation during message passing and widening the gap against diffusion-based approaches. • Diffusion-based models offer partial robustness yet remain insufficient. According to Table 2, diffusion-based methods generally outperform GNN baselines and match GENELink+ in some cases, but still fall behind CoDiffGRN. This suggests that existing diffusion models alleviate reliance on explicit graph structure, yet remain vulnerable to feature collapse on unseen genes. Moreover, their single-graph optimization paradigm appears suboptimal for diffusion. • CoDiffGRN achieves consistent SOTA performance. CoDiffGRN ranks first across all cell types and metrics in both TFs+500 and TFs+1000 settings, with relative gains up to +184.8% (and +24.5% on average) over the strongest baselines on the most competitive Specific network. These results validate the effectiveness of our co-evolutionary discrete diffusion framework with gene-state-dependent transitions and the TASS strategy for addressing inductive GRN inference and top-K ranking quality. 
+
+5.3 Ablation Study 
+
+To verify the effectiveness of our designs, we conduct extensive ablation experiments on BEELINE-KGC, focusing on the joint diffusion mechanism and the TASS augmentation strategy. The variants are: (i) Edge Only : a variant that only using edge diffusion; (ii) w/o TASS : the model trained on the original graph without TASS; and (iii) RandSS : replacing TASS with uniform random subgraph sampling. 
+
+Effect of joint modeling. As shown in Figure 3, removing joint modeling (Edge Only) consistently degrades performance across datasets and metrics. This indicates that decoupling gene expression states from regulatory edges limits the model’s ability to capture conditional regulatory interactions and reduces top-K ranking quality, especially when generalizing to unseen genes in inductive settings. 
+
+Effect of subgraph sampling. Removing TASS leads to a substantial performance drop across all experimental settings. In contrast, uniform random sampling (RandSS) partially recovers the performance and achieves superior results in a few isolated cases, but remains consistently less effective overall. These results highlight the importance of informative subgraph construction and demonstrate that the task-aware sampling strategy of TASS provides more reliable improvements than generic random sampling under inductive and data-scarce GRN inference settings. 96 Conclusion 
+
+In this work, we address the gap between computational GRN inference and real-world biological dis-covery. We introduce BEELINE-KGC, an application-aligned framework that enforces an inductive, KGC-based evaluation protocol to reflect the top-K constraints of wet-lab validation. To overcome the exposed gene-level generalization gap, we propose CoDiffGRN, the first joint node-edge discrete diffusion model for GRNs. By capturing the co-evolution of gene expression and network topology, and further enhanced by our TASS strategy, CoDiffGRN achieves robust inductive generalization. Together, our benchmark and model establish a unified paradigm for reliable and budget-aware biological discovery in systems biology. 
+
+Limitations and Future Work. Despite its performance, our approach has several limitations that suggest directions for future research. The current evaluation is restricted to established scRNA-seq systems, which may not fully represent the complexity of rare tissues or cross-species regulatory dynamics. We plan to extend our benchmark to include more diverse biological contexts and validate the model’s transferability across different species. Moreover, the joint diffusion process and TASS strategy introduce non-trivial computational overhead during training and inference. Future work will focus on developing optimized sampling kernels and parallelized subgraph processing to enhance scalability. 10 References 
+
+[1] Yu-Chieh Wang, Suzanne E Peterson, and Jeanne F Loring. Protein post-translational modi-fications and regulation of pluripotency in human stem cells. Cell research , 24(2):143–160, 2014. [2] Constantinos Chronis, Petko Fiziev, Bernadett Papp, Stefan Butz, Giancarlo Bonora, Shan Sabri, Jason Ernst, and Kathrin Plath. Cooperative binding of transcription factors orchestrates reprogramming. Cell , 168(3):442–459, 2017. [3] Michael Hecker, Sandro Lambeck, Susanne Toepfer, Eugene Van Someren, and Reinhard Guthke. Gene regulatory network inference: data integration in dynamic models—a review. 
+
+Biosystems , 96(1):86–103, 2009. [4] Patricia J Wittkopp and Gizem Kalay. Cis-regulatory elements: molecular mechanisms and evolutionary processes underlying divergence. Nature Reviews Genetics , 13(1):59–69, 2012. [5] Aleksandra A Kolodziejczyk, Jong Kyoung Kim, Valentine Svensson, John C Marioni, and Sarah A Teichmann. The technology and biology of single-cell rna sequencing. Molecular cell ,58(4):610–620, 2015. [6] Allon Wagner, Aviv Regev, and Nir Yosef. Revealing the vectors of cellular identity with single-cell genomics. Nature biotechnology , 34(11):1145–1160, 2016. [7] Peter V Kharchenko, Lev Silberstein, and David T Scadden. Bayesian approach to single-cell differential expression analysis. Nature methods , 11(7):740–742, 2014. [8] Guangyi Chen and Zhi-Ping Liu. Graph attention network for link prediction of gene regulations from single-cell rna-sequencing data. Bioinformatics , 38(19):4522–4529, 2022. [9] Guo Mao, Zhengbin Pang, Ke Zuo, Qinglin Wang, Xiangdong Pei, Xinhai Chen, and Jie Liu. Predicting gene regulatory links from single-cell rna-seq data using graph neural networks. 
+
+Briefings in Bioinformatics , 24(6):bbad414, 2023. [10] Wei Zhang, Bowen Shao, Wenrui Li, Wenbo Guo, Jiaxin Lyu, Guangyi Chen, Chuanyuan Wang, and Zhi-Ping Liu. Inferring cell-type-specific gene regulatory network from cellular transcriptomics data with genelink+. Briefings in Bioinformatics , 26(4):bbaf359, 2025. [11] Akshata Hegde and Jianlin Cheng. Grnformer: accurate gene regulatory network inference using graph transformer. Bioinformatics , 42(4):btag144, 2026. [12] Weiming Yu, Zerun Lin, Miaofang Lan, and Le Ou-Yang. Gclink: a graph contrastive link prediction framework for gene regulatory network inference. Bioinformatics , 41(3):btaf074, 2025. [13] Jiacheng Wang, Yaojia Chen, and Quan Zou. Inferring gene regulatory network from single-cell transcriptomes with graph autoencoder model. PLoS Genetics , 19(9):e1010942, 2023. [14] Aditya Pratapa, Amogh P Jalihal, Jeffrey N Law, Aditya Bharadwaj, and andT M Murali. Benchmarking algorithms for gene regulatory network inference from single-cell transcriptomic data. Nature methods , 17(2):147–154, 2020. [15] Jingwen W Ding, Chang N Kim, Megan S Ostrowski, Yashodara Abeykoon, Bryan J Pavlovic, Jenelle L Wallace, Nathan K Schaefer, Tomasz J Nowakowski, and Alex A Pollen. Dissecting gene regulatory networks governing human cortical cell fate. Nature , pages 1–11, 2026. [16] Rachel B Gilmore, Yaling Liu, Christopher E Stoddard, Michael S Chung, Gordon G Carmichael, and Justin Cotney. Identifying key underlying regulatory networks and predicting targets of orphan c/d box snord116 snornas in prader–willi syndrome. Nucleic Acids Research , 52(22): 13757–13774, 2024. [17] Antoine Bordes, Nicolas Usunier, Alberto Garcia-Duran, Jason Weston, and Oksana Yakhnenko. Translating embeddings for modeling multi-relational data. Advances in neural information processing systems , 26, 2013. 11 [18] Jacob Austin, Daniel D Johnson, Jonathan Ho, Daniel Tarlow, and Rianne Van Den Berg. Structured denoising diffusion models in discrete state-spaces. Advances in neural information processing systems , 34:17981–17993, 2021. [19] Itunuoluwa Isewon, Mariam Kanonte, Emmanuel Alagbe, and Jelili Oyelade. Benchmarking frameworks for gene regulatory network inference methods: A review. NIPES JSTR SPECIAL ISSUE , 7(1):2224–2228, 2025. [20] Thomas Moerman, Sara Aibar Santos, Carmen Bravo González-Blas, Jaak Simm, Yves Moreau, Jan Aerts, and Stein Aerts. Grnboost2 and arboreto: efficient and scalable inference of gene regulatory networks. Bioinformatics , 35(12):2159–2161, 2019. [21] Ye Yuan and Ziv Bar-Joseph. Deep learning for inferring gene relationships from single-cell expression data. Proceedings of the National Academy of Sciences , 116(52):27151–27158, 2019. [22] Vân Anh Huynh-Thu, Alexandre Irrthum, Louis Wehenkel, and Pierre Geurts. Inferring regulatory networks from expression data using tree-based methods. PloS one , 5(9):e12776, 2010. [23] Hantao Shu, Jingtian Zhou, Qiuyu Lian, Han Li, Dan Zhao, Jianyang Zeng, and Jianzhu Ma. Modeling gene regulatory networks using neural network architectures. Nature Computational Science , 1(7):491–501, 2021. [24] Hao Zhu and Donna Slonim. From noise to knowledge: diffusion probabilistic model-based neural inference of gene regulatory networks. Journal of Computational Biology , 31(11): 1087–1103, 2024. [25] Chuanyuan Wang and Zhi-Ping Liu. Diffusion-based generation of gene regulatory networks from scrna-seq data with dignet. Genome Research , 35(2):340–354, 2025. [26] Shiyu Xu, Na Yu, Daoliang Zhang, and Chuanyuan Wang. Attention-guided probabilistic diffusion model for generating cell-type-specific gene regulatory networks from gene expression profiles. Genes , 16(11):1255, 2025. [27] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. Advances in neural information processing systems , 33:6840–6851, 2020. [28] Shruthi Subramanian, Julie AI Thoms, Yizhou Huang, Paola Cornejo-Páramo, Forrest C Koch, Sebastien Jacquelin, Sylvie Shen, Emma Song, Swapna Joshi, Chris Brownlee, et al. Genome-wide transcription factor–binding maps reveal cell-specific changes in the regulatory architecture of human hspcs. Blood , 142(17):1448–1462, 2023. [29] Caroline RM Wiggers, Burak Yüzügüldü, Nathanial G Tadros, Tayla B Heavican-Foral, Eu-gene Y Cho, Zachary C Eisenbies, Merve Ozdemir, Steffen B Kulp, Yun-Cheol Chae, Alejandro Gutierrez, et al. Genome-wide crispr screen identifies irf1 and tfap4 as transcriptional regulators of galectin-9 in t cell acute lymphoblastic leukemia. Science advances , 11(12):eads8351, 2025. [30] Qiong Zhang, Wei Liu, Hong-Mei Zhang, Gui-Yan Xie, Ya-Ru Miao, Mengxuan Xia, and An-Yuan Guo. htftarget: a comprehensive database for regulations of human transcription factors and their targets. Genomics, proteomics & bioinformatics , 18(2):120–128, 2020. [31] Junlin Zhang, Bao Liu, Yan Song, Yang Chen, Jiao Fu, Jianquan Liu, Tao Ma, Zhenxiang Xi, and Huanhuan Liu. Genome-wide (chip-seq) identification of target genes regulated by wrky33 during submergence stress in arabidopsis. BMC genomic data , 22(1):16, 2021. [32] Wei Niu, Zhi John Lu, Mei Zhong, Mihail Sarov, John I Murray, Cathleen M Brdlik, Judith Janette, Chao Chen, Pedro Alves, Elicia Preston, et al. Diverse transcription factor binding features revealed by genome-wide chip-seq in c. elegans. Genome research , 21(2):245–254, 2011. [33] Emmanouil Bastakis, Jennifer Gerke, Seyma Özkan, Rebekka Harting, Tanja Lienard, Christoph Sasse, Emmanouil S Xylakis, Merle Aden, Anja Strohdiek, Gabriele Heinrich, et al. Molecular circuit between aspergillus nidulans transcription factors msna and velb to coordinate fungal stress and developmental responses. PLoS Genetics , 21(7):e1011578, 2025. 12 [34] Alexander Quinn Nichol and Prafulla Dhariwal. Improved denoising diffusion probabilistic models. In International conference on machine learning , pages 8162–8171. PMLR, 2021. [35] Dominic Grün, Anna Lyubimova, Lennart Kester, Kay Wiebrands, Onur Basak, Nobuo Sasaki, Hans Clevers, and Alexander Van Oudenaarden. Single-cell messenger rna sequencing reveals rare intestinal cell types. Nature , 525(7568):251–255, 2015. [36] Gerard A Bouland, Ahmed Mahfouz, and Marcel JT Reinders. Differential analysis of binarized single-cell rna sequencing data captures biological variation. NAR genomics and bioinformatics ,3(4):lqab118, 2021. [37] Gang Liu, Jiaxin Xu, Tengfei Luo, and Meng Jiang. Graph diffusion transformers for multi-conditional molecular generation. Advances in Neural Information Processing Systems , 37: 8065–8092, 2024. [38] Clement Vignac, Igor Krawczuk, Antoine Siraudin, Bohan Wang, Volkan Cevher, and Pas-cal Frossard. Digress: Discrete denoising diffusion for graph generation. arXiv preprint arXiv:2209.14734 , 2022. [39] Shaked Brody, Uri Alon, and Eran Yahav. How attentive are graph attention networks? arXiv preprint arXiv:2105.14491 , 2021. [40] Stratis Limnios, Praveen Selvaraj, Mihai Cucuringu, Carsten Maple, Gesine Reinert, and Andrew Elliott. Sagess: Sampling graph denoising diffusion model for scalable graph generation. arXiv preprint arXiv:2306.16827 , 2023. [41] Etienne Becht, Leland McInnes, John Healy, Charles-Antoine Dutertre, Immanuel WH Kwok, Lai Guan Ng, Florent Ginhoux, and Evan W Newell. Dimensionality reduction for visualizing single-cell data using umap. Nature biotechnology , 37(1):38–44, 2019. [42] Meenakshi S Kagda, Bonita Lam, Casey Litton, Corinn Small, Cricket A Sloan, Emma Spragins, Forrest Tanaka, Ian Whaling, Idan Gabdank, Ingrid Youngworth, et al. Data navigation on the encode portal. Nature Communications , 16(1):9592, 2025. [43] Zhaonan Zou, Tazro Ohta, and Shinya Oki. Chip-atlas 3.0: a data-mining suite to explore chromosome architecture together with large-scale regulome data. Nucleic Acids Research , 52 (W1):W45–W53, 2024. [44] Huilei Xu, Caroline Baroukh, Ruth Dannenfelser, Edward Y Chen, Christopher M Tan, Yan Kou, Yujin E Kim, Ihor R Lemischka, and Avi Ma’ayan. Escape: database for integrating high-content published data collected from human and mouse embryonic stem cells. Database ,2013:bat045, 2013. [45] Luz Garcia-Alonso, Christian H Holland, Mahmoud M Ibrahim, Denes Turei, and Julio Saez-Rodriguez. Benchmark and integration of resources for the estimation of human transcription factor activities. Genome research , 29(8):1363–1375, 2019. [46] Zhi-Ping Liu, Canglin Wu, Hongyu Miao, and Hulin Wu. Regnetwork: an integrated database of transcriptional and post-transcriptional regulatory networks in human and mouse. Database ,2015:bav095, 2015. [47] Heonjong Han, Jae-Won Cho, Sangyoung Lee, Ayoung Yun, Hyojin Kim, Dasom Bae, Sunmo Yang, Chan Yeong Kim, Muyoung Lee, Eunbeen Kim, et al. Trrust v2: an expanded reference database of human and mouse transcriptional regulatory interactions. Nucleic acids research ,46(D1):D380–D386, 2018. [48] Damian Szklarczyk, Rebecca Kirsch, Mikaela Koutrouli, Katerina Nastou, Farrokh Mehryary, Radja Hachilif, Annika L Gable, Tao Fang, Nadezhda T Doncheva, Sampo Pyysalo, et al. The string database in 2023: protein–protein association networks and functional enrichment analyses for any sequenced genome of interest. Nucleic acids research , 51(D1):D638–D646, 2023. 13 A Results on Previous Transductive Setting 
+
+Table 3: Results on transductive setting ( Specific network). Caption settings are the same as Table 2. 
+
+Model hESC hHEP mDC mESC mHSC-E mHSC-GM mHSC-L 
+
+H@10 H@50 MRR H@10 H@50 MRR H@10 H@50 MRR H@10 H@50 MRR H@10 H@50 MRR H@10 H@50 MRR H@10 H@50 MRR 
+
+Setting: TFs+500 
+
+> TRAD .
+
+GENIE3 .012 .012 .008 .023 .023 .020 .009 .018 .005 .034 .036 .024 .008 .008 .010 .010 .010 .014 .013 .013 .014 GRNBoost2 .006 .006 .007 .001 .001 .007 .000 .000 .003 .005 .005 .010 .002 .002 .005 .000 .000 .005 .002 .002 .006 
+
+> DL.
+
+CNNC .028 .140 .016 .047 .198 .028 .011 .109 .013 .058 .237 .033 .021 .103 .016 .032 .149 .018 .016 .095 .015 DeepSEM .024 .071 .012 .054 .059 .030 .045 .073 .022 .094 .149 .042 .078 .086 .049 .074 .075 .053 .065 .067 .036 
+
+> GNN.
+
+GNNLink .015 .051 .013 .001 .006 .007 .027 .130 .015 .000 .020 .006 .000 .002 .003 .010 .022 .006 .017 .025 .015 GENELink+ .040 .169 .022 .137 .377 .057 .016 .071 .010 .103 .358 .053 .329 .598 .167 .048 .213 .029 .130 .330 .057 GRNFormer .039 .187 .026 .106 .323 .049 .033 .125 .015 .118 .382 .058 .034 .119 .020 .040 .209 .024 .035 .137 .024 GCLink .098 .296 .048 .146 .394 .072 .049 .141 .031 .188 .461 .092 – – – – – – .058 .213 .032 
+
+> DIFF .
+
+RegDiffusion .031 .148 .017 .035 .140 .019 .022 .060 .018 .053 .176 .025 .040 .208 .024 .087 .311 .044 .081 .257 .036 
+
+DigNet .043 .168 .023 .055 .198 .029 .049 .120 .019 .064 .281 .031 .049 .184 .025 .132 .434 .066 .048 .235 .028 CoDiffGRN .102 .318 .056 .247 .539 .128 .049 .179 .033 .259 .524 .137 .470 .769 .259 .435 .755 .227 .349 .669 .189 
+
+∆(%) +4.1% +7.3% +15.9% +68.7% +36.9% +76.3% +0.0% +26.9% +4.8% +37.6% +13.9% +48.7% +42.8% +28.7% +54.9% +228.7% +74.0% +244.1% +167.6% +102.7% +231.2% 
+
+Setting: TFs+1000 
+
+> TRAD .
+
+GENIE3 .004 .004 .004 .010 .010 .010 .014 .014 .007 .021 .022 .015 .003 .283 .020 .006 .646 .022 .011 .011 .016 GRNBoost2 .000 .000 .002 .001 .001 .006 .000 .000 .002 .005 .005 .008 .001 .281 .017 .002 .643 .018 .000 .000 .006 
+
+> DL.
+
+CNNC .014 .096 .013 .032 .151 .018 .004 .042 .006 .043 .162 .023 .153 .520 .066 .129 .464 .056 .022 .142 .017 DeepSEM .024 .046 .008 .044 .049 .023 .014 .035 .008 .064 .112 .032 .046 .322 .043 .043 .668 .045 .043 .043 .037 
+
+> GNN.
+
+GNNLink .004 .021 .005 .000 .005 .005 .014 .046 .007 .000 .000 .003 .000 .516 .019 .005 .340 .016 .026 .059 .020 GENELink+ .041 .144 .022 .085 .295 .042 .025 .099 .010 .130 .356 .066 .445 .698 .251 .390 .670 .225 .084 .307 .036 GRNFormer .029 .112 .019 .062 .254 .035 .021 .053 .010 .062 .268 .033 .449 .660 .258 .396 .676 .207 .039 .134 .024 GCLink .042 .203 .024 .091 .274 .055 .042 .141 .021 .126 .351 .064 – – – – – – .103 .319 .044 
+
+> DIFF .
+
+RegDiffusion .022 .080 .013 .024 .089 .013 .021 .057 .012 .034 .119 .017 .064 .354 .036 .090 .334 .041 .154 .429 .082 DigNet .027 .107 .013 .026 .116 .016 .042 .064 .008 .042 .191 .023 .063 .346 .038 .055 .288 .034 .121 .407 .060 
+
+CoDiffGRN .079 .269 .035 .203 .439 .115 .053 .159 .025 .245 .502 .128 .464 .708 .267 .410 .702 .235 .311 .609 .144 
+
+∆(%) +88.6% +32.7% +47.6% +122.8% +49.1% +110.3% +25.0% +12.5% +20.3% +88.9% +41.0% +94.1% +3.3% +1.5% +3.5% +3.5% +3.8% +4.4% +101.1% +42.0% +76.2% Table 4: Results of AUPRC on transductive setting ( Specific network). 
+
+Model TFs+500 TFs+1000 
+
+hESC hHEP mDC mESC mHSC-E mHSC-GM mHSC-L hESC hHEP mDC mESC mHSC-E mHSC-GM mHSC-L 
+
+> TRAD .
+
+GENIE3 .156 .395 .055 .314 .566 .532 .525 .158 .384 .056 .312 .547 .532 .484 GRNBoost2 .154 .387 .069 .327 .578 .522 .597 .150 .380 .059 .324 .547 .527 .481 
+
+> DL.
+
+CNNC .255 .469 .066 .484 .746 .682 .648 .271 .499 .058 .597 .774 .737 .565 DeepSEM .196 .461 .054 .314 .567 .520 .537 .192 .419 .056 .320 .565 .543 .523 
+
+> GNN.
+
+GNNLink .521 .751 .251 .766 .881 .898 .855 .515 .787 .216 .785 .930 .931 .864 GENELink+ .519 .813 .153 .796 .943 .937 .870 .521 .817 .122 .776 .954 .951 .853 GRNFormer .503 .713 .121 .802 .874 .869 .764 .522 .744 .125 .797 .917 .915 .743 GCLink .465 .707 .207 .739 .856 .849 .814 .476 .740 .159 .722 .898 .870 .840 
+
+> DIFF .
+
+RegDiffusion .447 .808 .117 .761 .932 .925 .863 .483 .814 .132 .784 .944 .944 .859 
+
+DigNet .495 .799 .112 .775 .717 .703 .871 .527 .813 .139 .798 .625 .612 .869 
+
+CoDiffGRN .582 .817 .155 .836 .923 .909 .840 .598 .822 .154 .856 .931 .926 .839 
+
+∆(%) +11.8% +0.5% -38.4% +4.3% -2.0% -3.0% -3.6% +13.3% +0.5% -28.4% +7.2% -2.4% -2.6% -3.5% 14 B Cell-cluster Discretization 
+
+This section provides additional details and supporting evidence for the proposed Cell-cluster-based Discretization strategy. We first present the algorithmic procedure, followed by visualizations that demonstrate the biological coherence of the induced discrete gene state space. 
+
+B.1 Algorithm Algorithm 1 Cell-cluster Discretization 
+
+Require: Gene expression matrix X ∈ RN ×FX , number of clusters k
+
+Ensure: Discrete one-hot representations D ∈ RN ×FD , where FD = 2 k
+
+1: Construct Xvis using only visible data 
+
+2: Apply k-means on cell-wise expression profiles of Xvis to obtain clusters {C 1, . . . , Ck}
+
+3: For each cluster Cj , compute τj = 1
+
+|C j |· N
+
+P
+
+c∈C j
+
+PNg=1 Xg,c 
+
+4: for each gene g do 
+
+5: for each cluster j do 
+
+6: Compute mean expression μg,j = 1
+
+|C j |
+
+P
+
+c∈C j Xg,c 
+
+7: Set binary activation bg,j = I(μg,j ≥ τj )
+
+8: end for 
+
+9: Form binary vector bg ∈ { 0, 1}k
+
+10: Map bg to category index cg ∈ { 0, . . . , F D − 1}
+
+11: Convert cg to one-hot vector d ∈ RFD
+
+12: end for 
+
+13: return D = {d}Ng=1 
+
+B.2 Design Motivation and Biological Evidence 
+
+We provide the design motivation and biological evidence supporting the proposed Cell-cluster-based Discretization. The goal of this design is to construct a biologically coherent discrete state space that enables stable inductive diffusion over unseen genes. 1. hESC 
+
+> human embryonic stem cells
+> 2. hHEP
+> human mature hepatocytes
+> 3. mDC
+> mouse dendritic cells
+> 4. mESC
+> mouse embryonic stem cells
+> 5. mHSC -E
+> mouse hematopoietic stem cells
+> with erythroid -lineage
+> 7. mHSC -L
+> mouse hematopoietic stem cells
+> with lymphoid -lineage
+> 6. mHSC -GM
+> mouse hematopoietic stem cells
+> with granulocyte -monocyte -lineage
+> C0
+> hESC
+> C1
+> C2
+> C3
+> C0
+> hHEP
+> C1
+> C2
+> C3
+> C0
+> mDC
+> C1
+> C2
+> C3
+> C0
+> mESC
+> C1
+> C2
+> C3
+> C0
+> mHSC -E
+> C1
+> C2
+> C3
+> C0
+> mHSC -GM
+> C1
+> C2
+> C3
+> C0
+> mHSC -L
+> C1
+> C2
+> C3
+
+Figure 4: Cell-state structure induced by clustering. Visualization of cell clusters obtained from scRNA-seq profiles using UMAP [ 41 ]. Each cluster corresponds to a distinct cellular state, supporting the use of cell-level structure as the basis for discretization. 15 Motivation. A natural alternative is to directly cluster gene expression profiles using standard unsupervised methods (e.g., k-means). However, such approaches may produce clusters dominated by statistical artifacts such as sparsity patterns or zero inflation in scRNA-seq data, rather than biologically meaningful structure. In contrast, scRNA-seq measurements are inherently organized by cellular contexts (e.g., conditions or states), suggesting that discretization should be grounded in cell-level structure to preserve functional coherence. (a) hESC (b) hHEP (c) mDC (d) mESC 
+
+(e) mHSC -E (f) mHSC -GM (g) mHSC -L                             
+
+> C0
+> (n=177) C1
+> (n=260) C2
+> (n=121) C3
+> (n=200) C0
+> (n=84) C1
+> (n=81) C2
+> (n=196) C3
+> (n=64) C0
+> (n=22) C1
+> (n=247) C2
+> (n=24) C3
+> (n=90) C0
+> (n=77) C1
+> (n=163) C2
+> (n=93) C3
+> (n=88)
+> C0
+> (n=227) C1
+> (n=468) C2
+> (n=129) C3
+> (n=247) C0
+> (n=189) C1
+> (n=249) C2
+> (n=207) C3
+> (n=244) C0
+> (n=148) C1
+> (n=208) C2
+> (n=154) C3
+> (n=337)
+> 6
+> 4
+> 2
+> 0
+> -2
+> -4
+> -6
+
+Figure 5: Gene activation consistency across cell clusters. Representative genes show stable and coherent activation patterns within each cell cluster, indicating that discretization preserves biologically meaningful gene activity structure. 
+
+Design Principle. Our method explicitly leverages this structure by first clustering cells into k
+
+biologically meaningful groups, and then constructing gene-level discrete representations based on expression consistency across these cell states. This ensures that discretization reflects stable functional activity rather than superficial similarity in gene expression vectors. 
+
+Figure Organization and Evidence. We use UMAP [ 41 ] to visualize the resulting cell clusters ob-tained from scRNA-seq data in Figure 4. The clusters correspond to distinct cellular states, indicating that the clustering captures meaningful biological organization rather than arbitrary partitions. Figure 5 presents representative genes across different cell clusters. We observe that genes exhibit consistent activation patterns within clusters, suggesting that discretization captures stable gene-level 16 functional behavior conditioned on cellular context. This is further proved by Figure 6, which visualizes the induced gene representation manifold in the discrete state space using UMAP [ 41 ]. The resulting structure exhibits smooth organization and local coherence, suggesting that the discretization preserves biologically meaningful continuity while providing a structured state space suitable for diffusion modeling. 0000 
+
+> 0001
+> 0010
+> 0011
+> 0100
+> 0101
+> 0110
+> 0111
+> 1000
+> 1001
+> 1010
+> 1011
+> 1100
+> 1101
+> 1110
+> 1111
+> States
+> 000 0
+> 0001
+> 0010
+> 0011
+> 0100
+> 0101
+> 0110
+> 0111
+> 1000
+> 1001
+> 1010
+> 1011
+> 1100
+> 1101
+> 1110
+> 1111
+> hESC
+> hHEP
+> mDC
+> mESC
+> mHSC -E
+> mHSC -GM
+> mHSC -L
+> 0
+> 80
+> C3
+> C0
+> C1
+> C2
+> 80
+> 0
+> 160
+> 240
+> 0
+> 100
+> 200
+> 300
+> 400
+> 0
+> 80
+> 160
+> 240
+> 0
+> 150
+> 300
+> 450
+> 600
+> 0
+> 200
+> 400
+> 600
+> 0
+> 80
+> 160
+> 240
+> 0
+> 80
+> 160
+> 240
+> 320
+> # GENES
+> hES C hHEP  mDC  mESC  mHSC -E mHSC -GM  mHSC -L
+
+(a) Gene Counts over Discretized States (b) Gene Expression Manifold 
+
+Figure 6: Discrete gene manifold structure. The induced gene representation space exhibits smooth and coherent structure, indicating that the discretization preserves biologically meaningful organization while enabling stable diffusion over discrete states. Together, these results support the role of Cell-cluster-based Discretization as a biologically grounded representation scheme that enables stable inductive generalization under sparse and heterogeneous scRNA-seq data. 17 C TF-ALL Subgraph Sampling (TASS) 
+
+In this section, we present the complete pipeline of TF-ALL Subgraph Sampling (TASS), which consists of a stochastic subgraph sampling strategy followed by a consensus-based reconstruction procedure for global edge inference. 
+
+C.1 Sampling Algorithm 2 TF-ALL Subgraph Sampling (TASS) 
+
+Require: Graph G = ( V, E ), TF set VTF , gene set VG, subgraph size k
+
+Ensure: Subgraph collection S = {G1, . . . , G m} 
+
+> 1:
+
+Compute n ← | V |, p ← k/n , TF-ALL ratio t ← | VTF |/|VG| 
+
+> 2:
+
+Calculate theoretical bound mbase ← p−2 log n log(1 /δ ) 
+
+> 3:
+
+Set m = 100 · ⌈ mbase /100 ⌉ ▷ Round up to nearest multiple of 100  
+
+> 4:
+
+Initialize S ← ∅  
+
+> 5:
+
+for i = 1 to m do  
+
+> 6:
+
+Sample TF nodes: V (i) 
+
+> TF
+
+∼ Uniform (VTF , ⌊| VTF | · t⌋) 
+
+> 7:
+
+Sample gene nodes: V (i) 
+
+> G
+
+∼ Uniform (VG, k − | V (i) 
+
+> TF
+
+|) 
+
+> 8:
+
+Duplicates Vdup ← V (i) 
+
+> TF
+
+∩ V (i) 
+
+> G
+
+, ndup ← | Vdup | 
+
+> 9:
+
+while ndup ̸ = 0 do ▷ Resolve duplicates  
+
+> 10:
+
+Resample a new gene g ∼ Uniform (VG) 
+
+> 11:
+
+if g̸ ∈ V (i) 
+
+> TF
+
+∪ V (i) 
+
+> G
+
+then  
+
+> 12:
+
+Add g into the V (i) 
+
+> G
+
+, ndup ← ndup − 1 
+
+> 13:
+
+end if  
+
+> 14:
+
+end while  
+
+> 15:
+
+Construct induced subgraph: Gi = G[V (i) 
+
+> TF
+
+∪ V (i) 
+
+> G
+
+] 
+
+> 16:
+
+S ← S ∪ { Gi} 
+
+> 17:
+
+end for  
+
+> 18:
+
+return S
+
+C.2 Reconstruction Algorithm 3 TF-ALL Subgraph Sampling (TASS): Reconstruction 
+
+Require: Global graph G = ( V, E ), sampled node sets V = {Vi}mi=1 , trained model Φ, placeholder 
+
+λ
+
+Ensure: Global edge score matrix S ∈ R|V |×| V | 
+
+> 1:
+
+Initialize accumulation matrix A ← 0, count matrix C ← 0 
+
+> 2:
+
+for each sampled node set Vi ∈ V do  
+
+> 3:
+
+Construct induced subgraph Gi = G[Vi] 
+
+> 4:
+
+Predict raw edge logits: Ei = Φ( Gi) 
+
+> 5:
+
+Normalize edge scores: Pi = Softmax (Ei) ▷ within-subgraph normalization  
+
+> 6:
+
+Map local edges to global index space: (U, V ) ← π(Vi × Vi) 
+
+> 7:
+
+Accumulate predictions: AU,V ← AU,V + Pi, CU,V ← CU,V + 1  
+
+> 8:
+
+end for  
+
+> 9:
+
+Consensus aggregation:  
+
+> 10:
+
+for each potential edge (u, v ) ∈ V × V do  
+
+> 11:
+
+if Cu,v > 0 then  
+
+> 12:
+
+Su,v = Au,v /Cu,v ▷ mean across subgraphs  
+
+> 13:
+
+else  
+
+> 14:
+
+Su,v = λ ▷ unobserved edge prior  
+
+> 15:
+
+end if  
+
+> 16:
+
+end for  
+
+> 17:
+
+return S
+
+18 D Dataset Information of BEELINE-KGC 
+
+The original BEELINE benchmark is constructed from five experimental single-cell RNA-seq datasets covering seven cell types (hESC, hHEP, mDC, mESC, mHSC-E, mHSC-GM, mHSC-L) across human and mouse systems [ 14 ]. These datasets span diverse biological contexts, including differentiation and developmental processes, and provide measurements that enable pseudotime inference. Each dataset is paired with up to four types of ground-truth networks:: cell-type-specific (Specific) network derived from ChIP-seq experiments and curated databases such as ENCODE [ 42 ], ChIP-Atlas [ 43 ], and ESCAPE [ 44 ]; non-specific (Non-Specific) network aggregated from large-scale resources such as DoRothEA [ 45 ], RegNetwork [ 46 ], and TRRUST [ 47 ]; functional interaction networks from STRING [ 48 ], capturing broader biological associations that may include indirect regulatory relationships; loss-/gain-of-function (LOF/GOF) evidence from ESCAPE [ 44 ] (available only for mESC). For each dataset, two gene subsets are constructed by selecting the top 500 or 1,000 most variably expressed genes with transcription factors ( Abbr. : TFs+500 and TFs+1000, respectively), culminating in total 44 distinct evaluation tasks. Among these settings, future work may place particular emphasis on the Specific networks, as their cell-type-matched regulatory evidence provides the closest alignment between the expression measurements and the evaluation targets, making them a more representative testbed for context-dependent GRN discovery. The other network types remain valuable as complementary settings for assessing robustness to broader, heterogeneous, or functional interaction evidence. 19
