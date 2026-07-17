@@ -1,0 +1,2433 @@
+Title: CAR T cell foundation model predicts immunotherapy response
+
+URL Source: https://www.biorxiv.org/content/10.64898/2026.07.11.737994v1.full.pdf
+
+Number of Pages: 32
+
+Markdown Content:
+CAR T cell foundation model predicts immunotherapy response 1
+
+2
+
+Yawei Li 1,2 , Deyu Fang 3, Chengsheng Mao 1,2 , Xin Wu 4, Yuan Luo 1,2 ,* 
+
+3
+
+4 
+
+> 1
+
+Department of Preventive Medicine, Northwestern University, Feinberg School of Medicine, 5
+
+Chicago, IL 60611, USA 6 
+
+> 2
+
+Center for Collaborative AI in Healthcare, Northwestern University, Feinberg School of 7
+
+Medicine, Chicago, IL 60611, USA 8 
+
+> 3
+
+Department of Pathology, Northwestern University Feinberg School of Medicine, Chicago, 9
+
+IL, 60611, USA 10  
+
+> 4
+
+Department of Surgery, Feinberg School of Medicine, Northwestern University, Chicago, IL, 11 
+
+60611, USA 12 
+
+13  
+
+> *
+
+Corresponding author. Email: yuan.luo@northwestern.edu ( Yuan Luo) 14 
+
+15 
+
+Abstract 16 
+
+Single -cell transcriptomics resolves CAR T -cell states, yet translating heterogeneous cellular 17 
+
+signals into patient -level therapeutic response remains challenging . Existing studies primarily 18 
+
+identify response -associated genes or cell populations through experimental and statistical 19 
+
+analyses , but few predictive frameworks integrate gene -level structure with clinical outcomes. 20 
+
+Here, we present gANCHOR, a T-cell foundation model built on a hierarchical hypergraph 21 
+
+attention framework combining biologically informed representation learning with patient -22 
+
+level response prediction. By encoding gene -pathway relationships, gANCHOR learns 23 
+
+pathway -aware cell embeddings that improve biological conservation and batch robustness. A 24 
+
+cell -to -patient attention module then aggregates cellular information to infer therapeutic 25 
+
+response. Across benchmark datasets , gANCHOR achieve d the strongest overall performance 26 
+
+in biological conservation and batch -correction assessments . In response prediction across 161 27 
+
+patients from five CAR T -cell studies , gANCHOR achieved an F1 score of 0.87 , outperforming 28 
+
+benchmarked single -cell foundation models . gANCHOR also identifie d reproducible response -29 
+
+and non -response -associated gene programs , providing interpretable biological insights into 30 
+
+CAR T -cell efficacy and resistance .31 
+
+32 
+
+Introduction 33 
+
+Chimeric antigen receptor (CAR) T -cell therapy, in which patient -derived T lymphocytes are 34 
+
+genetically engineered to target tumor -associated antigens, has transformed cancer treatment 35 
+
+by producing unprecedented responses in otherwise refractory hematological malignancies 1.36 
+
+By combining an antibody -derived antigen recognition domain with intracellular T -cell 37 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+signaling modules, CAR constructs enable antigen -specific cytotoxicity independent of major 38 
+
+histocompatibility complex restriction 2. Over the past decade, anti -CD19 CAR T therapies 39 
+
+have achieved durable remissions in patients with refractory disease, leading to multiple 40 
+
+regulatory approvals and widespread clinical adoption 3-6. Despite these successes , substantial 41 
+
+variability in treatment outcomes, including relapse s and treatment -associated toxicities, 42 
+
+highlights the need for a deeper understanding of the biological determinants driving CAR T -43 
+
+cell therapeutic efficacy 7.44 
+
+Advances in single -cell RNA sequencing (scRNA -seq) have provided high -resolution 45 
+
+characterization of cellular heterogeneity in cancer and the tumor microenvironment 8. Unlike 46 
+
+bulk profiling , which averages gene expression across mixed populations, scRNA -seq resolves 47 
+
+transcriptomes at single -cell resolution , enabling the identification of rare cell subsets 9, lineage 48 
+
+trajectories 10 , and dynamic cell -cell interactions 11 that influence therapeutic response . In 49 
+
+immuno -oncology, these technologies have revealed diverse T cell differentiation states ,50 
+
+exhaustion programs, and functional heterogeneity within tumors , offering critical insights into 51 
+
+mechanisms underlying response and resistance to therapies such as immune checkpoint 52 
+
+blockade and CAR T -cell therapy 12,13 . As scRNA -seq datasets continue to expand in scale and 53 
+
+diversity , they represent a powerful foundation for developing predictive and mechanistic 54 
+
+models of tumor -immune interactions .55 
+
+Despite these advances, predictive modeling of CAR T -cell therapeutic response remains 56 
+
+limited . Current clinical stratification strategies rely largely on bulk -derived biomarkers , which 57 
+
+capture only a fraction of the variability in patient outcomes 14 -16 . Although r ecent scRNA -seq 58 
+
+studies have identified transcriptional programs associated with CAR T -cell differentiation, 59 
+
+persistence, and dysfunction 17 -30 , these analyses are predominantly descriptive and correlation -60 
+
+based . In parallel, recent single -cell foundation models have demonstrated that large -scale 61 
+
+pretraining on diverse transcriptomic datasets can yield transferable cellular representations for 62 
+
+downstream biological tasks. However, few, if any , deep learning framework s directly leverage 63 
+
+scRNA -seq data for patient -level prediction of CAR T -cell therapeutic outcomes . Bridging this 64 
+
+gap enables personalized immunotherapy and uncovering molecular features that drive 65 
+
+response and resistance. 66 
+
+Here , we present gANCH OR, a deep learning framework designed to predict CAR T -cell 67 
+
+therapeutic outcomes from single -cell transcriptomic data while providing interpretable 68 
+
+biological insights . gANCH OR employs a hypergraph -based neural architecture in which genes 69 
+
+are connected through curated pathway relationships, enabling structured modeling of gene -70 
+
+gene dependencies within each cell . Pretrained on approximately 1.8 million T and CAR T cells 71 
+
+across multiple datasets (Table S1, S2 ), the model learns biologically informed representations 72 
+
+that capture T cell heterogeneity while mitigating batch effects. These embeddings are 73 
+
+subsequently used for patient -level prediction, where gANCH OR outperforms state -of -the -art 74 
+
+approaches. Importantly , the pretrained embeddings and model weights are transferable, 75 
+
+enabling gANCHOR to be applied to new scRNA -seq datasets without retraining the full model .76 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+Beyond CAR T -cell therapy, this design provides broader immunological studies where T -cell 77 
+
+heterogeneity plays central role s, supporting biomarker discovery, patient stratification, and 78 
+
+task -specific fine -tuning. 79 
+
+80 
+
+Results 81 
+
+gANCHOR establishes a hierarchical framework for CAR T response prediction 82 
+
+We developed gANCH OR (graph Attention Network for CAR -T Hierarchical Outcome 83 
+
+Reasoning ), a deep learning framework designed to infer patient -level therapeutic outcomes 84 
+
+from CAR T single -cell transcriptomes (Figure 1 ). gANCH OR adopts a hierarchical two -85 
+
+module architecture in which Module I learns biologically informed cell embeddings and 86 
+
+Module II performs attention -based patient -level response prediction. This framework enables 87 
+
+modeling of pathway -guided gene relationships within cells and cellular heterogeneity across 88 
+
+patients while preserving interpretability through hierarchical attention mechanisms .89 
+
+Module I serves as a single -cell foundation model trained on integrated CAR T -cell and 90 
+
+reference T -cell datasets . Rather than treating genes as independent features, it incorporates 91 
+
+curated gene -pathway relationships through a hypergraph attention framework . This 92 
+
+architecture involves a gene encoder, a cell encoder, and a cell decoder. In the gene encoder, a 93 
+
+bipartite gene -pathway graph is constructed using Molecular Signatures Database (MSigDB) 94 
+
+> 31
+
+, and hypergraph attention layers generate pathway -aware gene embeddings as structured 95 
+
+biological priors . The cell encoder then integrates single -cell gene expression with gene 96 
+
+embeddings to capture pathway -informed transcriptional dependencies while preserving cell -97 
+
+to -cell heterogeneity. The cell decoder further optimizes these representations through multi -98 
+
+task objectives, including gene expression reconstruction and cell -type prediction, while an 99 
+
+adversarial batch discriminator reduces dataset -specific technical variation. This training 100 
+
+strategy yields transferable and batch -corrected cell embeddings. 101 
+
+Module II uses the learned cell embeddings to predict patient -level response. A cell -to -102 
+
+patient attention mechanism dynamically weights individual cells and aggregates them into a 103 
+
+unified patient representation for downstream classification. Training is performed in two 104 
+
+independent stages. Module I is first pretrained to learn transferable cell embeddings, after 105 
+
+which the encoder is fixed and Module II is then trained separately for patient -level prediction .106 
+
+This strategy stabilizes optimization and reduces overfitting to limited clinical outcome labels. 107 
+
+108 
+
+gANCHOR achieves robust biological conservation and batch correction 109 
+
+High -quality cell representations are essential for both patient -level prediction as well as 110 
+
+downstream biological interpretation. We therefore benchmarked gANCHOR against several 111 
+
+batch -correction methods (Combat 32 , MNN 33 , scVI 34 and Scanorama 35 ) and single -cell 112 
+
+foundation models (Geneformer 36 , scGPT 37 , scMulan 38 , scFoundation 39 and GenePT 40 ). 113 
+
+UMAP visualization revealed that, although batch effects were not completely eliminated, 114 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+gANCHOR achieved improved integration between T -cell and CAR T -cell datasets while 115 
+
+preserving biologically meaningful structure (Figure 2A ,B ; Figure S2 ). Within T -cell datasets, 116 
+
+gANCHOR embeddings clustered predominantly by cell type rather than sequencing platform, 117 
+
+suggesting effective batch mixing while maintaining cellular identity .118 
+
+To quantitatively evaluate embedding quality, we computed a comprehensive set of metrics 119 
+
+assessing both biological conservation and batch correction performance 41 . These involve 120 
+
+isolated label score, ARI, NMI, ASW, LISI, graph connectivity, kBET, and PCR comparison. 121 
+
+Across these metrics, gANCHOR demonstrated the strongest overall performance across both 122 
+
+metric categories (Figure 2 C,D ). Specifically, gANCHOR ranked among the top -performing 123 
+
+methods for biological conservation, with strong isolated label score, NMI, ARI, and cell -type 124 
+
+silhouette metrics, indicating preserved cellular identity and subtype structure . It also achiev ed 125 
+
+the highest aggregate batch -correction score , supporting effective integration across studies 126 
+
+while preserving local biological structure. 127 
+
+Notably, several methods preferentially optimized one objective at the expense of the other. 128 
+
+Conventional batch -correction approaches generally improved dataset mixing but often showed 129 
+
+weaker preservation of biological structure, whereas some foundation models achieved strong 130 
+
+biological conservation while exhibiting more limited batch correction. In contrast, gANCHOR 131 
+
+maintained a balanced trade -off between these competing objectives and achieved the highest 132 
+
+aggregate performance overall. 133 
+
+134 
+
+gANCHOR improves patient -level CAR T response prediction 135 
+
+Given the strong biological conservation and batch -correction performance of gANCHOR 136 
+
+embeddings, we next evaluated whether these representations improve patient -level CAR T 137 
+
+therapy response prediction (Figure 3A, B ). For all single cell foundation models, including 138 
+
+gANCHOR, pretrained cell embeddings were used as fixed inputs to a unified prediction 139 
+
+framework (Module II ), ensuring that performance differences primarily reflect representation 140 
+
+quality rather than classifier design. Raw gene expression profiles were also included as an 141 
+
+additional baseline , allowing direct comparison between learned representations and 142 
+
+unprocessed transcriptomic features. 143 
+
+Across all models and input settings, gANCHOR consistently achieved the best predictive 144 
+
+performance on the held -out test data . It attained the highest F1 score (Figure 3B ; Figure S 3)145 
+
+while maintaining robust performance across complementary evaluation metrics, including 146 
+
+precision, recall, AUROC, and AUPRC ( Figure S 4), demonstrating balanced discrimination 147 
+
+between responder and non -responder patients . Notably, raw gene expression profiles 148 
+
+performed substantially worse than embedding -based approaches, highlighting the importance 149 
+
+of representation learning for capturing predictive cellular features. To further assess the 150 
+
+contribution of cell -level modeling, we performed an additional ablation by collapsing single -151 
+
+cell data into patient -level features via mean aggregation of gene expression across all cells, 152 
+
+followed by logistic regression for response prediction ( Figure 3B). This simplified baseline 153 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+achieved the lowest F1 score among all evaluated methods, indicating that naive aggregation 154 
+
+fails to capture the cellular heterogeneity required for accurate response prediction. 155 
+
+To assess the statistical significance of these improvements, we performed a permutation 156 
+
+test by randomly reassigning test F1 scores between models and recomputing the difference in 157 
+
+mean performance. gANCHOR demonstrated a statistically significant advantage over all 158 
+
+baseline models , indicat ing that the observed performance gains are unlikely to arise from 159 
+
+stochastic variation across runs. Because all methods were evaluated using the same 160 
+
+downstream prediction framework, these improvements can be primarily attributed to 161 
+
+differences in representation quality . Together, these results demonstrate that gANCHOR 162 
+
+provides a more discriminative and biologically informative representation space for CAR T 163 
+
+therapy response prediction. 164 
+
+165 
+
+gANCHOR identifies reproducible gene programs associated with clinical response 166 
+
+Having established that gANCHOR accurately predicts patient -level therapeutic response, we 167 
+
+next investigated the molecular programs underlying these predictions by quantifying gene -168 
+
+level contributions through the hierarchical attention structure of the model. Patient -specific 169 
+
+gene attention scores were computed by propagating importance from genes to cells and 170 
+
+subsequently to patients , enabling identification of differential attention -enriched genes 171 
+
+(DA EGs) between responding and non -responding patients (see Methods). Across four 172 
+
+independent training repeats (Table S3 ), we identified top 100 DA EGs for each group, with 59 173 
+
+genes in the responding group (Figure 3C, E ) and 65 genes in the non -responding group 174 
+
+(Figure 3D, F ) consistently identified across all runs . These gene sets reflect distinct immune 175 
+
+states and provide a robust basis for interpreting the molecular determinants of CAR T -cell 176 
+
+therapeutic outcomes. 177 
+
+In the responding group, DA EGs were enriched for genes associated with T cell activation, 178 
+
+memory formation, and cytotoxic effector function (Figure 3E). For example, SELL (CD62L), 179 
+
+IL7R (CD127), and CD27 are canonical markers of central memory and stem -like T cells that 180 
+
+have been consistently linked to improved CAR T expansion and persistence. XCL1 is involved 181 
+
+in chemokine -mediated immune cell recruitment and coordination, whereas KLRK1 (NKG2D) 182 
+
+and FGFBP2 mark highly cytotoxic effector programs . PTPRC underscores the importance of 183 
+
+intact T -cell receptor signaling in therapeutic efficacy. Together , these genes indicate a 184 
+
+functionally competent, memory -enriched, and cytotoxic CAR T -cell state associated with 185 
+
+favorable outcomes. 186 
+
+In contrast, DA EGs enriched in non -responding patients exhibited signatures of T cell 187 
+
+dysfunction and exhaustion (Figure 3F). Immune checkpoint molecules such as PDCD1 (PD -188 
+
+1), CTLA4 , and TIGIT are well -established exhausted T cell markers, and have been linked to 189 
+
+impaired CAR T expansion and reduced antitumor activity. Transcription factors JUN , JUNB ,190 
+
+and FOS , components of the AP -1 complex, are associated with chronic activation and stress 191 
+
+responses. Enrichment of FOXP3 suggests increased regulatory T cell -like programs 192 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+contributing to immunosuppression. 193 
+
+Importantly, these response -associated gene signatures are highly consistent with 194 
+
+observations across independent CAR T scRNA -seq studies included in this work. Memory -195 
+
+associated genes identified in the responder group, including SELL , IL7R , and CD27 , align with 196 
+
+previously reported features of effective infusion products and durable response trajectories 17,19 .197 
+
+Conversely, the enrichment of exhaustion -associated markers such as PDCD1 , CTLA4 , and 198 
+
+TIGIT in the non -responder group recapitulates transcriptional programs linked to treatment 199 
+
+failure and relapse 18,29 . This concordance reflects a broader memory -versus -dysfunction axis, 200 
+
+supported by regulatory and stress -associated genes such as FOXP3 , JUN , and FOS 30 . These 201 
+
+findings demonstrate that gANCHOR recover s biological ly meaningful response -associated 202 
+
+programs while providing a quantitative framework for interpreting mechanisms associated 203 
+
+with CAR T -cell efficacy and failure .204 
+
+205 
+
+gANCHOR learns biologically structured and interpretable gene and cell representations 206 
+
+Beyond patient -level response prediction, we further examined whether gANCHOR captures 207 
+
+biologically meaningful cellular and gene -level organization within the learned representation 208 
+
+space. To assess cell -level representations, we examined the model’s ability to classify T cell 209 
+
+subtypes. The model achieved robust classification performance, with the confusion matrix 210 
+
+showing accurate discrimination of major T cell populations while preserving expected 211 
+
+similarities among closely related states ( Figure 4A, B; Figure S 5). These results indicate that 212 
+
+the learned cell embeddings encode biologically relevant transcriptional programs and support 213 
+
+reliable cell identity resolution. 214 
+
+To assess gene -level organization, we analyzed relationships among genes in the learned 215 
+
+embedding space by comparing pairwise distances between genes belonging to the same 216 
+
+MSigDB pathways with distances from randomly sampled gene sets . Genes within the same 217 
+
+pathway exhibited significantly smaller pairwise distances ( Wilcoxon rank -sum test , P < 0.001) 218 
+
+(Figure 4C, D; Figure S 6), indicating that the learned embeddings preserve pathway -level 219 
+
+functional coherence . This structured organization suggests that genes participating in shared 220 
+
+biological processes are embedded in close proximity within the latent space .221 
+
+To further evaluate interpretability, we analyzed gene -to -cell attention weights and 222 
+
+identified DA EGs for each T cell subtype (see Methods). These subtype -specific DA EGs 223 
+
+revealed strong concordance with established marker genes, with most canonical markers 224 
+
+exhibiting positive log 2 fold change and high statistical significance, indicating consistently 225 
+
+elevated attention within their corresponding cell types ( Figure 4E, F). Cytotoxic T cell subsets ,226 
+
+including CD8 -positive and CD4 -positive cytotoxic populations , show ed increased attention to 227 
+
+effector molecules such as GZMB , PRF1 , GNLY , and NKG7 , consistent with cytolytic function .228 
+
+Memory T cell subsets display ed enriched attention to IL7R and CCR7 , reflecting lymphoid 229 
+
+homing and long -term persistence. Regulatory T cells exhibited strong and specific attention to 230 
+
+FOXP3 , IL2RA , and CTLA4 , capturing their immunosuppressive phenotype. Activated T cell 231 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+states were characterized by elevated attention to activation markers such as CD69 and IL2RA ,232 
+
+while innate -like T cell populations, including mucosal invariant T cells and natural killer T 233 
+
+cells, show increased attention to KLRB1 and ZBTB16 .234 
+
+To determine whether these biologically structured representations depend on the curated 235 
+
+pathway priors rather than the hypergraph attention architecture alone, we performed an 236 
+
+ablation analysis in which gene -to -pathway assignments were randomly shuffled while 237 
+
+preserving the overall hypergraph topology . Compared with the original MSigDB -derived 238 
+
+pathway graph, the shuffled model exhibited reduced biological conservation and batch -239 
+
+correction performance ( Figure S 7A -D), indicating that disrupting biologically meaningful 240 
+
+gene -pathway relationships compromises the quality of the learned representations . Consistent 241 
+
+with this reduction in representation quality, the shuffled model also assigned weaker attention 242 
+
+to canonical subtype marker genes, reflected by lower attention -associated log2 fold changes 243 
+
+across T -cell populations (Figure S 7E , F ). Together, these findings demonstrate that the 244 
+
+biological interpretability and representational quality of gANCHOR depend not only on the 245 
+
+hierarchical attention architecture but also on biologically meaningful gene –pathway 246 
+
+organization encoded by curated pathway annotations. 247 
+
+248 
+
+Attention -derived representations preserve biologically structured cellular states 249 
+
+To assess whether the learned attention mechanisms provide informative representations 250 
+
+beyond embeddings, we evaluated gene -to -cell attention outputs as an alternative feature space 251 
+
+for characterizing cellular states. For each cell, attention -weighted gene representations were 252 
+
+extracted from the gene -to -cell attention module and used for downstream analys es. These 253 
+
+representations revealed coherent organization of annotated T -cell subtypes while improving 254 
+
+dataset mixing (Figure S8A-C). In the integrated reference T-cell and CAR T-cell dataset ,255 
+
+attention -based representations preserved T-cell structure while retaining CAR T-cell 256 
+
+heterogeneity , suggesting that the model avoids overcorrection under domain shift. 257 
+
+Quantitative evaluation further showed that attention -derived representations achieved 258 
+
+biological conservation comparable to normalized gene expression while substantially 259 
+
+improving batch correction (Figure S8D). Although learned cell embeddings remained the 260 
+
+best -performing representation overall, attention -derived features consistently outperformed 261 
+
+raw gene expression in overall integration quality, suggesting that the gene -to -cell attention 262 
+
+mechanism preserves biologically meaningful cellular structure while reducing technical 263 
+
+variation across datasets and retaining gene -level resolution .264 
+
+We next investigated whether attention -derived representations provide biological 265 
+
+information beyond conventional differential expression analysis. Using identical statistical 266 
+
+procedures, we compared DA EGs with differential expression genes (DEGs) identified from 267 
+
+gene expression. At the cell -type level, where batch effects are relatively modest (Figure 2A ),268 
+
+both approaches recovered canonical subtype marker genes with comparable accuracy ( Figure 269 
+
+3E,F and Figure S9), indicating that attention faithfully preserves established transcriptional 270 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+programs while remaining consistent with conventional expression -based analysis. In contrast, 271 
+
+for patient response analysis, where CAR T -cell datasets exhibit substantially stronger batch 272 
+
+effects ( Figure 2A ), the two approaches diverged considerably ( Table S 4). Conventional DEGs 273 
+
+were dominated by broadly expressed housekeeping, metabolic, and antigen -presentation genes, 274 
+
+whereas DA EGs preferentially highlighted genes with well -established roles in CAR T -cell 275 
+
+biology, including cytotoxicity, immune regulation, and T -cell exhaustion. Notably, several of 276 
+
+these biologically relevant genes were absent from the top -ranked DEGs despite being 277 
+
+consistently prioritized by the attention model. These findings suggest that attention -derived 278 
+
+representations suppress technical and dataset -specific variation while amplifying biologically 279 
+
+informative transcriptional programs, providing a more interpretable and clinically relevant 280 
+
+feature space than conventional differential expression analysis. 281 
+
+282 
+
+Discussion 283 
+
+gANCHOR establishes a hierarchical hypergraph attention framework that connects single -cell 284 
+
+transcriptomic representation learning with patient -level therapeutic outcome prediction in 285 
+
+CAR T -cell therapy. By encoding curated gene -pathway relationships as a bipartite hypergraph, 286 
+
+the foundation module learns pathway -aware gene and cell embeddings that preserve 287 
+
+coordinated functional programs while reducing batch effects . The cell -to -patient attention 288 
+
+module then aggregates heterogeneous cellular states into patient -level embeddings for accurate 289 
+
+and interpretable response prediction . Under a unified downstream architecture, gANCHOR 290 
+
+consistently achieves improved predictive performance. The hierarchical attention structure 291 
+
+propagates feature importance from genes to cells and patients, allowing identification of gene 292 
+
+programs associated with therapeutic response. The resulting gene signatures show 293 
+
+concordance with reported CAR T -cell functional states, including activation, memory, 294 
+
+cytotoxicity, and exhaustion, indicating that gANCHOR captures biologically meaningful 295 
+
+signals relevant to therapeutic outcomes. 296 
+
+Beyond response prediction , gANCHOR provides a generalizable framework for linking 297 
+
+single -cell molecular representations to clinically relevant phenotypes across heterogeneous T -298 
+
+cell and CAR T -cell scRNA -seq datasets . By integrating pathway -guided representation 299 
+
+learning with hierarchical attention, the framework enables interpretable mapping from 300 
+
+molecular features to cellular states and patient -level predictions while maintaining robustness 301 
+
+across diverse studies and sequencing platforms . This design supports both response prediction 302 
+
+and identification of clinically relevant genes and pathways . As a T cell -focused foundation 303 
+
+model, gANCHOR learn s reusable representations from large -scale integrated T -cell and CAR 304 
+
+T-cell transcriptomic datasets. These transferable representations and attention -derived scores 305 
+
+provide useful features for biomarker discovery, patient stratification, and task -specific fine -306 
+
+tuning in related immunological settings where T -cell heterogeneity is central. More broadly, 307 
+
+this study illustrates the feasibility of integrating structured biological priors with deep learning 308 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+to bridge the gap between high -dimensional single -cell data and clinically actionable insights. 309 
+
+gANCHOR also has several limitations . The gene -pathway hypergraph relies on existing 310 
+
+pathway annotations, which may be incomplete or biased toward well -characterized biological 311 
+
+processes, potentially limiting the discovery of unannotated functional relationships. Although 312 
+
+attention mechanisms improve interpretability, attention weights do not constitute direct 313 
+
+evidence of causal regulation and require complementary experimental validation. In addition, 314 
+
+the foundation and response modules are trained in separate stages; future work could explore 315 
+
+end -to -end or task -adaptive fine -tuning strategies to better align representation learning with 316 
+
+clinical prediction objectives. Extending gANCHOR to incorporate multi -omic data, spatial 317 
+
+transcriptomics, and longitudinal sampling may further improve its ability to capture dynamic 318 
+
+immune processes. Finally, validation in larger and more diverse patient cohorts will be 319 
+
+necessary to assess generalizability and potential clinical utility. 320 
+
+321 
+
+Competing Interests 322 
+
+The authors declare that they have no conflict of interests. 323 
+
+324 
+
+Methods 325 
+
+T cell and CAR T cell single cell data collection and initial filtering 326 
+
+scRNA -seq datasets of T cells and CAR T cells were collected from twelve published studies 327 
+
+spanning multiple disease contexts. All CAR T -cell samples used in this study were derived 328 
+
+from pre -infusion material collected prior to clinical outcome assessment, ensuring that both 329 
+
+representation pretraining (Module I) and patient -level response prediction (Module II) were 330 
+
+performed exclusively using available transcriptomic information. These CAR T -cell datasets 331 
+
+enabled characterization of transcriptional programs associated with subsequent therapeutic 332 
+
+response 17 -19,29,30 . Reference T-cell datasets were obtained from large -scale atlases and disease -333 
+
+focused cohorts and were subsetted to retain annotated T-cell populations across diverse 334 
+
+functional subtypes 42 -48 through the CZ CELLxGENE database 49 . All datasets were processed 335 
+
+using a unified preprocessing workflow , including normalization to account for sequencing 336 
+
+depth and harmonization to a shared gene space where necessary. For datasets lacking raw 337 
+
+counts, expression values were transformed to ensure compatibility with downstream analysis. 338 
+
+For further details on how each dataset was collected, curated, and processed, please see the 339 
+
+Supplementary Information. 340 
+
+341 
+
+Harmonization of patient -level clinical response labels 342 
+
+A total of 161 patients from five independent studies 17 -19,29,30 were included for patient -level 343 
+
+response prediction. Clinical outcome annotations from each study were harmonized into a 344 
+
+unified binary classification framework consisting of response and nonresponse labels. 345 
+
+Intermediate or study -specific response categories were systematically mapped to preserve 346 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+consistency across cohorts while maintaining clinically meaningful distinctions. In total, 120 347 
+
+patients were classified as response and 41 as nonresponse ( Figure 3A, Table S1 ). 348 
+
+For the Wilson et al. 2022 19 cohort, 12 patients were retained after excluding two patients 349 
+
+lacking pre -treatment scRNA -seq data and two lacking response annotations; 9 were classified 350 
+
+as responders and 3 as nonresponders . In Haradhvala et al. 2022 18 , 31 of 32 patients were 351 
+
+included after excluding one without scRNA -seq data . Patients labeled as response (n = 16) 352 
+
+were assigned to the responder group, while those annotated as nonresponse (n = 14) or partial 353 
+
+response (PR, n = 1) were grouped into nonresponder group . In Deng et al. 2020 17 , complete 354 
+
+response (CR, n = 9) was mapped to response, whereas partial response (PR, n = 1), progressive 355 
+
+disease (PD, n = 13), and death (n = 1) were categorized as nonresponse. The Bai et al. 2022 29 
+
+356 
+
+cohort included 12 patients (10 response, 2 nonresponse) as originally reported. In Bai et al. 357 
+
+2024 30 , patients annotated as complete response (CR) or relapse after response (RL) were 358 
+
+grouped as response (n = 76), whereas nonresponse (NR, n = 6) was assigned to the 359 
+
+nonresponder group. 360 
+
+This harmonization strategy ensures a unified clinical endpoint across heterogeneous 361 
+
+studies while preserving biologically and clinically relevant distinctions for downstream 362 
+
+predictive modeling. 363 
+
+364 
+
+Gene selection and pathway filtering 365 
+
+gANCHOR pretraining was based on genes with curated pathway annotations. We utilized the 366 
+
+Molecular Signatures Database (MSigDB) 31 curated human gene set collection, specifically 367 
+
+the C2 category, which comprises both Canonical Pathways (CP) and Chemical and Genetic 368 
+
+Perturbations (CGP). These curated gene sets provide structured prior knowledge of gene -369 
+
+pathway relationships derived from experimentally validated biological processes and 370 
+
+perturbation studies . The MSigDB C2 collection contains 21,587 unique genes. Genes lacking 371 
+
+functional pathway annotations were excluded from downstream analysis. To ensure 372 
+
+consistency across datasets, only genes that were detected across all pretraining T cell and CAR 373 
+
+T-cell datasets were retained. Ribosomal genes were further removed to reduce potential 374 
+
+confounding from technical variability and highly abundant housekeeping signals. After 375 
+
+filtering, the final feature space consisted of 11,140 genes, which were used as for hypergraph 376 
+
+construction and downstream representation learning. 377 
+
+378 
+
+Pathway graph ablation analysis 379 
+
+To evaluate the contribution of curated biological pathway information, we performed an 380 
+
+ablation experiment in which gene membership within MSigDB pathways was randomly 381 
+
+shuffled while preserving the number of pathways and the number of genes assigned to each 382 
+
+pathway. Module I was retrained using the shuffled gene -pathway incidence matrix under the 383 
+
+same architecture and training procedure as the original model. Differential attention -enriched 384 
+
+genes were subsequently identified using the same analysis pipeline. Biological interpretability 385 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+was assessed by comparing the recovery of canonical subtype marker genes between the 386 
+
+original MSigDB graph and the shuffled -pathway graph. 387 
+
+388 
+
+Single -cell d ata normalization 389 
+
+scRNA -seq data preprocessing was performed using Scanpy . No additional cell - or gene -level 390 
+
+filtering beyond the original study -specific quality -control procedures was applied beyond the 391 
+
+criteria used in the original studies from which the datasets were obtained. Raw count matrices 392 
+
+were first normalized to 10,000 total UMI counts per cell using scanpy.pp.normalize_total, 393 
+
+followed by logarithmic transformation with scanpy.pp.log1p . To further mitigate gene -specific 394 
+
+expression bias and technical variability associated with capture efficiency and sequencing 395 
+
+depth, an additional gene -wise normalization step was applied . For each detected gene, the non -396 
+
+zero median expression value was calculated across all cells in the training datasets containing 397 
+
+both T cells and CAR T cells . Gene expression values in each cell were then divided by the 398 
+
+corresponding non -zero median. This procedure places genes with systematically different 399 
+
+baseline expression levels onto a comparable scale while preserving biologically meaningful 400 
+
+variation across cells, thereby providing stable inputs for downstream hypergraph -based 401 
+
+representation learning .402 
+
+403 
+
+Harmonization of T-cell subtype annotations 404 
+
+All reference T cells used in this study were obtained from CZ CELLxGENE , where cell type 405 
+
+annotations are based on the Cell Ontology 50 . Because Cell Ontology annotations are 406 
+
+hierarchical, individual cells may be assigned to highly specific subtypes nested within broader 407 
+
+parent categories. To ensure consistency across datasets and compatibility with supervised 408 
+
+classification tasks requiring mutually exclusive labels , we constructed a unified annotation 409 
+
+framework consisting of 12 T -cell subtypes : CD4 -positive helper T cell; CD4 -positive, alpha -410 
+
+beta cytotoxic T cell; CD4 -positive, alpha -beta memory T cell; CD8 -positive, alpha -beta 411 
+
+cytotoxic T cell; CD8 -positive, alpha -beta memory T cell; activated CD4 -positive, alpha -beta 412 
+
+T cell; activated CD8 -positive, alpha -beta T cell; effector CD8 -positive, alpha -beta T cell; 413 
+
+gamma -delta T cell; mature NK T cell; mucosal invariant T cell; and regulatory T cell (Table 414 
+
+S2 ).415 
+
+Fine -grained Cell Ontology annotations were systematically mapped to these unified 416 
+
+categories . Specifically, central memory and effector memory CD4 -positive T cells were 417 
+
+consolidated into CD4 -positive, alpha -beta memory T cells, and analogous CD8 -positive 418 
+
+memory subtypes , including terminally differentiated effector memory cells , were grouped into 419 
+
+CD8 -positive, alpha -beta memory T cells. Activated T cell annotations labeled with species -420 
+
+specific suffixes (e.g., “human”) were unified into their corresponding activated CD4 -positive 421 
+
+or CD8 -positive categories. In addition, multiple regulatory T cell subtypes, including natural, 422 
+
+double -negative, and naive regulatory T cells, were merged into a single regulatory T cell 423 
+
+category. This harmonization strategy preserves major functional distinctions among T -cell 424 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+states while ensuring annotation consistency across studies .425 
+
+426 
+
+Train -test data splitting strategy 427 
+
+To ensure rigorous and unbiased evaluation, data splitting was performed at both the cell and 428 
+
+patient levels depending on the dataset type and modeling objective. For Module I pretraining ,429 
+
+which integrates both reference T -cell and CAR T -cell datasets, distinct strategies were applied. 430 
+
+In the reference T -cell datasets, 50,000 cells were randomly selected and held out as a test set, 431 
+
+and all remaining cells were used for model training. For CAR T -cell datasets, splitting was 432 
+
+performed at the patient level to prevent information leakage between samples derived from 433 
+
+the same individual . Approximate ly 20% of patients (34 out of 16 1) were randomly selected as 434 
+
+the test cohort, and all cells derived from these patients were excluded from training. 435 
+
+To maintain consistency between Module I and Module II , CAR T cells from the held -out 436 
+
+test patients were excluded from all training procedures and used exclusively for final 437 
+
+evaluation of patient -level response prediction . The same train, validation, and test splits were 438 
+
+applied across gANCHOR and all benchmarked baseline models to ensure fair comparison of 439 
+
+representation quality and predictive performance. 440 
+
+441 
+
+Benchmark models and evaluation framework 442 
+
+We benchmarked gANCHOR against against four widely used batch -correction methods —443 
+
+Combat 32 , MNN 33 , scVI 34 and Scanorama 35 —as well as five single -cell foundation models :444 
+
+Geneformer 36 , scGPT 37 , scMulan 38 , scFoundation 39 and GenePT 40 . Publicly available 445 
+
+pretrained models and default parameter settings were used for all methods . The benchmarked 446 
+
+foundation models include d transformer -based cell embedding models (Geneformer, scGPT, 447 
+
+scMulan, and scFoundation) as well as a gene embedding framework based on large -scale 448 
+
+language models (GenePT). For transformer -based models, pretrained representations were 449 
+
+directly extracted from gene expression profiles and used for downstream patient -level 450 
+
+response prediction. For GenePT , pretrained gene embeddings were combined with expression 451 
+
+profiles to generate cell representations (GenePT -w) . Geneformer, scGPT, and scFoundation 452 
+
+were fine -tun ed according to their published protocols, whereas GenePT and scMulan were 453 
+
+evaluated using their publicly available pretrained models . For scMulan, no additional training 454 
+
+was performed because the model is designed for zero -shot downstream applications and the 455 
+
+authors have not released a complete pretraining pipeline for continued model adaptation. 456 
+
+All models were evaluated using a unified downstream prediction framework, with 457 
+
+pretrained embeddings treated as fixed inputs. Hyperparameter optimization was performed 458 
+
+over learning rate and weight decay, and each parameter configuration was evaluated across 459 
+
+four independent runs with different random seeds. The optimal hyperparameters were selected 460 
+
+based on the highest mean binary F1 score on the validation set and subsequently evaluated on 461 
+
+the held -out test cohort (Figure S 3).462 
+
+To systematically dissect the contribution of representation learning and cellular resolution, 463 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+two complementary ablation settings were included . First, normalized gene expression profiles 464 
+
+were directly used as input s to the downstream prediction framework without representation 465 
+
+learning . This setting provides a baseline to assess whether performance gains arise from 466 
+
+representation learning rather than downstream modeling. Second, gene expression values were 467 
+
+averaged across all cells within each patient to generate bulk -like patient -level profiles, which 468 
+
+were then evaluated using logistic regression . This setting tests whether explicitly modeling 469 
+
+cell -level variability provides additional predictive power beyond bulk -like representations. 470 
+
+These ablations enabled assessment of the relative contributions of learned representations and 471 
+
+explicit modeling of intra -patient cellular heterogeneity . Additional implementation details and 472 
+
+parameter settings are provided in the Supplementary Information. 473 
+
+474 
+
+Logistic regression baseline for patient -level prediction 475 
+
+For the aggregation -based baseline, gene expression values were averaged across all cells 476 
+
+within each patient to generate patient -level gene expression profiles . The resulting patient -by -477 
+
+gene matrix was partitioned into training and test sets using the same split applied in the main 478 
+
+benchmarking framework. Features were standardized using z -score normalization fitted on the 479 
+
+training data and applied to the test data. 480 
+
+A logistic regression classifier was trained with hyperparameters optimized through grid 481 
+
+search using 5-fold cross -validation on the training set. The search space included 482 
+
+regularization strength ( 0.05, 0.1, 0.5, 1, 5, or 10 ), penalty type (L1 or L2), compatible solvers 483 
+
+(liblinear, lbfgs, newton -cg, sag, or saga), and class weighting (none or balanced). The optimal 484 
+
+configuration was selected based on cross -validation performance and evaluated on the held -485 
+
+out test set using F1 score. This baseline provides a reference framework for patient -level 486 
+
+prediction without explicit modeling of single -cell heterogeneity or learned feature 487 
+
+representations. 488 
+
+489 
+
+Benchmark metrics and evaluation strategy on cell embeddings 490 
+
+To comprehensively evaluate the quality of learned cell embeddings, we adopted a491 
+
+benchmarking framework that jointly assesses biological conservation and batch correction ,492 
+
+following established single -cell integration benchmarks 41 . All metrics were computed either 493 
+
+directly on the embedding space or on kNN graphs derived from the embedding . Biological 494 
+
+conservation metrics evaluate whether integrated embeddings preserve cell identity structure, 495 
+
+whereas batch correction metrics assess the extent to which cells from different datasets are 496 
+
+appropriately mixed . All evaluations were performed using the same set of cells and annotations, 497 
+
+including cell -type labels and batch (dataset) labels. Because CAR T cells lack unified subtype 498 
+
+annotations across studies, biological conservation metrics were evaluated only on reference T -499 
+
+cell datasets, whereas batch correction metrics were computed on the combined T -cell and CAR 500 
+
+T-cell datasets .501 
+
+For biological conservation, we used clustering - and distance -based metrics, including 502 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+normalized mutual information (NMI), adjusted Rand index (ARI) , isolated label score , and 503 
+
+average silhouette width (ASW). NMI and ARI quantify the agreement between unsupervised 504 
+
+clustering (Louvain clustering on the embedding space ) and ground -truth cell -type labels, 505 
+
+where values closer to 1 indicate better recovery of cell identity structure. The isolated label 506 
+
+score evaluates preservation of rare or underrepresented cell populations. ASW measures the 507 
+
+separation of cell types based on intra -cluster and inter -cluster distances. For a given cell  𝑖 , the 508 
+
+silhouette width is defined as: 509 
+
+S(𝑖 ) = 𝑏 (𝑖 ) − 𝑎 (𝑖 )
+
+max {𝑎 (𝑖 ), 𝑏 (𝑖 )} (1) 510 
+
+where  𝑎 (𝑖 ) is the average distance between cell  𝑖  and cells of the same type, and  𝑏 (𝑖 ) is the 511 
+
+minimum average distance to cells of different types. The ASW is obtained by averaging  𝑠 (𝑖 )512 
+
+across all cells and is rescaling values to  [0, 1] , where higher scores indicate improved 513 
+
+separation of biological cell types .514 
+
+To evaluate batch correction, we used complementary metrics capturing both local 515 
+
+neighborhood mixing and global batch structure. The batch ASW quantifies batch mixing by 516 
+
+computing silhouette widths using batch labels instead of cell -type labels. To ensure t 517 
+
+interpretability , silhouette values were inverted so that higher values correspond to improved 518 
+
+batch mixing :519 
+
+batch ASW = 1
+
+|𝑀 | ∑ 1
+
+|𝐶 𝑗 | ∑(1 − |𝑠 𝑏𝑎𝑡𝑐 ℎ(𝑖 )|)
+
+> 𝑖 ∈𝐶 𝑗 𝑗 ∈𝑀
+
+(2) 520 
+
+where  𝐶 𝑗  denotes cells of type  𝑗 , and  𝑀  is the set of all cell types. Values approaching 1521 
+
+indicate effective removal of batch effects .522 
+
+We further quantified neighborhood -level mixing using the local inverse Simpson’s Index 523 
+
+(LISI), which measures label diversity within local neighborhoods in the kNN graph. Two 524 
+
+variants were used: integration LISI (iLISI), which evaluates batch mixing and increases with 525 
+
+improved integration, and cell -type LISI (cLISI), which evaluates preservation of biological 526 
+
+structure and decreases when distinct cell identities remain well separated . LISI scores were 527 
+
+computed from neighborhood graphs and rescaled to  [0, 1] for comparability across datasets. 528 
+
+The k -nearest -neighbor batch effect test (kBET) was used to statistically assess whether 529 
+
+local neighborhoods reflect the global batch composition. For each cell, kBET compares the 530 
+
+batch distribution within its kNN neighborhood to the expected global distribution using a 531 
+
+hypothesis test. The rejection rate across tested cells is used as the metric, and the final score is 532 
+
+defined as  1 − rejection rate , such that higher values indicate improved batch mixing .533 
+
+To evaluate preservation of cellular topology , we used the graph connectivity, which 534 
+
+assesses whether cells of the same identity remain connected in the kNN graph. For each cell 535 
+
+type  𝑐 , the proportion of cells in the largest connected component was computed and averaged 536 
+
+across all cell types: 537 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+GC = 1
+
+|𝐶 | ∑ |𝐿𝐶𝐶 (𝐺 (𝑁 𝑐 , 𝐸 𝐶 ))|
+
+|𝑁 𝑐 |
+
+> 𝑐 ∈𝐶
+
+(3)538 
+
+where  LCC  denotes the largest connected component. Higher values indicate improved 539 
+
+preservation of within -cell -type connectivity structure .540 
+
+Finally, principal component regression (PCR) was used to quantify residual batch -541 
+
+associated variation within the embedding space . Specifically, the variance explained by batch 542 
+
+labels across principal components is computed as: 543 
+
+Var ( 𝐶 ∣ 𝐵 ) = ∑ Var 
+
+> 𝑖
+
+( 𝐶 ∣∣ PC 𝑖 ) ⋅ 𝑅 2( PC 𝑖 ∣∣ 𝐵 ) (4)546 
+
+where  𝑅 2(PC 𝑖 ∣ 𝐵 ) quantifies the association between batch labels and each principal 544 
+
+component. Lower values indicate reduced batch -driven variation and improved integration. 545 
+
+For each metric, scores were normalized and aggregated into two categories: biological 547 
+
+conservation and batch correction. An overall performance score was then computed as the 548 
+
+weighted average of these two categories, providing a balanced assessment of embedding 549 
+
+quality across models .550 
+
+551 
+
+Assessment of pathway coherence in gene embedding space 552 
+
+To assess whether learned gene embeddings preserve biologically meaningful functional 553 
+
+structure, we quantified pairwise distances among genes belonging to the same annotated 554 
+
+pathways and compared these distances to randomly sampled gene sets. Pathway annotations 555 
+
+were obtained from the MSigDB. For each pathway, mean pairwise distances among all 556 
+
+pathway member genes were computed in the learned embedding space using both cosine and 557 
+
+Euclidean distance metrics . As a background distribution , 1,000 random gene sets were 558 
+
+generated by uniformly sampling genes from the complete gene list , with each random set 559 
+
+matched in size to the corresponding pathway. Mean pairwise distances were computed for each 560 
+
+random set using the same procedure. Distributions of pathway -based and random distances 561 
+
+were then compared using the Wilcoxon rank -sum test to assess whether genes participating in 562 
+
+shared biological pathways exhibit significantly closer organization in the embedding space 563 
+
+than expected by chance. 564 
+
+565 
+
+Benchmark metrics and evaluation strategy for patient -level response prediction 566 
+
+To assess binary CAR T therapy response prediction, we used the binary F1 score as the primary 567 
+
+evaluation metric. The F1 score balances precision and recall and is particularly suitable for 568 
+
+imbalanced classification settings in which responder and non -responder groups are unevenly 569 
+
+distributed. Let true positives (TP), false positives (FP), false negatives (FN), and true negatives 570 
+
+(TN) denote predicted response outcomes relative to ground truth labels. Precision and recall 571 
+
+are defined as: 572 
+
+Precision = TP 
+
+TP + FP , Recall = TP 
+
+TP + FN (5)573 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+The binary F1 score is computed as the harmonic mean of precision and recall: 574 
+
+F1 = 2 ⋅ Precision ⋅ Recall 
+
+Precision + Recall (6)577 
+
+The F1 score ranges from 0 to 1, with higher values indicate improved discrimination between 575 
+
+responder and non -responder groups. 576 
+
+Model performance was evaluated on a held -out test dataset using the optimal 578 
+
+hyperparameter configuration selected from validation data (see Implementation and training 579 
+
+details of Module II ). To account for stochastic variability arising from random initialization, 580 
+
+each model was evaluated across four independent runs with different random seeds. Test 581 
+
+performance was summarized as the distribution of F1 scores across these runs, allowing 582 
+
+assessment of both predictive accuracy and robustness. 583 
+
+For pairwise model comparisons , we performed a non -parametric permutation test by 584 
+
+pooling test F1 scores from two models and randomly reassigning them into two groups 585 
+
+matching the original group sizes . The difference in mean F1 score between the two groups was 586 
+
+recomputed over 10,000 permutations to generate a null distribution. The empirical P-value 587 
+
+was calculated as the proportion of permutations in which the permuted difference in means 588 
+
+was greater than or equal to the observed difference. Statistical significance was defined as 589 
+
+𝑃 < 0.05 .590 
+
+This evaluation framework enables robust comparison of patient -level predictive 591 
+
+performance while avoiding strong distributional assumptions and accommodating the limited 592 
+
+number of independent training runs. 593 
+
+594 
+
+Computation and statistical analysis of differential attention -enriched genes 595 
+
+To quantify gene -level contributions across multiple biological resolutions, we leveraged the 596 
+
+hierarchical attention architecture of gANCHOR to propagate feature importance from genes 597 
+
+to cells and subsequently to higher -order structures, including cell types and patients. 598 
+
+We first extracted the gene -to -cell attention matrix from Module I, denoted as 599 
+
+𝑹 𝑔 →𝑐 𝜖 ℝ𝑛 𝑐𝑒𝑙𝑙 ×𝑛 𝑔𝑒𝑛𝑒  , which captures the relative contribution of each gene within individual 600 
+
+cells. 601 
+
+602 
+
+Cell -type -level differential attention analysis 603 
+
+To characterize subtype -specific transcriptional programs, we analyzed gene attention patterns 604 
+
+across annotated T -cell populations . For each cell, gene -level attention scores were obtained 605 
+
+directly from  𝑹 𝑔 →𝑐  . Cells were grouped according to their harmonized T-cell subtype 606 
+
+annotations , and gene attention scores were aggregated within each subtype to generate 607 
+
+subtype -specific gene importance profiles. 608 
+
+Differential attention -enriched genes at the cell -type level were identified using a one -609 
+
+versus -rest comparison framework. For each gene, a Mann -Whitney U test was performed to 610 
+
+compare attention scores in cells belonging to a given subtype against all remaining cells. 611 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+Resulting P -values were adjusted for multiple testing using the Benjamini -Hochberg procedure 612 
+
+to control the false discovery rate (FDR). Genes with significantly elevated attention weights 613 
+
+in a given subtype were defined as subtype -associated DA EGs. 614 
+
+615 
+
+Patient -level differential attention analysis 616 
+
+To connect gene -level signals to clinical outcomes, gene contributions was further propagated 617 
+
+from cells to patients using the cell -to -patient attention matrix from Module II , denoted as 618 
+
+𝑹 𝑐 →𝑝 ∈ ℝ𝑛 patient ×𝑛 cell  , which represents the contribution of individual cells to patient -level 619 
+
+predictions. Patient -specific gene contribution scores were computed as: 620 
+
+𝑹 𝑔 →𝑝 = 𝑹 𝑔 →𝑐 ∙ 𝑹 𝑐 →𝑝 (7)621 
+
+where  𝑹 𝑔 →𝑝 ∈ ℝ𝑛 patient ×𝑛 gene  quantifies the contribution of each gene to the predicted 622 
+
+therapeutic response of each patient. 623 
+
+To avoid information leakage from model evaluation, all differential analyses were 624 
+
+restricted to patients in the training cohort. Patients were stratified into responding and 625 
+
+nonresponding groups based on their clinical labels. To identify genes associated with 626 
+
+differential clinical response, we applied a Mann -Whitney U test to compare contribution scores 627 
+
+between the two groups , followed by Benjamini –Hochberg correction for multiple testing .628 
+
+Genes with significantly elevated contribution scores in responders were defined as responder -629 
+
+associated DA EGs, whereas those enriched in nonresponders were defined as nonresponder -630 
+
+associated DA EGs. 631 
+
+Genes were ranked based on their average contribution scores within each group, and the 632 
+
+top 100 genes per group were selected for downstream analysis. To ensure robustness, this 633 
+
+procedure was repeated across four independent training runs with different random seeds . Only 634 
+
+genes consistently identified among the top 100 across all runs were retained as high -635 
+
+confidence DA EGs. Using this criterion, 59 responder -associated and 65 non -responder -636 
+
+associated DA EGs were identified. 637 
+
+638 
+
+Differential expression analysis 639 
+
+For comparison with differential attention analysis, differential expression analysis was 640 
+
+performed using Scanpy (scanpy.tl.rank_genes_groups ) with the Wilcoxon rank -sum test. Cell -641 
+
+type -specific DEGs were identified using a one -versus -rest comparison across the 12 642 
+
+harmonized T -cell subtypes. For patient response analysis, only training -set CAR T cells were 643 
+
+included to avoid information leakage. Cells were grouped according to the clinical response 644 
+
+label of their corresponding patients, and DEGs between responders and nonresponders were 645 
+
+identified using the same Wilcoxon framework. Genes were ranked according to the Scanpy 646 
+
+ranking statistic, and the top -ranked genes were compared with canonical marker genes and 647 
+
+literature -supported response -associated genes using the same evaluation procedure applied to 648 
+
+DA EGs. 649 
+
+650 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+Overall architecture of gANCHOR 651 
+
+gANCHOR consists of two sequential modules. Module I biologically informed cell 652 
+
+representations from T-cell and CAR T -cell single -cell transcriptomes using a hierarchical 653 
+
+hyper graph attention framework, whereas Module II aggregates cell embeddings into patient -654 
+
+level representations and therapeutic response prediction . The complete workflow is illustrated 655 
+
+in Figure 1.656 
+
+657 
+
+Module I: Hypergraph -guided cell representation pretraining 658 
+
+Input data representation 659 
+
+Let  𝐻 𝑔𝑝 ∈ {0,1}𝑛 g×𝑛 p denote the gene –pathway incidence matrix, where  𝐻 𝑔𝑝 = 1 indicates 660 
+
+that gene  𝑔  belongs to pathway  𝑝 . Single -cell gene expression profiles are represented by the 661 
+
+normalized expression matrix  𝐸 𝑐𝑔 ∈ ℝ𝑛 𝑐 ×𝑛 𝑔 , where  𝑛 𝑐  and  𝑛 𝑔  denote the numbers of cells 662 
+
+and genes, respectively . Gene embeddings were initialized using a trainable embedding layer, 663 
+
+producing  G ∈ ℝ𝑛 g×𝑛 d . Cell -specific gene embeddings were constructed by broadcasting gene 664 
+
+embeddings across cells and combining them with normalized expression values through 665 
+
+element -wise multiplication , yielding  𝑋 𝑐𝑔𝑑 ∈ ℝ𝑛 c×𝑛 g×𝑛 d , which serves as the input to the 666 
+
+hierarchical graph -attention encoder. Following our notation convention, subscripts denote 667 
+
+tensor dimensions; for example,  𝑋 𝑐𝑔𝑑  denotes a tensor of shape  [𝑛 𝑐 , 𝑛 𝑔 , 𝑛 𝑑 ]. Module I aims 668 
+
+to learn pathway -aware gene and cell embeddings by integrating curated pathway structure with 669 
+
+single -cell transcriptional profiles. 670 
+
+671 
+
+Initial gene embedding via hypergraph graph attention 672 
+
+We construct ed a gene -pathway bipartite hypergraph in which genes are represented as nodes 673 
+
+and biological pathways are modeled as hyperedges connecting their member genes according 674 
+
+to the incidence matrix  𝐻 𝑔𝑝 . To learn pathway -aware gene representations, we adopt a strongly 675 
+
+dual -attention hypergraph message passing strategy inspired by SHINE 51 . This framework 676 
+
+allows genes to exchange information through shared pathway membership, capturing 677 
+
+coordinated biological function s.678 
+
+At each hypergraph attention layer, information is propagated bidirectionally between 679 
+
+genes and pathways. First, for each pathway  𝑝 , attention over connected genes quantifies the 680 
+
+relative contribution of each gene to the functional identity of that pathway. These gene -to -681 
+
+pathway attention weights are normalized across member genes and used to update pathway 682 
+
+embeddings by weighted aggregation of connected gene features. 683 
+
+Next, for each gene  𝑔  , attention over connected pathways quantifies the relative 684 
+
+contribution of each pathway to the functional context of that gene . These pathway -to -gene 685 
+
+attention weights are normalized across connected pathways and used to update gene 686 
+
+embeddings by weighted aggregation of pathway representations . Biologically, this step allows 687 
+
+each gene to integrate contextual information from multiple biological pathways in which they 688 
+
+participate .689 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+After two stacked dual -attention hypergraph layers, the model outputs final structural gene 690 
+
+embeddings  𝑋 𝑔𝑑 ∈ ℝ𝑛 𝑔 ×𝑛 𝑑 , which encode global functional relationships among genes 691 
+
+induced by shared pathway membership. These embeddings serve as biologically informed 692 
+
+priors for subsequent cell -level modeling. 693 
+
+694 
+
+Expression value encoding and fusion 695 
+
+Normalized expression values  𝐸 𝑐𝑔  were transformed by a multilayer perceptron (MLP) to 696 
+
+generate expression embeddings: 697 
+
+𝐸 𝑐𝑔𝑑  
+
+> 𝑒𝑚𝑏
+
+= MLP (𝐸 𝑐𝑔 ) ∈ ℝ𝑛 𝑐 ×𝑛 𝑔 ×𝑛 𝑑 (8),700 
+
+The pathway -derived gene embedding  𝐺 𝑔𝑑  were broadcast across cells and combined with 698 
+
+expression embeddings through element -wise multiplication :699 
+
+𝑋 𝑐𝑔𝑑  
+
+> (0)
+
+= 𝐺 𝑔𝑑 × 𝐸 𝑐𝑔𝑑  
+
+> 𝑒𝑚𝑏
+
+(9).701 
+
+702 
+
+Hierarchical hypergraph attention encoder 703 
+
+Within each hypergraph attention block, we perform a two -stage hierarchical attention 704 
+
+procedure consisting of gene -to -pathway aggregation followed by pathway -to -gene 705 
+
+redistribution. This design explicitly incorporates pathway structure into representation 706 
+
+learning, enabling the model to capture coordinated regulation of genes participating in shared 707 
+
+biological programs .708 
+
+1. Pathway attention (gene → pathway message passing) 709 
+
+𝑋 𝑐𝑝𝑑  
+
+> 𝑝𝑎𝑡 ℎ
+
+= softmax 𝑝 (∑(
+
+> 𝑑
+
+∑ 𝐻 𝑔𝑝 
+
+∑ 𝐻 𝑔𝑝 𝑔 
+
+> 𝑔
+
+𝑋 𝑐𝑔𝑑 )𝑎 𝑑  
+
+> 𝑝𝑎𝑡 ℎ𝑤𝑎𝑦
+
+) ⋅ ∑ 𝐻 𝑔𝑝 
+
+∑ 𝐻 𝑔𝑝 𝑔 
+
+> 𝑔
+
+𝑋 𝑐𝑔𝑑 (10 )710 
+
+where  𝐻 𝑔𝑝  is the gene –pathway incidence matrix encoding known gene membership in 711 
+
+curated biological pathways, and  𝑎 𝑑  
+
+> 𝑝𝑎𝑡 ℎ
+
+is a learnable pathway -level attention vector. This step 712 
+
+aggregates gene embeddings into pathway representations for each cell, allowing the model to 713 
+
+learn which pathways are most informative for characterizing transcriptional state. Pathway 714 
+
+attention weights are defined as: 715 
+
+𝛼 𝑐𝑝  
+
+> 𝑝𝑎𝑡 ℎ
+
+= softmax 𝑝 (∑ 𝑋 𝑐𝑝𝑑 
+
+> 𝑝𝑎𝑡 ℎ
+> 𝑑
+
+𝑎 𝑑 
+
+> 𝑝𝑎𝑡 ℎ
+
+) (11 ).717 
+
+2. Gene attention (pathway → gene message passing) 716 
+
+𝑋 𝑐𝑔𝑑  
+
+> ′
+
+= softmax 𝑔 (∑(
+
+> 𝑑
+
+∑ 𝐻 𝑔𝑝 
+
+∑ 𝐻 𝑔𝑝 𝑝 
+
+> 𝑝
+
+𝑋 𝑐𝑝𝑑  
+
+> 𝑝𝑎𝑡 ℎ𝑤𝑎𝑦
+
+)𝑎 𝑑  
+
+> 𝑔𝑒𝑛𝑒
+
+) ⋅ ∑ 𝐻 𝑔𝑝 
+
+∑ 𝐻 𝑔𝑝 𝑝 
+
+> 𝑝
+
+𝑋 𝑐𝑝𝑑  
+
+> 𝑝𝑎𝑡 ℎ𝑤𝑎𝑦
+
+(12 )722 
+
+where  𝑎 𝑑  
+
+> 𝑔𝑒𝑛𝑒
+
+is a learnable gene -level attention vector. This step redistributes pathway -718 
+
+contextual information back to genes, enabling gene embedding s to incorporate signals from 719 
+
+functionally related pathways. Biologically, this allows the model to emphasize genes that 720 
+
+participate in coordinated pathway activity patterns associated with T cell activation, 721 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+exhaustion, or cytotoxic response states. Gene attention weights are defined as: 723 
+
+𝛼 𝑐𝑔  
+
+> 𝑔𝑒𝑛𝑒
+
+= softmax 𝑔 (∑ 𝑋 𝑐𝑔𝑑 
+
+> ′
+> 𝑑
+
+𝑎 𝑑 
+
+> 𝑔𝑒𝑛𝑒
+
+) (13 ).725 
+
+Residual connections and layer normalization were subsequently applied: 724 
+
+𝑋 𝑐𝑔𝑑  
+
+> 𝑎𝑡𝑡𝑛
+
+= LayerNorm (𝑋 𝑐𝑔𝑑  
+
+> ′
+
++ 𝑋 𝑐𝑔𝑑 ) (14 ).727 
+
+A feed -forward network (FFN) was then applied at each gene: 726 
+
+𝑋 𝑐𝑔𝑑 
+
+> (
+
+𝑙 +1) = LayerNorm (FFN (𝑋 𝑐𝑔𝑑 
+
+> 𝑎𝑡𝑡𝑛
+
+) + 𝑋 𝑐𝑔𝑑 
+
+> 𝑎𝑡𝑡𝑛
+
+) (15 ).730 
+
+After six stacked hypergraph attention blocks, the encoder outputs the final gene -level cell 728 
+
+embeddings: 729 
+
+𝑋 𝑐𝑔𝑑  
+
+> 𝑒𝑛𝑐
+
+∈ ℝ𝑛 𝑐 ×𝑛 𝑔 ×𝑛 𝑑 (16 ).732 
+
+731 
+
+Cell -level pooling 733 
+
+Gene -level embeddings were aggregated into cell -level embedding s using an expression -aware 734 
+
+attention pooling mechanism. Let  𝐸 𝑐𝑔  denote the normalized expression of gene  𝑔  in cell  𝑐 ,735 
+
+and let  𝑋 𝑐𝑔𝑑  
+
+> enc
+
+denote the corresponding encoded gene embedding. The pooled cell embedding 736 
+
+is defined as: 737 
+
+𝑋 𝑐𝑑  
+
+> cell
+
+= ∑ 𝕀 (
+
+> 𝑛 𝑔
+> 𝑔 =1
+
+𝐸 𝑐𝑔 > 0) 𝛽 𝑐𝑔 𝑋 𝑐𝑔𝑑  
+
+> enc
+
+(17 ),740 
+
+where  𝕀 (⋅) is the indicator function and  𝛽 𝑐𝑔  are learnable attention coefficients normalized 738 
+
+across expressed genes within each cell. 739 
+
+The indicator function ensures that genes with zero observed expression do not contribute 741 
+
+to the pooled cell representation . Consequently, attention normalization and feature aggregation 742 
+
+are performed only across detected genes , naturally respecting the sparsity structure of scRNA -743 
+
+seq data . This expression -aware pooling strategy enables the model to emphasize 744 
+
+transcriptionally active gene programs relevant to each cell state (such as activation, memory, 745 
+
+or exhaustion programs in T and CAR T cells ) while minimizing noise introduced by 746 
+
+unexpressed genes .747 
+
+748 
+
+Training objectives 749 
+
+Module I was trained under a multi -task objective that jointly optimizes cell -type classification, 750 
+
+gene expression reconstruction, and batch -adversarial domain adaptation. 751 
+
+Cell -type classification loss. A fully connected classifier predicts cell -type labels from cell 752 
+
+embeddings. The loss is defined as cross -entropy between predicted and true cell -type labels: 753 
+
+𝐿 𝑐𝑙𝑠 = CrossEntropy (𝑦 ̂𝑐𝑒𝑙𝑙 , 𝑦 𝑐𝑒𝑙𝑙 ) (18 ).756 
+
+Gene expression reconstruction loss. A decoder reconstructs normalized gene expression 754 
+
+from encoded gene -level embeddings. The reconstruction loss is defined as mean squared error: 755 
+
+𝐿 𝑟𝑒𝑐 = MSE (𝐸 ̂ , 𝐸 ) (19 ).758 
+
+Batch -adversarial loss. A batch discriminator predicts dataset -of -origin labels from cell 757 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+embeddings. The discriminator is optimized using cross -entropy: 759 
+
+𝐿 𝑏𝑎𝑡𝑐 ℎ = CrossEntropy (𝑦 ̂𝑏𝑎𝑡𝑐 ℎ, 𝑦 𝑏𝑎𝑡𝑐 ℎ) (20 ).761 
+
+The total training objective for Module I is defined as :760 
+
+𝐿 = 𝑤 1𝐿 𝑐𝑙𝑠 + 𝑤 2𝐿 𝑟𝑒𝑐 + 𝑤 3𝐿 𝑏𝑎𝑡𝑐 ℎ
+
+𝑤 1 + 𝑤 2 + 𝑤 3
+
+(21 ).762 
+
+where  𝑤 1, 𝑤 2, 𝑤 3 are loss weights. L2 regularization was applied to all trainable parameters. 763 
+
+764 
+
+Batch effect correction via gradient reversal 765 
+
+To reduce dataset -specific technical variation while preserving biological signal, we adopt ed 766 
+
+an adversarial domain adaptation strategy implemented through a gradient reversal layer 52 . The 767 
+
+batch discriminator was trained to correctly classify batch labels from cell embeddings, whereas 768 
+
+the encoder was simultaneously optimized to prevent accurate batch discrimination . During 769 
+
+backpropagation, gradients from the batch classification loss were multiplied by a negative 770 
+
+constant  −𝛾  before propagating into the encoder. This adversarial optimization encourages 771 
+
+batch -invariant representations while retaining biologically meaningful structure relevant to 772 
+
+downstream prediction tasks .773 
+
+Formally, discriminator parameters were optimized to minimize  𝐿 𝑏𝑎𝑡𝑐 ℎ , while encoder 774 
+
+parameters are optimized to minimize  𝐿 𝑐𝑙𝑠 + 𝐿 𝑟𝑒𝑐  while maximize  𝐿 𝑏𝑎𝑡𝑐 ℎ . The gradient 775 
+
+reversal layer provides a stable implementation of this min -max objective. 776 
+
+777 
+
+Training strategy and parameter settings of Module I778 
+
+Model parameters were initialized using Xavier initialization and optimized using the Adam 779 
+
+optimizer. The initial learning rate was set to 0.00001 , with weight decay 0.0001 . Training was 780 
+
+performed using mini -batches of 64 cells. Dropout with rate 0.2 was applied in feed -forward 781 
+
+layers to reduce overfitting. The hidden embedding dimension  𝑛 𝑑  was set to 128 . Six stacked 782 
+
+hierarchical hypergraph -attention blocks were used in the encoder. 783 
+
+Loss weights were set to  𝑤 1 = 1 , 𝑤 2 = 1 , and  𝑤 3 = 0.35  for cell classification, 784 
+
+reconstruction, and batch -adversarial objectives, respectively. The gradient reversal coefficient 785 
+
+𝛾  was set to 1. Models were trained for 10 epochs, and the checkpoint with the lowest 786 
+
+validation loss was selected for downstream evaluation .787 
+
+To adaptively adjust optimization dynamics during training, we used 788 
+
+torch.optim.lr_scheduler.ReduceLROnPlateau. The learning rate reduction factor was set to 0.1 ,789 
+
+and the scheduler patience was set to 2 epochs without validation improvement. All models 790 
+
+were implemented in PyTorch and trained on NVIDIA GPUs .791 
+
+792 
+
+Module II : Patient -level response prediction. 793 
+
+Module II predicts patient -level CAR T therapy response using fixed cell embeddings learned 794 
+
+from Module I. After training Module I, we obtain ed a cell embedding tensor  𝑋 𝑝𝑐𝑑 ∈795 
+
+ℝ𝑛 𝑝 ×𝑛 𝑐 ×𝑛 𝑑 , where  𝑝 , 𝑐 , and  𝑑  index patients, cells, and embedding dimensions, respectively. 796 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+Parameters from Module I remained frozen during Module II training .797 
+
+A cell -to -patient attention layer was used to aggregate cell information for each patient. 798 
+
+Attention weights  𝐴 𝑝𝑐 ∈ ℝ𝑛 𝑝 ×𝑛 𝑐  were computed as 799 
+
+𝐴 𝑝𝑐 = exp (𝑤 ⊤𝑋 𝑝𝑐𝑑 )
+
+∑ exp (𝑐 ′ 𝑤 ⊤𝑋 𝑝 𝑐 ′𝑑 ) (22 ),803 
+
+where  𝑤 ∈ ℝ𝑛 𝑑  is a learnable attention vector and  𝑋 𝑝𝑐𝑑  denotes the embedding of cell  𝑐 800 
+
+from patient  𝑝 . The patient embedding matrix  𝑍 𝑝𝑑 ∈ ℝ𝑛 𝑝 ×𝑛 𝑑  was then obtained by weighted 801 
+
+aggregation: 802 
+
+𝑍 𝑝𝑑 = ∑ 𝐴 𝑝𝑐 
+
+> 𝑐
+
+𝑋 𝑝𝑐𝑑 (23 ).806 
+
+The resulting patient embeddings were passed through a multilayer perceptron classifier to 804 
+
+generate predicted response probabilities: 805 
+
+𝑌 ̂𝑝 = MLP (𝑍 𝑝𝑑 ), 𝑌 ̂𝑝 ∈ ℝ𝑛 𝑝 ×2 (24 ),809 
+
+To account for class imbalance between responders and non -responders, Module II was trained 807 
+
+using a weighted cross -entropy loss: 808 
+
+ℒresp = WeightedCrossEntropy (𝑌 ̂𝑝 , 𝑌 𝑝 ) (25 ),814 
+
+where loss weights for non -responding and responding classes were set to 3:1, reflecting the 810 
+
+empirical class imbalance in the training cohort. Biologically, the cell -to -patient attention 811 
+
+weights quantify the relative contribution of distinct CAR T cell states to patient -level 812 
+
+therapeutic outcome. 813 
+
+815 
+
+Implementation and training details of Module II 816 
+
+Module II was implemented in PyTorch and trained independently using fixed cell 817 
+
+representations derived from each upstream model, including gANCHOR, Geneformer, scGPT, 818 
+
+scMulan, scFoundation, GenePT, and raw gene expression profiles as an ablation baseline. To 819 
+
+ensure fair comparison, all inputs were evaluated using the same downstream architecture and 820 
+
+training protocol . To standardize patient -level input size , samples containing more than 2,000 821 
+
+cells were randomly subsampled to 2,000 cells for response prediction . The same sampled cells 822 
+
+were used across all compared models to ensure fair and consistent benchmarking. We 823 
+
+performed a grid search over optimization hyperparameters, including initial learning rate 824 
+
+{1 × 10 −5, 5 × 10 −5, 1 × 10 −4, 5 × 10 −4, 1 × 10 −3, 5 × 10 −3, 1 × 10 −2} and weight decay 825 
+
+{10 −2, 10 −3, 10 −4} . For each hyperparameter configuration , four independent runs with 826 
+
+different random seeds were performed to account for stochastic optimization variability .827 
+
+Model selection was based on the average binary F1 score on the validation set across the four 828 
+
+runs. The optimal hyperparameter configuration for each representation type was subsequently 829 
+
+valuated on the held -out test cohort . Final reported performance metrics correspond to the 830 
+
+distribution of test F1 scores across the four repeated runs. 831 
+
+The model was optimized using the Adam optimizer with early stopping based on 832 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+validation loss to mitigate overfitting. All architectural components, including the attention -833 
+
+based aggregation layer and multilayer perceptron classifier, were kept identical across all 834 
+
+experimental settings to ensure that observed performance differences reflect representation 835 
+
+quality rather than downstream architectural variation. 836 
+
+837 
+
+Model interpretability via hierarchical attention 838 
+
+gANCHOR provides interpretability across multiple biological resolutions through its 839 
+
+hierarchical attention architecture . Gene -to -cell attention weights quantify the contribution of 840 
+
+individual genes to cell embeddings, enabling identification of transcriptional programs 841 
+
+associated with distinct cellular states . Cell -to -patient attention weights quantify the 842 
+
+contribution of specific cell ular populations to patient -level predictions. These hierarchical 843 
+
+attention mechanisms enable systematic identification of biologically meaningful gene and cell 844 
+
+signatures associated with therapeutic response. 845 
+
+846 
+
+Code Availability: 847 
+
+gANCHOR and all script files used in the analysis in this manuscript can be downloaded from GitHub 848 
+
+repository at  https://github.com/luoyuanlab/cart .849 
+
+850 
+
+Data Availability: 851 
+
+All datasets used in this study are publicly available. T cell datasets were obtained from the CZ 852 
+
+CELLxGENE database 49 , including AIDA 2025 42 , Stephenson et al. 2021 43 , Yoshida et al. 853 
+
+2022 44 , Jin et al. 2021 45 , Rodríguez -Ubreva et al. 2022 46 , Chan Zuckerberg 2020 47 , and van 854 
+
+der Wijst et al. 2021 48 , and are accessible via the following collection links: 855 
+
+https://cellxgene.cziscience.com/collections/ced320a1 -29f3 -47c1 -a735 -513c7084d508 ,856 
+
+https://cellxgene.cziscience.com/collections/ddfad306 -714d -4cc0 -9985 -d9072820c530 ,857 
+
+https://cellxgene.cziscience.com/collections/03f821b4 -87be -4ff4 -b65a -b5fc00061da7 ,858 
+
+https://cellxgene.cziscience.com/collections/b9fc3d70 -5a72 -4479 -a046 -c2cc1ab19efc ,859 
+
+https://cellxgene.cziscience.com/collections/bf325905 -5e8e -42e3 -933d -9a9053e9af80 ,860 
+
+https://cellxgene.cziscience.com/collections/eb735cc9 -d0a7 -48fa -b255 -db726bf365af , and 861 
+
+https://cellxgene.cziscience.com/collections/7d7cabfd -1d1f -40af -96b7 -26a0825a306d .862 
+
+CAR T cell datasets were obtained from the Gene Expression Omnibus (GEO) under accession 863 
+
+numbers GSE151511 (Deng et al. 2020 17 ), GSE197268 (Haradhvala et al. 2022 18 ), 864 
+
+GSE197215 (Bai et al. 2022 29 ), and GSE262072 (Bai et al. 2024 30 ). The dataset from Wilson 865 
+
+et al. 2022 19 is available from Dryad at 866 
+
+https://datadryad.org/dataset/doi:10.5061/dryad.1rn8pk0x4 .867 
+
+868 
+
+869 
+
+870 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+References 871 
+
+1 June, C. H. & Sadelain, M. Chimeric Antigen Receptor Therapy. N Engl J Med 379 ,872 
+
+64 -73 (2018).  https://doi.org:10.1056/NEJMra1706169 873 
+
+2 Rafiq, S., Hackett, C. S. & Brentjens, R. J. Engineering strategies to overcome the 874 
+
+current roadblocks in CAR T cell therapy. Nat Rev Clin Oncol 17 , 147 -167 (2020). 875 
+
+https://doi.org:10.1038/s41571 -019 -0297 -y876 
+
+3 Maude, S. L. et al. Chimeric antigen receptor T cells for sustained remissions in 877 
+
+leukemia. N Engl J Med 371 , 1507 -1517 (2014). 878 
+
+https://doi.org:10.1056/NEJMoa1407222 879 
+
+4 Schuster, S. J. et al. Chimeric Antigen Receptor T Cells in Refractory B -Cell 880 
+
+Lymphomas. N Engl J Med 377 , 2545 -2554 (2017). 881 
+
+https://doi.org:10.1056/NEJMoa1708566 882 
+
+5 Fowler, N. H. et al. Tisagenlecleucel in adult relapsed or refractory follicular 883 
+
+lymphoma: the phase 2 ELARA trial. Nat Med 28 , 325 -332 (2022). 884 
+
+https://doi.org:10.1038/s41591 -021 -01622 -0885 
+
+6 Jacobson, C. A. et al. Axicabtagene ciloleucel in relapsed or refractory indolent non -886 
+
+Hodgkin lymphoma (ZUMA -5): a single -arm, multicentre, phase 2 trial. Lancet Oncol 887 
+
+23 , 91 -103 (2022).  https://doi.org:10.1016/S1470 -2045(21)00591 -X888 
+
+7 Patel, K. K., Tariveranmoshabad, M., Kadu, S., Shobaki, N. & June, C. From concept 889 
+
+to cure: The evolution of CAR -T cell therapy. Mol Ther 33 , 2123 -2140 (2025). 890 
+
+https://doi.org:10.1016/j.ymthe.2025.03.005 891 
+
+8 Lim, B., Lin, Y. & Navin, N. Advancing Cancer Research and Medicine with Single -892 
+
+Cell Genomics. Cancer Cell 37 , 456 -470 (2020). 893 
+
+https://doi.org:10.1016/j.ccell.2020.03.008 894 
+
+9 Brbic, M. et al. MARS: discovering novel cell types across heterogeneous single -cell 895 
+
+experiments. Nat Methods 17 , 1200 -1206 (2020).  https://doi.org:10.1038/s41592 -020 -896 
+
+00979 -3897 
+
+10 Wang, K. et al. PhyloVelo enhances transcriptomic velocity field mapping using 898 
+
+monotonically expressed genes. Nat Biotechnol 42 , 778 -789 (2024). 899 
+
+https://doi.org:10.1038/s41587 -023 -01887 -5900 
+
+11 Jin, S. et al. Inference and analysis of cell -cell communication using CellChat. Nat 901 
+
+Commun 12 , 1088 (2021).  https://doi.org:10.1038/s41467 -021 -21246 -9902 
+
+12 Papalexi, E. & Satija, R. Single -cell RNA sequencing to explore immune cell 903 
+
+heterogeneity. Nat Rev Immunol 18 , 35 -45 (2018).  https://doi.org:10.1038/nri.2017.76 904 
+
+13 Yost, K. E. et al. Clonal replacement of tumor -specific T cells following PD -1 blockade. 905 
+
+Nat Med 25 , 1251 -1259 (2019).  https://doi.org:10.1038/s41591 -019 -0522 -3906 
+
+14 Neelapu, S. S. et al. Chimeric antigen receptor T -cell therapy - assessment and 907 
+
+management of toxicities. Nat Rev Clin Oncol 15 , 47 -62 (2018). 908 
+
+https://doi.org:10.1038/nrclinonc.2017.148 909 
+
+15 Locke, F. L. et al. Long -term safety and activity of axicabtagene ciloleucel in refractory 910 
+
+large B -cell lymphoma (ZUMA -1): a single -arm, multicentre, phase 1 -2 trial. Lancet 911 
+
+Oncol 20 , 31 -42 (2019).  https://doi.org:10.1016/S1470 -2045(18)30864 -7912 
+
+16 Fraietta, J. A. et al. Determinants of response and resistance to CD19 chimeric antigen 913 
+
+receptor (CAR) T cell therapy of chronic lymphocytic leukemia. Nat Med 24 , 563 -571 914 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+(2018).  https://doi.org:10.1038/s41591 -018 -0010 -1915 
+
+17 Deng, Q. et al. Characteristics of anti -CD19 CAR T cell infusion products associated 916 
+
+with efficacy and toxicity in patients with large B cell lymphomas. Nat Med 26 , 1878 -917 
+
+1887 (2020).  https://doi.org:10.1038/s41591 -020 -1061 -7918 
+
+18 Haradhvala, N. J. et al. Distinct cellular dynamics associated with response to CAR -T919 
+
+therapy for refractory B cell lymphoma. Nat Med 28 , 1848 -1859 (2022). 920 
+
+https://doi.org:10.1038/s41591 -022 -01959 -0921 
+
+19 Wilson, T. L. et al. Common Trajectories of Highly Effective CD19 -Specific CAR T 922 
+
+Cells Identified by Endogenous T -cell Receptor Lineages. Cancer Discov 12 , 2098 -923 
+
+2119 (2022).  https://doi.org:10.1158/2159 -8290.CD -21 -1508 924 
+
+20 Wang, X., Peticone, C., Kotsopoulou, E., Gottgens, B. & Calero -Nieto, F. J. Single -cell 925 
+
+transcriptome analysis of CAR T -cell products reveals subpopulations, stimulation, and 926 
+
+exhaustion signatures. Oncoimmunology 10 , 1866287 (2021). 927 
+
+https://doi.org:10.1080/2162402X.2020.1866287 928 
+
+21 Jackson, Z. et al. Sequential Single -Cell Transcriptional and Protein Marker Profiling 929 
+
+Reveals TIGIT as a Marker of CD19 CAR -T Cell Dysfunction in Patients with Non -930 
+
+Hodgkin Lymphoma. Cancer Discov 12 , 1886 -1903 (2022). 931 
+
+https://doi.org:10.1158/2159 -8290.CD -21 -1586 932 
+
+22 Bai, Z. et al. Single -cell multiomics dissection of basal and antigen -specific activation 933 
+
+states of CD19 -targeted CAR T cells. J Immunother Cancer 9 (2021). 934 
+
+https://doi.org:10.1136/jitc -2020 -002328 935 
+
+23 Xhangolli, I. et al. Single -cell Analysis of CAR -T Cell Activation Reveals A Mixed 936 
+
+T(H)1/T(H)2 Response Independent of Differentiation. Genomics Proteomics 937 
+
+Bioinformatics 17 , 129 -139 (2019).  https://doi.org:10.1016/j.gpb.2019.03.002 938 
+
+24 Sheih, A. et al. Clonal kinetics and single -cell transcriptional profiling of CAR -T cells 939 
+
+in patients undergoing CD19 CAR -T immunotherapy. Nat Commun 11 , 219 (2020). 940 
+
+https://doi.org:10.1038/s41467 -019 -13880 -1941 
+
+25 Boroughs, A. C. et al. A Distinct Transcriptional Program in Human CAR T Cells 942 
+
+Bearing the 4 -1BB Signaling Domain Revealed by scRNA -Seq. Mol Ther 28 , 2577 -943 
+
+2592 (2020).  https://doi.org:10.1016/j.ymthe.2020.07.023 944 
+
+26 Lynn, R. C. et al. c-Jun overexpression in CAR T cells induces exhaustion resistance. 945 
+
+Nature 576 , 293 -300 (2019).  https://doi.org:10.1038/s41586 -019 -1805 -z946 
+
+27 Wang, D. et al. CRISPR Screening of CAR T Cells and Cancer Stem Cells Reveals 947 
+
+Critical Dependencies for Cell -Based Therapies. Cancer Discov 11 , 1192 -1211 (2021). 948 
+
+https://doi.org:10.1158/2159 -8290.CD -20 -1243 949 
+
+28 Li, X. et al. Single -Cell Transcriptomic Analysis Reveals BCMA CAR -T Cell 950 
+
+Dynamics in a Patient with Refractory Primary Plasma Cell Leukemia. Mol Ther 29 ,951 
+
+645 -657 (2021).  https://doi.org:10.1016/j.ymthe.2020.11.028 952 
+
+29 Bai, Z. et al. Single -cell antigen -specific landscape of CAR T infusion product 953 
+
+identifies determinants of CD19 -positive relapse in patients with ALL. Sci Adv 8,954 
+
+eabj2820 (2022).  https://doi.org:10.1126/sciadv.abj2820 955 
+
+30 Bai, Z. et al. Single -cell CAR T atlas reveals type 2 function in 8 -year leukaemia 956 
+
+remission. Nature 634 , 702 -711 (2024).  https://doi.org:10.1038/s41586 -024 -07762 -w957 
+
+31 Liberzon, A. et al. The Molecular Signatures Database (MSigDB) hallmark gene set 958 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+collection. Cell Syst 1, 417 -425 (2015).  https://doi.org:10.1016/j.cels.2015.12.004 959 
+
+32 Johnson, W. E., Li, C. & Rabinovic, A. Adjusting batch effects in microarray expression 960 
+
+data using empirical Bayes methods. Biostatistics 8, 118 -127 (2007). 961 
+
+https://doi.org:10.1093/biostatistics/kxj037 962 
+
+33 Haghverdi, L., Lun, A. T. L., Morgan, M. D. & Marioni, J. C. Batch effects in single -963 
+
+cell RNA -sequencing data are corrected by matching mutual nearest neighbors. Nat 964 
+
+Biotechnol 36 , 421 -427 (2018).  https://doi.org:10.1038/nbt.4091 965 
+
+34 Lopez, R., Regier, J., Cole, M. B., Jordan, M. I. & Yosef, N. Deep generative modeling 966 
+
+for single -cell transcriptomics. Nat Methods 15 , 1053 -1058 (2018). 967 
+
+https://doi.org:10.1038/s41592 -018 -0229 -2968 
+
+35 Hie, B., Bryson, B. & Berger, B. Efficient integration of heterogeneous single -cell 969 
+
+transcriptomes using Scanorama. Nat Biotechnol 37 , 685 -691 (2019). 970 
+
+https://doi.org:10.1038/s41587 -019 -0113 -3971 
+
+36 Theodoris, C. V. et al. Transfer learning enables predictions in network biology. Nature 972 
+
+618 , 616 -624 (2023).  https://doi.org:10.1038/s41586 -023 -06139 -9973 
+
+37 Cui, H. et al. scGPT: toward building a foundation model for single -cell multi -omics 974 
+
+using generative AI. Nat Methods 21 , 1470 -1480 (2024). 975 
+
+https://doi.org:10.1038/s41592 -024 -02201 -0976 
+
+38 Bian, H. Y. et al. scMulan: A Multitask Generative Pre -Trained Language Model for 977 
+
+Single -Cell Analysis. Lect Notes Comput Sc 14758 , 479 -482 (2024). 978 
+
+https://doi.org:10.1007/978 -1-0716 -3989 -4_57 979 
+
+39 Hao, M. et al. Large -scale foundation model on single -cell transcriptomics. Nat 980 
+
+Methods 21 , 1481 -1491 (2024).  https://doi.org:10.1038/s41592 -024 -02305 -7981 
+
+40 Chen, Y. & Zou, J. Simple and effective embedding model for single -cell biology built 982 
+
+from ChatGPT. Nat Biomed Eng 9, 483 -493 (2025).  https://doi.org:10.1038/s41551 -983 
+
+024 -01284 -6984 
+
+41 Luecken, M. D. et al. Benchmarking atlas -level data integration in single -cell genomics. 985 
+
+Nat Methods 19 , 41 -50 (2022).  https://doi.org:10.1038/s41592 -021 -01336 -8986 
+
+42 Kock, K. H. et al. Asian diversity in human immune cells. Cell 188 , 2288 -2306 e2224 987 
+
+(2025).  https://doi.org:10.1016/j.cell.2025.02.017 988 
+
+43 Stephenson, E. et al. Single -cell multi -omics analysis of the immune response in 989 
+
+COVID -19. Nat Med 27 , 904 -916 (2021).  https://doi.org:10.1038/s41591 -021 -01329 -990 
+
+2991 
+
+44 Yoshida, M. et al. Local and systemic responses to SARS -CoV -2 infection in children 992 
+
+and adults. Nature 602 , 321 -327 (2022).  https://doi.org:10.1038/s41586 -021 -04345 -x993 
+
+45 Jin, K. et al. An interactive single cell web portal identifies gene and cell networks in 994 
+
+COVID -19 host responses. iScience 24 , 103115 (2021). 995 
+
+https://doi.org:10.1016/j.isci.2021.103115 996 
+
+46 Rodríguez -Ubreva, J. et al. Single -cell Atlas of common variable immunodeficiency 997 
+
+shows germinal center -associated epigenetic dysregulation in B -cell responses. Nature 998 
+
+Communications 13 (2022).  https://doi.org:10.1038/s41467 -022 -29450 -x999 
+
+47 Ballestar, E. et al. Single cell profiling of COVID -19 patients: an international data 1000 
+
+resource from multiple tissues . (2020). 1001 
+
+48 van der Wijst, M. G. P. et al. Type I interferon autoantibodies are associated with 1002 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+systemic immune alterations in patients with COVID -19. Sci Transl Med 13 , eabh2624 1003 
+
+(2021).  https://doi.org:10.1126/scitranslmed.abh2624 1004 
+
+49 Program, C. Z. I. C. S. et al. CZ CELLxGENE Discover: a single -cell data platform 1005 
+
+for scalable exploration, analysis and modeling of aggregated data. Nucleic Acids Res 1006 
+
+53 , D886 -D900 (2025).  https://doi.org:10.1093/nar/gkae1142 1007 
+
+50 Diehl, A. D. et al. The Cell Ontology 2016: enhanced content, modularization, and 1008 
+
+ontology interoperability. J Biomed Semantics 7, 44 (2016). 1009 
+
+https://doi.org:10.1186/s13326 -016 -0088 -71010 
+
+51 Luo, Y. SHINE: SubHypergraph Inductive Neural nEtwork. Adv Neur In (2022). 1011 
+
+52 Ganin, Y. et al. Domain -Adversarial Training of Neural Networks. J Mach Learn Res 1012 
+
+17 (2016). 1013 
+
+1014 
+
+1015 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+1016 
+
+Figure 1 gANCHOR framework for hierarchical modeling of CAR -T single -cell data and 1017 
+
+patient response prediction. gANCHOR is a two -module architecture that integrates gene -1018 
+
+pathway structure and cellular heterogeneity to predict patient -level therapeutic outcomes from 1019 
+
+single -cell RNA -seq data. Module I (foundation model) learns biologically informed cell 1020 
+
+embeddings by incorporating a curated gene -pathway hypergraph. A gene encoder performs 1021 
+
+attention -based message passing between genes and pathways to generate pathway -aware gene 1022 
+
+representations, which are combined with single -cell expression profiles and processed through 1023 
+
+stacked hypergraph attention blocks to model structured intra -cellular dependencies. A multi -1024 
+
+task decoder reconstructs gene expression and predicts cell types, while adversarial training 1025 
+
+removes batch effects, yielding transferable, biologically meaningful cell embeddings. Module 1026 
+
+II aggregates cell embeddings via a cell -to -patient attention mechanism, assigning adaptive 1027 
+
+weights to individual cells and generating patient -level representations for response 1028 
+
+classification. Training is performed in two stages: Module I is pretrained with multi -task and 1029 
+
+batch -adversarial objectives, and the resulting embeddings are fixed for supervised training of 1030 
+
+Module II . This design enables interpretable modeling of gene -pathway interactions, cell -state 1031 
+
+heterogeneity, and their contributions to clinical response. 1032 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+1033 
+
+Figure 2 Benchmarking of cell embedding quality across models. (A, B) UMAP 1034 
+
+visualizations of cell embeddings generated from raw gene expression, Combat, Scanorama, 1035 
+
+scVI, MNN , scFoundation, scMulan, GenePT, scGPT, Geneformer, and gANCHOR. Cells are 1036 
+
+colored by dataset ( A) and T cell subtype ( B). ( C, D ) Quantitative evaluation of embedding 1037 
+
+performance across models using a comprehensive set of metrics. Batch correction metrics (C)1038 
+
+include silhouette score for batch mixing, integration local inverse Simpson’s index (iLISI), k -1039 
+
+nearest -neighbor batch effect test (kBET), graph connectivity, and principal component 1040 
+
+regression (PCR) comparison. Dot size represents the normalized metric score, and color 1041 
+
+indicates relative ranking across methods. Biological conservation metrics (D) include isolated 1042 
+
+label score, normalized mutual information (NMI), adjusted Rand index (ARI), silhouette score 1043 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+for cell types, and cell -type local inverse Simpson’s index (cLISI). gANCHOR achieves the 1044 
+
+highest overall performance, demonstrating strong and consistent results across both biological 1045 
+
+conservation and batch correction metrics. 1046 
+
+1047 
+
+.CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint 1048 
+
+Figure 3 gANCHOR improves patient -level response prediction and reveals reproducible 1049 
+
+response -associated gene programs. (A) Sankey diagram illustrating the distribution of CAR 1050 
+
+T cells across datasets, clinical response, and individual patients. ( B) Patient -level response 1051 
+
+prediction performance measured by F1 score. All models, except logistic regression, were 1052 
+
+evaluated across four independent runs with different random initializations. gANCHOR 1053 
+
+achieves the highest mean performance with low variability and shows a statistically significant 1054 
+
+improvement over all baseline models (permutation test, P < 0.05), indicating robust and 1055 
+
+reproducible predictive capability. ( C, D ) Venn diagrams showing the overlap of the top 100 1056 
+
+differential attention -enriched genes (DAEGs) identified across four independent runs in the 1057 
+
+responding ( C) and nonresponding ( D) groups. A substantial fraction of genes is consistently 1058 
+
+recovered across all runs, including 59 genes in the responding group and 65 genes in the 1059 
+
+nonresponding group, demonstrating high reproducibility of the identified gene signatures. ( E, 1060 
+
+F) DAEGs in the responding ( E) and nonresponding ( F) groups, restricted to genes consistently 1061 
+
+identified across all runs. Dot size represents log2 fold change (log2FC), reflecting the 1062 
+
+magnitude of increased gene contribution, and color indicates statistical significance (−log10 P 1063 
+
+value). These patterns highlight distinct and robust gene programs associated with favorable 1064 
+
+and unfavorable clinical outcomes. 1065 
+
+1066 
+
+> .CC-BY-NC-ND 4.0 International license made available under a (which was not certified by peer review) is the author/funder, who has granted bioRxiv a license to display the preprint in perpetuity. It is The copyright holder for this preprint this version posted July 16, 2026. ;https://doi.org/10.64898/2026.07.11.737994 doi: bioRxiv preprint
+
+1067 
+
+Figure 4 gANCHOR learns biologically informed gene and cell representations. (A)1068 
+
+Sankey diagram illustrating the distribution of cells across dataset batches and annotated T cell 1069 
+
+types. ( B) Confusion matrix showing the predictive performance of gANCHOR for T cell type 1070 
+
+classification in the test dataset (F1 = 0.7580). Values are normalized by the total number of 1071 
+
+cells in each ground truth class, enabling comparison of classification accuracy across cell types. 1072 
+
+(C, D ) Mean pairwise cosine ( C) and Euclidean ( D) distances of gene embeddings for genes 1073 
+
+within the same pathways compared to randomly selected gene sets. Genes within the same 1074 
+
+pathway exhibit significantly smaller distances than those in randomly sampled sets (1,000 1075 
+
+gene sets, Wilcoxon rank -sum test , *** P < 0.001), indicating that the learned gene embeddings 1076 
+
+preserve pathway -level organization and capture biologically meaningful relationships. ( E, F )1077 
+
+Differential attention -enriched genes of T cell subtype marker genes across subtypes, derived 1078 
+
+from the gene -to -cell attention mechanism. ( E) Scaled attention weights and fraction of cells 1079 
+
+with non -zero attention (expression > 0), reflecting subtype -specific gene importance. ( F) Log2 1080 
+
+fold change (log2FC) and statistical significance (−log10 P -value); only genes with log2FC > 1081 
+
+0 (increased attention) are shown. These patterns highlight distinct transcriptional programs 1082 
+
+associated with different T cell subtypes, with canonical marker genes consistently showing 1083 
+
+increased attention (log2FC > 0) in their corresponding cell types, supporting the biological 1084 
+
+fidelity of the learned representations. 1085
