@@ -1,0 +1,24 @@
+---
+title: Context-dependent utility and robustness of pretrained single-cell foundation model representations across analytical tasks
+title_zh: 预训练单细胞基础模型表示在不同分析任务中的上下文依赖效用与鲁棒性
+authors: "Liu, T., Feng, T., Pan, X., Chen, Y., Ren, L., Ye, X., Lin, H., Zhang, Y."
+date: 2026-07-13
+pdf: "https://www.biorxiv.org/content/10.64898/2026.06.18.733285v2.full.pdf"
+tags: ["query:virtual-cell"]
+score: 7.0
+evidence: 系统评估单细胞基础模型在6个下游任务上的零样本性能，支持用于扰动响应预测
+tldr: 单细胞基础模型（scFM）的表示能力在不同任务和数据结构下表现不一。本研究系统评估了20种方法在6个下游任务和1607个数据集上的零样本性能，涵盖效用、鲁棒性及与数据特征的关联。结果显示，scFM性能高度依赖任务，无方法全面占优；高效用不保证鲁棒性，传统方法仍具竞争力。研究为上下文感知的表示选择提供了依据，并强调评估结构鲁棒性的重要性。
+source: biorxiv
+selection_source: fresh_fetch
+figures_json: "[{\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-06-18-733285-v2/fig-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 1434, \"height\": 1416, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-06-18-733285-v2/fig-002.webp\", \"caption\": \"\", \"page\": 0, \"index\": 2, \"width\": 1441, \"height\": 1902, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-06-18-733285-v2/fig-003.webp\", \"caption\": \"\", \"page\": 0, \"index\": 3, \"width\": 1438, \"height\": 1961, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-06-18-733285-v2/fig-004.webp\", \"caption\": \"\", \"page\": 0, \"index\": 4, \"width\": 1442, \"height\": 1943, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-06-18-733285-v2/fig-005.webp\", \"caption\": \"\", \"page\": 0, \"index\": 5, \"width\": 1441, \"height\": 2040, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-06-18-733285-v2/fig-006.webp\", \"caption\": \"\", \"page\": 0, \"index\": 6, \"width\": 1429, \"height\": 1737, \"label\": \"Figure\"}]"
+motivation: 现有研究缺乏对单细胞基础模型表示在不同任务和数据结构下的系统评估，尤其在零样本设置下。
+method: 系统分析20种方法在6个下游任务和1607个数据集上的零样本性能，从效用、鲁棒性和关联三个维度评估。
+result: 性能任务依赖，无方法全面占优；高效用不保证鲁棒性；传统方法有竞争力；计算成本与性能不一致。
+conclusion: 零样本效用和鲁棒性取决于任务和数据结构，需根据上下文选择表示并重视结构鲁棒性。
+---
+
+## 摘要
+单细胞基础模型（scFMs）已成为单细胞转录组学中强大的表示学习方法。然而，其预训练表示在不同分析任务和数据条件下的效用与鲁棒性尚未得到充分表征，尤其是在没有任务特定微调的零样本设置中。在此，我们系统分析了20种方法、6个下游任务和包含近2180万个细胞的1607个数据集的单细胞转录组表示在零样本下的性能。我们从三个互补维度评估模型行为：原始数据集上的效用、对数据集结构受控变化的鲁棒性，以及数据集特征与性能变化之间的探索性关联。我们的结果表明，scFM性能强烈依赖于任务，没有一种方法能在细胞和基因水平分析中始终优于其他方法。值得注意的是，在原始数据集上的高效用并不一定转化为结构扰动下的鲁棒性，且几种排名靠前的方法对细胞数量、基因数量、类别组成、类别不平衡和批次复杂性的变化敏感。传统统计方法和任务特定方法在几种设置中仍具有竞争力，而更高的计算成本并不一致地对应着更好的性能。驱动分析进一步识别了性能与数据集特征（包括细胞类型复杂性、训练-测试类别重叠、批次数量和调控目标集大小）之间的任务特定关联。总之，这些发现表明，预训练scFM表示的零样本效用和鲁棒性共同取决于分析任务和数据集结构。我们的研究为上下文感知的表示选择提供了实用基础，并强调了在开发和应用scFMs时，评估结构鲁棒性与效用同等重要。
+
+## Abstract
+Single-cell foundation models (scFMs) have emerged as powerful representation learning approaches for single-cell transcriptomics. However, the utility and robustness of their pretrained representations across diverse analytical tasks and data conditions remain insufficiently characterized, particularly in zero-shot settings without task-specific fine-tuning. Here, we systematically analyze zero-shot performance of single-cell transcriptomic representations across 20 methods, 6 downstream tasks and 1,607 datasets comprising nearly 21.8 million cells. We evaluate model behavior along three complementary dimensions: utility on original datasets, robustness to controlled changes in dataset structure, and exploratory associations between dataset characteristics and performance variation. Our results show that scFM performance is strongly task dependent, with no single method consistently outperforming others across cell- and gene-level analyses. Notably, high utility on original datasets did not necessarily translate into robustness under structural perturbations, and several top-ranking methods were sensitive to changes in cell number, gene number, class composition, class imbalance, and batch complexity. Conventional statistical and task-specific methods remained competitive in several settings, while greater computational cost did not consistently correspond to better performance. Driver analyses further identified task-specific associations between performance and dataset characteristics, including cell-type complexity, train-test class overlap, batch number, and regulatory target-set size. Together, these findings show that the zero-shot utility and robustness of pretrained scFM representations depend jointly on analytical task and dataset structure. Our study provides a practical basis for context-aware representation selection and underscores the importance of evaluating structural robustness alongside utility when developing and applying scFMs.

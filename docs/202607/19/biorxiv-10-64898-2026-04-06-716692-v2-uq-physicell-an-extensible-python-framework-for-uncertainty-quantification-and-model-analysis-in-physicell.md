@@ -1,0 +1,24 @@
+---
+title: "UQ-PhysiCell: An extensible Python framework for uncertainty quantification and model analysis in PhysiCell"
+title_zh: "UQ-PhysiCell: 一个可扩展的Python框架，用于PhysiCell中的不确定性量化和模型分析"
+authors: "L. Rocha, H., Bucher, E., Zhang, S., Deshpande, A., Bergman, D. R., Heiland, R., Macklin, P. R."
+date: 2026-07-17
+pdf: "https://www.biorxiv.org/content/10.64898/2026.04.06.716692v2.full.pdf"
+tags: ["query:virtual-cell"]
+score: 7.0
+evidence: PhysiCell虚拟细胞模型的不确定性量化框架
+tldr: PhysiCell模型虽广泛应用于癌症等复杂生物系统研究，但缺乏不确定性量化、校准和假设比较的系统支持。UQ-PhysiCell作为模块化Python框架，自动化管理仿真输入输出与大规模并行仿真，集成敏感性分析、贝叶斯推断等Python库。该方法实现了参数探索、模型校准和选择的定制化流水线，显著提升分析效率。该框架降低了不确定性分析门槛，增强了模型评估的可扩展性与可重复性。
+source: biorxiv
+selection_source: fresh_fetch
+figures_json: "[{\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-04-06-716692-v2/fig-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 1370, \"height\": 711, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-04-06-716692-v2/fig-002.webp\", \"caption\": \"\", \"page\": 0, \"index\": 2, \"width\": 1374, \"height\": 718, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-04-06-716692-v2/fig-003.webp\", \"caption\": \"\", \"page\": 0, \"index\": 3, \"width\": 1307, \"height\": 1068, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-04-06-716692-v2/fig-004.webp\", \"caption\": \"\", \"page\": 0, \"index\": 4, \"width\": 1370, \"height\": 1218, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-04-06-716692-v2/fig-005.webp\", \"caption\": \"\", \"page\": 0, \"index\": 5, \"width\": 1355, \"height\": 997, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-04-06-716692-v2/fig-006.webp\", \"caption\": \"\", \"page\": 0, \"index\": 6, \"width\": 1342, \"height\": 1010, \"label\": \"Figure\"}]"
+motivation: 解决PhysiCell模型在高维参数空间和随机性下缺乏系统的不确定性量化、校准和模型选择支持的问题。
+method: 开发UQ-PhysiCell框架，管理仿真输入输出，自动协调大规模并行仿真，集成Python敏感性分析、优化和贝叶斯推断库。
+result: 提供多级并行和可定制分析流水线，高效实现参数探索、不确定性量化与模型校准选择。
+conclusion: 解耦执行与分析，强调可扩展性和可重复性，降低生物医学研究中严格不确定性分析的应用障碍。
+---
+
+## 摘要
+基于智能体的模型（ABMs）被广泛用于研究复杂的多尺度生物系统，特别是在癌症研究中。然而，它们的高维参数空间、随机性和计算成本给不确定性量化、校准以及竞争性机制假设的系统比较带来了重大挑战。PhysiCell已发展成为一个不断增长的开源工具生态系统，支持基于物理的多细胞建模，包括模型构建、可视化、实验数据集成（例如，空间多组学）以及下游输出分析。然而，尽管取得了这些进展，对不确定性感知模型分析、可扩展参数探索和正式校准工作流程的系统支持仍然有限。在此，我们介绍UQ-PhysiCell，一个开源的Python包，它通过模块化和可扩展的工作流程，实现了PhysiCell模型的不确定性量化、校准和模型选择。UQ-PhysiCell充当PhysiCell模拟输入和输出的管理器，包括参数、初始条件、规则和符合MultiCellDS的对象，并提供大型模拟集合的自动编排。该框架支持多个级别的并行性以加速分析，包括独立模拟的并行执行、随机重复以及下游分析任务。UQ-PhysiCell直接与已建立的Python库集成，用于敏感性分析、优化、贝叶斯推断和代理建模，允许用户构建符合其建模目标和计算资源需求的定制化流程。UQ-PhysiCell将模型执行与统计分析解耦，并强调可扩展性和可重复性。这降低了进行严格不确定性感知分析的门槛，并支持在生物和生物医学研究中对PhysiCell模型进行系统评估。
+
+## Abstract
+Agent-based models (ABMs) are widely used to study complex multiscale biological systems, particularly in cancer research. However, their high-dimensional parameter spaces, stochasticity, and computational costs pose significant challenges for uncertainty quantification, calibration, and systematic comparison of competing mechanistic hypotheses. PhysiCell has evolved into a growing ecosystem of open-source tools supporting physics-based multicellular modeling, including model construction, visualization, experimental data integration (e.g., spatial multiomics), and downstream output analysis. However, despite these advances, systematic support for uncertainty-aware model analysis, scalable parameter exploration, and formal calibration workflows remains limited. Here, we introduce UQ-PhysiCell, an open-source Python package that enables uncertainty quantification, calibration, and model selection for PhysiCell models using a modular and scalable workflow. UQ-PhysiCell acts as a manager of PhysiCell simulation inputs and outputs, including parameters, initial conditions, rules, and MultiCellDS-compliant objects, and provides automated orchestration of large ensembles of simulations. The framework supports multiple levels of parallelism to accelerate the analysis, including the parallel execution of independent simulations, stochastic replicates, and downstream analysis tasks. UQ-PhysiCell integrates directly with established Python libraries for sensitivity analysis, optimization, Bayesian inference, and surrogate modeling, allowing users to construct customized pipelines that match their modeling goals and computational resource requirements. UQ-PhysiCell decouples model execution from statistical analysis and emphasizes extensibility and reproducibility. This lowers the barrier to rigorous uncertainty-aware analysis and supports systematic evaluation of PhysiCell models in biological and biomedical research.
