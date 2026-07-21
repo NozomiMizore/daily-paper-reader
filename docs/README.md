@@ -6,26 +6,37 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-20
-- 运行时间：2026-07-20 21:42:12 UTC
+- 最新运行日期：2026-07-21
+- 运行时间：2026-07-21 21:03:49 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 本次总论文数：5
+- 精读区：3
+- 速读区：2
 
 ### 今日简报（AI）
-今日精读1篇、速读1篇，关注表格基础模型与基因调控网络推断。最值得看的是《Tabular Foundation Models Are Competitive Cellular Perturbation Predictors Across Biological Scales》，该模型在跨尺度细胞扰动预测中表现优异，《Large-scale, interpretable gene regulatory network inference through biologically informed matrix factorization》则提供可解释性思路。建议优先精读第一篇，了解基础模型在生物学中的前沿应用。
-- 详情：[/202607/20/README](/202607/20/README)
+1) 今日精读2篇高分论文，速读2篇，共覆盖5篇细胞动态响应与基因调控相关研究。  
+2) 最值得关注：《BaiZe》提出多视图动态框架模拟细胞扰动响应（10分），《GeneSpeak-FP》实现从扰动信号直接检索靶点与化合物（9分）。  
+3) 普通读者可优先阅读BaiZe的多视图建模思路，以及GeneSpeak-FP在药物发现中的实用价值。
+- 详情：[/202607/21/README](/202607/21/README)
 
 ### 精读区论文标签
-1. [Tabular Foundation Models Are Competitive Cellular Perturbation Predictors Across Biological Scales](/202607/20/biorxiv-10-64898-2026-06-28-735106-v3-tabular-foundation-models-are-competitive-cellular-perturbation-predictors-across-biological-scales)  
+1. [BaiZe: A Multi-View Dynamic Framework for Simulating and Interpreting Cellular Responses Across Perturbation Contexts](/202607/21/biorxiv-10-64898-2026-07-15-738608-v1-baize-a-multi-view-dynamic-framework-for-simulating-and-interpreting-cellular-responses-across-perturbation-contexts)  
    标签：评分：10.0/10、query:virtual-cell
-   evidence：直接比较表格基础模型与专用单细胞模型在细胞扰动预测上的表现
+   evidence：预测不同遗传、化学、时间扰动下的转录组变化
+2. [GeneSpeak-FP: Target and Compound Retrieval from Observed Cell-Level Perturbation Signatures](/202607/21/2607.17671v1-genespeak-fp-target-and-compound-retrieval-from-observed-cell-level-perturbation-signatures)  
+   标签：评分：9.0/10、query:virtual-cell
+   evidence：直接利用Transformer从单细胞扰动签名中检索靶点和化合物
+3. [Harmonised benchmarking of foundation models for single-cell and spatial transcriptomics reveals context-dependent generalisation](/202607/21/2607.17227v1-harmonised-benchmarking-of-foundation-models-for-single-cell-and-spatial-transcriptomics-reveals-context-dependent-generalisation)  
+   标签：评分：8.0/10、query:virtual-cell
+   evidence：对基础模型的扰动预测能力进行了基准测试
 
 ### 速读区论文标签
-1. [Large-scale, interpretable gene regulatory network inference through biologically informed matrix factorization](/202607/20/biorxiv-10-64898-2026-07-15-738791-v1-large-scale-interpretable-gene-regulatory-network-inference-through-biologically-informed-matrix-factorization)  
+1. [A hybrid machine learning and enzyme-constrained metabolic model for ab initio prediction of proteome reallocation](/202607/21/biorxiv-10-64898-2026-07-20-739489-v1-a-hybrid-machine-learning-and-enzyme-constrained-metabolic-model-for-ab-initio-prediction-of-proteome-reallocation)  
    标签：评分：7.0/10、query:virtual-cell
-   evidence：基因调控网络推断用于建模扰动效应
+   evidence：预测异源蛋白表达下的蛋白质组重新分配作为扰动响应
+2. [Deep and Probabilistic Models for Gene Regulatory Network Inference](/202607/21/2607.16053v1-deep-and-probabilistic-models-for-gene-regulatory-network-inference)  
+   标签：评分：6.0/10、query:virtual-cell
+   evidence：深度概率GRN推断可通过调控网络建模扰动效应
 
 
 <div class="dpr-home-promo-card">
