@@ -6,37 +6,28 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-21
-- 运行时间：2026-07-21 21:03:49 UTC
+- 最新运行日期：2026-07-22
+- 运行时间：2026-07-22 21:03:19 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：3
-- 速读区：2
+- 本次总论文数：2
+- 精读区：1
+- 速读区：1
 
 ### 今日简报（AI）
-1) 今日精读2篇高分论文，速读2篇，共覆盖5篇细胞动态响应与基因调控相关研究。  
-2) 最值得关注：《BaiZe》提出多视图动态框架模拟细胞扰动响应（10分），《GeneSpeak-FP》实现从扰动信号直接检索靶点与化合物（9分）。  
-3) 普通读者可优先阅读BaiZe的多视图建模思路，以及GeneSpeak-FP在药物发现中的实用价值。
-- 详情：[/202607/21/README](/202607/21/README)
+今天精读了一篇关于扰动效应机理推理的高分论文，并速读了一篇贝叶斯筛选方法。  
+最值得关注的是PertReason框架，它利用知识图谱实现细胞状态条件性的扰动效应机理推理。  
+建议先深入理解PertReason的基准数据集和因果推理设计，再对比传统筛选方法的应用场景。
+- 详情：[/202607/22/README](/202607/22/README)
 
 ### 精读区论文标签
-1. [BaiZe: A Multi-View Dynamic Framework for Simulating and Interpreting Cellular Responses Across Perturbation Contexts](/202607/21/biorxiv-10-64898-2026-07-15-738608-v1-baize-a-multi-view-dynamic-framework-for-simulating-and-interpreting-cellular-responses-across-perturbation-contexts)  
-   标签：评分：10.0/10、query:virtual-cell
-   evidence：预测不同遗传、化学、时间扰动下的转录组变化
-2. [GeneSpeak-FP: Target and Compound Retrieval from Observed Cell-Level Perturbation Signatures](/202607/21/2607.17671v1-genespeak-fp-target-and-compound-retrieval-from-observed-cell-level-perturbation-signatures)  
+1. [PertReason: A Knowledge-Grounded Benchmark and Framework for Cell-State-Conditioned Mechanistic Reasoning of Perturbation Effects](/202607/22/2607.18777v1-pertreason-a-knowledge-grounded-benchmark-and-framework-for-cell-state-conditioned-mechanistic-reasoning-of-perturbation-effects)  
    标签：评分：9.0/10、query:virtual-cell
-   evidence：直接利用Transformer从单细胞扰动签名中检索靶点和化合物
-3. [Harmonised benchmarking of foundation models for single-cell and spatial transcriptomics reveals context-dependent generalisation](/202607/21/2607.17227v1-harmonised-benchmarking-of-foundation-models-for-single-cell-and-spatial-transcriptomics-reveals-context-dependent-generalisation)  
-   标签：评分：8.0/10、query:virtual-cell
-   evidence：对基础模型的扰动预测能力进行了基准测试
+   evidence：用于扰动效应推理的深度学习方法的基准；基于知识且条件化细胞状态
 
 ### 速读区论文标签
-1. [A hybrid machine learning and enzyme-constrained metabolic model for ab initio prediction of proteome reallocation](/202607/21/biorxiv-10-64898-2026-07-20-739489-v1-a-hybrid-machine-learning-and-enzyme-constrained-metabolic-model-for-ab-initio-prediction-of-proteome-reallocation)  
-   标签：评分：7.0/10、query:virtual-cell
-   evidence：预测异源蛋白表达下的蛋白质组重新分配作为扰动响应
-2. [Deep and Probabilistic Models for Gene Regulatory Network Inference](/202607/21/2607.16053v1-deep-and-probabilistic-models-for-gene-regulatory-network-inference)  
+1. [Deep Adaptive Bayesian Screening](/202607/22/2607.16927v1-deep-adaptive-bayesian-screening)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：深度概率GRN推断可通过调控网络建模扰动效应
+   evidence：自适应贝叶斯筛选方法，适用于扰动因子筛选
 
 
 <div class="dpr-home-promo-card">

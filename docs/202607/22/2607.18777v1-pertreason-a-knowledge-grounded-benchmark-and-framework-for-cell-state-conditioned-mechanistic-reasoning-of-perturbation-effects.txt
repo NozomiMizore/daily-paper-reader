@@ -1,0 +1,847 @@
+Title: PertReason: A Knowledge-Grounded Benchmark and Framework for Cell-State-Conditioned Mechanistic Reasoning of Perturbation Effects
+
+URL Source: https://arxiv.org/pdf/2607.18777v1
+
+Published Time: Wed, 22 Jul 2026 00:35:29 GMT
+
+Number of Pages: 31
+
+Markdown Content:
+# PertReason: A Knowledge-Grounded Benchmark and Framework for Cell-State–Conditioned Mechanistic Reasoning of Perturbation Effects 
+
+Dongkwan Kim ∗ Yiming Gao ∗ Yining Yang Yang Shen 
+
+Department of Electrical and Computer Engineering, Texas A&M University 
+
+{dongkwan.kim, yiminggao618, yining_yang, yshen}@tamu.edu 
+
+## Abstract 
+
+Evaluating machine learning in scientific domains requires separating correct pre-dictions from correct reasons under realistic distribution shifts. We introduce PertReason, a knowledge-grounded benchmark and framework suite for cell-state– conditioned reasoning about perturbation effects. At its core, PertReasonQA is a benchmark that tests whether models can generate mechanistically faithful expla-nations while remaining robust to complex shifts, such as new cells and unseen perturbations. PertReasonQA combines single-cell genetic and chemical perturba-tion data across multiple cellular contexts with knowledge graphs, and dynamically conditions pathways on cell-specific basal states to avoid generic memorization. Evaluations on state-of-the-art models reveal systematic gaps between predictive ac-curacy and mechanistic reasoning. Specifically, these models exhibit failure modes largely invisible to standard benchmarks, such as deriving correct answers through flawed logic, ignoring cellular context, and generating directionally inconsistent mechanisms. As a reference probe of the benchmark, we present PertReasonLM, a large language model trained to align outcome predictions with context-specific mechanistic reasoning. Our model targets the identified failure modes by grounding rationales in context-specific pathways and tightening agreement between outcomes and mechanisms. Together, we provide a diagnostic framework for exposing and mitigating failures in faithful reasoning in data-rich scientific systems. 
+
+## 1 Introduction 
+
+Modeling complex and causal systems remains a fundamental challenge in machine learning. Virtual cell models serve as a demanding testbed for assessing how well AI can reason and generalize within such environments, while simultaneously accelerating drug discovery and disease modeling. Recent approaches leverage foundation models to predict transcriptomic changes caused by chemical or genetic perturbations [ 7 , 43 , 34 , 51 ]. Despite their progress, two critical challenges limit their utility. First, these approaches suffer from a lack of mechanistic reasoning . Because they bypass established biological pathways to predict outcomes [ 27 , 8], they cannot leverage shared causal mechanisms to generalize effectively across unseen perturbations [ 20 , 47 , 2]. Second, outcome-centric evaluation protocols worsen this problem by judging models solely on their outcome predictions [ 51 , 41 , 47 , 52 , 49 ]. By only looking at the end results, these benchmarks cannot tell if a model truly understands underlying biology or is simply relying on spurious correlations. To address these intertwined challenges, we introduce PertReason, which consists of a knowledge-grounded benchmark P ERT REASON QA and a framework suite P ERT REASON LM for rigorously evaluating and addressing mechanistic reasoning of perturbation effects, respectively. At its core,            
+
+> ∗Equal contribution. Preprint. arXiv:2607.18777v1 [cs.LG] 21 Jul 2026 Perturbation
+> Basal cell
+> Current
+> Virtual Cell
+> Perturbed cell
+> Effect genes
+> Expression
+> Prediction
+> …
+> Current evaluation
+> cannot detect errors in
+> perturbation reasoning
+> Outcome-Centric
+> Evaluation No Mechanistic Reasoning
+> Current models fail to infer
+> biologically plausible
+> mechanistic pathways
+> Up, Down,
+> Unchanged
+> Ground-truth
+> outcomes
+> Cell-state—conditioned
+> mechanistic pathways
+> e.g., In Cell Y ,Drug inhibits Protein C , which
+> activates Protein D , which inhibits Gene X
+> e.g., In Cell Y, Drug
+> increased Gene X
+> PertReasonLM
+> PertReasonQA
+> SFT / RL
+> Perturbation
+> Cell’s
+> Basal State
+> Reasoning-Centric Evaluation
+> Evaluating Reasoning-outcome
+> alignment as well as outcome
+> Gene Regulatory
+> Knowledge Graphs
+
+Figure 1: Overview of our proposed solutions in perturbation modeling. Current methods (left) predict expression changes without biological reasoning, limiting their evaluation to final outcomes. Our P ERT REASON QA (right) leverages reasoning pathways from knowledge graphs, alongside PERT REASON LM, a reference baseline to validate the efficacy of the reasoning-centric benchmark. PERT REASON QA pairs cell-specific perturbation outcomes with faithful gene-regulatory pathways derived from knowledge graphs [ 44 , 3 ]. To prevent models from relying on generic memorization, PERT REASON QA dynamically conditions these pathways on the basal state of the cell, ensuring that the reference reasoning reflects valid, context-specific mechanisms. This structural design enables us to separate correct predictions from correct reasons and expose reasoning failures that standard outcome-centric benchmarks miss. As a reference probe for this reasoning-centric benchmark, we present P ERT REASON LM, a large language model trained to align outcome predictions with context-specific pathways. Existing approaches often rely on fixed embedding lookups [ 1] or static graphs [ 34 , 48 ], which inherently struggle to generalize to new cellular contexts or new perturbations. P ERT REASON LM instead acts as a semantic bridge that translates textual descriptions of novel experimental conditions into actionable regulatory states. By learning reasoning through Supervised Fine-Tuning (SFT) and Reinforcement Learning (RL), P ERT REASON LM uses cell-conditioned pathway evidence to produce outcome-aligned causal explanations, thereby reducing the failure modes exposed by P ERT REASON QA. We evaluate state-of-the-art models on our P ERT REASON QA benchmark across diverse generalization scenarios, including unseen cellular contexts, perturbations, or both. To move beyond outcome-centric metrics, we propose specialized evaluation protocols based on symbolic matching and functional similarity to assess the mechanistic faithfulness of the reasoning. Our experiments reveal a systematic gap invisible to outcome-centric benchmarks: existing approaches, including Retrieval-Augmented Generation baselines [ 51 ] and general-purpose language models [ 54 ], exhibit failure modes, such as deriving correct answers through flawed logic or directionally inconsistent mechanisms. In this setting, P ERT REASON LM serves as a reference probe that turns the benchmark diagnosis into a concrete modeling test: whether reasoning-oriented training can close the gap between outcome prediction and mechanistic justification. Our main contributions are summarized as follows. First, we introduce P ERT REASON QA, a knowledge-grounded benchmark evaluating the mechanistic reasoning of perturbation effects using cell-conditioned pathways (§3). Second, we present P ERT REASON LM, a reference language model aligning outcome predictions with context-specific regulatory reasoning to address the failure modes (§4). Third, using novel reasoning-centric evaluations, we expose systematic failures in existing models, such as flawed logic, ignored cellular contexts, and directionally inconsistent mechanisms (§5). We release our datasets to support further research 2.
+
+## 2 Related Work 
+
+Benchmarking and Modeling Cellular Perturbation Prediction The landscape of cellular pertur-bation prediction encompasses parallel advancements in modeling and benchmarking. On the model-ing front, architectures have evolved from early gene embeddings [ 9 ] and generative models [ 19 , 11 ]to latent space arithmetic [20, 13] and extensive single-cell foundation models [55, 7, 43, 35, 1]. To 
+
+> 2http://github.com/dongkwan-kim/PertReasonQA
+
+2evaluate these systems, standardized benchmarks initially focused on the numerical regression of expression profiles [ 29 , 41 , 47 , 52 , 49 ]. However, optimizing strictly for regression yields black-box models that lack mechanistic reasoning, causing them to frequently underperform linear baselines [ 2]or exhibit biological hallucinations [ 31 ]. To incorporate semantic context and structural grounding, recent modeling approaches have explored graph augmentations, synthetic trace imitation, and multi-agent pipelines [ 57 , 30 , 14 ]. Concurrently, within benchmarking, PerturbQA [ 51 ] pioneered the use of natural language evaluation, though its scope currently remains constrained to discrete factual question-answering rather than tracing complex causal mechanisms. P ERT REASON QA addresses these gaps by explicitly shifting the evaluation paradigm from static outcome predictions to the rigorous assessment of coherent, multi-step, and mechanistically faithful perturbation reasoning. 
+
+Knowledge Graphs and Large Language Models in Biomedical Applications Researchers have used Knowledge Graphs (KGs) to decipher complex interactions between biological entities [ 5, 58 ,34 , 25 ]. However, the static nature of predefined KG schemas limits inductive generalization to novel entities [ 42 ]. Large Language Models (LLMs) bridge this semantic gap by offering transformative biomedical reasoning [ 21 , 38 ] and translating transcriptomics into linguistic constructs [ 37 , 26 , 16 ]. To anchor these models in factual biology, recent frameworks integrate LLMs with external knowledge via Retrieval-Augmented Generation (RAG) [ 17 , 51 ] or specialized agents [ 40 , 10 ]. Despite these synergies, current approaches prioritize discrete fact retrieval over dynamic causal simulation. To address this, P ERT REASON QA evaluates mechanistically faithful reasoning beyond static predictions. Concurrently, P ERT REASON LM dynamically aligns flexible language models with context-specific pathways, overcoming the structural limitations of standard graph retrieval. 
+
+## 3 PertReasonQA: Benchmarking of Perturbation Reasoning 
+
+In this section, we present P ERT REASON QA, a novel question-answering (QA) benchmark designed to evaluate knowledge-grounded mechanistic reasoning about cellular responses to perturbations. 
+
+3.1 Problem Formulation and Benchmark Construction Pipeline 
+
+Cellular systems respond to perturbations p through intracellular signaling cascades that alter down-stream gene expression. A perturbation interacts with a primary target, triggering regulatory events that ultimately affect a downstream effect gene ge. Because these cascades strictly depend on the cell’s basal state, mechanistic reasoning requires identifying the precise context-specific causal chain connecting the perturbation to the observed expression change. We formalize P ERT REASON QA as a knowledge-grounded QA task to assess this reasoning capacity. To build the benchmark, we implement a two-step data pipeline. First, we construct outcome-only question-answering samples. Given a cellular context, a perturbation p, its directly perturbed gene set G0 = {g(1) 0 , . . . , g (m)0 }, and an effect gene ge, we extract the ground-truth differential expression labels y ∈ { unchanged, up, down }. Next, to move beyond outcome-centric evaluation, we synthesize knowledge-grounded question-reasoning samples. We pair these initial outcomes with reference reasoning paths r that define the step-by-step biological mechanism as [( p, e 0, g 0), . . . , (gk−1, e k, g e)] ,where g0 ∈ G 0. Here, each ei represents a regulatory interaction between neighboring genes derived from biological knowledge graphs, thereby rigorously testing both the outcome correctness and its underlying mechanistic rationale. 
+
+3.2 Constructing Question-Outcome Dataset Multi-Source Data Curation To convert high-dimensional single-cell profiles into discrete rea-soning tasks for P ERT REASON QA, we first construct outcome-only QA samples. We aggregate chemical and genetic (CRISPRi) perturbation data from four large-scale sources [ 39 , 41 , 33 , 24 ]. Our dataset comprehensively spans ten cellular contexts comprising six cell lines (K562, MCF7, A549, HepG2, Jurkat, and RPE1) and four immune-cell types (B, Myeloid, NK, and T). Individual cells are aggregated into pseudobulks and paired with their respective average basal expression profiles. 
+
+Splits for Rigorous Evaluation To rigorously evaluate out-of-distribution (OOD) generalization, we partition the dataset to assess unseen cellular and perturbation contexts. We employ a network-based functional splitting strategy to prevent data leakage of overlapping pathways. We derive gene network embeddings based on OmniPath [ 44 ] and MSigDB [ 18 ], cluster them by similarity, and align chemical drugs to these clusters via the INDRA CoGEx database [ 3]. This structural design ensures the OOD test set evaluates true mechanistic extrapolation (details in Appendix A.1). 3Path Filtering 
+
+×                   
+
+> Cell-Specific Activity Thresholding
+> activates
+> Multi-Source Data Curation
+> 10 cell ular c xt s
+> Basal Cell
+> Perturbed
+> Cell
+> Gene A Gene B Gene Z
+> …
+> Unchanged Up Down
+> Outcome labels
+> Outcome-Only QA
+> 4sources
+> Chemical and genetic
+> perturbations for one model
+> Knowledge-Grounded Question-Reasoning
+> Pert.
+> Basal State
+> Inactive genes Active genes
+> activates
+> activates
+> activates
+> inhibits
+> [Up]
+> Cell-State–Conditioned Subgraph
+> Pert. [Up]
+> activates
+> Pert. [Up]
+> activates
+> activates
+> activates
+> activates
+> inhibits
+> Valid
+> Filtered
+> Prompt & Response in LLMs
+> Contexts in Prompt
+> Ground-Truth Response
+> "In Cell ,activates , …,
+> activates . Thus, …
+> Answer: Up"
+> LLM translates valid paths
+> into reasoning texts
+> Basal Context
+> Cell-State—Conditioned
+> Pathway Context
+> Conditioned
+> subgraph
+> Unconditioned subgraph
+> Evaluating
+> large language models
+> Multiple Test Splits
+> {Chemical, Genetic }
+> × {ID, OOD cells }
+> × {ID, OOD perturbations }
+
+Figure 2: To rigorously evaluate mechanistic reasoning, the P ERT REASON QA integrates multi-source data (left) featuring diverse chemical and genetic perturbations in ID and OOD contexts. It dynamically constructs a cell-state–conditioned subgraph (center) based on basal states to prevent generic memorization. This structured knowledge is then translated into prompts (right) to evaluate if LLMs can generate faithful mechanistic reasoning that aligns with the ground truth. 
+
+Differential Expression Labeling Finally, we derive ground-truth outcome labels through dif-ferential expression analysis against control groups. Following the pipeline from PerturbQA [ 51 ], we apply the Wilcoxon rank-sum test [ 50 ] with Benjamini-Hochberg correction [ 4 ]. We discretize continuous expression changes into three classes: Up-regulation or Down-regulation for genes with an adjusted p-value less than 0.01, and Unchanged for genes with a p-value greater than 0.1. 
+
+3.3 Synthesizing Knowledge-Grounded Reasoning Dataset 
+
+We synthesize a large-scale dataset of reasoning paths by mapping empirical transcriptomic obser-vations to knowledge graphs. This process involves defining basal cellular states, tracing causal interactions from the perturbation to the effect gene, and converting these mechanisms into natural language. Detailed descriptions of each step with rigorous notations are provided in the Appendix A.2. 
+
+Cell-Specific Basal Activity Thresholding To enable large language models to incorporate cellular context into semantic logic rather than processing raw numerical values, we discretize basal expression into interpretable biological states: “low," “medium," and “high." To achieve this while effectively mitigating technical noise and batch effects, we establish adaptive, cell-specific thresholds using Kolmogorov-Smirnov (KS) statistics. Specifically, we define a low threshold τlow by applying a two-sample KS test to distinguish the empirical groups of genes labeled unchanged and changed. We then determine a high threshold τhigh using a one-sample KS test to identify the saturation point of functionally active genes. We calibrate these thresholds using differential-expression labels only within the training set; at test time, they are reused for seen cell contexts or predicted for unseen contexts solely from basal expression distributions. This process converts numerical profiles into qualitative states, providing a robust foundation for mechanistic reasoning in P ERT REASON QA. 
+
+Cell-State–Conditioned Path Extraction Global knowledge graphs represent a superset of all potential interactions, many of which remain less likely to be active under the measured basal expression in specific cell types. To address this, we dynamically refine the static graph into a context-specific subgraph by modulating edge weights based on the cell’s basal expression b(c). For each edge 
+
+(u, v ), we define the conditioned weight as w(c) 
+
+> uv
+
+= wbase  
+
+> uv
+
+·γsrc  
+
+> u
+
+·γtgt  
+
+> v
+
+, where γ· ∝ sigmoid (b(c) 
+
+> ·
+
+−τlow )
+
+acts as a sigmoid-based gating function that penalizes edges involving inactive genes, where τlow is the cell-specific activity threshold. Building on this, we extend TieDIE [ 28 ] to identify mechanistic paths from the perturbation to the effect gene. By performing Dijkstra searches on the weighted KG, we extract a diverse ensemble of high-confidence causal paths. This approach ensures that the reasoning paths in P ERT REASON QA reflect biologically plausible, cell-specific signaling events. 4Table 1: Summary statistics of the P ERT REASON QA, including the number of unique perturbations, cellular contexts, labels (unchanged, up, down), and pathways across training, validation, and all test splits. Outcome-only samples are used only for training and validation. Train ID Cell Valid ID Cell Test ID Cell Test OOD Cell Chem. Gen. Chem. Gen. ID Chem. ID Gen. OOD Chem. OOD Gen. ID Chem. ID Gen. OOD Chem. OOD Gen. Perturbation 135 1172 17 137 15 131 25 518 15 125 25 481 Cellular Contexts 5 3 5 3 5 3 5 3 2 1 2 1Outcome Samples Unch. 62730 212524 7583 24042 – – – – – – – –Up 32304 179141 2600 22951 – – – – – – – –Down 53412 282868 6653 31775 – – – – – – – –Reasoning Samples Unch. 19156 36755 2906 4715 2316 1275 1913 62 809 192 815 24 Up 17985 28313 1562 4700 1579 1265 628 133 803 396 496 64 Down 29901 54387 3857 7104 3252 1939 3203 464 1406 692 1935 273 Avg. Pathway Length 5.98 4.91 6.06 4.62 6.25 4.68 5.29 3.95 6.05 4.89 5.07 4.35 
+
+Reference Paths via Evidence Augmentation and Filtering To ensure the quality of reference reasoning, we filter the extracted paths to retain only those that logically justify the observed transcriptomic outcomes. We first resolve regulatory directions by assigning activating ( +1 ) or inhibitory ( −1) signs to edges based on consensus from INDRA CoGEx [ 3]. For differentially expressed genes, we select only those paths where the cumulative sign propagation matches the observed direction of change (Algorithm 1). For unchanged responses, we identify cases where regulatory signals are masked by cellular boundary conditions (Algorithm 2), such as inhibitory signals targeting already silent genes. This logical validation ensures that P ERT REASON QA provides high-quality, mechanistically sound reference pathways for each perturbation-effect pair. 
+
+Path-to-Text Reasoning Synthesis To enable language models to natively process biologically grounded mechanisms, we convert the filtered structural causal paths into natural-language reasoning texts. We utilize Qwen3-4B [ 54 ] to synthesize these mechanisms that causally link the perturbation to the effect gene outcome into cohesive narrative explanations. Finally, to guarantee the textual fidelity of the P ERT REASON QA dataset, we apply a post-generation quality control step that actively removes low-quality samples through keyword matching. 
+
+Dataset Statistics PERT REASON QA contains 919K outcome-only perturbation samples. From this pool, we construct 237K reasoning samples, each paired with a mechanistic pathway grounded in the knowledge graph. Detailed statistics are summarized in Table 1. 
+
+3.4 Evaluation Metrics 
+
+We evaluate models along two complementary axes: outcome accuracy and mechanistic faithfulness. 
+
+Outcome Accuracy. We evaluate whether the model predicts the correct final perturbation outcome. We extract the final prediction from the last valid <answer> block and compare it against the ground-truth differential-expression label. We report balanced accuracy over the three outcome classes: 
+
+up , down , and unchanged . Balanced accuracy is used because the label distribution varies across perturbation types, cell contexts, and test folds. 
+
+Mechanistic Faithfulness. Outcome accuracy alone cannot determine whether a model reaches the correct answer through a reference-consistent biological mechanism. We canonicalize the regulatory triplets extracted from the <triplet> block and evaluate the resulting structured mechanism. • Edge Recall: We compare the predicted signed triplets against the curated reference paths and measure the fraction of reference regulatory edges recovered by the model. We emphasize recall because language models may generate additional contextual nodes or auxiliary regulatory edges that are biologically plausible but absent from the curated reference path. Edge Recall therefore tests whether the model recovers indispensable signaling mechanisms without overly penalizing generative verbosity. • Path Connectivity: Edge-level overlap does not guarantee that the predicted mechanism forms a coherent causal route. We therefore verify whether the generated triplets form a directed, connected chain from the perturbation source to the queried effect gene. This metric detects broken or fragmented mechanisms that contain individually plausible edges but fail to support an end-to-end perturbation-effect explanation. • Gene-Ontology Similarity: To account for mechanisms that are functionally similar to the reference without matching edge-by-edge, we compute biological similarity between predicted 5and reference chains. For each chain, we collect the intermediate genes, excluding the perturbation and effect gene when possible, construct IDF-weighted Gene Ontology Biological Process profiles, and compute cosine similarity between the predicted and reference profiles. Finally, we report a four-level answer-reason taxonomy that separates final-answer correctness from mechanistic correctness. A generated reason is counted as correct when triplets exist, the predicted triplets form a directed connected path, and edge recall is at least 0.5.
+
+## 4 Models and Experimental Setup 
+
+To evaluate the effectiveness of reasoning-centric modeling, we describe P ERT REASON LM, the reference probe based on large language models. Our P ERT REASON LM is trained to reason pertur-bation effects via a comprehensive pipeline of supervised fine-tuning (SFT) and group relative policy optimization (GRPO). We also describe the experimental configurations for our benchmarking. 
+
+4.1 PERT REASON LM: Perturbation Reasoning Model via SFT and GRPO Supervised Fine-Tuning The initial SFT stage instills foundational biological knowledge and struc-tural reasoning into P ERT REASON LM via a multi-stage curriculum. First, to overcome the scarcity of high-quality reasoning paths, we employ outcome-only supervision. By predicting final differential expression labels directly from cellular contexts and perturbations, the model acquires broad domain priors and stable entity representations. Building upon this foundation, we introduce mechanistic reasoning supervision to align these learned associations with explicit causal mechanisms. P ERT REA -
+
+> SON
+
+LM is trained to generate natural language Chain-of-Thought (CoT) reasoning [ 46 , 6, 22 ] that justifies the final outcome using context-specific regulatory pathways. We format target responses with specialized tags (e.g., <thinking> , <answer> , <triplet> ) and employ data mixing [ 12 , 23 ]to integrate complex reasoning samples with outcome-only data, ensuring predictive stability. Finally, to handle ambiguous gene interactions, we integrate a relation direction self-supervision objective. By masking and predicting the causal signs of known edges [ 42 , 56 ], the model actively uses cellular and pathway contexts to learn edge-level mechanistic primitives (i.e., activation or inhibition). By carefully sequencing these objectives, our curriculum effectively bridges the gap between abun-dant outcome labels and scarce high-fidelity reasoning signals, consolidating them into a cohesive perturbation reasoning capability. A detailed description of SFT is in Appendix B.1 
+
+Reinforcement Learning with GRPO We apply Group Relative Policy Optimization (GRPO) [ 36 ]on top of the SFT model as a post-training alignment stage. It aims to tighten the agreement between the final expression label and the generated causal chain. To do so, the reward combines answer correctness with structured triplet-level feedback, so that the model is encouraged to produce responses that are both label-correct and mechanistically grounded. Full GRPO implementation details and reward definitions are deferred to Appendix B.2. 
+
+Backbone models We use Qwen3-4B [ 54 ] as the primary backbone for P ERT REASON LM due to its robust reasoning performance at a moderate parameter scale. We further conduct ablation experiments using the Qwen3-1.7B and Qwen3-8B. 
+
+4.2 Pathway Contexts in Inference Stages 
+
+To examine how language models use pathway information, we define four inference scenarios. First, the no-path scenario serves as a baseline for predicting outcomes without pathways provided. Second, 
+
+unconditional paths provide regulatory chains from the unweighted global KG, independent of cell states. Third, the cell-conditioned-path scenario is our default , where pathways are dynamically selected by the cell-specific basal state; these paths are contextually grounded but remain imperfect because they contain potential regulatory trajectories that may not directly support the observed outcome. Finally, reference paths consist of high-fidelity pathways that all mechanistically support the final outcome. While these require prior knowledge of the results and are thus unavailable for real-world inference, they provide a ceiling for performance analysis. 
+
+4.3 Baselines 
+
+We compare P ERT REASON LM with state-of-the-art gene-space and text-space baselines. Detailed descriptions and configurations for all baselines are provided in Appendix D. 6Table 2: Balanced accuracy for outcome prediction on 3-way gene expression QA in ID and OOD test splits of cells and perturbations. Results are reported under the Cell-Conditioned-Path Context (default). Averages are computed over the displayed slices; GEARS, scGPT, and STATE are trained and evaluated only on the genetic subset by design (See §D.1). ID Cell OOD Cell Model Average ID Chem. ID Gen. OOD Chem. OOD Gen. ID Chem. ID Gen. OOD Chem. OOD Gen. GEARS 0.356 - 0.357 - 0.405 - 0.341 - 0.320 scGPT 0.359 - 0.374 - 0.390 - 0.350 - 0.323 STATE 0.411 - 0.510 - 0.407 - 0.403 - 0.324 BioMistral 7B 0.309 0.305 0.307 0.313 0.319 0.324 0.294 0.315 0.293 NatureLM 8x7B 0.334 0.336 0.332 0.334 0.333 0.331 0.337 0.335 0.333 SUMMER-4B 0.404 0.444 0.389 0.421 0.360 0.442 0.416 0.392 0.367 Qwen3-4B 0-shot 0.367 0.418 0.330 0.358 0.358 0.400 0.372 0.325 0.370 PERT REASON LM-4B Outcome SFT 0.636 0.713 0.690 0.612 0.622 0.653 0.646 0.543 0.611 + CoT SFT 0.709 0.749 0.722 0.678 0.708 0.705 0.697 0.669 0.743 + GRPO 0.736 0.772 0.756 0.721 0.745 0.668 0.763 0.680 0.786 
+
+Gene-Space Baselines with Numerical Outputs We adopt: (1) GEARS [ 34 ], which utilizes a gene-gene interaction graph to model genetic perturbation effects, (2) scGPT [ 7], and (3) STATE (SE+ST) [ 1 ], generative foundation models pre-trained on single-cell transcriptomic data. We restrict these baselines to the genetic subset for evaluation since GEARS and scGPT are architecturally limited to genetic perturbations, and STATE uses embedding lookup for chemical perturbations, which does not support OOD generalization. Detailed matched evaluation protocols and the rationale for excluding chemical proxy comparisons are provided in Appendix D.1 and Appendix H. 
+
+Text-Space Baselines based on LLMs We compare against: (1) the Qwen-3 4B base model [ 54 ], (2) domain-specific LLMs on biology, BioMistral 7B [ 15 ] and NatureLM 8x7B [ 53 ], (3) SUM-MER [ 51 ] with Qwen3-4B backbone, a state-of-the-art Retrieval-Augmented Generation (RAG) model for perturbation responses. 
+
+Proprietary LLM APIs We also tested closed-source GPT-5.4 families (full, mini, nano). To assess the performance of resource-intensive API-based models, we create P ERT REASON QA-mini, a representative subset comprising 1,591 examples where each test slice is capped at 200 instances. As detailed in Appendix E, this mini-benchmark serves as a reliable proxy for the full suite. 
+
+## 5 Results and Discussion 
+
+In this section, we evaluate models on P ERT REASON QA in both predictive and reasoning perfor-mance. We first compare outcome prediction across in-domain and out-of-distribution settings, then examine whether correct predictions of models are supported by faithful cell-conditioned mechanisms. We further analyze the effects of pathway context, perturbation modality, and model scale to identify where mechanistic supervision improves generalization and where current models still fail. 
+
+5.1 Benchmarking Outcome Prediction and Generalization 
+
+We evaluate model performance under the cell-conditioned-path context, where models must reason through noisy, context-specific regulatory environments. Table 2 summarizes the balanced accuracy across eight test folds. Gene-space baselines, including GEARS, scGPT, and STATE, exhibit performance decay outside of in-domain cellular and perturbation contexts. While STATE achieves a peak balanced accuracy of 0.510 on in-domain data, its performance drops substantially in OOD settings, highlighting the limitations of non-textual representations in generalizing across diverse perturbation types. Similarly, evaluations on the P ERT REASON QA-mini subset (Appendix E) reveal that proprietary models like GPT-5.4-full achieve balanced accuracies (0.380–0.399) comparable to Qwen3-4B (0.368), confirming that massive-scale parametric knowledge is insufficient for context-specific reasoning without explicit alignment to regulatory pathways. PERT REASON LM demonstrates superior predictive power and robustness against distribution shifts. While the P ERT REASON LM-SFT (Outcome) variant achieves an average balanced accuracy of 0.636, incorporating chain-of-thought reasoning in P ERT REASON LM-SFT pushes performance to 0.709. PERT REASON LM-GRPO further improves this to 0.736, outperforming SFT in seven out of eight test 7Table 3: Comparing outcome accuracy and mechanism faithfulness across LLM-based models under the No-Path Context and Cell-Conditioned-Path Context (default). All metrics are macro-averaged summaries over the eight test folds. Outcome Reasoning Failure Modes Pathway Contexts Model Bal. Acc. Edge Recall PathConn GOSim Answer × Reason ✓ Answer ✓ Reason ×                                                
+
+> SUMMER-4B 0.382 0.084 0.217 0.291 0.003 0.322 Qwen3-4B 0.347 0.136 0.857 0.613 0.027 0.293 PERT REASON LM-4B SFT 0.707 0.356 0.992 0.767 0.108 0.441 No Paths + GRPO 0.729 0.408 0.993 0.788 0.119 0.407 SUMMER-4B 0.404 0.839 0.923 0.950 0.446 0.036 Qwen3-4B 0.367 0.860 0.995 0.907 0.491 0.025 PERT REASON LM-4B SFT 0.709 0.975 0.974 0.938 0.288 0.021 Cell-Cond. (default) + GRPO 0.736 0.976 0.990 0.938 0.274 0.008
+
+folds and suggesting that RL-based alignment effectively captures complex biological logic. Notably, the performance degradation from ID to OOD settings is small for P ERT REASON LM-GRPO, whereas domain-specific models like BioMistral and NatureLM struggled with the reasoning protocol (see Appendix F for common failure modes). The benchmark stresses generalization across unseen cellular contexts and perturbation mechanisms. Models must infer perturbation effects when the held-out samples involve unfamiliar cell states, unseen perturbation clusters, or both. P ERT REASON LM remains strong in these OOD settings, indicating that it does not merely match perturbation-specific surface patterns but instead utilizes a shared pathway representation grounded in cellular context. These results underscore that structured mechanistic supervision is essential for effective extrapolation to unseen cells and perturbations. 
+
+5.2 Benchmarking Reasoning Faithfulness 
+
+We next investigate whether improved outcome performance is driven by faithful reasoning. Table 3 summarizes the mechanistic faithfulness alongside outcome metrics averaged across test folds. We first analyze the default cell-conditioned-path scenario. Providing pathway contexts generally im-proves reasoning metrics across all models. However, P ERT REASON LM maintains a clear advantage by consistently translating this contextual help into accurate outcomes and faithful reasoning. For instance, P ERT REASON LM-GRPO achieves a 0.976 edge recall and a 0.938 Gene Ontology similarity score. While Qwen3-4B and the RAG-based SUMMER successfully extract plausible biological chains, they frequently fail to connect these chains to the correct downstream impact. This disconnect results in high rates of mismatched answers and reasoning. In contrast, P ERT REASON LM improves both outcome accuracy and reasoning faithfulness simultaneously. Comparing P ERT REASON LM-SFT to P ERT REASON LM-GRPO reveals no alignment tax. The reinforcement learning stage heavily suppresses the “right answer with wrong reason” failure mode, reducing it from 2.1% to 0.8%. The advantages of P ERT REASON LM become more pronounced in the no-path scenario. Without pathway contexts, SUMMER and Qwen3-4B suffer from low or unstable edge recall and GO similarity. This indicates that their predictions are weakly coupled to mechanistic support: even when the final answer is correct, the rationale often fails to recover the relevant regulatory structure. Conversely, P ERT REASON LM retains relatively high reasoning connectivity and outcome accuracy even without explicit contextual clues, demonstrating a robust generalization of regulatory logic. Figures 3 and 4 reinforce the alignment between mechanism recovery and outcome prediction from complementary perspectives. Only P ERT REASON LM-SFT and P ERT REASON LM-GRPO display a positive coupling between edge recall and balanced accuracy. The four-level taxonomy further shows that training shifts a large fraction of predictions into the fully correct Ans ✓ Reason ✓ state. This indicates that P ERT REASON LM does not merely produce more polished explanations; it learns to connect structured mechanisms to the correct perturbation outcome. GRPO provides an additional refinement by further increasing fully correct predictions and reducing answer–reason disagreement. 
+
+5.3 Ablations by Pathway Contexts, Training Perturbation Modalities, and Model Scales Pathway Contexts Table 4 shows that cell-conditioned pathway contexts improve prediction. Simply adding unconditional paths degrades performance, suggesting that unconditioned paths can introduce irrelevant “evidence”. The strong performance even in the no-path scenario indicates that the model already recalls perturbation-response regularities learned during training, while the cell-conditioned-path context complements this internal knowledge with cell-specific mechanistic 830 40 50 60 70 80 90 100 
+
+> Balanced Accuracy (%)
+> 75
+> 80
+> 85
+> 90
+> 95
+> 100
+> Edge Recall (%)
+> PertReasonLM-GRPO (r=0.88)
+> PertReasonLM-SFT (r=0.72)
+> Qwen Base (r=-0.08)
+> Summer (r=-0.62)
+
+Figure 3: Per-split relationship between balanced accuracy and edge recall under the cell-conditioned-path context. Qwen Base SFT (Ours) GRPO (Ours)          
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Fraction of Samples
+> No Path
+> Qwen Base SFT (Ours) GRPO (Ours)
+> Cell-Conditioned Path
+> Ans, Reasoning Ans, Reasoning Ans, Reasoning Ans, Reasoning
+
+Figure 4: Answer–reason taxonomy distribution for Qwen3-4B base, PERT REASON LM-SFT, and PERT REASON LM-GRPO in the scenarios with the no-path context and with the cell-conditioned-path context. The four colors indicate joint answer/reason correct-ness, where reason correctness requires triplet exis-tence, path connectivity, and edge recall ≥ 0.5.Table 4: Balanced accuracy of P ERT REASON LM-SFT on outcome prediction across different pathway contexts. ID Cell OOD Cell Pathway Contexts Average ID Chem. ID Gen. OOD Chem. OOD Gen. ID Chem. ID Gen. OOD Chem. OOD Gen. No-Path 0.707 0.752 0.692 0.674 0.732 0.714 0.710 0.671 0.710 Uncond. Paths 0.691 0.766 0.696 0.693 0.634 0.696 0.698 0.659 0.688 Cell-Cond Paths (Default) 0.709 0.749 0.722 0.678 0.708 0.705 0.697 0.669 0.743 Reference Paths (Oracle) 0.809 0.842 0.793 0.818 0.788 0.795 0.817 0.820 0.799 context, especially under distribution shift. For OOD genetic perturbations in OOD cells, the cell-conditioned-path scenario achieves 0.743 balanced accuracy, outperforming both scenarios of no-path (0.710) and unconditional paths (0.688). Reference paths further raise performance but require outcome knowledge, indicating that path quality remains a major bottleneck. 
+
+Training Perturbation Modalities Table 5 shows that joint perturbation supervision provides the most consistent gains across evaluation regimes. Chemical-only and genetic-only training each perform well on portions of their matched perturbation type, but training on all perturbations achieves the best overall balanced accuracy across the eight splits. These results indicate that mixed perturbation supervision helps P ERT REASON LM learn regulatory patterns that are less tied to a single perturbation modality and more robust under realistic distribution shifts. 
+
+Model Scales Table 6 shows the effect of model scale on the outcome prediction performance of PERT REASON LM. Increasing the number of parameters generally improves balanced accuracy, with the 4B and 8B models substantially outperforming the 1.7B model across most settings. The 8B model achieves the best performance in several ID-cell settings, including ID Chem., OOD Chem., and OOD Gen., suggesting that larger models better capture cell-conditioned perturbation patterns. However, the 4B model obtains the highest average score and performs best on several OOD-cell settings, indicating that scaling alone does not uniformly improve generalization. These results suggest that larger P ERT REASON LM variants improve predictive robustness, while OOD cell and perturbation shifts remain challenging. 
+
+5.4 Discussion and Limitations Beyond Outcome-Centric Perturbation Evaluation. PERT REASON QA highlights that perturba-tion models should be evaluated not only by whether they predict the correct expression outcome, but also by whether the prediction is supported by a biologically plausible mechanism. By pairing pertur-bation outcomes with cell-state-conditioned regulatory pathways, P ERT REASON QA complements existing perturbation prediction suites by testing whether a model can maintain causal consistency under realistic shifts. 9Table 5: Balanced accuracy of P ERT REASON LM-SFT under the Cell-Conditioned-Path Context (default) when training on chemical-only, genetic-only, or joint perturbation supervision. Joint training gives the best overall performance and the strongest cross-modality transfer. ID Cell OOD Cell Training Perturbation Average ID Chem. ID Gen. OOD Chem. OOD Gen. ID Chem. ID Gen. OOD Chem. OOD Gen. Chemical 0.627 0.697 0.562 0.679 0.572 0.651 0.594 0.646 0.617 Genetic 0.616 0.534 0.710 0.582 0.698 0.530 0.653 0.550 0.671 All 0.709 0.749 0.722 0.678 0.708 0.705 0.697 0.669 0.743 Table 6: Balanced accuracy of P ERT REASON LM-SFT on outcome prediction by model scales. Results are reported under the Cell-Conditioned-Path Context (default). ID Cell OOD Cell Number of Parameters Average ID Chem. ID Gen. OOD Chem. OOD Gen. ID Chem. ID Gen. OOD Chem. OOD Gen. 1.7B 0.617 0.676 0.599 0.663 0.599 0.633 0.574 0.601 0.593 4B 0.709 0.749 0.722 0.678 0.708 0.705 0.697 0.669 0.743 8B 0.707 0.778 0.684 0.712 0.739 0.724 0.660 0.620 0.736 
+
+Limitations of Curated Mechanistic References. A major remaining challenge is that correct pathway retrieval does not always imply correct causal reasoning. In the conflict subset of P ERT REA -
+
+> SON
+
+QA, models can recover plausible pathways while still failing to arbitrate among competing mechanisms that imply different outcome directions. This suggests that future models need stronger mechanisms for weighting pathway dominance, cell-state compatibility, uncertainty, and regulatory sign propagation. Moreover, the reference pathways in P ERT REASON QA should be viewed as curated mechanistic proxies rather than exhaustive biological ground truth. Because knowledge graphs are incomplete and biased toward well-studied genes and pathways, high edge recall does not guarantee recovery of the true causal mechanism, and low edge recall may under-credit alternative valid mechanisms. 
+
+Limitations of Natural-Language Reasoning Synthesis. PERT REASON QA converts structured causal paths into natural-language texts using Qwen3-4B, which may introduce stylistic biases or favor models with similar linguistic priors. This may partly explain why the Qwen3-4B model performs strongly in the scale ablation, despite larger models having greater capacity in some settings. To mitigate this issue, future versions of the benchmark should incorporate expert-written rationales, evidence provenance, and multiple valid mechanistic explanations per perturbation-effect pair. 
+
+## 6 Conclusion 
+
+We introduced P ERT REASON QA, a knowledge-grounded benchmark for evaluating whether models can reason faithfully about perturbation effects under realistic distribution shifts. By pairing pertur-bation outcomes with cell-conditioned regulatory pathways, P ERT REASON QA moves evaluation beyond label accuracy and exposes failure modes that existing evaluations and benchmarks on pertur-bation modeling often miss. We further presented P ERT REASON LM as a reference probe that aligns outcome prediction with context-specific mechanistic explanations, showing that reasoning-centric training can reduce these gaps. Together, these results suggest that progress in virtual cell modeling should be measured not only by predictive performance, but also by the ability to produce biologically plausible and generalizable mechanisms. 
+
+## Acknowledgments and Disclosure of Funding 
+
+This work is supported by the National Institute of General Medical Sciences of the National Institutes of Health (R35GM124952). Portions of this research were conducted with the advanced computing resources provided by Texas A&M High Performance Research Computing. 10 References 
+
+[1] Abhinav K Adduri, Dhruv Gautam, Beatrice Bevilacqua, Alishba Imran, Rohan Shah, Mohsen Naghipour-far, Noam Teyssier, Rajesh Ilango, Sanjay Nagaraj, Mingze Dong, et al. Predicting cellular responses to perturbation across diverse contexts with state. BioRxiv , 2025. [2] Constantin Ahlmann-Eltze, Wolfgang Huber, and Simon Anders. Deep-learning-based gene perturbation effect prediction does not yet outperform simple linear baselines. Nature Methods , 22(8):1657–1661, 2025. doi: 10.1038/s41592-025-02772-6. URL https://doi.org/10.1038/s41592-025-02772-6 .[3] John A. Bachman, Benjamin M. Gyori, and Peter K. Sorger. Automated assembly of molecular mechanisms at scale from text mining and curated databases. Molecular Systems Biology , 19(5):MSB202211325, 2023. doi: 10.15252/msb.202211325. URL https://doi.org/10.15252/msb.202211325 .[4] Yoav Benjamini and Yosef Hochberg. On the adaptive control of the false discovery rate in multiple testing with independent statistics. Journal of educational and Behavioral Statistics , 25(1):60–83, 2000. [5] Payal Chandak, Kexin Huang, and Marinka Zitnik. Building a knowledge graph to enable precision medicine. Scientific data , 10(1):67, 2023. [6] Hyung Won Chung, Le Hou, Shayne Longpre, Barret Zoph, Yi Tay, William Fedus, Yunxuan Li, Xuezhi Wang, Mostafa Dehghani, Siddhartha Brahma, et al. Scaling instruction-finetuned language models. 
+
+Journal of Machine Learning Research , 25(70):1–53, 2024. [7] Haotian Cui, Chloe Wang, Hassaan Maan, Kuan Pang, Fengning Luo, Nan Duan, and Bo Wang. scgpt: toward building a foundation model for single-cell multi-omics using generative ai. Nature methods , 21(8): 1470–1480, 2024. [8] Daniel Dimitrov, Stefan Schrod, Martin Rohbeck, and Oliver Stegle. Interpretation, extrapolation and perturbation of single cells. Nature Reviews Genetics , pages 1–22, 2026. [9] Jingcheng Du, Peilin Jia, Yulin Dai, Cui Tao, Zhongming Zhao, and Degui Zhi. Gene2vec: distributed representation of genes based on co-expression. BMC genomics , 20(Suppl 1):82, 2019. [10] Yiming Gao, Zhen Wang, Jefferson Chen, Mark Antkowiak, Mengzhou Hu, JungHo Kong, Dexter Pratt, Jieyuan Liu, Enze Ma, Zhiting Hu, and Eric P. Xing. scpilot: Large language model reasoning toward automated single-cell analysis and discovery. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. URL https://openreview.net/forum?id=Vzi96rTe4w .[11] Christopher Heje Grønbech, Maximillian Fornitz Vording, Pascal N Timshel, Casper Kaae Sønderby, Tune H Pers, and Ole Winther. scvae: variational auto-encoders for single-cell gene expression data. 
+
+Bioinformatics , 36(16):4415–4422, 2020. [12] Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Peiyi Wang, Qihao Zhu, Runxin Xu, Ruoyu Zhang, Shirong Ma, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948 , 2025. [13] Leon Hetzel, Simon Böhm, Niki Kilbertus, Stephan Günnemann, Mohammad Lotfollahi, and Fabian J Theis. Predicting cellular responses to novel drug perturbations at a single-cell resolution. In NeurIPS 2022 , 2022. [14] Hyomin Kim, Sang-Yeon Hwang, Jaechang Lim, Yinhua Piao, Yunhak Oh, Woo Youn Kim, Chanyoung Park, Sungsoo Ahn, and Junhyeok Jeon. Progressive multi-agent reasoning for biological perturbation prediction, 2026. URL https://arxiv.org/abs/2602.07408 .[15] Yanis Labrak, Adrien Bazoge, Emmanuel Morin, Pierre-Antoine Gourraud, Mickael Rouvier, and Richard Dufour. Biomistral: A collection of open-source pretrained large language models for medical domains, 2024. URL https://arxiv.org/abs/2402.10373 .[16] Daniel Levine, Syed A Rizvi, Sacha Lévy, Nazreen Pallikkavaliyaveetil, David Zhang, Xingyu Chen, Sina Ghadermarzi, Ruiming Wu, Zihe Zheng, Ivan Vrkic, et al. Cell2sentence: Teaching large language models the language of biology. In International Conference on Machine Learning , pages 27299–27325. PMLR, 2024. [17] Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen tau Yih, Tim Rocktäschel, Sebastian Riedel, and Douwe Kiela. Retrieval-augmented generation for knowledge-intensive nlp tasks, 2021. URL https://arxiv.org/abs/2005 .11401 .
+
+11 [18] Arthur Liberzon, Chet Birger, Helga Thorvaldsdóttir, Mahmoud Ghandi, Jill P Mesirov, and Pablo Tamayo. The molecular signatures database hallmark gene set collection. Cell systems , 1(6):417–425, 2015. [19] Romain Lopez, Jeffrey Regier, Michael B Cole, Michael I Jordan, and Nir Yosef. Deep generative modeling for single-cell transcriptomics. Nature methods , 15(12):1053–1058, 2018. [20] Mohammad Lotfollahi, Anna Klimovskaia Susmelj, Carlo De Donno, Leon Hetzel, Yuge Ji, Ignacio L Ibarra, Sanjay R Srivatsan, Mohsen Naghipourfar, Riza M Daza, Beth Martin, et al. Predicting cellular responses to complex perturbations in high-throughput screens. Molecular Systems Biology , page e11517, 2023. [21] Renqian Luo, Liai Sun, Yingce Xia, Tao Qin, Sheng Zhang, Hoifung Poon, and Tie-Yan Liu. Biogpt: generative pre-trained transformer for biomedical text generation and mining. Briefings in Bioinformatics ,23(6), September 2022. ISSN 1477-4054. doi: 10.1093/bib/bbac409. URL http://dx.doi.org/10.10 93/bib/bbac409 .[22] Lucie Charlotte Magister, Jonathan Mallinson, Jakub Adamek, Eric Malmi, and Aliaksei Severyn. Teaching small language models to reason. In Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 2: Short Papers) , pages 1773–1781, 2023. [23] Arindam Mitra, Luciano Del Corro, Shweti Mahajan, Andres Codas, Clarisse Simoes, Sahaj Agarwal, Xuxi Chen, Anastasia Razdaibiedina, Erik Jones, Kriti Aggarwal, et al. Orca 2: Teaching small language models how to reason. arXiv preprint arXiv:2311.11045 , 2023. [24] Ajay Nadig, Joseph M. Replogle, Angela N. Pogson, Steven A McCarroll, Jonathan S. Weissman, Elise B. Robinson, and Luke J. O’Connor. Transcriptome-wide characterization of genetic perturbations. bioRxiv ,2024. doi: 10.1101/2024.07.03.601903. URL https://www.biorxiv.org/content/early/2024/0 7/03/2024.07.03.601903 .[25] Shengkun Ni, Xiangtai Kong, Yingying Zhang, Zhengyang Chen, Zhaokun Wang, Zunyun Fu, Ruifeng Huo, Xiaochu Tong, Ning Qu, Xiaolong Wu, et al. Identifying compound-protein interactions with knowledge graph embedding of perturbation transcriptomics. Cell genomics , 4(10), 2024. [26] Harsha Nori, Nicholas King, Scott Mayer McKinney, Dean Carignan, and Eric Horvitz. Capabilities of gpt-4 on medical challenge problems, 2023. URL https://arxiv.org/abs/2303.13375 .[27] Gherman Novakovsky, Nick Dexter, Maxwell W Libbrecht, Wyeth W Wasserman, and Sara Mostafavi. Obtaining genetics insights from deep learning via explainable artificial intelligence. Nature Reviews Genetics , 24(2):125–137, 2023. [28] Evan O. Paull, Daniel E. Carlin, Mario Niepel, Peter K. Sorger, David Haussler, and Joshua M. Stuart. Discovering causal pathways linking genomic events to transcriptional states using tied diffusion through interacting events (tiedie). Bioinformatics , 29(21):2757–2764, 08 2013. ISSN 1367-4803. doi: 10.1093/bi oinformatics/btt471. URL https://doi.org/10.1093/bioinformatics/btt471 .[29] Stefan Peidli, Tessa D Green, Ciyue Shen, Torsten Gross, Joseph Min, Samuele Garda, Bo Yuan, Linus J Schumacher, Jake P Taylor-King, Debora S Marks, et al. scperturb: harmonized single-cell perturbation data. Nature Methods , 21(3):531–540, 2024. [30] Lawrence Phillips, Marc Boubnovski Martell, Aditya Misra, Josefa Lia Stoisser, Cesar A. Prada-Medina, Rory Donovan-Maiye, and Kaspar Märtens. Synthpert: Enhancing llm biological reasoning via synthetic reasoning traces for cellular perturbation prediction, 2025. URL https://arxiv.org/abs/2509.253 46 .[31] Jean Radig, Robin Droit, Daria Doncevic, Albert Li, Duc Thien Bui, Luis Herfurth, Thaddeus Kühn, and Carl Herrmann. Tracking biological hallucinations in single-cell perturbation predictions using scarchon, a comprehensive benchmarking platform. bioRxiv , 2025. doi: 10.1101/2025.06.23.661046. URL 
+
+https://www.biorxiv.org/content/early/2025/06/27/2025.06.23.661046 .[32] Jeff Rasley, Samyam Rajbhandari, Olatunji Ruwase, and Yuxiong He. Deepspeed: System optimizations enable training deep learning models with over 100 billion parameters. In Proceedings of the 26th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining , KDD ’20, page 3505–3506, New York, NY, USA, 2020. Association for Computing Machinery. ISBN 9781450379984. doi: 10.1145/3394486.3406703. URL https://doi.org/10.1145/3394486.3406703 .
+
+12 [33] Joseph M. Replogle, Reuben A. Saunders, Angela N. Pogson, Jeffrey A. Hussmann, Alexander Lenail, Alina Guna, Lauren Mascibroda, Eric J. Wagner, Karen Adelman, Gila Lithwick-Yanai, Nika Iremadze, Florian Oberstrass, Doron Lipson, Jessica L. Bonnar, Marco Jost, Thomas M. Norman, and Jonathan S. Weissman. Mapping information-rich genotype-phenotype landscapes with genome-scale perturb-seq. 
+
+Cell , 185(14):2559–2575.e28, 2022. ISSN 0092-8674. doi: https://doi.org/10.1016/j.cell.2022.05.013. URL https://www.sciencedirect.com/science/article/pii/S0092867422005979 .[34] Yusuf Roohani, Kexin Huang, and Jure Leskovec. Predicting transcriptional outcomes of novel multigene perturbations with gears. Nature Biotechnology , 42(6):927–935, 2024. [35] Yanay Rosen, Yusuf Roohani, Ayush Agarwal, Leon Samotorˇ can, Tabula Sapiens Consortium, Stephen R Quake, and Jure Leskovec. Universal cell embeddings: A foundation model for cell biology. BioRxiv ,2023. [36] Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, Y. K. Li, Y. Wu, and Daya Guo. Deepseekmath: Pushing the limits of mathematical reasoning in open language models, 2024. URL https://arxiv.org/abs/2402.03300 .[37] Karan Singhal, Shekoofeh Azizi, Tao Tu, S. Sara Mahdavi, Jason Wei, Hyung Won Chung, Nathan Scales, Ajay Tanwani, Heather Cole-Lewis, Stephen Pfohl, Perry Payne, Martin Seneviratne, Paul Gamble, Chris Kelly, Nathaneal Scharli, Aakanksha Chowdhery, Philip Mansfield, Blaise Aguera y Arcas, Dale Webster, Greg S. Corrado, Yossi Matias, Katherine Chou, Juraj Gottweis, Nenad Tomasev, Yun Liu, Alvin Rajkomar, Joelle Barral, Christopher Semturs, Alan Karthikesalingam, and Vivek Natarajan. Large language models encode clinical knowledge, 2022. URL https://arxiv.org/abs/2212.13138 .[38] Karan Singhal, Tao Tu, Juraj Gottweis, Rory Sayres, Ellery Wulczyn, Mohamed Amin, Le Hou, Kevin Clark, Stephen R. Pfohl, Heather Cole-Lewis, Darlene Neal, Qazi Mamunur Rashid, Mike Schaekermann, Amy Wang, Dev Dash, Jonathan H. Chen, Nigam H. Shah, Sami Lachgar, Philip Andrew Mansfield, Sushant Prakash, Bradley Green, Ewa Dominowska, Blaise Agüera y Arcas, Nenad Tomašev, Yun Liu, Renee Wong, Christopher Semturs, S. Sara Mahdavi, Joelle K. Barral, Dale R. Webster, Greg S. Corrado, Yossi Matias, Shekoofeh Azizi, Alan Karthikesalingam, and Vivek Natarajan. Toward expert-level medical question answering with large language models. Nature Medicine , 31(3):943–950, 2025. doi: 10.1038/s41591-024-03423-7. URL https://doi.org/10.1038/s41591-024-03423-7 .[39] Sanjay R. Srivatsan, José L. McFaline-Figueroa, Vijay Ramani, Lauren Saunders, Junyue Cao, Jonathan Packer, Hannah A. Pliner, Dana L. Jackson, Riza M. Daza, Lena Christiansen, Fan Zhang, Frank Steemers, Jay Shendure, and Cole Trapnell. Massively multiplex chemical transcriptomics at single-cell resolution. 
+
+Science , 367(6473):45–51, 2020. doi: 10.1126/science.aax6234. URL https://www.science.org/do i/abs/10.1126/science.aax6234 .[40] Xiaorui Su, Yibo Wang, Shanghua Gao, Xiaolong Liu, Valentina Giunchiglia, Djork-Arné Clevert, and Marinka Zitnik. KGARevion: An AI agent for knowledge-intensive biomedical QA. In The Thirteenth International Conference on Learning Representations , 2025. URL https://openreview.net/forum ?id=tnB94WQGrn .[41] Artur Szał ata, Andrew Benz, Robrecht Cannoodt, Mauricio Cortes, Jason Fong, Sunil Kuppasani, Richard Lieberman, Tianyu Liu, Javier A. Mas-Rosario, Rico Meinl, Jalil Nourisa, Jared Tumiel, Tin M. Tunjic, Mengbo Wang, Noah Weber, Hongyu Zhao, Benedict Anchang, Fabian J. Theis, Malte D. Luecken, and Daniel B. Burkhardt. A benchmark for prediction of transcriptomic responses to chemical perturbations across cell types. In A. Globerson, L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. Tomczak, and C. Zhang, editors, Advances in Neural Information Processing Systems , volume 37, pages 20566–20616. Curran Associates, Inc., 2024. doi: 10.52202/079017-0650. [42] Komal Teru, Etienne Denis, and Will Hamilton. Inductive relation prediction by subgraph reasoning. In 
+
+International conference on machine learning , pages 9448–9457. PMLR, 2020. [43] Christina V. Theodoris, Ling Xiao, Anant Chopra, Mark D. Chaffin, Zeina R. Al Sayed, Matthew C. Hill, Helene Mantineo, Elizabeth M. Brydon, Zexian Zeng, X. Shirley Liu, and Patrick T. Ellinor. Transfer learning enables predictions in network biology. Nature , 618:616–624, May 2023. [44] Dénes Türei, Tamás Korcsmáros, and Julio Saez-Rodriguez. Omnipath: guidelines and gateway for literature-curated signaling pathway resources. Nature methods , 13(12):966–967, 2016. [45] Leandro von Werra, Younes Belkada, Lewis Tunstall, Edward Beeching, Tristan Thrush, Nathan Lambert, Shengyi Huang, Kashif Rasul, and Quentin Gallouédec. TRL: Transformers Reinforcement Learning, 2020. URL https://github.com/huggingface/trl .
+
+13 [46] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, et al. Chain-of-thought prompting elicits reasoning in large language models. Advances in neural information processing systems , 35:24824–24837, 2022. [47] Zhiting Wei, Yiheng Wang, Yicheng Gao, Shuguang Wang, Ping Li, Duanmiao Si, Yuli Gao, Siqi Wu, Danlu Li, Kejing Dong, et al. Benchmarking algorithms for generalizable single-cell perturbation response prediction. Nature Methods , pages 1–14, 2025. [48] Frederik Wenkel, Wilson Tu, Cassandra Masschelein, Hamed Shirzad, Cian Eastwood, Shawn T Whitfield, Ihab Bendidi, Craig Russell, Liam Hodgson, Yassir El Mesbahi, et al. Txpert: Leveraging biochemical re-lationships for out-of-distribution transcriptomic perturbation prediction. arXiv preprint arXiv:2505.14919 ,2025. [49] Aaron Wenteler, Martina Occhetta, Nikhil Branson, Victor Curean, Magdalena Huebner, William Dee, William Connell, Siu Pui Chung, Alex Hawkins-Hooker, Yasha Ektefaie, César Miguel Valdez Córdova, and Amaya Gallagher-Syed. Perteval-scFM: Benchmarking single-cell foundation models for perturbation effect prediction. In Forty-second International Conference on Machine Learning , 2025. URL https: //openreview.net/forum?id=t04D9bkKUq .[50] Frank Wilcoxon. Individual comparisons by ranking methods. Biometrics bulletin , 1(6):80–83, 1945. [51] Menghua Wu, Russell Littman, Jacob Levine, Lin Qiu, Tommaso Biancalani, David Richmond, and Jan-Christian Huetter. Contextualizing biological perturbation experiments through language. In The Thirteenth International Conference on Learning Representations , 2025. [52] Yan Wu, Esther Wershof, Sebastian M Schmon, Marcel Nassar, Bła˙ zej Osi´ nski, Ridvan Eksi, Zichao Yan, Rory Stark, Kun Zhang, and Thore Graepel. Perturbench: Benchmarking machine learning models for cellular perturbation analysis. In The Thirty-ninth Annual Conference on Neural Information Processing Systems Datasets and Benchmarks Track , 2025. URL https://openreview.net/forum?id=PPPDuy iZaG .[53] Yingce Xia, Peiran Jin, Shufang Xie, Liang He, Chuan Cao, Renqian Luo, Guoqing Liu, Yue Wang, Zequn Liu, Yuan-Jyue Chen, Zekun Guo, Yeqi Bai, Pan Deng, Yaosen Min, Ziheng Lu, Hongxia Hao, Han Yang, Jielan Li, Chang Liu, Jia Zhang, Jianwei Zhu, Ran Bi, Kehan Wu, Wei Zhang, Kaiyuan Gao, Qizhi Pei, Qian Wang, Xixian Liu, Yanting Li, Houtian Zhu, Yeqing Lu, Mingqian Ma, Zun Wang, Tian Xie, Krzysztof Maziarz, Marwin Segler, Zhao Yang, Zilong Chen, Yu Shi, Shuxin Zheng, Lijun Wu, Chen Hu, Peggy Dai, Tie-Yan Liu, Haiguang Liu, and Tao Qin. Nature language model: Deciphering the language of nature for scientific discovery, 2025. URL https://arxiv.org/abs/2502.07527 .[54] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, Chujie Zheng, Dayiheng Liu, Fan Zhou, Fei Huang, Feng Hu, Hao Ge, Haoran Wei, Huan Lin, Jialong Tang, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jing Zhou, Jingren Zhou, Junyang Lin, Kai Dang, Keqin Bao, Kexin Yang, Le Yu, Lianghao Deng, Mei Li, Mingfeng Xue, Mingze Li, Pei Zhang, Peng Wang, Qin Zhu, Rui Men, Ruize Gao, Shixuan Liu, Shuang Luo, Tianhao Li, Tianyi Tang, Wenbiao Yin, Xingzhang Ren, Xinyu Wang, Xinyu Zhang, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yinger Zhang, Yu Wan, Yuqiong Liu, Zekun Wang, Zeyu Cui, Zhenru Zhang, Zhipeng Zhou, and Zihan Qiu. Qwen3 technical report, 2025. URL 
+
+https://arxiv.org/abs/2505.09388 .[55] Fan Yang, Wenchuan Wang, Fang Wang, Yuan Fang, Duyu Tang, Junzhou Huang, Hui Lu, and Jianhua Yao. scbert as a large-scale pretrained deep language model for cell type annotation of single-cell rna-seq data. Nature machine intelligence , 4(10):852–866, 2022. [56] Yichi Zhang, Zhuo Chen, Lingbing Guo, Yajing Xu, Wen Zhang, and Huajun Chen. Making large language models perform better in knowledge graph completion. In Proceedings of the 32nd ACM international conference on multimedia , pages 233–242, 2024. [57] Haiteng Zhao, Chang Ma, Fangzhi Xu, Lingpeng Kong, and Zhi-Hong Deng. Biomaze: Benchmarking and enhancing large language models for biological pathway reasoning, 2025. URL https://arxiv.or g/abs/2502.16660 .[58] Marinka Zitnik, Monica Agrawal, and Jure Leskovec. Modeling polypharmacy side effects with graph convolutional networks. Bioinformatics , 34(13):i457–i466, 06 2018. ISSN 1367-4803. doi: 10.1093/bioi nformatics/bty294. URL https://doi.org/10.1093/bioinformatics/bty294 .
+
+14 A Data Details 
+
+A.1 Splits 
+
+To evaluate generalizability, we partition the dataset into folds designed to measure out-of-distribution (OOD) performance across cellular contexts and perturbations. We define OOD cells per modality: T cells and A549 for chemical perturbations, and RPE1 for genetic perturbations. The remaining test folds combine ID/OOD cellular contexts with ID/OOD perturbation clusters, allowing us to evaluate extrapolation to novel cells, novel perturbations, and their joint shift. To rigorously evaluate generalization, we implement a functional splitting strategy for both genetic and chemical perturbations. By partitioning perturbations based on biological function rather than random assignment, we ensure the test set evaluates true extrapolation to novel mechanisms rather than memorization of overlapping pathways. We construct a heterogeneous directed biological graph from OmniPath [ 44 ] and augment it with Gene Ontology (GO) gene sets from MSigDB (v2023.2) [ 18 ]. We then compute Personalized PageRank (PPR) scores across the gene interaction network and aggregate them onto connected GO term nodes, yielding a gene-to-GO continuous vector encoding each gene’s functional and structural context. Based on cosine similarity of these functional vectors, we apply KMeans clustering ( k = 30 ) to group genes sharing similar biological roles, then randomly partition entire clusters into ID and OOD sets. Chemical perturbations are aligned to this functional split by mapping drugs to their target genes via INDRA CoGEx [ 3]; a drug is assigned to the OOD test set if more than 10% of its target genes fall into OOD gene clusters. This formulation guarantees that both genetic and chemical OOD splits systematically evaluate the model’s capacity under functional distribution shift. 
+
+A.2 Knowledge-Grounded Reasoning Details A.2.1 Cell-Specific Basal Activity Thresholding 
+
+A fundamental step in modeling cell-specific mechanisms is interpreting the continuous spectrum of basal gene expression. Raw transcriptomic data frequently suffer from technical noise and systemic batch effects across different experimental runs, making fixed global thresholds highly unreliable. To robustly categorize expression levels across diverse contexts, we establish adaptive, cell-specific thresholds. Operationally, we identify two critical transition points in the data density. The low threshold ( τlow ) marks a data-adaptive lower boundary for basal activity. Conversely, the high threshold ( τhigh ) marks the upper transition of typical active expression. This dynamic thresholding mitigates batch effects and provides a normalized context for the P ERT REASON QA task. Threshold estimation follows a split-aware supervised calibration protocol. We first derive cell-context-specific calibration targets from the changed and unchanged groups defined by the differential-expression procedure on the training set only, and fit a regressor from quantile summaries of each training context’s full basal expression distribution to (τlow , τ high ). For evaluation, thresholds are fixed and reused for cell contexts observed during training, while those for cell-OOD contexts are predicted solely from their basal expression quantiles. Only these fixed or predicted thresholds are used for graph construction and prompt generation; neither test changed/unchanged labels nor perturbation-induced expression outcomes enter calibration or prediction. Accordingly, the evaluation assumes access to a basal control profile for each test cell context. To determine the low-threshold calibration target for each training cell context c, we employ a maximum separability criterion using a two-sample Kolmogorov-Smirnov (KS) statistic. We group basal expression values according to whether genes are labeled unchanged or changed by the training differential-expression procedure. Denoting the resulting empirical cumulative distribution functions (ECDFs) by ˆF train unchanged ,c (x) and ˆF train changed ,c (x), the target is defined as: 
+
+τ train low ,c = arg max 
+
+> x
+
+ ˆF train unchanged ,c (x) − ˆF train changed ,c (x)
+
+
+
+This objective identifies the expression value at which the two empirical training label groups are maximally separated. To capture the upper bounds of typical expression dynamics, we define the high threshold ( τhigh ), which represents the biological saturation point of gene expression. For genes exhibiting active 15 expression ( Xact > τ low ), we apply a normalization mapping ϕ : Xact → [0 , 1] :
+
+zi = ϕ(xi) = xi − min( Xact )max( Xact ) − min( Xact )
+
+Let ˆFact (z) denote the ECDF of these normalized values. We compare this empirical distribution against the cumulative distribution function of a standard Uniform distribution, FU (z) = z, which acts as a constant density baseline. The high threshold is determined by calculating the one-sample Kolmogorov-Smirnov (KS) statistic against this linear baseline: 
+
+z∗ = arg max 
+
+> z∈[0 ,1]
+
+ˆFact (z) − z , τhigh = ϕ−1(z∗)
+
+In the context of heavy-tailed biological data, this geometric knee point effectively localizes the structural transition from the main body of active expression to a state of saturation. 
+
+A.2.2 Cell-State-Conditioned Subgraph Extraction 
+
+A fundamental challenge in biological modeling is that general KGs contain the superset of all possible interactions, many of which are physically inactive in specific cell types due to gene silencing. The static architecture of a general KG must be dynamically refined to reflect the functional connectivity unique to a given transcriptomic state. Let G = ( V, A) be the global knowledge graph derived from OmniPath, where each node v ∈ V
+
+denotes a gene, and each directed edge (u, v ) ∈ A denotes a regulatory relation. For a specific cell state c, we retrieve its basal gene expression profile b(c) ∈ R|V|.Using the established low threshold τlow , we implement an asymmetric basal activity gating mecha-nism that modulates edge traversability based on gene expression context. For each edge (u, v ), we define a structural base weight wbase  
+
+> uv
+
+, which is then modulated using sigmoid-based gating functions with asymmetric treatment of source and target nodes: 
+
+γsrc  
+
+> u
+
+= max 
+
+
+
+σ β(b(c) 
+
+> u
+
+− τlow ), δ src 
+
+
+
+γtgt  
+
+> v
+
+= δtgt + (1 − δtgt ) · σ β(b(c) 
+
+> v
+
+− τlow )
+
+where σ(·) denotes the logistic sigmoid function, β is a steepness parameter controlling the gate’s sensitivity, and δsrc and δtgt are floor constants that maintain minimum traversability. The final context-conditioned edge weight is: 
+
+w(c) 
+
+> uv
+
+= wbase  
+
+> uv
+
+· γsrc  
+
+> u
+
+· γtgt  
+
+> v
+
++ ϵw
+
+where ϵw is a small constant to prevent weights from becoming exactly zero. This asymmetric design reflects biological reality: the source floor δsrc allows signal propagation through weakly-expressed genes (modeling de-repression or inducibility), while the target floor δtgt ensures downstream genes remain inducible even when they are basally silent. 
+
+A.2.3 Diversity-Aware Causal Path-finding 
+
+To construct robust reasoning chains from perturbation sources to differential expression targets, we adopted the TieDIE framework, which was originally designed to connect genomic events to transcriptional states through network diffusion. Our approach extends TieDIE with three key modifi-cations: (1) cell-state conditioned edge weights, (2) explicit path extraction rather than subnetwork identification, and (3) iterative penalty-based diversification. Given the weighted graph G(c) = ( V, A, {w(c) 
+
+> uv
+
+}), we follow influence propagation by estimating a perturbation-centered flow score over nodes using Personalized PageRank (PPR). Let S(p) denote the set of start nodes associated with perturbation p:
+
+S(p) = 
+
+
+
+{t : t is a known target of chemical p}, if p is chemical ,
+
+{p}, if p is a single-gene perturbation ,
+
+{p1, . . . , p m}, if p = p1 + · · · + pm is a gene combination .
+
+16 We define a personalization vector s(p) ∈ R|V| by assigning equal mass to valid start nodes: 
+
+s(p) 
+
+> v
+
+=
+
+( 1 
+
+> |S (p)|
+
+, if v ∈ S (p),
+
+0, otherwise .
+
+Let P(c) be the row-normalized transition matrix induced by the edge weights w(c) 
+
+> uv
+
+. The node flow score p(c,p ) is computed as the fixed point of: 
+
+p(c,p ) = (1 − α)s(p) + α(P(c))⊤p(c,p )
+
+where α is the damping factor representing the probability of continuing the random walk. The resulting scores define a flow field quantifying each node’s mechanistic relevance to the perturbation. Next, we extract explicit causal paths from S(p) to the effect gene ge using Dijkstra search on a PPR-informed cost function. For each traversable edge (u, v ), the search cost is defined as: 
+
+cost (c,p ) 
+
+> uv
+
+= 1
+
+w(c) 
+
+> uv
+
+p(c,p ) 
+
+> u
+
+p(c,p ) 
+
+> v
+
++ ϵc
+
+where ϵc is a small cost constant ensuring numerical stability. This cost formulation ensures that paths traverse high-flow regions identified by network diffusion while respecting cell-state structurally plausible edges. The extracted shortest path P⋆ is the one minimizing cumulative resistance L(P) = 
+
+P cost (c,p ) 
+
+> vivi+1
+
+, subject to a maximum hop-depth constraint Dmax .To capture the multifaceted nature of perturbation mechanisms—such as compensatory signaling axes—we employ iterative penalty-based diversification. After extracting a path, we apply multi-plicative penalties to its visited edges in a temporary graph copy, dividing their weight by a penalty factor λ to encourage the exploration of alternative mechanistic routes. Duplicate paths and paths that are complete supersets of other selected paths are pruned. This procedure yields a focused, perturbation-anchored bag-of-paths representation tailored to the queried response gene. 
+
+A.2.4 Reference Paths via Evidence Augmentation and Filtering 
+
+The primary objective of this stage is to filter the extracted causal paths to eliminate mechanistically invalid reasoning trajectories. However, the paths extracted from OmniPath merely establish structural connectivity and frequently contain edges where the regulatory direction is unknown or functionally ambiguous. To enable the rigorous causal inference required for logical filtering, we must first maximize directional certainty. We achieve this by cross-referencing these unspecified edges with directional literature evidence from INDRA CoGEx. By adopting the majority consensus from the literature, we resolve the ambiguous relations into explicit activating ( +1 ) or inhibitory ( −1)interactions. This evidence augmentation transforms the candidate subgraph into a functionally signed causal network, laying the necessary groundwork for subsequent validation. Then, we apply deterministic filtering criteria based on the observed differential expression labels. For samples exhibiting significant differential expression (labels up or down ), a biologically valid path must possess a cumulative polarity that matches the observed outcome. We formalize this using a Sign-Reachability criterion (Algorithm 1). Biologically, a perturbation initiates a specific signal cascade. As this signal propagates through the network, inhibitory edges invert the polarity. A path is retained only if the terminal signal polarity logically aligns with the observed gene expression shift. Paths that accumulate excessive ambiguity or fundamentally contradict the observed differential state are pruned. Explaining an unchanged transcriptomic response presents a unique biological challenge, as a lack of differential expression does not necessarily imply an absence of causal interaction. It frequently stems from biological boundary conditions, such as ceiling or floor effects in gene transcription. To model this phenomenon, we introduce a Sign-Consistency framework (Algorithm 2) that directly integrates the propagated causal signal with the basal transcriptomic state. Utilizing the hysteresis thresholds τlow and τhigh defined in previous sections, we discretize the basal expression of the target gene into distinct functional states: silent, active, or saturated. The algorithm then evaluates whether the incoming perturbation signal can physically alter this state. Crucially, if an activating signal reaches a gene already at its saturation point ( τhigh ), or if an inhibitory signal reaches a basally silent gene ( τlow ), the mechanistic outcome is correctly classified as unchanged . This basal context integration prevents the false rejection of valid causal pathways that are simply masked by physiological constraints. 17 Algorithm 1: Sign-Reachability Filter for Differential Expression 
+
+Input: Extracted path π = ( a1, . . . , a L), Initial perturbation sign sign 0(pi), Observed label 
+
+ℓi ∈ { up , down }, Ambiguity budget B0
+
+Output: Validity of the path (True/False) 
+
+S0 ← { sign 0(pi)};
+
+bcount ← 0;
+
+for t ← 1 to L do if sign( at) == +1 then 
+
+St ← St−1;
+
+else if sign( at) == −1 then 
+
+St ← {− s : s ∈ St−1};
+
+else 
+
+St ← St−1 ∪ {− s : s ∈ St−1};
+
+bcount ← bcount + 1 ;
+
+end end if bcount > B 0 then return False ; // Path exceeds allowable ambiguity 
+
+end 
+
+target _sign ← +1 if ℓi == up else −1;
+
+return target _sign ∈ SL;
+
+A.2.5 Path-to-Text Reasoning Synthesis 
+
+To systematically translate structured causal graphs into natural language, we implement a multi-stage prompt construction and generation pipeline. This process ensures that the resulting text maintains strict fidelity to the underlying biological mechanisms and properly grounds the language model in the defined cellular context. For a given cell state c, the generation module requires the perturbation p, the effect gene ge, the observed differential expression label y ∈ { unchanged , up , down }, and the filtered causal paths. To present this graph-structured data to the language model, we serialize the pathways using a flat breadth-first search traversal initialized at the perturbation root p. This topological ordering ensures that upstream regulatory events are structurally prioritized in the prompt before the downstream interactions that converge on ge.To provide the language model with an accurate representation of intermediate regulator availability, we discretize the continuous basal expression values of the genes along the selected paths. Leveraging the adaptive hysteresis thresholds τlow and τhigh defined previously, we map the basal expression of each relevant gene into explicit qualitative states of low, medium, or high availability. This contextual translation allows the model to correctly deduce whether a specific signaling route is mechanistically viable, attenuated, or entirely insufficient to induce a change in ge within the initial cellular environment. The comprehensive prompt integrates five core components: the cell type, the perturbation p, the effect gene ge, the expanded text of the observed label y, and the serialized path evidence. We apply specific encoding rules for perturbations to maintain mechanistic integrity. The prompt instructs the model to synthesize a single predictive paragraph that derives y purely as a logical consequence of the provided pathways, actively resolving ambiguous regulatory relations into defined polarities without relying on external or unsupported mechanisms. Text generation is executed using Qwen3-4B configured with bfloat16 precision. Because language models can occasionally fail to ground their outputs in the provided physical constraints, we enforce a strict post-generation quality control protocol. Paragraphs containing semantic markers of mechanistic failure or refusal, such as explicit statements indicating the path does not support the observed label (e.g., “cannot be explained”, “not mechanistically supported”, or “cannot be logically explained”), are aggressively filtered out. The surviving samples are assigned deterministic identifiers based on the unique combination of cell type, perturbation, and effect gene, which are subsequently compiled into the final P ERT REASON QA dataset. 18 Algorithm 2: Sign-Consistency Filter for Unchanged Targets 
+
+Input: Extracted path π = ( a1, . . . , a L), Perturbation initial state z0 ∈ { 0, 1}, Target basal expression xyi,c i , Thresholds τlow , τ high 
+
+Output: Consistency of the path (True/False) 
+
+if xyi,c i ≤ τlow then 
+
+b ← 0 ; // Basally silent 
+
+else if xyi,c i ≥ τhigh then 
+
+b ← 1 ; // Basally saturated 
+
+else 
+
+b ← ∅ ; // Active state without boundaries 
+
+end 
+
+Z0 ← { z0};
+
+// Propagate binary activity states 
+
+for t ← 1 to L do if sign( at) == +1 then 
+
+Zt ← Zt−1;
+
+else if sign( at) == −1 then 
+
+Zt ← { 1 − z : z ∈ Zt−1};
+
+else 
+
+Zt ← { 0, 1};
+
+end end 
+
+// Evaluate physiological constraints 
+
+if (b == 1 ∧ 1 ∈ ZL) ∨ (b == 0 ∧ 0 ∈ ZL) then return True ; // Ceiling or floor effect observed 
+
+end return False; 
+
+A.2.6 Hyperparameters 
+
+In our implementation, the structural base weight wbase  
+
+> uv
+
+was set to a uniform value of 1.0. The gating steepness parameter β was set to 10 . To maintain appropriate baseline traversability, the source floor 
+
+δsrc was configured to 0.05 , and the target floor δtgt was configured to 0.5. The small weight constant 
+
+ϵw = 10 −9 was added to the final weight computation to prevent exact zeros. For the PageRank diffusion process, we utilized a damping parameter α = 0 .85 , capped at a maximum of 50 iterations with a tolerance of 10 −4. In the path extraction phase, the edge cost formulation included a small constant ϵc = 10 −4. The maximum hop-depth constraint Dmax was restricted to 4
+
+(which is reduced to 3 internally for chemical perturbations after prepending the drug-target edge). To construct the final Bag-of-Paths, the pipeline iteratively extracted up to K = 4 diverse paths, where 
+
+K is the path budget, penalizing visited edges by a factor of λ = 2 .0.For all path-to-text reasoning generations, we use Qwen’s recommended configurations, specifically, temperature 0.7, top-p sampling 0.8, and top-k sampling 20 .
+
+## B Model and Training Details 
+
+B.1 SFT Training 
+
+We cast supervised fine-tuning as a standard causal language modeling objective. Let x denote the input instruction and y the target output. We minimize the negative log-likelihood over response tokens using a completion-only loss strategy, where only the assistant tokens contribute to the gradient: 
+
+LSFT = −
+
+> |y|
+
+X
+
+> t=1
+
+log Pθ (yt | x, y <t ) ,
+
+where θ represents the trainable Low-Rank Adaptation (LoRA) parameters. 19 Outcome-Only Supervision The primary objective of this initial stage is to enable P ERT REA -
+
+> SON
+
+LM to acquire domain knowledge regarding the broad associations among a perturbation p, a cellular context c, an effect gene ge, and the expression outcome y. Because high-quality knowledge graph triplets for reasoning are scarce for many perturbations and effect gene pairs, outcome-only samples are significantly more abundant within P ERT REASON QA. Consequently, this phase acts as a crucial knowledge acquisition step, allowing the model to internalize biological entity representations and perturbation response priors. By predicting the final outcome without requiring a full mechanistic explanation, this stage provides a stable initialization that primes the model for the subsequent, more complex reasoning supervision. In practice, the input sequence is constructed using the cell type, the perturbation p, the effect gene ge, and the basal expression contexts. The corresponding output consists exclusively of the final differential expression label y ∈ { unchanged, up, down }, without any intermediate reasoning paths or retrieved pathway evidence. 
+
+Mechanistic Reasoning Supervision Following the initial knowledge acquisition phase, we train PERT REASON LM to generate Chain-of-Thought (CoT) reasoning in natural language [ 46 , 6, 22 ]that elucidates the causal pathways from the perturbation p to the effect gene ge. This supervision forces the model to align the “broad associations" learned in the previous stage with structured, step-by-step “causal mechanisms". By doing so, we mitigate shortcut predictions and ensure that the final concluded outcome y is explicitly justified by established biological pathway evidence. Crucially, the model learns to jointly interpret retrieved pathway knowledge and the basal cell state c to select the correct context-specific regulatory mechanism. We also employ data mixing that combines complex reasoning samples with the outcome-only samples [ 12 , 23 ]. The target output is then formatted as a tag-structured response, including a <thinking> block of the mechanistic reasoning, a final <answer> block explicitly stating the predicted expression change y, and a <triplet> block detailing the used causal edges. 
+
+Relation Direction Self-Supervision Despite the integration of multiple KG sources, the precise regulatory direction of certain gene-gene interactions often remains unknown or ambiguous. To address this, the final stage of our SFT pipeline introduces a biologically inspired self-supervised learning objective. We formulate a “relation masking and prediction” task designed to teach the model edge-level mechanistic primitives, enabling it to accurately distinguish between activation and inhibition [ 42 , 56 ]. Here, the model is explicitly tasked with inferring the causal sign of ambiguous edges based on the cell and KG contexts. To ensure the model learns genuine context-based disambiguation rather than simply copying localized text, we mask the directionality of a subset of well-defined, clear relations during training. This strategy forces P ERT REASON LM to actively use the provided cellular and pathway contexts to deduce the correct causal direction, thereby significantly reinforcing its foundational mechanistic understanding. 
+
+Multi-Stage SFT Curriculum The comprehensive SFT process is structured as a progressive curriculum that systematically advances from simpler task adaptations to mechanistically richer forms of supervision. Specifically, the training sequence unfolds across four distinct phases: outcome-only adaptation, outcome-plus-reasoning alignment, relation-direction specialization, and a final multi-objective consolidation. This concluding consolidation stage ensures that the three distinct forms of prior supervision do not manifest as isolated capabilities, but are instead seamlessly integrated into a single, cohesive perturbation reasoning within P ERT REASON LM. By carefully ordering these learning objectives, our curriculum effectively mitigates the inherent data trade-off in P ERT REASON QA, bridging the gap between a large but shallow pool of outcome supervision and a small but high-fidelity set of mechanistic reasoning signals. Due to the diverse nature of P ERT REASON QA, the outcome-only, reasoning, and relation-direction samples exhibit significant disparities in both quantity and sequence length. Simple uniform batching across these distributions leads to objective and memory imbalances. To ensure stable optimization, we employ dynamic batch sampling. We construct homogeneous micro-batches containing samples from exclusively one supervision type and then mix these types at the gradient accumulation block level. This strategy maintains the required effective batch size for each specific objective type. Additionally, we apply oversampling based on the perturbation modality and outcome label to mitigate data skewness. Training is implemented using the TRL library [ 45 ] with DeepSpeed ZeRO-2 [ 32 ] for memory efficiency on two NVIDIA A100 GPUs (40 GB each) with 128 GB system memory. All SFT stages 20 Table 7: Hyperparameters for Supervised Fine-Tuning                    
+
+> Hyperparameter Value
+> Precision BFloat16 Learning Rate 2×10 −4
+> LR Scheduler Cosine Warmup Ratio 0.03 Max Sequence Length 4096 Training Technique Gradient Checkpointing, Completion-only Loss LoRA Rank ( r)32 LoRA Alpha ( α)64 LoRA Dropout 0.05
+> Outcome-Only Supervision
+> Epoch 1Effective Batch Size 512
+> Mechanistic Reasoning Supervision
+> Epoch 1Effective Batch Size 128
+> Relation Direction Supervision
+> Epoch 2Effective Batch Size 128 Clear Relation Masking Ratio 20%
+
+Table 8: GRPO implementation settings.                               
+
+> Component Setting
+> Initialization Pre-merged SFT checkpoint Epoch 3Rollouts per prompt 8 completions Sampling Temperature 0.85 , top-p= 0 .9, max completion length 768
+> Objective Clipped GRPO with KL coefficient β= 0 .02 against epoch-start reference Reward 0.8×rans + 0 .2×rtrp
+> Optimization AdamW, lr 5×10 −6, bf16, DeepSpeed ZeRO-2, gradient checkpointing LoRA Rank 16 , alpha 32 , dropout 0.05 ; targets: q/k/v/o_proj ,gate/up/down_proj
+> Stabilizers GT injection into last rollout; zero-std rescue with baseline ±1.0
+
+share a common set of hyperparameters, which, along with stage-specific effective batch sizes, epochs, and masking ratios, are detailed in Table 7. 
+
+B.2 GRPO Training Distributed training loop. Each RL epoch runs as a five-phase workflow: (1) Prepare : load JSONL data from cell-conditioned-path context and no-path context pools, apply two-stage oversampling, and append /no_think to disable the backbone’s native thinking mode. (2) Generate : shard prompts across nodes and decode K=8 completions per prompt with vLLM; (3) Rewards : optionally inject the ground-truth response as the final rollout (GT injection), compute scalar rewards, and normalize into group advantages; (4) Train : attach a fresh LoRA adapter to the epoch-start merged checkpoint, compute reference log-probabilities with adapters disabled, and optimize with DeepSpeed ZeRO-2; (5) Merge : fold the learned adapter back into the checkpoint for the next epoch. Our GRPO runs on an 8-node cluster with 16 NVIDIA A100-40GB GPUs in total, and each epoch completes in under 10 hours. This hardware configuration supports the distributed rollout, reward, and DeepSpeed training pipeline used for the official model. 21 Table 9: Four-level answer–reason taxonomy used throughout the analysis. The categories cross final-answer correctness with mechanistic correctness.                          
+
+> Label Rule
+> Ans ✓Reason ✓answer correct; triplets exist; path connected; edge recall ≥0.5
+> Ans ✓Reason ×answer correct; no triplets, disconnected path, or edge recall <0.5
+> Ans ×Reason ✓answer wrong; triplets exist; path connected; edge recall ≥0.5
+> Ans ×Reason ×answer wrong; no triplets, disconnected path, or edge recall <0.5
+
+Table 10: Four-level answer–reason counts under the Cell-Conditioned-Path Context (default). Raw counts are shown for Qwen3-4B base, P ERT REASON LM-SFT, and P ERT REASON LM-GRPO, with model-to-model deltas indicating how SFT and GRPO shift predictions.                                       
+
+> Model Raw Counts Performance Deltas Label Qwen Base SFT GRPO Base →SFT SFT →GRPO
+> Ans ✓Reason ✓9,168 17,867 18,771 +8,699 +904
+> Ans ✓Reason ×755 801 307 +46 -494
+> Ans ×Reason ✓13,974 7,082 6,786 -6,892 -296
+> Ans ×Reason ×2,037 184 70 -1,853 -114
+
+Advantage normalization and stabilization. Group advantages are computed as 
+
+Ai =
+
+
+
+ri − μx
+
+σx
+
+, σx > 0,
+
++1 .0, σx = 0 and μx > 0.5,
+
+−1.0, σx = 0 and μx ≤ 0.5.
+
+The zero-variance rescue prevents zero-signal updates on groups where all completions receive identical rewards, which is common on structured biological outputs. GT injection into the last rollout further reduces the frequency of such groups. 
+
+Reward design The reward is the answer-and-triplet objective rsel = 0 .8 rans + 0 .2 rtrp , where 
+
+rans is a binary reward on the extracted answer label and rtrp is a partial-match reward on causal triplets. The partial-match rule gives full credit when subject, object, and sign are all correct; reduced credit when the entity pair is correct but the sign is neutral; and smaller credit when the entity pair is correct but the sign is wrong. 
+
+Hyperparameters. Full GRPO settings are listed in Table 8. 
+
+## C Answer–Reason Error Taxonomy 
+
+This appendix formalizes the four-level answer–reason taxonomy used in the main analysis. The taxonomy directly crosses final-answer correctness with mechanistic correctness. Answer correctness is determined by comparing the final prediction extracted from the last valid <answer> block against the ground-truth perturbation outcome. Mechanistic correctness is determined from the canonicalized signed regulatory triplets extracted from the <triplet> block. A reason is marked correct only when triplets exist, the predicted triplets form a directed connected path from the perturbation source to the queried effect gene, and edge recall is at least 0.5.Table 10 reports the full four-level taxonomy counts. From Qwen3-4B base to P ERT REASON LM-SFT, fully correct predictions increase from 9,168 to 17,867, a gain of 8,699 cases. At the same time, Ans 
+
+× Reason ✓ decreases from 13,974 to 7,082, and Ans × Reason × decreases from 2,037 to 184. This pattern suggests that supervised training improves both the mapping from plausible mechanisms to final perturbation outcomes and the recovery of connected, reference-overlapping mechanisms. GRPO adds a smaller but targeted refinement. It increases Ans ✓ Reason ✓ by another 904 cases, reduces Ans ✓ Reason × from 801 to 307, and further lowers both wrong-answer categories. Thus, 22 the RL stage mainly sharpens answer–reason agreement rather than qualitatively changing the overall failure profile. 
+
+## D Baseline Details 
+
+D.1 Gene-Space Baselines with Numerical Outputs 
+
+• GEARS [ 34 ]: A KG-based model for perturbation prediction that uses a Gene Ontol-ogy knowledge graph to predict outcomes for unseen single and combinatorial genetic perturbations. • scGPT [ 7]: A foundation model pre-trained on massive single-cell transcriptomic data. We fine-tune scGPT on our dataset to represent the capability of generative gene-expression models. • STATE (SE+ST) [1]: A large-scale perturbation foundation model trained directly in gene-expression space on Perturb-seq style data. We use the pre-trained SE model’s embedding and fine-tune the ST model. These baselines are evaluated only on the genetic subset. We train them on genetic perturbations and report scores only on matched genetic test slices; we do not merge chemical and genetic splits in their summary statistics. This is the fairest protocol because GEARS and scGPT consume gene-level inputs and predict continuous perturbed expression profiles, rather than operating over a representation that can natively encode both genes and small molecules. For STATE, while genetic perturbations are represented via ESM2 protein embeddings, allowing the model to generalize to unseen genes via sequence similarity, its chemical perturbation module typically employs embedding lookup by one-hot encodings. This dependency on fixed vocabularies makes chemical OOD extrapolation technically impossible. Consequently, to ensure a fair comparison focused on generalization, we evaluate these numerical baselines exclusively on the genetic subset of PERT REASON QA. 
+
+Continuous-to-label conversion. GEARS, scGPT, and STATE output continuous gene-expression values rather than 3-way labels. To compare them against our benchmark, we convert each predicted perturbation profile into differential-expression calls by pairing the predicted perturbed values with empirical control cells from the same AnnData source and cell type, then running Scanpy’s Wilcoxon 
+
+rank_genes_groups test for each (c, p ) contrast. We apply Benjamini–Hochberg correction across the genes available in that contrast and assign up or down only when the adjusted p-value passes the evaluation threshold and the estimated log-fold change has the corresponding sign; all remaining cases are mapped to unchanged . If a cell-type-specific control pool is unavailable, we fall back to the corresponding source-level controls. This protocol evaluates the induced 3-way endpoint rather than raw regression error, which is the quantity aligned with our QA benchmark. 
+
+D.2 Text-Space Baselines based on LLMs 
+
+• Qwen3-4B (base) [54 ]: The backbone of P ERT REASON LM-4B, evaluated without any fine-tuning to isolate the gains from our training pipeline. • BioMistral 7B [ 15 ] and NatureLM 8x7B [53 ]: Leading open-source biomedical LLMs continuously pre-trained or instruction-tuned on large-scale biomedical corpora (PubMed, medical guidelines). They represent the upper bound of performance for models relying solely on implicit pre-training knowledge without explicit KG-guided reasoning. • SUMMER [ 51 ]: A state-of-the-art Retrieval-Augmented Generation baseline. It retrieves relevant literature or KG triplets to answer perturbation queries, serving as a strong RAG reference point. We use Qwen3-4B as a backbone model for SUMMER. 
+
+## E Results of GPT-5.4 Variants on P ERT REASON QA-mini 
+
+To make expensive API evaluation practical, we construct P ERT REASON QA-mini by randomly subsampling the full benchmark so that each test slice contains at most 200 examples. This preserves 23 Table 11: Results on the full and mini P ERT REASON QA benchmarks.                                     
+
+> Dataset Model Bal. Acc Edge Recall GOSim Full SUMMER 0.404 0.839 0.950 Full Qwen3-4B 0.367 0.860 0.907 Full PERT REASON LM-SFT 0.709 0.975 0.938 Full PERT REASON LM-GRPO 0.736 0.976 0.938
+> Mini SUMMER 0.393 0.832 0.946 Mini Qwen3-4B 0.368 0.857 0.901 Mini PERT REASON LM-SFT 0.707 0.975 0.936 Mini PERT REASON LM-GRPO 0.744 0.976 0.937
+
+Table 12: Benchmark results on P ERT REASON QA-mini. GPT-5.4-full, GPT-5.4-mini, and GPT-5.4-nano are evaluated in the same no-search API setting described above.                 
+
+> Model Bal. Acc. Edge Recall SUMMER 0.393 0.832 Qwen3-4B base 0.368 0.857 GPT-5.4-full 0.388 0.767 GPT-5.4-mini 0.399 0.714 GPT-5.4-nano 0.380 0.716 PERT REASON LM-SFT 0.707 0.975 PERT REASON LM-GRPO 0.744 0.976
+
+the benchmark split structure while reducing the cost of closed-source evaluation; in our setup, a full GPT-5.4 run on P ERT REASON QA-mini costs roughly $15. The GPT-5.4 API setting used in this work did not provide internet search, browsing, or external retrieval tools, so these models answered from the prompt and their parametric knowledge alone. Table 11 verifies that P ERT REASON QA-mini is a faithful proxy for the full benchmark. Across the overlapping shared models, all balanced-accuracy and edge recall deviations stay within 1.1 percentage point. Table 12 reports the mini-benchmark results used to evaluate GPT-5.4. The central pattern matches the full benchmark: the GPT-5.4 family remains clustered near Qwen3-4B base and SUMMER, and none of the GPT variants approaches the SFT or GRPO checkpoints. 
+
+## F BioMistral and NatureLM: Prediction-Only Fallback 
+
+We first evaluated BioMistral and NatureLM under the same structured reasoning protocol used for the main benchmark, requiring a valid <thinking> , <answer> , and <triplet> output. In practice, both models failed to produce reliable structured generations often enough that the full chain-of-thought evaluation was not informative. BioMistral was the more extreme case, failing to emit a parseable structured answer on 97% of samples. NatureLM produced more text, but much of it drifted away from the task format or ignored the supplied context graph. To obtain a fairer lower-bound comparison, we re-ran both models in a prediction-only setting and evaluated only the final label. Even under this relaxed protocol, both models remained close to chance because their predictions were highly skewed across the three labels. BioMistral never predicted the 
+
+up class in either context, yielding balanced accuracy of roughly 31% overall despite moderate recall on down . NatureLM showed a milder but still severe skew in the no-path context, with recall 13.5% on up , 67.8% on down , and 16.0% on unchanged , corresponding to 32.4% balanced accuracy. In the cell-conditioned-path context, NatureLM effectively collapsed to a single-label predictor, with recall approximately 99% on down , 1% on up , and 0.4% on unchanged , giving 33.3% balanced accuracy. The main takeaway is that domain-specific pretraining alone does not solve this task. Without perturbation-specific supervision and format control, these biomedical LLMs fail twice: first at structured mechanistic generation, and second at balanced three-way label prediction even after the reasoning requirement is removed. 24 We also qualitatively examine why BioMistral and NatureLM could not be meaningfully compared under the full structured reasoning protocol. We group the failed generations into three recurring behavioral modes. 
+
+F.1 Failure Mode 1: Degenerative Repetition 
+
+NatureLM falls into infinite loops of biological terms or path logic, failing to synthesize a final conclusion.  
+
+> Question: Does CRISPRi knockdown of SRPRB in HepG2 result in differential expression of USP10?
+> NatureLM output:
+> - SRPRB activates INS => STAT3 => BECN1 => USP10 - INS inhibits STAT3 => BECN1 => USP10 - BECN1 activates USP10 => STAT3 => BECN1 => USP10 ... [Repeats Until Token Limit]
+
+F.2 Failure Mode 2: Context Ignorance and Encyclopedic Drift 
+
+Rather than reasoning over the provided context-specific graph, models substitute generic training data. 
+
+Sub-mode 2a: Metadata retrieval.   
+
+> Question: Does CRISPRi knockdown of SLBP in HepG2 result in differential expression of ECE1?
+> NatureLM output: The data is available on GEO under accession number: GSE123688?
+
+Sub-mode 2b: Literal echoing.   
+
+> Question: Does CRISPRi knockdown of SRPRB in HepG2 result in differential expression of HSP90AA1? Answer with “changed” or “unchanged”.
+> BioMistral output: "changed" or "unchanged".
+
+F.3 Failure Mode 3: Instruction and Template Leakage 
+
+BioMistral outputs the underlying conditional logic of the evaluation template rather than applying it.  
+
+> Question: Does CRISPRi knockdown of SRPRB in HepG2 result in differential expression of SEMA3B?
+> BioMistral output:
+> If the answer is unchanged, then explain how the retrieved knowledge indicates that the effect of the perturbation is not propagated to the gene of interest. If the answer is changed, then explain how the retrieved knowledge indicates that the effect of the perturbation is propagated to the gene of interest.
+
+## G Qualitative Case Studies 
+
+This section provides a systematic visual characterization of how predicted reasoning chains evolve across the base model, SFT, and GRPO checkpoints. 
+
+G.1 Case Study I: No-Path Context IN1451 to LZIC 
+
+This case holds the perturbation and effect gene pair fixed while the correct label changes across cell states: under no-path context, IN1451 → LZIC is down in Myeloid cells and T cells, but 
+
+unchanged in NK cells. It therefore isolates the benchmark’s central challenge, namely context-sensitive interpretation when explicit supporting paths are absent. Qwen3-4B base produces plausible 25 Table 13: Comprehensive No-Path Context case study for IN1451 → LZIC .                     
+
+> Model Myeloid
+> OOD pert.
+> Truth: down
+> T cells
+> OOD cell+pert.
+> Truth: down
+> NK cells
+> OOD pert.
+> Truth: unchanged
+> Condensed interpretation Qwen3-4B base up up up Reuses a context-insensitive MAPK1/HIF1A heuristic, sign-flipping HIF1A as repressive and treating MAPK1 inhibition as generic release of LZIC repression. PERT REASON LM-SFT down down unchanged Adapts the mediator to the cell state: MAPK1 →HIF1A in Myeloid, MAPK1 →ETS1 in T cells, and low-baseline buffering in NK cells. PERT REASON LM-GRPO down down unchanged Preserves the SFT labels while making arbitration more explicit, retaining ETS1/HIF1A support routes and the low-expression floor explanation for NK cells.
+> Cell-specific decision points: Myeloid hinges on whether MAPK1 →HIF1A supports or represses LZIC ; T cells require selecting the ETS1 branch, with GRPO also preserving HIF1A support; NK cells require recognizing that low basal LZIC buffers the residual signal.
+
+but mislabeled chains in all three rows, whereas both trained checkpoints adapt the same MAPK1-centered evidence to the local cellular state, with GRPO making the arbitration more explicit. Table 13 consolidates the model-level comparison and the per-cell outcomes. The table summarizes the outcome-level pattern; the following excerpts show how those decisions arise in the actual model generations for each cell state. 
+
+Myeloid cells. The base model flips the terminal interpretation of the retrieved chain. It explicitly asserts that HIF1A represses LZIC , so MAPK1 inhibition is turned into an up prediction. Both trained checkpoints instead treat HIF1A as the positive support route for LZIC and correctly infer down .
+
+Qwen3-4B base. I need to determine the effect of IN1451 on LZIC expression in myeloid cells. First, I know that IN1451 is a chemical perturbation, and I need to infer its mechanism. Based on known biological pathways, IN1451 is a known inhibitor of MAPK1 (also known as ERK2), a key kinase in the MAPK signaling pathway. In myeloid cells, the MAPK pathway is crucial for cell proliferation, differentiation, and survival. Basal expression levels are given: MAPK1 (medium), HIF1A (medium), and LZIC (medium). Now, if IN1451 inhibits MAPK1, then MAPK1 activity decreases. The MAPK pathway often regulates downstream effectors. HIF1A is a transcription factor that can be regulated by MAPK signaling; specifically, MAPK1 can phosphorylate and stabilize HIF1A, leading to its activation. Thus, inhibition of MAPK1 would result in reduced HIF1A activity. Now, what about LZIC? LZIC is a tumor suppressor gene involved in regulating cell cycle and apoptosis. In some studies, HIF1A can directly or indirectly repress LZIC expression. When HIF1A is active, it may suppress LZIC transcription. Therefore, if IN1451 inhibits MAPK1, reduces HIF1A activity, and removes repression of LZIC, LZIC expression increases. Thus, the pathway is: IN1451 inhibits MAPK1, HIF1A activity decreases, repression of LZIC is lifted, and LZIC expression increases. Therefore, LZIC expression should be up-regulated after IN1451 treatment. 
+
+PERT REASON LM-SFT. IN1451 inhibits MAPK1, leading to reduced activation of HIF1A, which in turn results in decreased transcriptional regulation of LZIC, causing a significant downregulation of LZIC expression in myeloid cells. Given that basal expression of MAPK1, HIF1A, and LZIC is medium, the inhibition of MAPK1 disrupts the upstream signaling nec-essary for HIF1A activation, thereby diminishing HIF1A-mediated transcriptional support for LZIC, resulting in a measurable decline in LZIC levels as a direct consequence of the perturbation. 
+
+PERT REASON LM-GRPO. IN1451 inhibits MAPK1, leading to reduced activation of HIF1A, which in turn results in decreased regulation of LZIC, causing a significant down-regulation of LZIC expression in myeloid cells. Given that basal expression of MAPK1, HIF1A, and LZIC is medium, the inhibition of MAPK1 disrupts the upstream signaling cascade that normally sustains HIF1A activity, thereby diminishing HIF1A-mediated tran-scriptional support for LZIC, resulting in a measurable decrease in LZIC expression as a direct consequence of the perturbation. 
+
+T cells. The T-cell row shows the benefit of context-specific mediator selection. Qwen3-4B base again falls back to a sign-flipped HIF1A story. The trained checkpoints recover that the dominant 26 support route under the cell-conditioned-path context runs through ETS1, and GRPO additionally keeps the HIF1A branch in play. 
+
+Qwen3-4B base. In T cells, the expression of LZIC is regulated by transcription factors such as ETS1 and HIF1A. Basal expression of LZIC is medium, and it is known that HIF1A acts as a repressor of LZIC expression. This means that when HIF1A is active, it suppresses LZIC levels. The chemical perturbation IN1451 is known to inhibit HIF1A activity. When HIF1A is inhibited, its repressive effect on LZIC is lifted. As a result, the repression on LZIC is removed, leading to an increase in LZIC expression. Furthermore, MAPK1 and ETS1 are involved in signaling pathways that can influence gene expression, but in this context, the primary regulatory link between IN1451 and LZIC goes through HIF1A. Since IN1451 inhibits HIF1A, and HIF1A normally suppresses LZIC, the removal of HIF1A activity results in upregulation of LZIC. Therefore, the expression of LZIC should increase after IN1451 treatment. 
+
+PERT REASON LM-SFT. IN1451 inhibits MAPK1, which disrupts the activation of ETS1, a transcription factor that normally maintains medium basal expression of LZIC; since ETS1 is required for LZIC expression and its activity is diminished upon MAPK1 inhibition, the transcriptional drive for LZIC is reduced, leading to a significant decrease in LZIC expression. This causal cascade is consistent with the basal medium levels of both ETS1 and LZIC, as the perturbation removes a key upstream activator, resulting in downregulation of the downstream target LZIC. 
+
+PERT REASON LM-GRPO. IN1451 inhibits MAPK1, which disrupts the activation of ETS1, a transcription factor that normally maintains medium basal expression of LZIC; since ETS1 is required for LZIC expression, its reduced activity leads to diminished transcriptional activation of LZIC, resulting in a significant decrease in LZIC expression. Additionally, MAPK1 inhibition reduces HIF1A activation, which normally contributes to LZIC expres-sion, further suppressing LZIC levels. Given that both ETS1 and HIF1A act as positive regulators of LZIC and are functionally downstream of MAPK1, the dual suppression of these regulators through MAPK1 inhibition creates a robust and synergistic reduction in LZIC expression, leading to downregulation of LZIC in T cells. 
+
+NK cells. The NK row is the clearest example of why basal-expression context matters. Qwen3-4B base still predicts up , effectively treating the perturbation as generic release of repression. The trained checkpoints retain the same broad pathway family but conclude that the effect is buffered because 
+
+LZIC already starts near a low-expression floor. 
+
+Qwen3-4B base. IN1451 is a known inhibitor of the MEK/ERK pathway, specifically targeting MEK, which leads to reduced phosphorylation and activation of MAPK1 (ERK1/2). In NK cells, the MAPK1 pathway normally exerts a repressive effect on tumor suppressor genes such as LZIC. When MAPK1 activity is reduced due to IN1451 inhibition, this repression is lifted, resulting in increased expression of LZIC. Given that LZIC is basally expressed at low levels, inhibition of the MAPK pathway would be expected to upregulate LZIC. This conclusion is consistent with known signaling pathways where MAPK signaling suppresses tumor suppressor genes. 
+
+PERT REASON LM-SFT. IN1451 inhibits MAPK1, which reduces activation of HIF1A, leading to diminished regulation of LZIC; however, LZIC exhibits low basal expression and is subject to weak regulatory influence from HIF1A, such that even under reduced HIF1A activity, its expression remains near baseline due to a floor effect inherent in its low starting level. The minimal dynamic range of LZIC expression, combined with the likely insufficiency of HIF1A-mediated suppression to drive significant downregulation, results in no detectable change in LZIC expression despite the upstream perturbation, reflecting the gene’s intrinsic stability and low sensitivity to fluctuations in HIF1A activity. 
+
+PERT REASON LM-GRPO. IN1451 inhibits MAPK1, which reduces activation of HIF1A, leading to diminished regulation of LZIC; however, LZIC exhibits low basal expression, and the magnitude of HIF1A suppression is insufficient to drive significant changes in LZIC levels, resulting in no detectable alteration in its expression. Given that the pathway from MAPK1 to HIF1A to LZIC operates under a weak regulatory influence and that LZIC is already expressed at a low baseline, the downstream effect of reduced HIF1A activity is absorbed within the existing expression floor, preventing a measurable shift in LZIC levels despite the perturbation. This outcome is thus a direct consequence of the low basal 
+
+27 Table 14: Comprehensive Cell-Conditioned-Path Context (default) case study for Regorafenib (BAY 73-4506) → NOBOX .               
+
+> Model A549
+> OOD cell
+> Truth: unchanged
+> MCF7
+> ID cell+pert.
+> Truth: down
+> Condensed interpretation Qwen3-4B base up unchanged Over-commits to the shortest FGFR1 →GSK3B →RUNX2 route in A549, but remains unresolved when FGFR1/GSK3B and RET/ESR1 evidence conflict in MCF7. PERT REASON LM-SFT unchanged down Balances FGFR1, RET/ESR1, and CTNNB1 inputs: low-baseline NOBOX
+> buffers A549, while loss of RET/ESR1 or other RUNX2 support dominates in MCF7. PERT REASON LM-GRPO unchanged down Matches SFT labels while making the arbitration more explicit, using low-baseline buffering in A549 and clearer net-negative branch resolution in MCF7.
+> Cell-specific decision points: A549 turns on whether weak positive FGFR1 →GSK3B →RUNX2 evidence can overcome competing RET/ESR1 and CTNNB1 inputs plus low NOBOX baseline; MCF7 turns on resolving the competing branches toward a net negative effect.
+
+expression of LZIC and the limited dynamic range of the regulatory cascade in the context of NK cell physiology. 
+
+G.2 Case Study II: Cell-Conditioned-Path Context Regorafenib (BAY 73-4506) to NOBOX 
+
+This is our clearest cell-conditioned-path context example in which Qwen3-4B base is wrong and both trained checkpoints are correct. The same perturbation-gene pair changes from unchanged in A549 to down in MCF7, making the example useful for isolating context-sensitive arbitration among competing retrieved branches rather than simple path recovery. Qwen3-4B base over-commits to the shortest FGFR1 →GSK3B →RUNX2 route in A549 and remains unresolved under conflicting evi-dence in MCF7, whereas both trained checkpoints identify the cell-specific dominant effect. Because neither row is tagged Ans ✓ Reason ×, the example more cleanly reflects improved decision-making from the retrieved evidence rather than post-hoc rationalization. Table 14 consolidates the model-level comparison and the per-cell outcomes. The table gives the consolidated comparison; the following cell-specific excerpts show the generated rationales behind each summarized decision. 
+
+A549. The A549 row shows an over-simplified positive chain. Qwen3-4B base follows the FGFR1-to-GSK3B-to-RUNX2 route and predicts up , but the trained checkpoints explicitly weigh competing RET/ESR1 and CTNNB1 inputs and conclude that the positive branch is too weak to move NOBOX 
+
+away from its low baseline. 
+
+Qwen3-4B base. We are asked to determine the effect of Regorafenib (BAY 73-4506) on NOBOX expression in A549 cells. Step 1: Identify the direct effect of Regorafenib. From the retrieved knowledge: Regorafenib inhibits FGFR1. Step 2: Determine how FGFR1 relates to downstream genes. From the knowledge: FGFR1 regulates GSK3B. Step 3: Determine how GSK3B relates to NOBOX. From the knowledge: GSK3B inhibits RUNX2. Step 4: Determine . . . 
+
+PERT REASON LM-SFT. Regorafenib inhibition of FGFR1 leads to reduced activation of GSK3B, which normally suppresses RUNX2; however, the basal level of GSK3B is medium, and its inhibition results in a moderate increase in RUNX2 activity. Concurrently, KDR inhibition reduces CTNNB1 activation, which normally promotes RUNX2, while RET inhibition suppresses ESR1, a positive regulator of RUNX2. The net effect on RUNX2 is thus balanced betwee . . . 
+
+PERT REASON LM-GRPO. Regorafenib inhibits FGFR1, which normally regulates GSK3B, leading to reduced GSK3B activity; however, GSK3B inhibition would be expected to relieve suppression of RUNX2, which in turn activates NOBOX. Despite this, NOBOX expression remains unchanged because the basal level of NOBOX is already low, and the pathway from FGFR1 to GSK3B to RUNX2 to NOBOX operates under a weak regulatory influence, such that the magnitu . . . 
+
+28 MCF7. The MCF7 row is a cleaner arbitration failure. Qwen3-4B base recognizes that the retrieved graph is conflicted but stops at unchanged . The trained checkpoints instead identify that loss of RET/ESR1 or other RUNX2-supporting input dominates, producing a net down effect.    
+
+> Qwen3-4B base. We are asked to determine the effect of Regorafenib (BAY 73-4506) on NOBOX expression in MCF7 cells. The basal expression of NOBOX is medium. Step 1: Identify how Regorafenib affects the pathway. From the retrieved knowledge, Regorafenib inhibits FGFR1. Step 2: Determine the downstream effects of FGFR1 inhibition. We know that FGFR1 regulates GSK3B. Therefore, inhibition of FGFR1 would lead to reduced regulation of . . .
+> PERT REASON LM-SFT. Regorafenib inhibition of FGFR1 leads to reduced activation of GSK3B, which normally suppresses RUNX2; consequently, RUNX2 activity increases due to the loss of GSK3B-mediated inhibition. However, this pathway is counterbalanced by the direct inhibition of RET by Regorafenib, which reduces ESR1 activation, and since ESR1 normally activates RUNX2, this diminishes RUNX2 expression. The net effect is a reduction in RUNX . . .
+> PERT REASON LM-GRPO. Regorafenib inhibits FGFR1, which normally regulates GSK3B, leading to reduced GSK3B activity; since GSK3B inhibits RUNX2, its suppression results in increased RUNX2 activity. RUNX2, in turn, activates NOBOX, which is already expressed at medium basal levels. However, the inhibition of FGFR1 also disrupts upstream signaling that may normally sustain NOBOX expression through alternative pathways, and the net effect of . . .
+
+## H Limitations of Gene-Centric Baselines for Chemical Perturbations 
+
+GEARS, scGPT, and STATE operate in gene space: they take gene-level perturbation inputs and predict continuous transcriptomic responses. They therefore support genetic perturbations natively, but not small-molecule inputs. In the main comparison, we accordingly train these baselines only on the genetic subset and report only matched genetic test slices; we do not merge their scores with chemical results. We also explored a proxy construction for chemical perturbations in which each drug was mapped to its top-2 protein targets (from INDRA [ 3]) and then fed to the gene-space models as a combinatorial genetic perturbation. We do not use this proxy in the main paper for two reasons: 1. Loss of polypharmacology. Small molecules rarely act with the precision of genetic edits. Reducing a drug to its top-2 targets ignores significant off-target effects and downstream modulation that define the drug’s actual transcriptomic footprint. 2. Input misalignment. Gene-space models treat multi-gene inputs as discrete genetic in-terventions, failing to capture continuous binding affinities, target competition, and other synergistic chemical-biological mechanisms. Treating chemical perturbations as gene-set proxies produced high-variance predictions that are better interpreted as artifacts of the proxy than as faithful measures of model capability. For that reason, the matched genetic-only evaluation is the fairest comparison to gene-space baselines, while the full mixed-modality benchmark remains a domain-coverage test that only text-space models can participate in natively. 
+
+## I Example Prompts and Output 
+
+We show one matched example for P ERT REASON LM-GRPO under the cell-conditioned-path con-text and no-path context. The task, cell type, perturbation, effect gene, basal-expression context, and required answer format are identical; the only substantive prompt difference is that the cell-conditioned-path context injects retrieved edges explicitly, whereas the no-path context asks the model to recover the pathway from its own biological knowledge. In this example both outputs predict unchanged , but the output under the no-path context changes the final TP53 →ARHGEF19 relation from regulates to activates , illustrating how answer correctness can be preserved even when chain fidelity is weaker without retrieved path evidence. 29 I.1 Cell-Conditioned-Path Context Example Input prompt. 
+
+You are an expert biologist. Your goal is to determine: Is the expression of ARHGEF19 up, down, or unchanged after chemical perturbation Alogliptin in B cells? Answer the question based on the context and the retrieved knowledges. Note that the retrieved knowledges may contain irrelevant information. Focus only on pathways that causally connect the perturbation to the effect gene. ## Task Information - **Cell Type:** B cells - **Perturbation (chemical):** Alogliptin - **Effect Gene:** ARHGEF19 ## Basal Expression Context The basal gene expression levels in the pathway are: - TGFB1: medium - TP53: low - ARHGEF19: low - DPP4: low ## Retrieved Knowledges - Alogliptin inhibits DPP4 - DPP4 activates TGFB1 - TGFB1 activates TP53 - TP53 regulates ARHGEF19 ## Question Is the expression of ARHGEF19 up, down, or unchanged after the chemical perturbation Alogliptin in B cells? Answer with either "up", "down", or "unchanged". Please reason step by step. Structure your response in exactly 3 blocks: 1. <thinking>Your step-by-step biological reasoning here.</thinking> 2. <answer>up</answer> OR <answer>down</answer> OR <answer>unchanged</answer> 3. <triplet>A JSON list of causal edges from your reasoning, e.g., [["Alogliptin", "inhibits", "DPP4"], [" DPP4", "activates", "TGFB1"], ["TGFB1", "regulates", "ARHGEF19"]]. Entities must come from this set: ["Alogliptin", "TGFB1", "DPP4", "TP53", "ARHGEF19"].</triplet> 
+
+Model output. 
+
+<thinking>Alogliptin inhibits DPP4, which reduces activation of TGFB1, leading to diminished signaling through the TGFB1-TP53 axis; however, TP53-mediated regulation of ARHGEF19 operates under a low basal expression state, where the gene is already at a minimal level due to the absence of strong upstream drivers. Given that the perturbation reduces TGFB1 activity, the downstream activation of TP53 is attenuated, yet the baseline expression of ARHGEF19 remains unchanged because the gene’s expression is not sensitive to small fluctuations in TP53 activity under these conditions, likely due to a floor effect where low basal levels are maintained by constitutive or alternative regulatory mechanisms. Consequently, despite the expected reduction in TP53 signaling, ARHGEF19 expression remains stable, reflecting the insensitivity of this low-expressing gene to perturbations in the upstream pathway.</ thinking> <answer>unchanged</answer> <triplet>[["Alogliptin", "inhibits", "DPP4"], ["DPP4", "activates", "TGFB1"], ["TGFB1", "activates", "TP53 "], ["TP53", "regulates", "ARHGEF19"]]</triplet> 
+
+I.2 No-path Context Example Input prompt. 
+
+You are an expert biologist. Your goal is to determine: Is the expression of ARHGEF19 up, down, or unchanged after chemical perturbation Alogliptin in B cells? Answer the question based on the context. You must reason using your own knowledge on the biological pathway that connects the perturbation to the effect gene. ## Task Information - **Cell Type:** B cells - **Perturbation (chemical):** Alogliptin - **Effect Gene:** ARHGEF19 ## Basal Expression Context The basal gene expression levels in the pathway are: - TGFB1: medium - TP53: low - ARHGEF19: low - DPP4: low ## Question Is the expression of ARHGEF19 up, down, or unchanged after the chemical perturbation Alogliptin in B cells? Answer with either "up", "down", or "unchanged". 
+
+30 Please reason step by step. Structure your response in exactly 3 blocks: 1. <thinking>Your step-by-step biological reasoning here.</thinking> 2. <answer>up</answer> OR <answer>down</answer> OR <answer>unchanged</answer> 3. <triplet>A JSON list of causal edges from your reasoning, e.g., [["Alogliptin", "inhibits", "DPP4"], [" DPP4", "activates", "TGFB1"], ["TGFB1", "regulates", "ARHGEF19"]]. Entities must come from this set: ["Alogliptin", "TGFB1", "DPP4", "TP53", "ARHGEF19"].</triplet> 
+
+Model output. 
+
+<thinking>Alogliptin inhibits DPP4, which normally activates TGFB1; however, since TGFB1 is already at medium basal levels, the reduction in DPP4 activity results in only a modest decrease in TGFB1 signaling, insufficient to significantly alter downstream TP53 activation. TP53, which is basally low, remains largely uninduced, and thus fails to drive a measurable increase in ARHGEF19 expression. Given that ARHGEF19 is already expressed at low basal levels, the absence of a strong upstream signal from TP53 results in no significant change in its expression, as the system operates near its expression floor. The weak connectivity between the perturbed node and the output gene, combined with the low basal expression of ARHGEF19, ensures that the perturbation does not elicit a detectable transcriptional response.</thinking> <answer>unchanged</answer> <triplet>[["DPP4", "activates", "TGFB1"], ["TGFB1", "activates", "TP53"], ["TP53", "activates", "ARHGEF19 "], ["Alogliptin", "inhibits", "DPP4"]]</triplet> 
+
+## J Broader Impact 
+
+This work primarily contributes a benchmark and reference modeling framework for evaluating whether machine learning systems predict cellular perturbation effects for the right mechanistic reasons. If used responsibly, P ERT REASON QA can help researchers compare virtual-cell models beyond end-point accuracy, prioritize wet-lab follow-up experiments, and identify cases where a model reaches the correct answer through biologically implausible logic. In that sense, the benchmark may improve transparency and reliability in early-stage drug discovery and disease-modeling workflows, where understanding why a prediction is made is often as important as the prediction itself. At the same time, this work should not be interpreted as a substitute for experimental validation or as a tool for autonomous scientific or clinical decision making. The benchmark is constructed from public perturbation datasets and curated knowledge graphs, so any incompleteness, bias, or coverage gaps in those resources can propagate into both the reference chains and the models trained on them. Moreover, systems that reason about biological pathways carry a general dual-use risk if misapplied in harmful settings. We therefore view P ERT REASON QA as a hypothesis-generation and diagnostic resource, to be used with domain oversight and with downstream claims validated in controlled experiments. 31
