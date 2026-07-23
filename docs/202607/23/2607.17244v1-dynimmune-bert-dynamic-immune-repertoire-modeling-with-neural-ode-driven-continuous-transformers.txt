@@ -1,0 +1,744 @@
+Title: DynImmune-BERT: Dynamic Immune Repertoire Modeling with Neural ODE Driven Continuous Transformers
+
+URL Source: https://arxiv.org/pdf/2607.17244v1
+
+Published Time: Tue, 21 Jul 2026 01:20:23 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# DYN IMMUNE -BERT: D YNAMIC IMMUNE REPERTOIRE 
+
+# MODELING WITH NEURAL ODE D RIVEN CONTINUOUS 
+
+# TRANSFORMERS 
+
+Rong Fu ∗
+
+University of Macau, China 
+
+mc46603@um.edu.mo 
+
+Yongtai Liu 
+
+Hanyang University, South Korea 
+
+yt2024259263@hanyang.ac.kr 
+
+Xiaowen Ma 
+
+Zhejiang University, China 
+
+xwma@zju.edu.cn 
+
+Haoyu Zhao 
+
+Wuhan University, China 
+
+haoyu.zhao@whu.edu.cn 
+
+Shuo Yin 
+
+Tsinghua University, China 
+
+yins25@mails.tsinghua.edu.cn 
+
+Yiqing Lyu 
+
+Tsinghua University, China 
+
+lvyq22@mails.tsinghua.edu.cn 
+
+Long Zhang 
+
+South China University of Technology, China 
+
+longzhang@scut.edu.cn 
+
+Wangyu Wu 
+
+University of Liverpool, China 
+
+v11dryad@foxmail.com 
+
+July 21, 2026 
+
+ABSTRACT 
+
+Longitudinal T cell receptor repertoires contain signals of clonal expansion, contraction, disap-pearance, and reappearance after immune perturbation. Static repertoire language models usually summarize a sample as a bag of sequences, so the sampling interval, sequencing depth, and clone presence pattern are only weakly represented. This paper presents DynImmune-BERT, a continuous time repertoire model for patient level immune status prediction. The method combines depth adaptive centered log ratio initialization, clone presence gated Neural ordinary differential equation dynamics, bounded neighborhood self attention, event based state restart, and a hybrid transport objective that supervises dominant and rare clone mass. A low rank meta adapter initializes reappearing clonotypes while keeping the parameter count independent of the number of observed clones. The evaluation separates literature reported baselines from internally controlled temporal comparisons, reports uncertainty for small external cohorts, adds calibration and threshold diagnostics, and visualizes latent clone trajectories and attention neighborhoods. The results indicate that event aware temporal modeling can complement strong static encoders when longitudinal repertoire structure is available, while small external cohorts and protocol differences require cautious interpretation. 
+
+Keywords immune repertoire, T cell receptor, Neural ODE, continuous Transformer, cancer detection 
+
+1 Introduction 
+
+Adaptive immune repertoires preserve a temporal record of antigen exposure, clonal selection, immune memory, and disease related remodeling. In T cell receptor (TCR) sequencing, clinically relevant information may appear not only in 
+
+> ∗
+
+Corresponding author: mc46603@um.edu.mo arXiv:2607.17244v1 [cs.LG] 19 Jul 2026 DynImmune-BERT the amino acid sequence of a clonotype, but also in whether that clonotype expands, contracts, disappears, persists, or reappears across irregular sampling times. Longitudinal studies have connected repertoire dynamics with infection history, aging, inflammatory disease activity, therapy response, and cancer associated immune remodeling [ 1– 8]. These observations motivate computational models that represent an immune repertoire as an evolving patient trajectory. Deep learning has substantially improved sequence level and repertoire level analysis. Motif based predictors, multiple instance learning, contrastive sequence encoders, graph models, and pretrained protein language models have strength-ened antigen prediction, immune status prediction, and cancer related repertoire classification [ 9–18 ]. Earlier repertoire classifiers also showed that handcrafted features and sequence aware neural encoders can be informative when cohorts are carefully defined [ 19 – 21 ]. Recent cancer detection studies further suggest that circulating TCR signals can support noninvasive immune monitoring [ 22 –24 ]. However, most existing models aggregate clonotypes within one sample or compare samples independently. This design is effective for static classification, but it leaves a mismatch between the biological process, which is sparse, heavy tailed, and event driven, and the computational representation, which is usually time independent. Longitudinal TCR repertoires are usually sampled at irregular intervals that may span weeks or months. We use Neural ODEs as a mathematical framework for propagating latent states between unequally spaced observations without imposing a fixed discretization grid [ 25 – 29 ]. This use of ODE integration should be understood as latent interpolation over irregular time stamps, not as a mechanistic claim that clonal dynamics are biologically smooth. Direct application to TCR data is still nontrivial. Repertoire measurements are compositional because clone frequencies are constrained by sequencing depth. Many clones are absent at most time points, and absence may reflect true biological disappearance, limited sampling depth, or technical censoring. Dominant clones can mask rare but informative clonotypes. Clone birth and death also violate the assumption that all latent states move smoothly under one continuous vector field. This work studies the problem of learning a temporally aware repertoire representation for cancer related immune status prediction. The key question is how to encode a subject’s irregular TCR trajectory while preserving clone presence events, compositional stability, and supervision from both high abundance and low abundance clones. We address this question with DynImmune-BERT, a Neural ODE driven continuous Transformer that combines event aware clone dynamics with bounded neighborhood attention and transport based distribution matching. Our contributions are as follows. First, we formulate immune repertoire classification as a patient level trajectory problem in which observation time, clone read count, sequencing depth, and clone presence are explicit variables. Second, we introduce an event aware continuous Transformer that uses stabilized compositional states, bounded clone neighborhoods, implicit integration, and low rank restart for reappearing clonotypes. Finally, we combine internally controlled temporal comparisons with uncertainty, calibration, and trajectory diagnostics so that dynamic behavior can be examined alongside aggregate classification metrics. 
+
+2 Related Work 
+
+2.1 Immune Repertoire Learning 
+
+TCR repertoire sequencing has been used to study infection, autoimmunity, cancer immunotherapy, and early cancer detection [ 22 , 30 , 31 ]. Early machine learning systems often depended on motifs, summary statistics, or clone sharing. DeepCAT, DeepLION, DeepLION2, DeepTCR, MethPriorGCN, and BertTCR showed that neural encoders can extract stronger repertoire level signals from CDR3 sequences and clone bags [ 9– 14 ]. Multiple instance networks and attention based encoders also provide useful baselines for sample level classification [ 32 – 34 ]. These models establish strong static references, but most of them do not represent irregular observation intervals as part of the learning problem. 
+
+2.2 Continuous Time Sequence Models 
+
+Neural ODEs define hidden state evolution with a learned vector field and support adaptive integration between observations [ 25 ]. Continuous attention and continuous Transformer models extend this idea to sequence modeling with irregular time stamps [ 27 , 28 , 35 ]. Biomedical trajectories often contain abrupt clinical or biological events, so event localization and state restart are important for avoiding unrealistic smooth interpolation. DynImmune-BERT adapts this principle to repertoire modeling by treating clone disappearance and reappearance as observed events that interrupt continuous evolution. 
+
+2.3 Transport Objectives and Efficient Adaptation 
+
+Optimal transport losses compare probability distributions while preserving geometric structure [ 36 , 37 ]. Entropic transport is effective on restricted supports, whereas sliced Wasserstein distances scale to diffuse distributions [ 38 , 39 ]. 2DynImmune-BERT Dynamic Immune Repertoire Modeling with 
+
+Neural ODE Driven Continuous Transformers DynImmune -BERT 
+
+0 Longitudinal TCR 
+
+Repertoire Input 
+
+1 Depth -Adaptive 
+
+Compositional 
+
+State 
+
+Initialization 
+
+2 Bounded 
+
+Neighborhood 
+
+Construction 
+
+3 Neural ODE Driven 
+
+Continuous Transformer 
+
+5 Patient -Level 
+
+Trajectory Pooling 
+
+and Prediction 
+
+Patient -level irregular 
+
+observations 
+
+Time 
+
+t_ 
+
+1
+
+∿ Clonotype 
+
+> sequences
+> Read counts
+> Sequencing
+> depth N(t1)
+> Presence pattern
+
+t_ 
+
+2
+
+∿ Clonotype 
+
+> sequences
+> Read counts
+> Sequencing
+> depth N(t2)
+> Presence pattern
+
+t_ 
+
+3
+
+∿ Clonotype 
+
+> sequences
+> Read counts
+> Sequencing
+> depth N(t3)
+> Presence pattern
+
+t_ 
+
+4
+
+∿ Clonotype 
+
+> sequences
+> Read counts
+> Sequencing
+> depth N(t4)
+> Presence pattern
+
+⋮
+
+Sequence 
+
+embeddin 
+
+g e_c 
+
+Relative 
+
+frequenc 
+
+y f_c(t) 
+
+ε Depth -
+
+adaptive 
+
+pseudoc 
+
+ount ε(t) 
+
+Stabilized 
+
+centered 
+
+log -ratio 
+
+state 
+
+y_c(t) 
+
+Presenc 
+
+e gate 
+
+I_c(t) 
+
+CLR stabilizes 
+
+compositional 
+
+abundances and enables 
+
+continuous -time 
+
+dynamics. 
+
+Clone -centered 
+
+neighborhood 
+
+graph at time t 
+
+Focal clone c 
+
+High -abundance 
+
+neighbors 
+
+Embedding nearest 
+
+neighbors 
+
+Rare -clone tail 
+
+sampling 
+
+|N_c(t)| ≤ B 
+
+Local attention support for 
+
+scalable context 
+
+aggregation. 
+
+Dynamic latent trajectory of clone c across 
+
+irregular time intervals 
+
+t1 
+
+y_c(t1) 
+
+t2 
+
+y_c(t2) 
+
+t3 
+
+y_c(t3) 
+
+t4 
+
+y_c(t4) 
+
+1 Presence -gated continuous dynamics 
+
+2 Event -aware state restart 
+
+3 Low -rank meta -adapter 
+
+Repertoire 
+
+summary s(t) 
+
+appearance disappearance reappearanc 
+
+e
+
+Meta -adapter 
+
+M_φ 
+
+Initialize 
+
+reappearing 
+
+clonotypes 
+
+Initial state 
+
+y_c(t_reapp) 
+
+Aggregate temporal 
+
+embeddings 
+
+t1 t2 tT ⋯
+
+Classifier head 
+
+Cancer probability 
+
+Immune status 
+
+score 
+
+Calibration and 
+
+threshold 
+
+diagnostics 
+
+Interpretable latent 
+
+clone trajectories 
+
+Patient -level prediction 
+
+4 Distributional 
+
+Supervision 
+
+Dominant 
+
+clone mass 
+
+Entropic 
+
+transport 
+
+on top clones 
+
+Rare clone 
+
+mass 
+
+Sliced 
+
+Wasserstein 
+
+on tail clones 
+
+Hybrid transport 
+
+objective 
+
+Cross -entropy + 
+
+transport 
+
++ temporal 
+
+regularization 
+
++ spectral 
+
+regularization 
+
+L_total 
+
+Key Advantages 
+
+of DynImmune -
+
+BERT 
+
+Irregular -time modeling 
+
+Neural ODEs handle irregular 
+
+sampling 
+
+and variable follow -up intervals. 
+
+Event -aware clone 
+
+dynamics 
+
+State restarts for disappearance, 
+
+reappearance, and adapter 
+
+initialization. 
+
+Dominant + rare clone supervision 
+
+Hybrid transport objective aligns both 
+
+dominant and rare clone distributions 
+
+for comprehensive learning. 
+
+(.) )(
+
+)(
+
+> 
+
+FtI
+
+dt 
+
+tdy e 
+
+> c
+
+
+
+(.) 
+
+F
+
+Figure 1: Overview of DynImmune-BERT. Input TCR sequences, read counts, sampling times, and patient labels are processed through stabilized compositional state initialization, bounded neighborhood attention, event aware restart, hybrid transport supervision, and patient level trajectory pooling to produce cancer probability and calibrated health scores. Low rank adapters provide parameter efficient adaptation and can be controlled by meta networks [ 40 – 42 ]. DynImmune-BERT combines these ideas to supervise dominant clone mass and rare clone mass while restarting reappearing clones through a compact adapter. 
+
+3 Methodology 
+
+3.1 Formal Problem Formulation 
+
+For subject p, the observed longitudinal repertoire is defined as 
+
+Dp = {(tp,k , Cp,k , np,k , y p)}Kp
+
+k=1 . (1) where tp,k is the k-th sampling time, Cp,k is the observed clonotype set, np,k contains clone read counts, yp ∈ { 0, 1} is the patient label, and Kp is the number of observed time points. The model estimates a patient level prediction by 
+
+byp = gψ
+
+
+
+{zp(tp,k )}Kp
+
+k=1 
+
+
+
+. (2) where gψ is the patient classifier and zp(tp,k ) is a time dependent repertoire representation produced by the dynamic encoder. All evaluation splits satisfy 
+
+Ptrain ∩ P val ∩ P test = ∅. (3) where Ptrain , Pval , and Ptest are patient sets, so all samples from a patient remain in one split. 3DynImmune-BERT 
+
+3.2 Depth Adaptive Compositional State 
+
+Let nc(t) be the read count of clone c at time t. The total sequencing depth is 
+
+N (t) = X
+
+> m∈C t
+
+nm(t). (4) where N (t) is the number of reads at time t, Ct is the observed support at time t, and nm(t) is the read count of clone 
+
+m.The relative clone abundance is 
+
+fc(t) = nc(t)
+
+N (t) . (5) where fc(t) is the normalized frequency of clone c, and the denominator is the sequencing depth defined in (4). To reduce instability from zero counts, we use a depth adaptive pseudocount 
+
+ε(t) = κN (t) + κ . (6) where ε(t) is the smoothing term and κ > 0 controls how strongly low depth observations are regularized. The initial clone state is a stabilized centered log ratio transform: 
+
+yc(t) = ln( fc(t) + ε(t)) − 1
+
+|S t|
+
+X
+
+> m∈S t
+
+ln( fm(t) + ε(t)) . (7) where yc(t) is the compositional log state, St is the union of observed and retained candidate clones at time t, and |S t|
+
+is the support size used for centering. Clone presence is represented by 
+
+Ic(t) = ⊮[nc(t) > 0] . (8) where Ic(t) equals one when clone c is observed and equals zero when the clone is absent at time t.
+
+3.3 Bounded Neighborhood Construction 
+
+Each clone is associated with a sequence embedding ec ∈ Rd. The dynamic attention neighborhood is built as 
+
+Nc(t) = N freq  
+
+> c
+
+(t) ∪ N emb  
+
+> c
+
+(t) ∪ N tail  
+
+> c
+
+(t). (9) where N freq  
+
+> c
+
+(t) contains high abundance clones, N emb  
+
+> c
+
+(t) contains nearest sequence embedding neighbors, and N tail  
+
+> c
+
+(t)
+
+contains sampled low abundance candidates. The bounded size condition is 
+
+|N c(t)| ≤ B. (10) where B is the maximum number of neighbors used by each clone at one observation time. The neighborhood bound is used primarily to control computation on repertoires with thousands of candidate clones. It reduces attention from full pairwise comparison to local aggregation while preserving three sources of context: abundance, sequence similarity, and low abundance exploration. In the ablation study, removing the neighborhood module causes only a modest AUC decline, but the bounded form keeps memory and inference latency practical for large clone supports. Attention over the bounded neighborhood is computed as 
+
+a(h) 
+
+> cj
+
+(t) = exp( ℓ(h) 
+
+> cj
+
+(t) − m(h) 
+
+> c
+
+(t)) 
+
+P 
+
+> r∈N c(t)
+
+exp( ℓ(h) 
+
+> cr
+
+(t) − m(h) 
+
+> c
+
+(t)) . (11) where a(h) 
+
+> cj
+
+(t) is the head h attention weight from clone c to neighbor j, ℓ(h) 
+
+> cj
+
+(t) is the scaled query key logit, and 
+
+m(h) 
+
+> c
+
+(t) = max r∈N c(t) ℓ(h) 
+
+> cr
+
+(t) is used for numerical stability. 4DynImmune-BERT 
+
+3.4 Event Aware Continuous Dynamics 
+
+Between two observed events, the clone state evolves according to 
+
+dy c(t)
+
+dt = Ic(t)Fθ (yc(t), e c, Nc(t), s(t), t ) . (12) where Fθ is the continuous Transformer vector field, s(t) is a pooled repertoire summary, and the presence gate Ic(t)
+
+prevents absent clones from drifting under the vector field. The continuous flow is interrupted when a clone changes from absent to present. Such transitions can reflect true biological reappearance, increased sampling depth, or technical detection of a low frequency clone. For a restart event at ti, the uncentered restart proposal is 
+
+rc(ti) = ln ε(ti) + ∆ ϕ(ec, t i). (13) where rc(ti) is the proposed restart state and ∆ϕ is a meta low rank adapter controlled by clone embedding and time. The support centered restart is 
+
+y(t+ 
+
+> i
+
+) = Π Sti (r(ti)) . (14) where y(t+ 
+
+> i
+
+) is the post event state vector, r(ti) stacks restart proposals for active support Sti , and ΠSti subtracts the mean over Sti so the centered log ratio constraint is restored after restart. 
+
+3.5 Distributional Supervision 
+
+The hidden clone state is mapped to a predicted clone distribution by 
+
+bpc(t) = exp( ρc(t)) 
+
+P 
+
+> m∈S t
+
+exp( ρm(t)) . (15) where bpc(t) is the predicted mass of clone c, ρc(t) is a scalar readout from the dynamic state, and the denominator normalizes over the current support. The hybrid transport loss is 
+
+fW (p, bp) = ωtop Sλ(pT , bpT ) + ωtail SW L(pU , bpU ). (16) where Sλ is entropic transport on top clone set T , SW L is sliced Wasserstein distance with L random projections on tail sample U, and ωtop and ωtail are nonnegative mixture weights. The final training loss is 
+
+L = LCE + λW fW + λtemp Rtemp + λspec Rspec . (17) where LCE is cross entropy, Rtemp penalizes unstable temporal codes, Rspec controls the vector field spectrum, and 
+
+λW , λtemp , and λspec are regularization weights. 
+
+3.6 Stability and Complexity 
+
+The event formulation is not meant to force every clone to follow a smooth biological path. Instead, it separates smooth latent evolution between observations from discrete state updates at detected clone presence changes. If the vector field is locally Lipschitz on a bounded state domain, then 
+
+∥F θ (u, t ) − F θ (v, t )∥2 ≤ LF ∥u − v∥2. (18) where LF is a finite Lipschitz constant, and u and v are two clone state vectors in the bounded integration domain. The centered restart update is bounded by 
+
+∥y(t+ 
+
+> i
+
+)∥2 ≤ ∥ ΠSti ∥2
+
+p |S ti | | ln ε(ti)| + ∥∆ϕ(E, t i)∥2
+
+
+
+. (19) where E stacks clone embeddings in the active support, and the inequality shows that restart magnitude remains finite when sequencing depth and adapter output are bounded. With bounded neighborhoods, the dominant forward cost satisfies 
+
+Tforward = O(SCBd + SCd 2). (20) where S is the number of ODE solver steps, C is the number of candidate clones, B is the neighborhood bound, and d
+
+is the hidden dimension. 5DynImmune-BERT 
+
+Algorithm 1 DynImmune-BERT training step 
+
+Require: Longitudinal repertoire batch {(tk, Ck, nk)}Kk=1 
+
+Require: Patient labels y, dynamic encoder parameters θ, classifier parameters ψ
+
+Ensure: Prediction by and loss L
+
+for each observation time tk do 
+
+Encode clone sequences as embeddings ec
+
+Compute fc(tk), ε(tk), yc(tk), and Ic(tk)
+
+Build bounded neighborhoods from abundance, embedding similarity, and tail candidates 
+
+end for for each interval [tk, t k+1 ] do 
+
+Integrate the gated vector field on smooth subintervals 
+
+if a clone reappears then 
+
+Restart and recenter its state with (14) 
+
+end if end for 
+
+Pool dynamic clone states into zp(tK )
+
+Predict by = gψ (zp(tK )) 
+
+Compute L with (17) 
+
+return by, L
+
+Figure 2: Latent trajectory and attention diagnostics. The trajectory panel visualizes clone evolution and restart behavior, while the heatmap shows bounded neighborhood attention weights among representative clones. 
+
+4 Experiments 
+
+4.1 Data and Comparison Protocol 
+
+Experiments were conducted on a workstation running Ubuntu 20.04 with an AMD Ryzen R7 5700X CPU, 128GB RAM, and an NVIDIA RTX 4090 GPU (24GB VRAM). The software stack included Python 3.9.7, PyTorch 1.12.1+cu102, NumPy 1.7.1, pandas 1.3.4, and scikit-learn 0.24.2. Neural ODE modules were implemented using torchdiffeq with implicit Runge-Kutta solvers for stable event handling. The evaluation separates three sources of evidence. Table 1 reflect different cohort definitions, preprocessing pipelines, and evaluation splits. Internally controlled temporal comparisons use the same patient level split, preprocessing, and evaluation script for DynImmune-BERT variants and temporal controls. External cancer detection is reported as preliminary evidence because several disease subsets are small. Table 1 summarizes the protocol. The key hyperparameters were fixed before final test reporting. We used B = 96 bounded neighbors, κ = 0 .5,
+
+ωtop = 0 .65 , ωtail = 0 .35 , λW = 0 .2, λtemp = 10 −3, and λspec = 10 −4. The ODE solver used implicit Runge Kutta 6DynImmune-BERT Table 1: Evaluation protocol summary. Component Source of numbers Split and processing rule Interpretation Main output Literature context Reported values from cited static TCR and MIL papers Original protocols of cited re-ports are retained Context for prior performance ranges Table 2 Internal temporal controls Same DynImmune-BERT evaluation interface Patient level split with all time points grouped before assign-ment Matched comparison of tem-poral designs Table 3 External detection check Public or cited repertoire cohorts summarized at disease level Patient level separation and dis-ease specific reporting Small cohort generalization check Table 4 Threshold and cali-bration analysis Validation scores and held out prediction files Model selection and threshold selection are logged before test evaluation Decision stability and proba-bility reliability Figs. 5 and 6 Table 2: Performance comparison of various models on THCA[43] and lung cancer test samples[43] Disease Model Accuracy Sensitivity Specificity F1-score AUC Lung DeepCAT [9] 0.620 0.871 0.388 0.688 0.720 Lung DeepLION [10] 0.620 0.887 0.373 0.806 0.762 Lung BertSingle [13] 0.798 0.871 0.731 0.806 0.907 Lung BertTCR [13] 0.899 0.952 0.851 0.901 0.972 Lung DeepLION2 [11] 0.809 0.736 0.865 0.770 0.880 Lung DeepTCR [12] 0.721 0.393 0.968 0.617 0.836 Lung MINN_SA [32] 0.655 0.620 0.711 0.685 0.788 Lung TransMIL [33] 0.757 0.687 0.814 0.746 0.820 Lung BiFormer [34] 0.768 0.716 0.812 0.746 0.836 Lung DynImmune-BERT 0.974 0.976 0.973 0.974 0.982 
+
+THCA DeepCAT [9] 0.600 0.917 0.308 0.687 0.731 THCA DeepLION [10] 0.680 0.583 0.769 0.636 0.769 THCA BertSingle [13] 0.720 0.583 0.846 0.667 0.785 THCA BertTCR [13] 0.900 0.875 0.923 0.894 0.912 THCA DeepTCR [12] 0.733 0.481 0.891 0.617 0.860 THCA MINN_SA [32] 0.740 0.542 0.874 0.608 0.843 THCA TransMIL [33] 0.816 0.704 0.887 0.746 0.888 THCA BiFormer [34] 0.840 0.729 0.911 0.770 0.917 THCA DeepLION2 [11] 0.886 0.751 0.973 0.908 0.933 THCA DynImmune-BERT 0.962 0.948 0.978 0.960 0.984 
+
+style steps with relative tolerance 10 −4 and absolute tolerance 10 −6. Hyperparameter values are reported alongside the notation to support independent implementation. 
+
+4.2 Comparative Analysis with State-of-the-Art Methods 
+
+Table 2 reports lung cancer and thyroid cancer (THCA) performance together with literature values from prior repertoire studies and related cohort reports [ 43 ]. Baseline values are retained from their original reports and may reflect differences in cohort definition, preprocessing, and evaluation protocols. BertTCR remains a strong static reference in the cited literature. The DynImmune-BERT rows reach higher AUC values in this table, but the comparison is interpreted as cross study context because the underlying protocols differ. 
+
+4.3 Temporal Necessity and Ablation 
+
+Table 3 evaluates whether longitudinal information is useful under matched processing. Last sample and mean pooled controls remove temporal ordering. GRU and time feature controls test whether simpler temporal encoders can account for the observed gain. Time aware Transformer and latent ODE controls retain time information but do not include the full event restart and hybrid transport design. DynImmune-BERT shows the strongest mean AUC in this internal comparison, with the largest gain over controls that ignore ordering. Ablations indicate that the ODE core drives most of the accuracy gain, while event handling, pseudocounts, and low rank restart improve robustness across seeds. Fig. 4 reports seed variability to avoid overreading point estimates that differ by only a few thousandths. 
+
+4.4 External Detection and Uncertainty 
+
+The universal cancer detection setting includes 2296 samples from 17 cancer types and healthy controls. Table 4 reports five representative disease subsets. Specificity varies across diseases because the control composition and threshold 7DynImmune-BERT 
+
+Figure 3: ROC consistency check for DynImmune-BERT. The displayed AUC values correspond to the DynImmune-BERT rows in Table 2. Table 3: Internally controlled temporal comparisons. Values are mean ± standard deviation across repeated seeds. Variant Lung AUC THCA AUC Last observed sample 0.891 ± 0.019 0.907 ± 0.021 
+
+Mean pooled time points 0.904 ± 0.017 0.918 ± 0.019 
+
+Static MIL pooling 0.913 ± 0.014 0.927 ± 0.016 
+
+GRU over time points 0.928 ± 0.013 0.938 ± 0.015 
+
+Time feature static encoder 0.934 ± 0.012 0.944 ± 0.014 
+
+Time aware Transformer 0.949 ± 0.011 0.957 ± 0.012 
+
+Latent ODE control 0.963 ± 0.009 0.969 ± 0.010 
+
+Full DynImmune-BERT 0.982 ± 0.006 0.984 ± 0.007 
+
+behavior differ across cohorts. Wide uncertainty on subsets with fewer than 20 cases limits definitive conclusions, and these estimates require validation on larger cohorts. 
+
+4.5 Trajectory Visualization and Calibration 
+
+Fig. 2 provides micro level evidence that complements aggregate ROC curves. The left panel shows representative latent clone trajectories, including a reappearing clone whose state is restarted at the marked event. The right panel shows bounded neighborhood attention weights among representative clones and clarifies how information propagates through local clone neighborhoods. 8DynImmune-BERT 
+
+Figure 4: Ablation with seed variability. The ODE core is the largest driver of AUC, while event restart and adaptive pseudocount mainly improve robustness. Table 4: External validation with disease specific uncertainty. Disease n Accuracy Sensitivity Specificity AUC uncertainty THCA 24 0.938 0.921 0.956 0.986 [0.944, 0.999] GBM 11 0.941 0.947 0.918 0.974 (SE 0.031) PACA 8 0.873 0.706 0.902 0.889 (SE 0.064) ESCA 10 0.944 0.972 0.927 0.981 (SE 0.026) Lung 15 0.957 0.961 0.942 0.982 (SE 0.024) The cancer probability threshold is selected on validation data by maximizing Youden’s index: 
+
+τ ∗ = arg max  
+
+> τ
+
+(TPR( τ ) + TNR( τ ) − 1) . (21) where τ ∗ is the selected cancer probability threshold, TPR( τ ) is sensitivity, and TNR( τ ) is specificity at threshold τ .The health score is defined as 
+
+Hp = 1 − Pr  
+
+> θ
+
+(yp = 1 | D p). (22) where Hp is the health score of patient p, and Pr θ (yp = 1 | D p) is the predicted cancer probability. Figs. 5 and 6 report threshold and calibration diagnostics. The bootstrap band in Fig. 5 highlights that threshold selection can be unstable in small validation sets. The calibration plot and Brier scores assess probability reliability, which is important because a high AUC does not guarantee clinically calibrated cancer probabilities. 
+
+4.6 Computational Cost 
+
+The continuous ODE core adds computation, so efficiency is reported alongside accuracy. Table 5 summarizes parameter count, training time per epoch, inference latency, and memory use for internal controls. Runtime scales with the number of solver steps and candidate clones; bounded neighborhoods keep the attention term linear in the neighborhood size. The measured latency remains small relative to TCR sequencing turnaround, although this claim should be rechecked when larger repertoires or stricter tolerances are used. 9DynImmune-BERT 
+
+Figure 5: Validation threshold selection using Youden’s index with bootstrap uncertainty. Table 5: Computational cost summary for internal controls. Model Params Train Infer GPU M min/epoch ms/subject GB Static repertoire encoder 113.7 1.9 7.4 6.3 Time aware Transformer 118.2 2.7 9.6 7.1 Latent ODE control 119.6 3.1 11.8 7.8 
+
+Full DynImmune-BERT 122.4 3.8 13.5 8.6 
+
+5 Discussion and Limitations 
+
+DynImmune-BERT is most useful when repeated repertoire measurements are available and the analysis requires patient level temporal structure. The internal controls indicate that event aware propagation adds information beyond static pooling and simpler temporal encoders. Literature baselines remain useful context, but they should be read as prior performance ranges because cohort definitions and preprocessing differ. Several limitations remain. External subsets with fewer than 20 cases have wide uncertainty, and clone absence may reflect sampling depth or technical dropout. Disease specific thresholds also require prospective validation before clinical use. 
+
+6 Conclusion 
+
+DynImmune-BERT models longitudinal immune repertoires as event aware continuous trajectories. The framework links clone read counts, sequencing depth, observation time, and clone presence to a patient level representation. It uses stabilized compositional initialization to reduce zero count instability, bounded neighborhood attention to control clone level aggregation, and restart updates to handle reappearing clonotypes. Hybrid transport supervision further connects the dynamic hidden states to both dominant and rare clone mass. The experiments support the value of temporal structure when matched patient level controls are used. The method achieves the strongest AUC values in the internal 10 DynImmune-BERT 
+
+Figure 6: Reliability diagram for predicted cancer probability. The diagonal line indicates perfect calibration. comparisons and provides trajectory, threshold, calibration, and computational diagnostics alongside classification results. These diagnostics are important because a high aggregate score alone does not explain whether a dynamic model handles sparse and irregular repertoire observations responsibly. Future work will combine larger prospective cohorts with motif annotation, HLA covariates, and treatment metadata to test whether the learned clone trajectories correspond to clinically interpretable immune events. 
+
+References 
+
+[1] Xuefeng Niu, Song Li, Pingchao Li, Wenjing Pan, Qian Wang, Ying Feng, Xiaoneng Mo, Qihong Yan, Xianmiao Ye, Jia Luo, et al. Longitudinal analysis of t and b cell receptor repertoire transcripts reveal dynamic immune response in covid-19 patients. Frontiers in Immunology , 11:582010, 2020. [2] Xiaoping Sun, Thomas Nguyen, Achouak Achour, Annette Ko, Jeffrey Cifello, Chen Ling, Jay Sharma, Toyoko Hiroi, Yongqing Zhang, Chee W Chia, et al. Longitudinal analysis reveals age-related changes in the t cell receptor repertoire of human t cell subsets. The Journal of clinical investigation , 132(17), 2022. [3] Anastasia A Minervina, Ekaterina A Komech, Aleksei Titov, Meriem Bensouda Koraichi, Elisa Rosati, Ilgar Z Mamedov, Andre Franke, Grigory A Efimov, Dmitriy M Chudakov, Thierry Mora, et al. Longitudinal high-throughput tcr repertoire profiling reveals the dynamics of t-cell memory formation after mild covid-19 infection. 
+
+Elife , 10:e63502, 2021. [4] Angela M Mitchell, Erin E Baschal, Kristen A McDaniel, Kimber M Simmons, Laura Pyle, Kathleen Waugh, Andrea K Steck, Liping Yu, Peter A Gottlieb, Marian J Rewers, et al. Temporal development of t cell receptor repertoires during childhood in health and disease. JCI insight , 7(18):e161885, 2022. [5] Yi-Tung Chen, Hung-Chih Hsu, Yun-Shien Lee, Hsuan Liu, Bertrand Chin-Ming Tan, Chia-Yin Chin, Ian Yi-Feng Chang, and Chia-Yu Yang. Longitudinal high-throughput sequencing of the t-cell receptor repertoire reveals dynamic change and prognostic significance of peripheral blood tcr diversity in metastatic colorectal cancer during chemotherapy. Frontiers in Immunology , 12:743448, 2022. 11 DynImmune-BERT [6] NH Servaas, Fatiha Zaaraoui-Boutahar, CGK Wichers, Andrea Ottria, Eleni Chouri, AJ Affandi, Sandra Silva-Cardoso, Maarten van der Kroef, T Carvalheiro, Femke van Wijk, et al. Longitudinal analysis of t-cell receptor repertoires reveals persistence of antigen-driven cd4+ and cd8+ t-cell clusters in systemic sclerosis. Journal of Autoimmunity , 117:102574, 2021. [7] Asbjørn Kjær, Nanna Kristjánsdóttir, Randi Istrup Juul, Iver Nordentoft, Karin Birkenkamp-Demtröder, Johanne Ahrenfeldt, Trine Strandgaard, Deema Radif, Darren Hodgson, Christopher Abbosh, et al. Low t cell diversity associates with poor outcome in bladder cancer: A comprehensive longitudinal analysis of the t cell receptor repertoire. Cell Reports Medicine , 6(5), 2025. [8] Kristi C Briggs, Jessica S Lin, Lara Chaaban, Alyssa Parian, Mark Lazarev, Florin Selaru, Franck Housseau, Kellie N Smith, and Joanna MP Melia. Longitudinal t cell repertoire analysis reveals dynamic clonal t cell populations in ulcerative colitis. bioRxiv , pages 2025–01, 2025. [9] Daria Beshnova, Jianfeng Ye, Oreoluwa Onabolu, Benjamin Moon, Wenxin Zheng, Yang-Xin Fu, James Bru-garolas, Jayanthi Lea, and Bo Li. De novo prediction of cancer-associated t cell receptors for noninvasive cancer detection. Science translational medicine , 12(557):eaaz3738, 2020. [10] Ying Xu, Xinyang Qian, Xuanping Zhang, Xin Lai, Yuqian Liu, and Jiayin Wang. Deeplion: deep multi-instance learning improves the prediction of cancer-associated t cell receptors for accurate cancer detection. Frontiers in genetics , 13:860510, 2022. [11] Xinyang Qian, Guang Yang, Fan Li, Xuanping Zhang, Xiaoyan Zhu, Xin Lai, Xiao Xiao, Tao Wang, and Jiayin Wang. Deeplion2: deep multi-instance contrastive learning framework enhancing the prediction of cancer-associated t cell receptors by attention strategy on motifs. Frontiers in Immunology , 15:1345586, 2024. [12] John-William Sidhom, H Benjamin Larman, Drew M Pardoll, and Alexander S Baras. Deeptcr is a deep learning framework for revealing sequence concepts within t-cell repertoires. Nature communications , 12(1):1605, 2021. [13] Min Zhang, Qi Cheng, Zhenyu Wei, Jiayu Xu, Shiwei Wu, Nan Xu, Chengkui Zhao, Lei Yu, and Weixing Feng. Berttcr: a bert-based deep learning framework for predicting cancer-related immune status based on t cell receptor repertoire. Briefings in Bioinformatics , 25(5):bbae420, 2024. [14] Jie Ni, Bin Li, Shumei Miao, Xinting Zhang, Donghui Yan, Shengqi Jing, Shan Lu, Zhuoying Xie, Xin Zhang, and Yun Liu. Methpriorgcn: a deep learning tool for inferring dna methylation prior knowledge and guiding personalized medicine. Briefings in Bioinformatics , 26(2):bbaf131, 2025. [15] Andreas Dounas, Tudor-Stefan Cotet, and Alexander Yermanos. Learning immune receptor representations with protein language models. arXiv preprint arXiv:2402.03823 , 2024. [16] Chiho Im, Ryan Zhao, Scott D Boyd, and Anshul Kundaje. Sequence-based tcr-peptide representations using cross-epitope contrastive fine-tuning of protein language models. In International Conference on Research in Computational Molecular Biology , pages 34–48. Springer, 2025. [17] Xing Fang, Chenpeng Yu, Shiye Tian, and Hui Liu. A large language model for predicting t cell receptor-antigen binding specificity. In 2024 IEEE International Conference on Bioinformatics and Biomedicine (BIBM) , pages 1489–1492. IEEE, 2024. [18] Jinwoo Leem, Laura S Mitchell, James HR Farmery, Justin Barton, and Jacob D Galson. Deciphering the language of antibodies using self-supervised learning. Patterns , 3(7), 2022. [19] Tianshi Lu, Ze Zhang, James Zhu, Yunguan Wang, Peixin Jiang, Xue Xiao, Chantale Bernatchez, John V Heymach, Don L Gibbons, Jun Wang, et al. Deep learning-based prediction of the t cell receptor–antigen binding specificity. 
+
+Nature machine intelligence , 3(10):864–875, 2021. [20] Yideng Cai, Meng Luo, Wenyi Yang, Chang Xu, Pingping Wang, Guangfu Xue, Xiyun Jin, Rui Cheng, Jinhao Que, Wenyang Zhou, et al. The deep learning framework icantcr enables early cancer detection using the t-cell receptor repertoire in peripheral blood. Cancer Research , 84(11):1915–1928, 2024. [21] Anja Mösch, Silke Raffegerst, Manon Weis, Dolores J Schendel, and Dmitrij Frishman. Machine learning for cancer immunotherapies based on epitope recognition by t cell receptors. Frontiers in genetics , 10:1141, 2019. [22] Yilong Li, Michelle Nahas, Dennis Stephens, Kate Froburg, Emma Hintz, Devin Champagne, Amaneet Lochab, Markus Brown, Jasper Braun, María Antonia Fortuño, et al. Circulating t-cell receptor repertoire for cancer early detection. NPJ Precision Oncology , 9(1):245, 2025. 12 DynImmune-BERT [23] Maxim E Zaslavsky, Erin Craig, Jackson K Michuda, Nidhi Sehgal, Nikhil Ram-Mohan, Ji-Yeun Lee, Khoa D Nguyen, Ramona A Hoh, Tho D Pham, Katharina Röltgen, et al. Disease diagnostics using machine learning of b cell and t cell receptor sequences. Science , 387(6736):eadp2407, 2025. [24] Timothy J O’Donnell, Chakravarthi Kanduri, Giulio Isacchini, Julien P Limenitakis, Rebecca A Brachman, Raymond A Alvarez, Ingrid H Haff, Geir K Sandve, and Victor Greiff. Reading the repertoire: Progress in adaptive immune receptor analysis using machine learning. Cell Systems , 15(12):1168–1189, 2024. [25] Ricky TQ Chen, Yulia Rubanova, Jesse Bettencourt, and David K Duvenaud. Neural ordinary differential equations. Advances in neural information processing systems , 31, 2018. [26] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. Advances in neural information processing systems , 30, 2017. [27] Jing Zhang, Peng Zhang, Baiwen Kong, Junqiu Wei, and Xin Jiang. Continuous self-attention models with neural ode networks. In Proceedings of the AAAI conference on artificial intelligence , volume 35, pages 14393–14401, 2021. [28] Yuqi Chen, Kan Ren, Yansen Wang, Yuchen Fang, Weiwei Sun, and Dongsheng Li. Contiformer: Continuous-time transformer for irregular time series modeling. Advances in Neural Information Processing Systems , 36: 47143–47175, 2023. [29] Yudong Zhang, Xu Wang, Xuan Yu, Zhengyang Zhou, Xing Xu, Lei Bai, and Yang Wang. Diffode: Neural ode with differentiable hidden state for irregular time series analysis. In 2025 IEEE 41st International Conference on Data Engineering (ICDE) , pages 1–14. IEEE, 2025. [30] Johanna Chiffelle, Raphael Genolet, Marta AS Perez, George Coukos, Vincent Zoete, and Alexandre Harari. T-cell repertoire analysis and metrics of diversity and clonality. Current opinion in biotechnology , 65:284–295, 2020. [31] Joy A Pai and Ansuman T Satpathy. High-throughput and single-cell t cell receptor sequencing technologies. 
+
+Nature methods , 18(8):881–892, 2021. [32] Younghoon Kim, Tao Wang, Danyi Xiong, Xinlei Wang, and Seongoh Park. Multiple instance neural networks based on sparse attention for cancer detection using t-cell receptor sequences. BMC bioinformatics , 23(1):469, 2022. [33] Zhuchen Shao, Hao Bian, Yang Chen, Yifeng Wang, Jian Zhang, Xiangyang Ji, et al. Transmil: Transformer based correlated multiple instance learning for whole slide image classification. Advances in neural information processing systems , 34:2136–2147, 2021. [34] Lei Zhu, Xinjiang Wang, Zhanghan Ke, Wayne Zhang, and Rynson WH Lau. Biformer: Vision transformer with bi-level routing attention. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pages 10323–10333, 2023. [35] Anh Tong, Thanh Nguyen-Tang, Dongeun Lee, Duc Nguyen, Toan Tran, David Hall, Cheongwoong Kang, and Jaesik Choi. Neural ode transformers: Analyzing internal dynamics and adaptive fine-tuning. arXiv preprint arXiv:2503.01329 , 2025. [36] Arthur Mensch and Gabriel Peyré. Online sinkhorn: Optimal transport distances from sample streams. Advances in Neural Information Processing Systems , 33:1657–1667, 2020. [37] Grégoire Mialon, Dexiong Chen, Alexandre d’Aspremont, and Julien Mairal. A trainable optimal transport embedding for feature aggregation and its relationship to attention. arXiv preprint arXiv:2006.12065 , 2020. [38] Khai Nguyen and Nhat Ho. Energy-based sliced wasserstein distance. Advances in Neural Information Processing Systems , 36:18046–18075, 2023. [39] Eric Heitz, Kenneth Vanhoey, Thomas Chambon, and Laurent Belcour. A sliced wasserstein loss for neural texture synthesis. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 9412–9420, 2021. [40] Longteng Zhang, Lin Zhang, Shaohuai Shi, Xiaowen Chu, and Bo Li. Lora-fa: Memory-efficient low-rank adaptation for large language models fine-tuning. arXiv preprint arXiv:2308.03303 , 2023. 13 DynImmune-BERT [41] Ruiyi Zhang, Rushi Qiang, Sai Ashish Somayajula, and Pengtao Xie. Autolora: Automatically tuning matrix ranks in low-rank adaptation based on meta learning. arXiv preprint arXiv:2403.09113 , 2024. [42] Soufiane Hayou, Nikhil Ghosh, and Bin Yu. Lora+: Efficient low rank adaptation of large models. arXiv preprint arXiv:2402.12354 , 2024. [43] Kroopa Joshi, Marc Robert de Massy, Mazlina Ismail, James L Reading, Imran Uddin, Annemarie Woolston, Emine Hatipoglu, Theres Oakes, Rachel Rosenthal, Thomas Peacock, et al. Spatial heterogeneity of the t cell receptor repertoire reflects the mutational landscape in lung cancer. Nature medicine , 25(10):1549–1559, 2019. 14

@@ -1,0 +1,24 @@
+---
+title: Single-Cell Proteomics Reveals Heterogeneous and Bimodal Proteome Responses to DNA Damage
+title_zh: 单细胞蛋白质组学揭示DNA损伤的异质性和双峰蛋白质组响应
+authors: "Adoni, K. R., Charlton, G. H., Ditcham, J. E., Cook, D. T., Ho, J., Kirkpatrick, J., Zenezini Chiozzi, R., Thalassinos, K."
+date: 2026-07-21
+pdf: "https://www.biorxiv.org/content/10.64898/2026.07.20.739584v1.full.pdf"
+tags: ["query:virtual-cell"]
+score: 6.0
+evidence: 单细胞蛋白质组学揭示DNA损伤扰动下的异质性蛋白质组响应
+tldr: 批量蛋白质组学平均了细胞间响应，掩盖DNA损伤反应的异质性。本研究应用单细胞蛋白质组学分析U-2 OS细胞对6TG的响应，通过严格过滤确保比较公平。发现损伤激活经典DDR通路并增加蛋白质丰度异质性，其中MSH3响应最稳健。此外，部分蛋白出现双峰分布，揭示了基因相同细胞群中协调但异质的响应。
+source: biorxiv
+selection_source: fresh_fetch
+figures_json: "[{\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-07-20-739584-v1/fig-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 886, \"height\": 753, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-07-20-739584-v1/fig-002.webp\", \"caption\": \"\", \"page\": 0, \"index\": 2, \"width\": 885, \"height\": 1051, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-07-20-739584-v1/fig-003.webp\", \"caption\": \"\", \"page\": 0, \"index\": 3, \"width\": 841, \"height\": 1790, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-07-20-739584-v1/fig-004.webp\", \"caption\": \"\", \"page\": 0, \"index\": 4, \"width\": 1640, \"height\": 2364, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2026-07-20-739584-v1/fig-005.webp\", \"caption\": \"\", \"page\": 0, \"index\": 5, \"width\": 885, \"height\": 1802, \"label\": \"Figure\"}]"
+motivation: 阐明DNA损伤反应中单细胞水平的蛋白质组异质性，避免批量分析导致的死细胞污染和信号平均。
+method: 应用单细胞蛋白质组学技术，按形态、采样和生物学标准过滤细胞，分析6TG处理前后U-2 OS细胞的蛋白质组变化。
+result: 发现DNA损伤后整体蛋白丰度异质性增加，MSH3响应最稳健且异质性最低，以及双峰分布的出现或消失。
+conclusion: 单细胞蛋白质组学能够解析基因相同细胞群中协调但异质的DNA损伤响应，揭示双峰状态。
+---
+
+## 摘要
+DNA损伤反应（DDR）涉及基因组毒性后修复、检查点和应激适应信号通路的协同激活。然而，群体细胞蛋白质组学平均了邻近细胞间的不同反应，掩盖了基因毒性应激下具有生物学意义的蛋白质组重塑的特征。这对于DDR尤为重要，因为部分细胞会经历凋亡，导致死细胞的采样混淆了下游生物学解释。在这里，我们应用单细胞蛋白质组学（SCP）研究U-2 OS细胞对6-硫鸟嘌呤（6TG）诱导的DNA损伤的蛋白质组响应。通过根据预定义的形态学、采样和生物学标准过滤单个细胞，以确保对照和DNA损伤群体之间的匹配比较；发现6TG处理激活了典型的DDR，包括错配修复和碱基切除修复，以及与氧化应激、线粒体功能障碍、炎症信号和蛋白质稳态相关的次级应激反应。利用SCP，我们能够探究邻近细胞间的异质性，揭示DNA损伤后全局蛋白质丰度变异性的增加。重要的是，错配修复蛋白MSH3表现出最大的丰度增加之一，同时所有定量蛋白质中细胞间丰度异质性减少最大，突显其为对6TG诱导的DNA损伤最稳健且可重复的响应者。此外，蛋白质丰度异质性分析揭示了在邻近细胞中呈现分叉丰度状态的蛋白质，DNA损伤诱导了这些双峰丰度分布的出现或消失。与基因表达和蛋白质合成相关的蛋白质在DNA损伤后趋向于在邻近细胞中分叉为离散的高-低蛋白质丰度状态。相反，6TG消除了几个核心信号、应激信号和转运蛋白固有的高-低丰度双峰性，表明它们在应对基因毒性应激时协调均质化。总之，这些发现证明了SCP在解析遗传相同细胞群体内对DNA损伤的协同但异质的细胞反应方面的能力。
+
+## Abstract
+DNA damage response (DDR) involves coordinated activation of repair, checkpoint, and stress adaptive signalling pathways following genomic toxicity. Bulk-cell proteomics, however, averages divergent responses across neighbouring cells, obscuring the characterisation of biologically meaningful proteome remodelling during genotoxic stress. This is particularly relevant to DDR, where a subset of cells undergo apoptosis, resulting in the sampling of dead cells that confound downstream biological interpretation. Here, we applied single cell proteomics (SCP) to investigate the proteome response of U-2 OS cells to 6-thioguanine (6TG)-induced DNA damage. By filtering individual cells according to predefined morphological-, sampling- and biological-criteria, to ensure a matched comparison between control and DNA-damaged populations; 6TG treatment was found to activate canonical DDR, including mismatch repair and base excision repair, together with secondary stress responses linked to oxidative stress, mitochondrial dysfunction, inflammatory signalling and proteostasis. Using SCP, we were able to probe neighbouring cell-to-cell heterogeneity, revealing globally increased protein abundance variability following DNA-damage. Importantly, mismatch repair protein MSH3 exhibited amongst the largest abundance increases, concomitant with the greatest reduction in cell-to-cell abundance heterogeneity across all quantified proteins, highlighting it as the most robust and reproducible respond-er to 6TG-induced DNA damage. Furthermore, analysis of protein-abundance heterogeneity revealed proteins that exhibit bifurcated abundance states across neighbouring cells, with DNA damage inducing either the emergence or loss of these bimodal abundance distributions. Proteins linked to gene expression and protein synthesis were driven towards bifurcation into discrete high-low protein abundance states across neighbouring cells following DNA-damage. Conversely, 6TG abolished the intrinsic high-low abundance bimodality of several core-signalling, stress-signalling and trafficking proteins, suggesting their coordinated homogenisation in response to genotoxic stress. Collectively, these findings demonstrate the power of SCP to resolve the coordinated, yet heterogeneous, cellular response to DNA damage within a population of genetically identical cells.

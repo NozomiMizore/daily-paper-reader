@@ -6,28 +6,30 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-22
-- 运行时间：2026-07-22 21:03:19 UTC
+- 最新运行日期：2026-07-23
+- 运行时间：2026-07-23 20:38:03 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 本次总论文数：3
+- 精读区：0
+- 速读区：3
 
 ### 今日简报（AI）
-今天精读了一篇关于扰动效应机理推理的高分论文，并速读了一篇贝叶斯筛选方法。  
-最值得关注的是PertReason框架，它利用知识图谱实现细胞状态条件性的扰动效应机理推理。  
-建议先深入理解PertReason的基准数据集和因果推理设计，再对比传统筛选方法的应用场景。
-- 详情：[/202607/22/README](/202607/22/README)
+今日速读聚焦细胞形态学、免疫组库与单细胞蛋白质组学三大前沿方向；最值得关注的是7分的检索增强LLM用于纵向细胞形态学假设审计，揭示了AI驱动生物表征的新范式；建议读者优先精读该文，并追踪其后续在药物筛选或疾病分型中的验证进展。
+- 详情：[/202607/23/README](/202607/23/README)
 
 ### 精读区论文标签
-1. [PertReason: A Knowledge-Grounded Benchmark and Framework for Cell-State-Conditioned Mechanistic Reasoning of Perturbation Effects](/202607/22/2607.18777v1-pertreason-a-knowledge-grounded-benchmark-and-framework-for-cell-state-conditioned-mechanistic-reasoning-of-perturbation-effects)  
-   标签：评分：9.0/10、query:virtual-cell
-   evidence：用于扰动效应推理的深度学习方法的基准；基于知识且条件化细胞状态
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Deep Adaptive Bayesian Screening](/202607/22/2607.16927v1-deep-adaptive-bayesian-screening)  
+1. [Auditing Retrieval-Augmented LLM Hypotheses for Longitudinal Cell Painting Morphology](/202607/23/2607.19415v1-auditing-retrieval-augmented-llm-hypotheses-for-longitudinal-cell-painting-morphology)  
+   标签：评分：7.0/10、query:virtual-cell
+   evidence：基于LLM的长期慢性扰动下的细胞形态学解释
+2. [DynImmune-BERT: Dynamic Immune Repertoire Modeling with Neural ODE Driven Continuous Transformers](/202607/23/2607.17244v1-dynimmune-bert-dynamic-immune-repertoire-modeling-with-neural-ode-driven-continuous-transformers)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：自适应贝叶斯筛选方法，适用于扰动因子筛选
+   evidence：使用神经ODE对免疫扰动动态建模
+3. [Single-Cell Proteomics Reveals Heterogeneous and Bimodal Proteome Responses to DNA Damage](/202607/23/biorxiv-10-64898-2026-07-20-739584-v1-single-cell-proteomics-reveals-heterogeneous-and-bimodal-proteome-responses-to-dna-damage)  
+   标签：评分：6.0/10、query:virtual-cell
+   evidence：单细胞蛋白质组学揭示DNA损伤扰动下的异质性蛋白质组响应
 
 
 <div class="dpr-home-promo-card">

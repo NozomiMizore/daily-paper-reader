@@ -1,0 +1,894 @@
+Title: Auditing Retrieval-Augmented LLM Hypotheses for Longitudinal Cell Painting Morphology
+
+URL Source: https://arxiv.org/pdf/2607.19415v1
+
+Published Time: Thu, 23 Jul 2026 00:06:30 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Auditing Retrieval-Augmented LLM Hypotheses for Longitudinal Cell Painting Morphology 
+
+## Gilchan Park, Guang Zhao, Byung-Jun Yoon, Shinjae Yoo 
+
+Brookhaven National Laboratory Upton, New York, USA {gpark,gzhao,byoon,sjyoo}@bnl.gov 
+
+Abstract 
+
+High-content morphological profiling (Cell Painting) yields sensi-tive, high-dimensional signatures of cellular state, but translating longitudinal morphology trajectories into interpretable biology re-mains difficult—especially for weak, chronic perturbations such as low-dose-rate ionizing radiation. Large language models (LLMs) can synthesize heterogeneous evidence into narratives, yet sci-entific use requires quantitative auditing: fluent outputs may be ungrounded or inconsistent with measured morphology. We present an evaluation-first, retrieval-augmented interpre-tation framework for longitudinal Cell Painting morphology. To demonstrate the framework’s utility in a highly challenging real-world scenario characterized by weak signals and sparse refer-ence data, we apply it to a 9-week RPE-1 time course spanning five dose rates (0.003–6.0 mGy/hr). We compute week-matched treated–control morphology deltas and construct evidence-rich prompt payloads that bind (i) quantitative deltas to (ii) retrieved per-turbation neighbors, pathway context, and literature snippets via stable evidence identifiers. An LLM generates structured controlled-vocabulary hypotheses at the week ×dose level, which are then inte-grated hierarchically into dose-time phases and global summaries while preserving evidence provenance. We operationalize auditing with two quantitative tests: V1 ci-tation validity, which verifies that every cited evidence identifier is present in the prompt payload, and V2 proxy-based morphol-ogy compatibility, which measures whether predicted process la-bels are consistent with the top changed morphology features un-der an explicit proxy table. In the audited run, V1 detected no invalid evidence references, and V2 showed non-trivial morphol-ogy compatibility that increased with perturbation strength. At week ×dose resolution, V2 also showed a modest positive associa-tion with an LLM-external morphology drift summary computed from the same Cell Painting data distribution. Crucially, this au-ditable pipeline distilled complex trajectories into falsifiable hy-potheses, including a distinct adaptive phenotype associated with metabolic reprogramming and proteostatic stress at lower dose rates (0.003-0.3 mGy/hr). Limitations include proxy-based evalua-tion granularity and the absence of ground-truth mechanism labels. The source code and datasets for this study are publicly available at https://github.com/cellpainting-llm-auditor. 
+
+CCS Concepts 
+
+• Applied computing → Bioinformatics .
+
+Keywords 
+
+Cell Painting, morphological profiling, longitudinal phenotyping, low-dose ionizing radiation (LDIR), LDR, Large Language Models (LLMs), retrieval-augmented generation, LLM auditing, hypothesis generation 
+
+1 Introduction 
+
+High-content imaging assays provide a sensitive readout of how perturbations reshape cellular state. Cell Painting–style morpholog-ical profiling converts multiplexed fluorescence images into quan-titative single-cell feature vectors spanning size, shape, intensity, and texture [ 3 ]. Repeated measurement enables longitudinal tra-jectories, but mechanistic interpretation is particularly challenging for weak, chronic perturbations such as low-dose and low-dose-rate ionizing radiation, where responses can be multifactorial and context dependent [22, 31]. The interpretability bottleneck is largely downstream of feature extraction. Morphological profiles are high-dimensional and sensi-tive to technical variation, often requiring robust normalization and aggregation before comparisons are meaningful across plates and timepoints [ 4, 5]. Even after preprocessing, translating a trajectory in morphology space into biological hypotheses typically remains manual. Public reference resources partially mitigate this gap via “profile matching,” where new signatures are compared to large perturbation libraries (e.g., JUMP) to suggest candidate gene pro-grams or pathways [5]. However, similarity alone rarely yields an end-to-end explanation—especially in longitudinal settings where dominant processes may shift by dose or phase. Large language models (LLMs) offer an appealing interface for synthesizing heterogeneous evidence, but scientific deployment requires auditing: fluent narratives can be unfaithful to evidence and may include fabricated or incorrect citations [ 11 , 28 ]. Retrieval-augmented generation (RAG) improves provenance by coupling generation to external evidence stores [ 15 ], and curated resources such as Reactome provide standardized pathway context [20]. In this work, we introduce an LLM-centered, retrieval-augmented interpretation framework for longitudinal Cell Painting morphol-ogy that is evaluation-first by design. To demonstrate the practical utility of this framework in a highly challenging real-world scenario, we apply it to the longitudinal profiling of chronic low-dose-rate (LDR) ionizing radiation—a domain where morphological signals are notoriously weak and established reference mechanisms are scarce. Rather than treating LLM narratives as conclusions, we treat them as auditable scientific artifacts: structured hypotheses grounded in (i) measured morphology deltas, and (ii) retrieved exter-nal evidence (perturbation neighbors, pathway context, literature snippets). Specifically, we operationalize auditing through two rigorous quantitative tests. First, we enforce citation integrity (V1) by veri-fying that every piece of evidence cited by the LLM strictly maps arXiv:2607.19415v1 [q-bio.QM] 17 Jul 2026 Gilchan Park, Guang Zhao, Byung-Jun Yoon, Shinjae Yoo 
+
+Figure 1: Architectural overview of the evaluation-first LLM-driven morphological reasoning and validation pipeline. The framework consists of four integrated modules: (A) Data Acquisition & Processing, where raw microscopy images undergo feature extraction and delta Z-score normalization to yield quantitative morphology profiles; (B) Static RAG Backend, which constructs an integrated semantic knowledge payload by synthesizing morphological reference profiles (JUMP-CP), mechanistic biological pathways (Reactome), and scientific literature contexts (EuropePMC); (C) Hierarchical LLM Reasoning, employing the Gemini large language model to iteratively consolidate local condition-specific inferences (week × dose) into temporal trajectories and unified global hypotheses; and (D) Quantitative Auditing, the primary evaluation module where hypotheses are rigorously anchored against grounding integrity (V1: citation validity) and morphological alignment (V2: quantitative predictive hit-rate) to produce audited, falsifiable biological discoveries. Furthermore, the V2 auditing metric is meta-validated against an independent external reference of trajectory-based PCA morphology drift. (Note: The visual representation of this diagram was generated with the assistance of the Gemini.) 
+
+back to the provided prompt payload, effectively eliminating ref-erence hallucinations. Second, we assess biological fidelity via a proxy-based alignment metric (V2), which evaluates the consis-tency between the LLM’s predicted biological processes and the most prominent morphological feature shifts. To further substanti-ate these findings, we establish an independent, morphology-only PCA drift summary. This drift metric serves as a crucial secondary quantitative anchor, ensuring that the semantic trajectories pro-posed by the LLM are fundamentally grounded in the principal axes of phenotypic variation observed in the raw data (Figure 1). 
+
+Contributions: 
+
+• Evaluation-first auditing for LLM interpretation of morphology: Formal validation of hypothesis grounding (V1) and quantitative proxy alignment (V2), designed specif-ically for settings lacking ground-truth mechanism labels. 
+
+• Traceable retrieval-augmented prompting: A robust prompt payload schema that binds quantitative morphology deltas to retrieved perturbation and literature evidence via stable IDs, enabling automatic citation verification. 
+
+• Hierarchical reasoning with provenance: A multi-step synthesis approach (dose-time and global summaries) that preserves longitudinal structure and reliably propagates evidence references, preventing the loss of context typical of flattened week × dose outputs. 
+
+2 Related Work 2.1 Cell Painting and morphological profiling 
+
+Cell Painting is a widely adopted foundation for image-based mor-phological profiling, yielding multi-channel fluorescence images that can be summarized into quantitative single-cell feature vectors [ 3]. A recurring theme in the literature is that interpretability is limited less by feature extraction than by downstream processing and contextualization: profiles often require robust normalization, Auditing Retrieval-Augmented LLM Hypotheses for Longitudinal Cell Painting Morphology 
+
+aggregation, and careful similarity computation before they can be compared across batches or experimental conditions [5]. Recently, large public reference resources have emphasized both the promise and complexity of morphological profiling. The JUMP Cell Painting Consortium released a benchmark-scale dataset span-ning matched chemical and genetic perturbations to support simi-larity evaluation and representation learning [ 5 ]. While early ap-proaches relied on classical image analysis pipelines, modern ef-forts increasingly leverage deep representation learning—such as weakly supervised learning and vision transformers—to extract more robust phenotypic embeddings [4, 5]. Such resources enable “profile matching” as a practical mechanism-discovery heuristic, but nearest-neighbor similarity typically requires additional path-way and literature context. This remains especially challenging for longitudinal settings where phenotypes evolve dynamically over time. 
+
+2.2 LLMs, RAG systems, and biological interpretation 
+
+Biomedical LLMs have become central tools for text mining and syn-thesis, building on domain-adapted pretraining (e.g., BioBERT, Pub-MedBERT) and subsequent generative models tailored for biomedi-cal knowledge tasks [ 8, 14 , 17 ]. More recently, state-of-the-art mod-els like Med-PaLM have demonstrated expert-level performance on medical and biological reasoning benchmarks, signaling a shift toward highly capable, domain-specific reasoning engines [29]. In parallel, retrieval-augmented generation (RAG) couples a gen-erator with an evidence store to improve provenance and factu-ality for knowledge-intensive generation [ 15 ]. In biology, curated resources such as Reactome provide standardized pathway defini-tions and gene–pathway mappings that are well suited for evidence-aware interpretation pipelines [ 20 ]. The integration of RAG into sci-entific workflows is now moving beyond simple question-answering toward autonomous hypothesis generation and complex data inter-pretation [2]. 
+
+2.3 Grounding, evaluation, and interpretation auditing 
+
+Despite their capabilities, neural generation in scientific settings can be fluent yet unfaithful to underlying evidence, motivating explicit grounding constraints and automated checks [ 1 , 19 ]. Prior work proposes faithfulness evaluations and truthfulness benchmarks (e.g., TruthfulQA) [ 16 ] and scientific claim verification benchmarks (e.g., SciFact) [ 32 ]. More broadly, documentation and auditing frame-works (e.g., model cards, datasheets) motivate treating AI artifacts as objects requiring structured reporting and evaluation [7, 21]. To the best of our knowledge, no existing computational frame-work natively integrates longitudinal Cell Painting trajectories with RAG-driven LLM synthesis and quantitative auditing. Traditional morphological profiling largely relies on single-time-point prox-imity matching (e.g., using JUMP-CP benchmarks), which limits its ability to capture weak, continuous perturbations unfolding over multiple weeks. Conversely, standard RAG applications in biology primarily operate on textual data and lack direct grounding in quantitative, image-derived morphological changes. Our work bridges this gap by introducing an evaluation-first auditing framework for LLM-generated hypotheses in longitudi-nal morphology. Rather than assuming that retrieval augmenta-tion alone guarantees correctness, we formalize measurable con-straints—such as grounding integrity—and introduce quantitative alignment tests, including proxy-based morphology consistency. Crucially, these LLM-centric evaluation metrics are anchored to an independent morphology-only reference used strictly for valida-tion, enabling a new paradigm of auditable morphological reasoning where direct empirical comparison to existing approaches remains challenging. 
+
+3 Methods 3.1 Experimental design and dataset 
+
+We studied long-term cellular responses to chronic low-dose ioniz-ing radiation in RPE-1 (human retinal pigment epithelial) cells using the Cell Painting assay [ 3]. Cells were exposed at five dose rates (mGy/hr): 0.003, 0.03, 0.3, 3.0, and 6.0, and profiled longitudinally from week 1 through week 9 (9 weeks total; Table A1). 
+
+Paired treated–control design. For each week, the treated plate (designated as Plate 3) was paired with a same-week control plate (Plate C). Within each week 𝑤 and dose 𝑑 , we analyzed four treated replicate wells (180 treated wells total). Control wells were defined on Plate C (2 wells in week 1; 4 wells in weeks 2–9; 34 control wells total), yielding 214 wells analyzed overall (Table A1). 
+
+Cell-level file structure. Cell segmentation and feature extrac-tion produced per-image tables of single-cell features. For each well, images were acquired in 𝑓 ∈ { 1, . . . , 9} fields of view (FOVs) and 𝑝 ∈ { 1, . . . , 15 } focal planes (135 images per well nominal). Across the study, 28,886 cell-level tables were analyzed (expected 28,890; four files missing), comprising 6,375,699 single-cell obser-vations (Table A1). Single-cell segmentation was performed using the CellSAM model [ 18 ] to extract instance-level masks prior to morphological feature computation. 
+
+3.2 Morphology preprocessing pipeline (Steps 1–3) 
+
+The preprocessing pipeline converts cell-level observations into well-level treated–control deltas suitable for retrieval and LLM prompting. 
+
+3.2.1 Metadata construction (Step 1). We parse the directory struc-ture and file naming convention to map each cell-level file to a well identifier and experimental context (𝑤, 𝑑, condition ) under the paired Plate 3/Plate C design. The result is stored as a metadata index table. 
+
+3.2.2 Cell-level to well-level aggregation (Step 2). For each well, we pool all single-cell observations across its available FOV ×plane files and compute robust summary statistics for each base morphol-ogy feature: median, median absolute deviation (MAD), 10th per-centile, and 90th percentile. We exclude geometry/QC-like columns 
+
+orientation , centroid_x , and centroid_y during aggregation. For the nine base features ( area , perimeter , eccentricity ,
+
+solidity , mean_intensity , glcm_contrast , glcm_correlation ,
+
+glcm_energy , glcm_homogeneity ), this yields 36 well-level sum-mary features. Gilchan Park, Guang Zhao, Byung-Jun Yoon, Shinjae Yoo 
+
+3.2.3 Robust within-week normalization and treated–control deltas (Step 3). Let 𝑥 𝑖,𝑓 denote the aggregated value for well 𝑖 and feature 
+
+𝑓 , and let 𝑤 (𝑖 ) denote the week of well 𝑖 . We perform robust within-week normalization using the per-week feature median and MAD computed across all wells (treated and control) in the same week. Letting 𝑊 (𝑖 ) denote the set of all wells in week 𝑤 (𝑖 ), and with 
+
+𝜖 = 10 −6, the normalized value is 
+
+𝑧 𝑖,𝑓 = 𝑥 𝑖,𝑓 − median 𝑗 ∈𝑊 (𝑖 ) 𝑥 𝑗,𝑓 
+
+MAD 𝑗 ∈𝑊 (𝑖 ) 𝑥 𝑗,𝑓 + 𝜖 . (1) We then define the week-specific control baseline vector as the feature-wise median of normalized control wells 𝐶 𝑤 in week 𝑤 .The treated–control delta for well 𝑖 is 
+
+Δ𝑖,𝑓 = 𝑧 𝑖,𝑓 − median 𝑗 ∈𝐶 𝑤 (𝑖 ) 𝑧 𝑗,𝑓 . (2) To ensure stable baselines, we require at least two control wells per week and record control coverage diagnostics. Dataset scale and preprocessing exclusions are summarized in Table A1. 
+
+3.3 LLM-external morphology drift summary (Step 4) 
+
+We compute an LLM-external summary of morphology drift over time for validation-oriented sanity checks only. This module is inde-pendent of the retrieval and generation stack, but it is still derived from the same Cell Painting data distribution and is therefore not treated as independent biological validation. 
+
+3.3.1 PCA fitting and drift definition. We fit PCA on the normalized well profiles ( 𝑧 ) restricted to control wells (Plate C) across all weeks. We use 𝑛 PC = 12 components and apply whitening. We then project each delta profile Δ𝑖 into this PCA space and define drift magnitude as the Euclidean norm of the whitened PCA score vector: 
+
+𝐷 𝑖 = ∥PCA whiten (Δ𝑖 )∥ 2 . (3) For each (𝑤, 𝑑 ), we aggregate drift by averaging 𝐷 𝑖 across the four treated replicate wells. 
+
+3.3.2 Week ×dose and dose-level summaries. We summarize drift at two resolutions. First, for each (𝑤, 𝑑 ) we retain the week ×dose mean drift as a higher-resolution morphology-only summary. Sec-ond, for each dose 𝑑 , we summarize the week-by-week drift trajec-tory using (i) a linear slope computed by least-squares regression of mean drift against week index, and (ii) an area-under-the-curve (AUC) computed by trapezoidal integration over weeks. These sum-maries are used only as LLM-external quantitative anchors for sanity checks on score behavior. 
+
+3.4 Retrieval-augmented prompt construction (Steps 5–6) 
+
+We construct a structured evidence payload for each (𝑤, 𝑑 ) to sup-port grounded, traceable LLM hypothesis generation. 
+
+3.4.1 Reduced morphology neighbor index. We build a reduced-feature index over a public Cell Painting perturbation reference (JUMP). We compute a 9-dimensional embedding corresponding to the base morphology feature set above by mapping each feature to matching Cell Painting columns and averaging across available channels/scales. Reference embeddings are z-scored using mean and standard deviation with 𝜖 = 10 −8. The index uses exact L2 neighbor search (FAISS when available), otherwise a scikit-learn nearest-neighbor backend with Euclidean distance [12, 25]. 
+
+3.4.2 Neighbor search and selection. For each (𝑤, 𝑑 ) observation, we query the reference index with 𝑘 = 100 candidate neighbors and retain up to 10 for prompting, enforcing that at least three neighbors correspond to gene perturbations when possible. Neighbor records are assigned stable evidence IDs of the form jump:<jump_doc_id> .
+
+3.4.3 Reactome pathway retrieval. We construct a retrieval index over Reactome pathway descriptions using TF–IDF (1–2 grams; cosine similarity; min_df =2; max_features =250000) [ 20 ]. For each 
+
+(𝑤, 𝑑 ) payload, we aggregate enriched pathways for Entrez genes associated with the candidate neighbors and retain the top 12 path-ways by frequency. For dose-time and global aggregation (Step 8), pathway references can be cited using path:<pathway_id_or_name> 
+
+and are validated against the payload; for week ×dose generation (Step 7), enforceable retrieval IDs are limited to jump: and lit: 
+
+(see below). 
+
+3.4.4 Literature snippets and quantitative observations. When en-abled, we retrieve brief literature snippets per prompt via the Eu-rope PMC REST API [ 6], using radiation-focused queries augmented with the cell line and additional terms ( dose rate , protracted ,
+
+long-term ). We retrieve up to 10 hits per query and optionally pull and truncate selected full-text sections when available (sections 
+
+methods , results , discussion , supplementary ; section character cap 5000). Each snippet is assigned a stable ID lit:q<query_idx>: <lit_id> . Each payload also includes a quantitative observation block with a unique ID obs_w<week>_d<dose> and the top changed morphology features by absolute mean delta. 
+
+3.4.5 Prompt payload schema and traceability. Each JSONL prompt record stores: (i) the observation block (obs ID and top-changed features), (ii) selected neighbors (with jump: IDs), (iii) literature snippets (with lit: IDs), and (iv) pathway evidence (pathway IDs). These evidence identifiers form the reference set used for grounding validation (V1). 
+
+3.5 Structured LLM hypothesis generation (Step 7) 
+
+We run an LLM reasoner per (𝑤, 𝑑 ) prompt with strict structured-output constraints. 
+
+3.5.1 Model and decoding. We use Google’s Gemini model via Ver-tex AI [ 30 ] with temperature 0.2, thinking level HIGH , maximum output length 8192 tokens, and a prompt length cap of 300,000 char-acters. The runner retries up to three times on schema or grounding failures. The specific model revision served by the endpoint was 
+
+gemini-3-pro-preview .
+
+3.5.2 JSON-only schema and controlled vocabulary. The model is instructed to output JSON only, conforming to a schema with one or more hypotheses per prompt. Each hypothesis includes: hypothesis_id , biological_process ,
+
+summary , quant_evidence_refs , retrieval_refs ,
+
+testable_predictions , confidence , and a categorical Auditing Retrieval-Augmented LLM Hypotheses for Longitudinal Cell Painting Morphology 
+
+process_label constrained to an 11-label controlled vocab-ulary (Table A2). Schema validation is enforced programmatically. 
+
+3.5.3 Grounding enforcement. For week ×dose hypotheses, ground-ing validation requires that all quant_evidence_refs are of the form obs:<obs_id> and match the prompt’s observation ID, and that all retrieval_refs are of the form jump:<jump_id> or 
+
+lit:<lit_id> and appear in the payload. We also require that each hypothesis cites at least one observation and one retrieved item. 
+
+3.6 Hierarchical integration across scales (Step 8) 
+
+Longitudinal interpretation benefits from hierarchical reasoning that preserves temporal structure. 
+
+3.6.1 Dose-time aggregation. We construct dose-time prompts by grouping week ×dose outputs across weeks for each dose and adding a timepoint catalog that retains per-week observation IDs, selected neighbors, literature snippets, and pathway evidence. A second LLM pass produces phase-level summaries (e.g., early/mid/late) with evidence references that must cite at least one observation and one retrieved item per phase. 
+
+3.6.2 Why week × dose first (and why not flat aggregation). 
+
+Week ×dose reasoning is performed first because it is the small-est unit in which (i) quantitative deltas Δ𝑖,𝑓 are directly defined against the matched weekly control baseline, and (ii) retrieval evi-dence (nearest neighbors, pathway context, literature snippets) is conditioned on the same quantitative signature. Aggregating all timepoints into a single prompt would mix heterogeneous tem-poral regimes and can obscure non-monotonic dynamics: feature directions can cancel when averaged across weeks, phase-specific patterns can be lost, and trends can reverse when marginalizing over time (a Simpson’s paradox). Flat prompts also dilute prove-nance by coupling a large evidence pool to a small number of claims, increasing ambiguity about which observations support which statements. To preserve traceability, we keep evidence identifiers stable across scales. Each week ×dose prompt assigns a unique obser-vation ID (e.g., obs:obs_w{week}_d{dose} ) and retains retrieval IDs ( jump: , lit: , and Reactome IDs). Dose_time prompts embed a per-week catalog of these IDs; global prompts embed the per-dose catalogs. Downstream, V1 grounding checks operate on these iden-tifier sets to verify that every phase- or global-level statement cites concrete week-level measurements and retrieved evidence. 
+
+3.6.3 Global summarization. We further summarize across doses by constructing a global prompt that preserves the dose-time evi-dence catalog and produces a small set of global hypotheses with evidence references. Hierarchical reasoning avoids flattening het-erogeneous timepoints and enables phase-specific claims while maintaining provenance. 
+
+3.7 Validation framework 
+
+We distinguish (i) measured morphology quantities ( Δ, drift), (ii) retrieval evidence (neighbors, snippets, pathways), and (iii) LLM-generated hypotheses. We quantify two complementary validation layers. 
+
+3.7.1 V1: citation validity (grounding integrity). V1 checks citation integrity: do evidence references in an LLM hypothesis correspond to evidence IDs present in the associated prompt payload? Let 
+
+O( 𝑝 ) be the observation ID set for payload 𝑝 and E ( 𝑝 ) the set of retrieval IDs ( jump: and lit: for week ×dose). For a hypothesis 
+
+ℎ with reference sets Q ( ℎ) (quantitative) and R ( ℎ) (retrieval), we define 
+
+V1 (ℎ, 𝑝 ) = I
+
+h
+
+Q ( ℎ) ⊆ O( 𝑝 ) ∧ R ( ℎ) ⊆ E ( 𝑝 ) ∧ |Q ( ℎ)| > 0 ∧ |R ( ℎ)| > 0
+
+i
+
+.
+
+(4) V1 therefore evaluates identifier-level provenance validity within a closed evidence set. It does not test whether a cited item semanti-cally entails or fully supports a claim. 
+
+3.7.2 V2: proxy-based process–morphology compatibility. V2 tests whether a predicted process_label is compatible with the prompt’s quantitative morphology signature. To operationalize this comparison, we use an explicit proxy mapping between the con-trolled vocabulary of biological processes and expected directional shifts in core morphological features (Table A6). Because morpho-logical profiles are highly multiplexed, we restricted our proxy definitions to well-established, macroscopic cellular hallmarks. The mapping is intentionally simplified, but it is fully specified in the manuscript and programmatically applied, making the evaluation transparent and reproducible. For instance, cellular senescence is classically characterized by cellular hypertrophy (significantly increased area and perimeter) alongside increased cytoplasmic granularity and vacuolization (re-flected as increased glcm_contrast and decreased glcm_energy ) [ 10 ]. Conversely, apoptosis and cell death typically manifest as severe cell shrinkage (decreased area) and chromatin condensation or membrane blebbing, which drive high textural contrast [ 13 ]. Fur-thermore, cell-cycle arrest frequently leads to continued macro-molecular synthesis without division, resulting in increased overall cell size [ 23 ]. Processes such as oxidative stress and DNA damage response, while lacking a uniform macroscopic size shift, frequently induce cytoskeletal remodeling and nuclear texture alterations iden-tifiable via GLCM metrics [26]. We emphasize that this predefined proxy mapping is not in-tended as a definitive single-cell mechanism classifier or a ground-truth benchmark. Rather, it serves as a conservative, literature-grounded consistency check designed to penalize biologically con-tradictory LLM outputs (e.g., an LLM predicting “apoptosis” when the observation payload clearly indicates massive cell enlargement). Formally, for each label ℓ, let Pℓ be its defined proxy set over the reduced feature vocabulary. Let T denote the set of top features provided in the prompt (ranked by |Δ|). We define Hit@10 as the fraction of top features belonging to the proxy set: 
+
+Hit@10 (ℓ) = |T ∩ P ℓ ||T | . (5) Gilchan Park, Guang Zhao, Byung-Jun Yoon, Shinjae Yoo 
+
+We also compute a magnitude-aware weighted proxy score as the fraction of total absolute delta mass in T explained by proxy hits: 
+
+WP (ℓ) =
+
+Í 
+
+> 𝑓 ∈ T∩P ℓ
+
+|Δ𝑓 |
+
+Í 
+
+> 𝑓 ∈ T
+
+|Δ𝑓 | . (6) 
+
+3.7.3 Consistency with the drift summary. To relate LLM-centric validation to an LLM-external morphology-only signal, we perform two correlation analyses. First, at week ×dose resolution we aggre-gate per-hypothesis V2 scores to the observation level by mean (with median and max summaries reported in supplementary di-agnostics) and correlate these summaries with the corresponding week ×dose drift mean from Step 4. Second, we compute a coarser dose-level comparison using per-dose V2 summaries and dose-level drift summaries (mean drift, slope, and AUC). Pearson and Spear-man correlations are reported with nonparametric bootstrap un-certainty (10,000 resamples). These analyses are intended as sanity checks on score behavior rather than as independent biological validation. 
+
+3.7.4 Supplementary diagnostics. Additional quantitative and re-trieval diagnostics referenced throughout the paper are provided in Supplementary Materials in Appendix. 
+
+4 Results 4.1 Grounding integrity (V1) 
+
+Across the full longitudinal design (9 weeks × 5 dose rates), the week ×dose LLM reasoning stage produced 45/45 successful prompt records (0 failures), yielding 136 total hypotheses. Under the im-plemented citation-integrity check, no grounding failures were detected: 0 invalid evidence-reference cases and 0 records missing grounding statistics. V1 grounding validity was perfect under strict grounding criteria (Methods, Eq. 4). Both the mean observation-reference validity rate and the mean retrieval-reference validity rate were 1.0. Furthermore, all hypotheses contained at least one observation reference and one retrieval reference (coverage rate = 1.0). Aggregate V1 metrics are summarized in Table 3; additional reference-count diagnostics are provided in Table A5 and Figure A2. By construction, these V1 results establish provenance validity within the closed prompt evidence set; they do not by themselves show that a cited item semantically supports a claim. 
+
+4.2 Representative auditable hypotheses 
+
+To make the audit-first outputs concrete, we highlight one represen-tative week ×dose hypothesis alongside its supporting quantitative signature. Table 1 displays the input prompt payload for week 4 at 3.0 mGy/hr, which reports the top-|Δ| morphology deltas (group-mean Δ𝑍 ; values rounded to three decimals). Based on this signature and the retrieved context, the LLM generated hypothesis hyp_w4_d3.0_1 , classifying the state as 
+
+senescence_like with high confidence (Table 2). We present this example as an auditable biological hypothesis: its cited evidence is traceable, and its declared label can be checked for morphology-compatibility under V2. 
+
+Table 1: Quantitative prompt payload (top morphology deltas) for week 4 at 3.0 mGy/hr.          
+
+> Feature 𝚫 𝒁
+> mean_intensity_median +2.145
+> glcm_energy_median −1.786
+> solidity_median +1.364
+> glcm_homogeneity_median −1.204
+> area_median +1.007
+> glcm_correlation_median −0.756
+> eccentricity_median +0.621
+> glcm_contrast_median −0.268
+
+Table 2: Representative week ×dose hypothesis generated by the LLM.           
+
+> Field Content Hypothesis ID hyp_w4_d3.0_1
+> Process Label senescence_like (Confidence: high )
+> Summary “The observed increase in cell area and texture het-erogeneity, characteristic of cellular hypertrophy, aligns with a senescence-like state. This is supported by morphological similarity to the perturbation of RRAGD, a regulator of mTOR signaling, which is a key driver of senescent cell enlargement and meta-bolic activity.”
+> Quant Evidence obs:obs_w4_d3.0
+> Retrieval Refs jump:row_916481 ,lit:q1:4 ,lit:q1:6
+
+This example demonstrates identifier-level citation validity and strong proxy compatibility under our evaluation framework. It passes V1 because all cited evidence identifiers are strictly present in the associated payload (record-level validity: obs_valid_rate=1.0 ,
+
+retrieval_valid_rate=1.0 ; 0 invalid references). Furthermore, it passes V2 proxy compatibility: under the senescence_like map-ping (Table A6), 7 top features are proxy hits ( Hit@10 = 0.875 ), and these hits account for 86.8% of the absolute delta mass ( WP = 0.868 ;Methods, Eq. 5–6). This does not by itself prove that the cited evidence semantically entails the claim, but it shows that the hy-pothesis is auditable under both V1 and V2. A complete structured example of a global-level claim is provided in Table A7. 
+
+4.3 Proxy alignment performance (V2) 
+
+We next evaluated whether the LLM-generated process_label 
+
+hypotheses were quantitatively compatible with observed morphol-ogy deltas using the predefined proxy mapping (Methods, Eq. 5–6; proxy definitions in Table A6). At the global (dose ×label) level, the mean Hit@10 over rows was 0.4335 ( 𝑛 dose _label _rows = 14 ), with 0 missing-delta records. Dose-stratified results showed a clear dose dependence in best-case compatibility. The per-dose best mean Hit@10 values were 0.2361 (0.003 mGy/hr), 0.4306 (0.03 mGy/hr), 0.4861 (0.3 mGy/hr), 0.8750 (3.0 mGy/hr), and 0.8889 (6.0 mGy/hr). Figure 2 visualizes how V2 alignment varies with dose rate for both hierarchical scales (dose-time and global), reporting both the Auditing Retrieval-Augmented LLM Hypotheses for Longitudinal Cell Painting Morphology 10 2 10 1 10 0
+
+> Dose rate (mGy/hr)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Hit@10
+> V2 proxy alignment across dose rates
+> Dose-time (mean Hit@10)
+> Dose-time (max Hit@10)
+> Global (mean Hit@10)
+> Global (max Hit@10)
+
+Figure 2: V2 proxy alignment dose-response (Hit@10). 
+
+mean Hit@10 across rows and the best-case (max) Hit@10 at each dose. Quantitatively, the global best-case Hit@10 increases from 0.2361 at 0.003 mGy/hr to 0.8889 at 6.0 mGy/hr, while the global mean Hit@10 increases from 0.2292 to 0.5787 over the same range. Dose_time summaries show a similar upward trend (mean Hit@10 from 0.2662 to 0.4464; max Hit@10 from 0.5000 to 0.9167). In the evaluation-first framing, this dose-response matters because it in-dicates that the compatibility metric is sensitive to perturbation strength: when quantitative deltas are weak, proxy alignment is limited, whereas stronger perturbations permit higher compatibil-ity between declared process_label s and observed morphology signatures. 
+
+Table 3: Validation summary (V1 grounding, V2 proxy align-ment). 
+
+Metric Value Notes V1 grounding integrity 
+
+Week ×dose records (successful) 45 Total prompts processed Hypotheses generated 136 Across all records Invalid evidence-reference cases 0 V1 citation failures Mean obs-reference validity 1.000 Valid obs:<id> / total Mean retrieval-reference validity 1.000 Valid jump: /lit: / total Coverage (both obs + retrieval refs) 1.000 Fraction of hypotheses 
+
+V2 proxy alignment 
+
+Global mean Hit@10 (over rows) 0.4335 Dose ×label rows ( 𝑛 = 14 )Missing-delta records 0 Should be 0 
+
+Per-dose best mean Hit@10 (best row per dose) 
+
+Dose 0.003 mGy/hr 0.2361 Dose 0.03 mGy/hr 0.4306 Dose 0.3 mGy/hr 0.4861 Dose 3.0 mGy/hr 0.8750 Dose 6.0 mGy/hr 0.8889 
+
+4.4 Hierarchical longitudinal summaries 
+
+Beyond week ×dose hypotheses, the system produces hierarchical summaries at the dose_time and global levels while preserving evidence IDs for traceability (Methods). Dose-time summaries par-tition each dose trajectory into a small set of temporal phases with dominant process labels and supporting evidence. Figure 3 shows the dose-time integration output as a phase time-line for each dose rate, where contiguous week ranges are grouped into 3–4 phases and assigned dominant process_labels . This vi-sualization is not used as a biological claim; rather, it demonstrates the intended behavior of hierarchical reasoning: the model pro-duces compact, temporally structured summaries that preserve within-dose phase structure instead of collapsing all weeks into a single undifferentiated narrative. Because phases cite week-level observation IDs and retrieval IDs, they remain auditable under V1 and quantifiable under V2. Figure 4 summarizes the within-week distribution of 
+
+process_label assignments across all week ×dose hypothe-ses. The non-uniform label usage over time provides a descriptive check that the controlled vocabulary is used in a temporally structured manner (rather than collapsing to a single default label). In the evaluation-first framing, this matters because it motivates why phase-aware aggregation (Figure 3) is preferable to flat averaging: the label distribution can shift across weeks, and hierarchical summaries provide a traceable representation of these shifts. 
+
+4.5 Higher-resolution consistency with an LLM-external morphology drift summary 
+
+To test whether V2 behaves like a non-arbitrary score, we com-pared it with the Step 4 morphology drift summary computed without any LLM or retrieval components. We first performed a week ×dose analysis by aggregating per-hypothesis V2 scores to the corresponding observation level and comparing them with the matched week ×dose drift mean ( 𝑛 = 45 observations). For the mean weighted-proxy summary, the association was positive but modest (Pearson 𝑟 = 0.307 with 95% bootstrap CI [− 0.001 , 0.566 ]; Spearman 
+
+𝜌 = 0.293 with 95% CI [− 0.021 , 0.558 ]; bootstrap 𝑛 boot = 10000 , seed 42). Mean Hit@10 showed a similar but slightly weaker pattern (Pearson 𝑟 = 0.282 ; Spearman 𝜌 = 0.265 ). Figure 5 shows this higher-resolution comparison for the mean weighted-proxy summary. The effect size is intentionally inter-preted cautiously: both quantities derive from the same Cell Paint-ing distribution, and the purpose of this analysis is only to test whether V2 co-varies with an LLM-external morphology summary rather than behaving as an arbitrary label-matching score (See Ap-pendix A.1 for a complementary coarse dose-level sanity check.). 
+
+4.6 Biological interpretation under quantitative constraints. 
+
+To provide a more concrete biological interpretation, we explicitly examine how LLM-generated hypotheses vary across dose regimes and how these patterns relate to observed morphological signatures. At higher dose rates (3.0–6.0 mGy/hr), the dominant hypothe-ses consistently correspond to senescence-like and DNA damage response (DDR)-related processes. This regime is characterized by strong and coherent morphological shifts, including increases in cell area and perimeter along with pronounced changes in texture Gilchan Park, Guang Zhao, Byung-Jun Yoon, Shinjae Yoo 1 2 3 4 5 6 7 8 9
+
+Week 
+
+0.003 mGy/hr 
+
+0.03 mGy/hr 
+
+0.3 mGy/hr 
+
+3 mGy/hr 
+
+6 mGy/hr 
+
+> Dose rate
+
+early_metabolic_adjustment 
+
+metabolic_reprogramming 
+
+transient_recovery 
+
+adaptation_recovery 
+
+oxidative_adaptation 
+
+oxidative_stress 
+
+late_membrane_remodeling 
+
+metabolic_reprogramming 
+
+early_stress_metabolic 
+
+oxidative_stress 
+
+structural_remodeling_arrest 
+
+mitochondrial_dysfunction 
+
+adaptation_homeostasis 
+
+adaptation_recovery 
+
+early_stress_response 
+
+oxidative_stress 
+
+metabolic_proteostatic_adaptation 
+
+metabolic_reprogramming 
+
+cumulative_arrest_quiescence 
+
+cell_cycle_arrest 
+
+phase_1 
+
+metabolic_reprogramming 
+
+phase_2 
+
+senescence_like 
+
+phase_3 
+
+apoptosis_cell_death 
+
+phase_4 
+
+apoptosis_cell_death 
+
+hypertrophic_senescence 
+
+senescence_like 
+
+lysosomal_stress_transition 
+
+proteostasis_upr 
+
+atrophic_inflammatory_collapse 
+
+apoptosis_cell_death 
+
+Dose-time phase summaries from hierarchical, grounded LLM integration 
+
+adaptation_recovery 
+
+apoptosis_cell_death 
+
+cell_cycle_arrest 
+
+dna_damage_response 
+
+inflammation_innate_immune 
+
+metabolic_reprogramming 
+
+mitochondrial_dysfunction 
+
+other_uncertain 
+
+oxidative_stress 
+
+proteostasis_upr 
+
+senescence_like 
+
+Figure 3: Dose-time integrated phase timeline (hierarchical reasoning output). 1 2 3 4 5 6 7 8 9                                                                                        
+
+> Week
+> dna_damage_response
+> oxidative_stress
+> inflammation_innate_immune
+> cell_cycle_arrest
+> senescence_like
+> apoptosis_cell_death
+> mitochondrial_dysfunction
+> proteostasis_upr
+> metabolic_reprogramming
+> adaptation_recovery
+> other_uncertain
+> process_label
+> 0.19 0.27 0.13 0.13 0.33 0.20 0.20 0.14 0.00
+> 0.19 0.00 0.13 0.13 0.07 0.00 0.00 0.07 0.00
+> 0.00 0.13 0.00 0.00 0.20 0.00 0.07 0.07 0.06
+> 0.00 0.00 0.13 0.00 0.00 0.13 0.07 0.07 0.12
+> 0.12 0.07 0.20 0.13 0.00 0.00 0.00 0.07 0.06
+> 0.00 0.00 0.00 0.00 0.00 0.13 0.00 0.00 0.25
+> 0.00 0.07 0.00 0.07 0.00 0.00 0.00 0.00 0.06
+> 0.06 0.00 0.07 0.20 0.27 0.20 0.07 0.21 0.06
+> 0.25 0.27 0.13 0.07 0.07 0.13 0.27 0.21 0.25
+> 0.12 0.20 0.20 0.20 0.07 0.20 0.27 0.14 0.12
+> 0.06 0.00 0.00 0.07 0.00 0.00 0.07 0.00 0.00
+
+LLM hypothesis process_label distribution over time 
+
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> Proportion of hypotheses (within week)
+
+Figure 4: Temporal heatmap of LLM process_label assign-ments. 
+
+features. Such changes are consistent with stress-associated mor-phological remodeling and hypertrophic phenotypes commonly ob-served during cellular senescence and growth dysregulation [ 9 , 24 ]. Importantly, prior work in image-based profiling has demon-strated that morphological features extracted from Cell Painting assays can reliably capture biologically meaningful variation and map to underlying cellular processes [ 4, 27 ]. In line with this, we observe substantially higher V2 proxy alignment scores in this high-dose regime, indicating strong quantitative consistency be-tween predicted biological processes and observed morphological changes. In contrast, at lower dose rates (0.003–0.3 mGy/hr), the model produces more heterogeneous hypotheses, including processes such as metabolic reprogramming, proteostatic stress, and adaptive re-sponse programs. In this regime, morphological changes are com-paratively subtle and less dominated by canonical stress signatures, 
+
+Figure 5: Higher-resolution consistency check between week ×dose V2 and the LLM-external morphology drift sum-mary. 
+
+leading to lower proxy alignment scores and reduced interpretabil-ity of process–morphology relationships. This pattern is consistent with prior radiobiology literature, which suggests that chronic low-dose radiation often induces non-linear and adaptive cellular responses rather than acute DNA damage-driven phenotypes [22, 31]. 
+
+5 Discussion 
+
+This work is motivated by a practical gap in high-content biol-ogy: morphology is information-rich yet difficult to interpret, while Auditing Retrieval-Augmented LLM Hypotheses for Longitudinal Cell Painting Morphology 
+
+LLMs can generate fluent interpretations that require rigorous au-diting before scientific use. We therefore frame LLM outputs as 
+
+auditable artifacts —structured hypotheses with explicit evidence pointers—and emphasize evaluation-first validation via citation validity (V1) and proxy-based morphology compatibility (V2). 
+
+Scope and limits of quantitative auditing. V1 enforces identifier-level grounding: hypotheses may only cite evidence items that are actually present in the prompt payload. This directly targets out-of-payload references, a known failure mode of neural generation in scientific settings [ 16 , 19 , 32 ]. However, V1 does not guarantee that a cited item semantically supports the claim; it is a necessary but not sufficient condition for scientific faithfulness. V2 complements this by evaluating whether predicted process_label s are compati-ble with the measured morphology deltas under a predefined proxy mapping. This is intentionally conservative: it does not require that the label is true in a mechanistic sense, only that it is quantitatively compatible with the observed signature. Because the proxy table is hand-specified, V2 should be interpreted as a transparent and reproducible diagnostic rather than as an objective mechanistic benchmark. 
+
+Hierarchical reasoning as an auditing strategy. A core de-sign choice is to generate hypotheses at the most atomic unit of measurement (week × dose) before aggregation. In longitudinal settings, flat aggregation can obscure phase structure and dilute evidence, and it can yield misleading global summaries when trends differ across subgroups (a form of Simpson’s paradox). By preserv-ing evidence IDs from week-level hypotheses into dose_time phases and global summaries, the system maintains traceability while pro-ducing compact narratives suitable for downstream review. 
+
+Limitations and extensibility. First, V1 evaluates citation va-lidity but not semantic support; a stronger external assessment would require claim–evidence judgments or expert annotation, which we do not yet have. Second, V2 relies on a predefined proxy mapping from process_label to expected morphology feature buckets; this mapping is necessarily simplified and may not capture context-dependent morphology–process relationships. Third, the controlled vocabulary constrains expressivity and may collapse dis-tinct biological mechanisms into coarse categories. Fourth, retrieval coverage and bias (e.g., limitations of the reference library, neighbor annotation quality, and pathway text granularity) can shape the evidence available to the LLM and thus the hypotheses produced. We further emphasize that the use of morphology-only quanti-tative anchors reflects a practical constraint of the current dataset rather than a limitation of the framework itself. In many longitudi-nal biological studies—including low-dose radiation experiments— ground-truth mechanism labels and orthogonal modalities are lim-ited or unavailable. Our framework is therefore designed to operate under this constraint, using morphology as a primary quantitative signal while enforcing strict grounding and consistency checks. The auditing structure is inherently extensible: additional modalities such as transcriptomics, proteomics, or targeted biomarkers can be incorporated into the same evidence and validation pipeline to provide stronger mechanistic validation. Finally, the Step 4 drift summary is derived from the same mor-phology distribution and should be interpreted only as an LLM-external sanity check, not as independent biological validation. 
+
+Implications for low-dose radiation studies. Chronic low-dose and low-dose-rate radiation remains an area where effects can be subtle and context dependent [ 22 , 31 ]. Our results do not estab-lish mechanisms; rather, they demonstrate that an LLM-centered interpretation workflow can be instrumented with quantitative au-diting so that any proposed biological narrative remains tethered to measured morphology and retrievable evidence. 
+
+Real-world applicability. Our study is conducted on a real-world longitudinal Cell Painting dataset involving chronic low-dose-rate radiation exposure in RPE-1 cells. This setting reflects a particularly challenging regime in radiobiology, where effects are subtle, context-dependent, and lack well-defined ground-truth labels. In such scenarios, traditional supervised or benchmarking ap-proaches are not feasible. Our framework is specifically designed for this setting: it leverages limited experimental data and external knowledge to generate structured, auditable hypotheses that can guide downstream experimental validation. This makes the approach directly applicable to other real-world biological contexts characterized by limited labels and complex temporal dynamics, such as drug response profiling, aging studies, and environmental exposure analysis. 
+
+6 Conclusion 
+
+We presented an LLM-centered, retrieval-augmented interpreta-tion framework for longitudinal Cell Painting morphology data that is evaluation-first by design. By enforcing structured JSON outputs with controlled labels and explicit evidence references, and by validating outputs using grounding integrity (V1) and proxy-based process–morphology alignment (V2), the framework enables traceable hypothesis generation that can be quantitatively audited against independent morphology signals. More broadly, this work contributes a practical template for integrating LLMs into computational biology workflows where nar-rative interpretation must remain accountable to measured data: hypotheses are generated with explicit provenance, assessed quan-titatively, and summarized hierarchically without sacrificing trace-ability. 
+
+7 Acknowledgment 
+
+This material is based upon works for the LUCID: Low-dose Un-derstanding, Cellular Insights, and Molecular Discoveries program under Award Number DE-AC02-06CH11357 supported by the U.S. Department of Energy, Office of Science, Office of Biological and Environmental Research. 
+
+References          
+
+> [1] Emily M Bender, Timnit Gebru, Angelina McMillan-Major, and Shmargaret Shmitchell. 2021. On the dangers of stochastic parrots: Can language models be too big?. In Proceedings of the 2021 ACM conference on fairness, accountability, and transparency . 610–623. [2] Daniil A Boiko, Robert MacKnight, and Gabe Gomes. 2023. Emergent au-tonomous scientific research capabilities of large language models. arXiv preprint arXiv:2304.05332 (2023). [3] Mark-Anthony Bray, Shantanu Singh, Han Han, Chad T. Davis, Blake Borgeson, Carol Hartland, Maria Kost-Alimova, Sigrun M. Gustafsdottir, Christopher C. Gibson, and Anne E. Carpenter. 2016. Cell Painting, a high-content image-based assay for morphological profiling using multiplexed fluorescent dyes. Nature Protocols 11, 9 (2016), 1757–1774. doi:10.1038/nprot.2016.105
+
+Gilchan Park, Guang Zhao, Byung-Jun Yoon, Shinjae Yoo 
+
+[4] Juan C Caicedo, Sam Cooper, Florian Heigwer, Scott Warchal, Peng Qiu, Csaba Molnar, Aliaksei S Vasilevich, Joseph D Barry, Harmanjit Singh Bansal, Oren Kraus, et al . 2017. Data-analysis strategies for image-based cell profiling. Nature methods 14, 9 (2017), 849–863. [5] Srinivas Niranj Chandrasekaran, Beth A. Cimini, Amy Goodale, Lisa Miller, Maria Kost-Alimova, Nasim Jamali, John G. Doench, Briana Fritchman, Adam Skepner, Michelle Melanson, Alexandr A. Kalinin, John Arevalo, Marzieh Haghighi, Juan C. Caicedo, Daniel Kuhn, Desiree Hernandez, James Berstler, Hamdah Shafqat-Abbasi, David E. Root, Susanne E. Swalley, Sakshi Garg, Shantanu Singh, and Anne E. Carpenter. 2024. Three million images and morphological profiles of cells treated with matched chemical and genetic perturbations. Nature Methods 21 (2024), 1114–1121. doi:10.1038/s41592-024-02241-6 Published online 2024-04-09. [6] Europe PMC Consortium. 2015. Europe PMC: a full-text literature database for the life sciences and platform for innovation. Nucleic acids research 43, D1 (2015), D1042–D1048. [7] Timnit Gebru, Jamie Morgenstern, Briana Vecchione, Jennifer Wortman Vaughan, Hanna Wallach, Hal Daumé III, and Kate Crawford. 2021. Datasheets for Datasets. 
+
+Commun. ACM 64, 12 (2021), 86–92. doi:10.1145/3458723 Originally released as arXiv:1803.09010. [8] Yu Gu, Robert Tinn, Hao Cheng, Michael Lucas, Naoto Usuyama, Xiaodong Liu, Tristan Naumann, Jianfeng Gao, and Hoifung Poon. 2020. PubMedBERT: Domain-Specific Language Model Pretraining for Biomedical Text Mining. arXiv:2007.15779 [cs.CL] doi:10.48550/arXiv.2007.15779 TO BE VERIFIED: if citing a published version, replace arXiv with venue details. [9] Alejandra Hernandez-Segura, Jamil Nehme, and Marco Demaria. 2018. Hallmarks of cellular senescence. Trends in cell biology 28, 6 (2018), 436–453. [10] Arturo Hernandez-Segura, Justine Nehme, and Marco Demaria. 2018. New hallmarks of cellular senescence. Trends in Cell Biology 28, 6 (2018), 436–453. [11] Lei Huang, Weijiang Yu, Weitao Ma, Weihong Zhong, Zhangyin Feng, Hao-tian Wang, Qianglong Chen, Weihua Peng, Xiaocheng Feng, Bing Qin, and Ting Liu. 2023. A Survey on Hallucination in Large Language Models: Prin-ciples, Taxonomy, Challenges, and Open Questions. arXiv:2311.05232 [cs.CL] doi:10.48550/arXiv.2311.05232 arXiv:2311.05232 is a hallucination survey (not specifically a fabricated-citations-only study).. [12] Jeff Johnson, Matthijs Douze, and Hervé Jégou. 2019. Billion-scale similarity search with GPUs. IEEE transactions on big data 7, 3 (2019), 535–547. [13] Guido Kroemer, Lorenzo Galluzzi, Peter Vandenabeele, John Abrams, Emad S Alnemri, Eric H Baehrecke, Mikhail V Blagosklonny, Wafik S El-Deiry, Pierre Gol-stein, Douglas R Green, et al . 2009. Classification of cell death: recommendations of the Nomenclature Committee on Cell Death 2009. Cell Death & Differentiation 
+
+16, 1 (2009), 3–11. [14] Jinhyuk Lee, Wonjin Yoon, Sungdong Kim, Donghyeon Kim, Sunkyu Kim, Chanho So, and Jaewoo Kang. 2020. BioBERT: a pre-trained biomedical language representation model for biomedical text mining. Bioinformatics 36, 4 (2020), 1234–1240. doi:10.1093/bioinformatics/btz682 [15] Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, Sebastian Riedel, and Douwe Kiela. 2020. Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks. In Advances in Neural Informa-tion Processing Systems 33 (NeurIPS 2020) . https://proceedings.neurips.cc/paper/ 2020/hash/6b493230205f780e1bc26945df7481e5-Abstract.html Proceedings ver-sion (NeurIPS 2020). arXiv:2005.11401 is the preprint.. [16] Stephanie Lin, Jacob Hilton, and Owain Evans. 2022. Truthfulqa: Measuring how models mimic human falsehoods. In Proceedings of the 60th annual meeting of the association for computational linguistics (volume 1: long papers) . 3214–3252. [17] Renqian Luo, Litao Sun, Yingce Xia, Tao Qin, Sheng Zhang, Hoifung Poon, and Tie-Yan Liu. 2022. BioGPT: generative pre-trained transformer for biomedical text generation and mining. arXiv:2210.10341 [cs.CL] doi:10.48550/arXiv.2210.10341 [18] Markus Marks, Uriah Israel, Rohit Dilip, Qilin Li, Changhua Yu, Emily Laubscher, Ahamed Iqbal, Elora Pradhan, Ada Ates, Martin Abt, et al . 2025. CellSAM: a foundation model for cell segmentation. Nature Methods (2025), 1–9. [19] Joshua Maynez, Shashi Narayan, Bernd Bohnet, and Ryan McDonald. 2020. On faithfulness and factuality in abstractive summarization. In Proceedings of the 58th annual meeting of the association for computational linguistics . 1906–1919. [20] Marija Milacic, Deidre Beavers, Patrick Conley, Chuqiao Gong, Marc Gille-spie, Johannes Griss, Robin Haw, Bijay Jassal, Lisa Matthews, Bruce May, Robert Petryszak, Eliot Ragueneau, Karen Rothfels, Cristoffer Sevilla, Veron-ica Shamovsky, Ralf Stephan, Krishna Tiwari, Thawfeek Varusai, Joel Weiser, Adam Wright, Guanming Wu, Lincoln Stein, Henning Hermjakob, and Peter D’Eustachio. 2024. The Reactome Pathway Knowledgebase 2024. Nucleic Acids Research 52, D1 (2024), D672–D678. doi:10.1093/nar/gkad1025 [21] Margaret Mitchell, Simone Wu, Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer, Inioluwa Deborah Raji, and Timnit Gebru. 2019. Model Cards for Model Reporting. In Proceedings of the Conference on Fairness, Ac-countability, and Transparency (FAT* ’19) . 220–229. doi:10.1145/3287560.3287596 [22] National Research Council. 2006. Health Risks from Exposure to Low Levels of Ionizing Radiation: BEIR VII Phase 2 . The National Academies Press, Washington, DC. doi:10.17226/11340 [23] Gabriel E Neurohr, Rachel L Terry, Jette Lengefeld, Megan Bonney, Gregory P Brittingham, Fabrice Moretto, Teemu P Miettinen, Laura P Vaites, Lidia M Soares, Joao A Paulo, et al . 2019. Excessive cell growth causes cytoplasm dilution and contributes to senescence. Cell 176, 5 (2019), 1083–1097. [24] Gabriel E Neurohr, Rachel L Terry, Jette Lengefeld, Megan Bonney, Gregory P Brittingham, Fabien Moretto, Teemu P Miettinen, Laura Pontano Vaites, Luis M Soares, Joao A Paulo, et al . 2019. Excessive cell growth causes cytoplasm dilution and contributes to senescence. cell 176, 5 (2019), 1083–1097. [25] Fabian Pedregosa, Gaël Varoquaux, Alexandre Gramfort, Vincent Michel, Bertrand Thirion, Olivier Grisel, Mathieu Blondel, Peter Prettenhofer, Ron Weiss, Vincent Dubourg, et al . 2011. Scikit-learn: Machine learning in Python. the Journal of machine Learning research 12 (2011), 2825–2830. [26] Mohammad Hasan Rohban, Shantanu Singh, Xiaoyun Wu, Julia B Berthet, Mark-Anthony Bray, Matthew D Shair, Lee L Rubin, and Anne E Carpenter. 2017. Systematic morphological profiling of human gene and allele function via Cell Painting. eLife 6 (2017), e24060. [27] Mohammad Hossein Rohban, Shantanu Singh, Xiaoyun Wu, Julia B Berthet, Mark-Anthony Bray, Yashaswi Shrestha, Xaralabos Varelas, Jesse S Boehm, and Anne E Carpenter. 2017. Systematic morphological profiling of human gene and allele function via Cell Painting. Elife 6 (2017), e24060. [28] Maria Janina Sarol, Shufan Ming, Shruthan Radhakrishna, Jodi Schneider, and Halil Kilicoglu. 2024. Assessing citation integrity in biomedical publications: corpus annotation and NLP models. Bioinformatics 40, 7 (2024), btae420. doi:10. 1093/bioinformatics/btae420 Published 2024-06-26. [29] Karan Singhal, Shekoofeh Azizi, Tao Tu, S Sara Mahdavi, et al . 2023. Large language models encode clinical knowledge. Nature 620, 7972 (2023), 172–180. [30] Gemini Team, Rohan Anil, Sebastian Borgeaud, Jean-Baptiste Alayrac, Jiahui Yu, Radu Soricut, Johan Schalkwyk, Andrew M Dai, Anja Hauth, Katie Millican, et al . 2023. Gemini: a family of highly capable multimodal models. arXiv preprint arXiv:2312.11805 (2023). [31] United Nations Scientific Committee on the Effects of Atomic Radiation. 2022. 
+
+Sources, Effects and Risks of Ionizing Radiation: UNSCEAR 2020/2021 Report to the General Assembly, with Scientific Annexes, Volume III – Scientific Annex C: Biological mechanisms relevant for the inference of cancer risks from low-dose and low-dose-rate radiation . Technical Report. United Nations. Scientific Annex C (low-dose/low-dose-rate). A corrigendum was issued in Sep 2022.. [32] David Wadden, Shanchuan Lin, Kyle Lo, Lucy Lu Wang, Madeleine van Zuylen, Arman Cohan, and Hannaneh Hajishirzi. 2020. Fact or Fiction: Verifying Scientific Claims. In Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP) . 7534–7550. doi:10.18653/v1/2020.emnlp-main.609 Auditing Retrieval-Augmented LLM Hypotheses for Longitudinal Cell Painting Morphology 
+
+A Supplementary Materials 
+
+Table A1: Dataset scale and preprocessing summary. 
+
+Item Value Notes Biological Setup & Experimental Design 
+
+Cell line RPE-1 Human retinal pigment ep-ithelial Assay Cell Painting High-content morphology Plate format 96-well Time course Weeks 1–9 9 longitudinal time points Dose rates (mGy/hr) 0.003, 0.03, 0.3, 3.0, 6.0 5 treated dose conditions Paired controls Plate C (weekly) Paired control plate per week Treated replicates 4 wells / (week, dose) Fixed plate map Total treated wells 180 9 weeks × 5 doses × 4 wells Total control wells 34 Week 1: 2; Weeks 2–9: 4 Total wells analyzed 214 Treated + control well pro-files 
+
+Data Dimensions 
+
+Fields of view (FOV) / well 9 𝑓 ∈ { 1, . . . , 9}
+
+Z-planes / FOV 15 𝑝 ∈ { 1, . . . , 15 }
+
+Nominal CSV files / well 135 9 × 15 (when complete) Total cell-level CSV files 28,886 (4 files excluded via QC) Total cell-level observa-tions 6,375,699 Sum of per-well cell counts 
+
+Features & Preprocessing 
+
+Excluded columns orientation ,
+
+centroid_x ,
+
+centroid_y 
+
+Excluded at well-level ag-gregation Base morphology fea-ture set 9 features area , perimeter ,
+
+eccentricity ,
+
+solidity ,
+
+mean_intensity ,and 4 glcm texture features Well-level summary fea-tures 36 9 base × {median, MAD, q10, q90} Within-week normaliza-tion Robust 𝑍 -score (𝑥 − median )/( MAD +
+
+10 −6 )
+
+Delta design Treated – Control (weekly paired) 
+
+Δ𝑍 = 𝑍 −
+
+median (𝑍 control , week )
+
+Table A2: System configuration summary (retrieval and LLM settings). 
+
+Component Parameter Value Retrieval (JUMP) 
+
+Reduced embedding 9 morphology features; z-score standardization ( 𝜖 = 10 −8)Neighbor search back-end FAISS IndexFlatL2 (if available); else sklearn 
+
+NearestNeighbors (Euclidean) Candidate neighbors (𝑘 )100 Final neighbors re-tained 10 Min. gene-like neigh-bors 3
+
+Retrieval (Re-actome) 
+
+Gene →pathway top 
+
+𝑁 
+
+12 Pathway document search TF–IDF (1–2 grams); cosine sim-ilarity TF–IDF 
+
+max_features 
+
+250,000 TF–IDF min_df 2Document retrieval 𝑘 6Reactome release Downloaded from /current/ 
+
+endpoint 
+
+LLM Reasoner Model gemini-3-pro-preview 
+
+Temperature 0.2 Max output tokens 8192 Thinking level HIGH 
+
+Output format JSON-only; schema-enforced Controlled vocabulary 11 canonical process_label s
+
+Grounding Strict grounding Enabled (invalid/missing refer-ences → reject & retry) Citation types (week ×dose) 
+
+obs:<id> , jump:<id> ,
+
+lit:<id> 
+
+Citation types (hierar-chical) 
+
+obs: , jump: , lit: ,
+
+path:<Reactome_id> 
+
+Hierarchy week ×dose →
+
+dose_time Evidence preserved with per-week catalogs dose_time → global Cross-dose summarization with evidence-ID propagation 
+
+Table A3: Delta and baseline diagnostics. 
+
+Control Treated Feature (Δ z-score) Median |Δ| q95 |Δ| Median |Δ| q95 |Δ|
+
+area_median 0.520 2.738 2.080 6.484 
+
+perimeter_median 0.374 2.550 2.322 6.008 
+
+eccentricity_median 0.545 1.517 1.379 4.745 
+
+solidity_median 1.041 2.383 1.399 4.758 
+
+mean_intensity_median 0.533 1.473 1.229 3.892 
+
+glcm_contrast_median 0.728 2.503 1.260 4.500 
+
+glcm_correlation_median 0.899 3.124 1.489 5.199 
+
+glcm_energy_median 0.425 2.736 2.164 5.933 
+
+glcm_homogeneity_median 0.433 1.570 1.871 4.544            
+
+> Note: Computed on well-level delta profiles. (Δ=𝑧 −median (𝑧 control ,week )).
+> 𝑛 control =34 ,𝑛 treated =180 .
+
+Gilchan Park, Guang Zhao, Byung-Jun Yoon, Shinjae Yoo 
+
+Table A4: Process label usage summary. 
+
+Process label week ×dose dose_time Global Global dose hypotheses phases claims summaries 
+
+dna_damage_response 24 (17.6%) 1 (5.9%) 1 (25.0%) 2 (40.0%) 
+
+oxidative_stress 9 (6.6%) 4 (23.5%) 1 (25.0%) 0 (0.0%) 
+
+inflammation_innate_immune 8 (5.9%) 3 (17.6%) 1 (25.0%) 1 (20.0%) 
+
+cell_cycle_arrest 8 (5.9%) 6 (35.3%) 0 (0.0%) 2 (40.0%) 
+
+senescence_like 10 (7.4%) 2 (11.8%) 1 (25.0%) 2 (40.0%) 
+
+apoptosis_cell_death 6 (4.4%) 4 (23.5%) 1 (25.0%) 2 (40.0%) 
+
+mitochondrial_dysfunction 3 (2.2%) 3 (17.6%) 1 (25.0%) 0 (0.0%) 
+
+proteostasis_upr 17 (12.5%) 5 (29.4%) 1 (25.0%) 2 (40.0%) 
+
+metabolic_reprogramming 25 (18.4%) 8 (47.1%) 1 (25.0%) 2 (40.0%) 
+
+adaptation_recovery 23 (16.9%) 4 (23.5%) 1 (25.0%) 1 (20.0%) 
+
+other_uncertain 3 (2.2%) 2 (11.8%) 0 (0.0%) 0 (0.0%)  
+
+> Note: Denominators: week
+
+×dose hypotheses 𝑛 = 136 ; dose_time phases 𝑛 = 17 ;global claims 𝑛 = 4; global dose summaries 𝑛 = 5.
+
+Table A5: Grounding reference statistics (evidence-reference coverage and counts). 
+
+Metric Value Notes Run scale 
+
+Week ×dose records 45 Prompt instances Hypotheses (total) 136 Across all records Hypotheses per record (mean) 3.022 Hypotheses per record (min–max) 2–4 Distribution: {2:1, 3:42, 4:2} 
+
+Evidence references per hypothesis 
+
+Quant refs per hypothesis (mean) 1.000 obs:<id> citations Quant refs per hypothesis (min–max) 1–1 Retrieval refs per hypothesis (mean) 2.838 jump: /lit: citations Retrieval refs per hypothesis (min–max) 1–5 
+
+Retrieval evidence usage 
+
+Hypotheses citing JUMP neighbors 124 (91.2%) At least one jump: ref Hypotheses citing literature 102 (75.0%) At least one lit: ref Hypotheses citing both jump + lit 90 (66.2%) Total retrieval refs ( jump ) 219 Count across all hypotheses Total retrieval refs ( lit ) 167 Count across all hypotheses 
+
+Grounding caps (per record) 
+
+Allowed obs IDs 1Allowed JUMP refs 10 Allowed literature refs 10 
+
+Table A6: V2 proxy mapping (process labels to proxy feature sets). 
+
+Process label Proxy expectations (reduced morphology feature set) 
+
+dna_damage_response glcm_contrast(+) ,
+
+glcm_correlation(0) ,
+
+mean_intensity(0) , area(0) oxidative_stress glcm_contrast(+) ,
+
+mean_intensity(0) , area(0) inflammation_innate_immune glcm_contrast(+) , area(0) cell_cycle_arrest area(+) , perimeter(+) ,
+
+eccentricity(0) , solidity(0) senescence_like area(+) , perimeter(+) , solidity(0) ,
+
+eccentricity(0) , glcm_contrast(+) ,
+
+glcm_correlation(0) ,
+
+glcm_energy(-) , mean_intensity(0) apoptosis_cell_death area(-) , perimeter(-) ,
+
+mean_intensity(0) ,
+
+glcm_contrast(+) , glcm_energy(-) mitochondrial_dysfunction mean_intensity(0) ,
+
+glcm_contrast(+) proteostasis_upr glcm_contrast(+) , glcm_energy(-) metabolic_reprogramming mean_intensity(0) , area(0) adaptation_recovery area(0) , glcm_contrast(0) other_uncertain (none) 
+
+Note: Direction codes: (+) expected increase; (-) expected decrease; (0) either direc-tion / weak proxy. Feature mappings are derived from canonical morphological hallmarks of cell stress [ 10 , 13 , 26 ]. Used strictly as a quantitative consistency check (V2), not as a biological ground truth. Used as a consistency check, not biological ground truth. 0.0         
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Hit@10 (V2)
+> Supplementary: Distribution of V2 alignment metrics by dose
+> 0.003 0.03 0.3 36
+> Dose rate (mGy/hr)
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Weighted proxy (V2)
+> n=26 n=28 n=27 n=27 n=28
+
+Figure A1: V2 metric distributions. 
+
+A.1 Coarse Dose-Level Sanity Check 
+
+As a complementary coarse summary to the higher-resolution week ×dose analysis ( 𝑛 = 45 ) presented in the main text (Section 4.5), we also evaluated a dose-level comparison ( 𝑛 = 5 doses). As shown Auditing Retrieval-Augmented LLM Hypotheses for Longitudinal Cell Painting Morphology Obs refs 
+
+(obs:...) 
+
+JUMP neighbors 
+
+(jump:...) 
+
+Literature 
+
+(lit:...) 
+
+Reactome 
+
+(path:...) 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+2.5 
+
+3.0 
+
+3.5 
+
+4.0 
+
+> Count per hypothesis
+
+mean=1.00 
+
+mean=1.61 
+
+mean=1.23 
+
+mean=0.00 Hypotheses analyzed: 136 
+
+Supplementary: Evidence reference usage in grounded hypotheses 
+
+Figure A2: Evidence reference composition. 1 2 3 4 5 6 7 8 9
+
+Week 
+
+0.0 
+
+2.5 
+
+5.0 
+
+7.5 
+
+10.0 
+
+12.5 
+
+15.0 
+
+17.5 
+
+> Drift mean (Step4, PCA-whitened norm)
+
+Supplementary: Independent drift anchor trajectories 
+
+0.003 mGy/hr 
+
+0.03 mGy/hr 
+
+0.3 mGy/hr 
+
+3 mGy/hr 
+
+6 mGy/hr 
+
+Figure A3: Step 4 drift trajectories. 0.003 0.03 0.3 3.0 6.0 
+
+Dose rate (mGy/hr) 
+
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> L2 distance in reduced morphology space
+
+A. JUMP neighbor distance (top-10)     
+
+> 0.003 0.03 0.3 3.0 6.0
+
+Dose rate (mGy/hr) 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Mean pairwise Jaccard (top pathways)
+
+B. Reactome pathway overlap across weeks 
+
+Retrieval diagnostics (Supplementary) 
+
+Figure A4: Retrieval diagnostics. dna_damage_response 
+
+> oxidative_stress
+> inflammation_innate_immune
+> cell_cycle_arrest
+> senescence_like
+> apoptosis_cell_death
+> mitochondrial_dysfunction
+> proteostasis_upr
+> metabolic_reprogramming
+> adaptation_recovery
+> other_uncertain
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Count
+> A. week×dose hypotheses (Step 7)
+> dna_damage_response
+> oxidative_stress
+> inflammation_innate_immune
+> cell_cycle_arrest
+> senescence_like
+> apoptosis_cell_death
+> mitochondrial_dysfunction
+> proteostasis_upr
+> metabolic_reprogramming
+> adaptation_recovery
+> other_uncertain
+> 0
+> 2
+> 4
+> 6
+> 8
+> Count
+> B. dose_time phases (Step 8)
+> dna_damage_response
+> oxidative_stress
+> inflammation_innate_immune
+> cell_cycle_arrest
+> senescence_like
+> apoptosis_cell_death
+> mitochondrial_dysfunction
+> proteostasis_upr
+> metabolic_reprogramming
+> adaptation_recovery
+> other_uncertain
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Count
+> C. global key claims (Step 8)
+
+Controlled process_label usage across reasoning scales (Supplementary) low 
+
+> medium
+> high
+
+Figure A5: Controlled vocabulary usage across reasoning scales. Table A7: Structured Example of a Global-Level Integrated Claim 
+
+Field Content Claim ID claim_low_dose_adaptation 
+
+Claim State-ment 
+
+Chronic low-dose radiation (0.003–0.3 mGy/hr) induces a distinct adaptive phenotype characterized by meta-bolic reprogramming and proteostatic stress, contrast-ing with the hypertrophic senescence seen at higher doses. 
+
+Process Labels metabolic_reprogramming, adaptation_recovery, pro-teostasis_upr 
+
+Quantitative Evidence 
+
+obs:obs_w6_d0.003, obs:obs_w9_d0.03, obs:obs_w7_d0.3 
+
+Retrieval Ref-erences 
+
+jump:row_862582, jump:row_928254, lit:q1:1 
+
+Confidence Level 
+
+High 
+
+in Figure A6, the association remained positive for the dose_time 
+
+mean Hit@10 summary (Pearson 𝑟 = 0.661 with 95% bootstrap CI 
+
+[− 0.363 , 1.000 ]; Spearman 𝜌 = 0.700 with 95% CI [− 0.875 , 1.000 ]). Given the extremely small sample size, the confidence intervals are understandably wide. We retain this five-point analysis strictly as a low-resolution sanity check. Consistent with our approach in the main text, we do not interpret this as an independent biological validation, but rather as a basic verification that the model’s scores co-vary positively with the expected morphological drift at the macro-dose level. 
+
+Figure A6: Coarse dose-level comparison ( 𝑛 = 5) evaluating the consistency between the LLM-external morphology drift and the dose_time mean Hit@10 summary. While a positive trend is visible, the small sample size limits statistical confi-dence.
