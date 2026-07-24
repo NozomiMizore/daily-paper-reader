@@ -6,30 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-23
-- 运行时间：2026-07-23 20:38:03 UTC
+- 最新运行日期：2026-07-24
+- 运行时间：2026-07-24 20:13:50 UTC
 - 运行状态：成功
 - 本次总论文数：3
-- 精读区：0
-- 速读区：3
+- 精读区：1
+- 速读区：2
 
 ### 今日简报（AI）
-今日速读聚焦细胞形态学、免疫组库与单细胞蛋白质组学三大前沿方向；最值得关注的是7分的检索增强LLM用于纵向细胞形态学假设审计，揭示了AI驱动生物表征的新范式；建议读者优先精读该文，并追踪其后续在药物筛选或疾病分型中的验证进展。
-- 详情：[/202607/23/README](/202607/23/README)
+今日阅读3篇论文，精读1篇关于基因组尺度代谢模型的智能体架构。最值得关注的是《ChatGEM》，它实现了交互式模拟代谢网络，评分8.0/10。建议下一步可速读《scRepresenter》，了解单细胞转录组表征的整合与基准测试方法。
+- 详情：[/202607/24/README](/202607/24/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [ChatGEM: An Agentic Architecture Enabling Interactive Simulation of Genome-Scale Metabolic Models](/202607/24/biorxiv-10-64898-2026-07-20-739662-v2-chatgem-an-agentic-architecture-enabling-interactive-simulation-of-genome-scale-metabolic-models)  
+   标签：评分：8.0/10、query:virtual-cell
+   evidence：支持交互式模拟基因组规模代谢模型作为虚拟细胞
 
 ### 速读区论文标签
-1. [Auditing Retrieval-Augmented LLM Hypotheses for Longitudinal Cell Painting Morphology](/202607/23/2607.19415v1-auditing-retrieval-augmented-llm-hypotheses-for-longitudinal-cell-painting-morphology)  
-   标签：评分：7.0/10、query:virtual-cell
-   evidence：基于LLM的长期慢性扰动下的细胞形态学解释
-2. [DynImmune-BERT: Dynamic Immune Repertoire Modeling with Neural ODE Driven Continuous Transformers](/202607/23/2607.17244v1-dynimmune-bert-dynamic-immune-repertoire-modeling-with-neural-ode-driven-continuous-transformers)  
+1. [scRepresenter: a workflow for computing, integrating and benchmarking cellular representations in single-cell transcriptomics](/202607/24/biorxiv-10-64898-2026-07-15-738660-v1-screpresenter-a-workflow-for-computing-integrating-and-benchmarking-cellular-representations-in-single-cell-transcriptomics)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：使用神经ODE对免疫扰动动态建模
-3. [Single-Cell Proteomics Reveals Heterogeneous and Bimodal Proteome Responses to DNA Damage](/202607/23/biorxiv-10-64898-2026-07-20-739584-v1-single-cell-proteomics-reveals-heterogeneous-and-bimodal-proteome-responses-to-dna-damage)  
+   evidence：计算单细胞数据细胞表示的工作流，支持下游扰动分析
+2. [ChatGEM: An Agentic Architecture Enabling Interactive Simulation of Genome-Scale Metabolic Models](/202607/24/biorxiv-10-64898-2026-07-20-739662-v1-chatgem-an-agentic-architecture-enabling-interactive-simulation-of-genome-scale-metabolic-models)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：单细胞蛋白质组学揭示DNA损伤扰动下的异质性蛋白质组响应
+   evidence：交互式模拟基因组尺度代谢模型用于细胞表型预测
 
 
 <div class="dpr-home-promo-card">
