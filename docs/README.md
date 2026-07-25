@@ -6,29 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-24
-- 运行时间：2026-07-24 20:13:50 UTC
+- 最新运行日期：2026-07-25
+- 运行时间：2026-07-25 21:02:20 UTC
 - 运行状态：成功
-- 本次总论文数：3
-- 精读区：1
-- 速读区：2
+- 本次总论文数：1
+- 精读区：0
+- 速读区：1
 
 ### 今日简报（AI）
-今日阅读3篇论文，精读1篇关于基因组尺度代谢模型的智能体架构。最值得关注的是《ChatGEM》，它实现了交互式模拟代谢网络，评分8.0/10。建议下一步可速读《scRepresenter》，了解单细胞转录组表征的整合与基准测试方法。
-- 详情：[/202607/24/README](/202607/24/README)
+今日仅速读1篇论文，聚焦生物网络组学数据通路表示。  
+值得关注的方向：利用纹理特征提升组学数据在网络层面的表征能力，可尝试用于通路分析。  
+建议普通读者留意该技术在整合多组学数据中的潜在应用，后续可结合具体生物网络案例深入理解。
+- 详情：[/202607/25/README](/202607/25/README)
 
 ### 精读区论文标签
-1. [ChatGEM: An Agentic Architecture Enabling Interactive Simulation of Genome-Scale Metabolic Models](/202607/24/biorxiv-10-64898-2026-07-20-739662-v2-chatgem-an-agentic-architecture-enabling-interactive-simulation-of-genome-scale-metabolic-models)  
-   标签：评分：8.0/10、query:virtual-cell
-   evidence：支持交互式模拟基因组规模代谢模型作为虚拟细胞
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [scRepresenter: a workflow for computing, integrating and benchmarking cellular representations in single-cell transcriptomics](/202607/24/biorxiv-10-64898-2026-07-15-738660-v1-screpresenter-a-workflow-for-computing-integrating-and-benchmarking-cellular-representations-in-single-cell-transcriptomics)  
+1. [Textural features for pathway-level representation of omics data in biological networks](/202607/25/biorxiv-10-64898-2026-07-12-737672-v1-textural-features-for-pathway-level-representation-of-omics-data-in-biological-networks)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：计算单细胞数据细胞表示的工作流，支持下游扰动分析
-2. [ChatGEM: An Agentic Architecture Enabling Interactive Simulation of Genome-Scale Metabolic Models](/202607/24/biorxiv-10-64898-2026-07-20-739662-v1-chatgem-an-agentic-architecture-enabling-interactive-simulation-of-genome-scale-metabolic-models)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：交互式模拟基因组尺度代谢模型用于细胞表型预测
+   evidence：提出通路级纹理特征用于预测抗癌药物响应（一种扰动）
 
 
 <div class="dpr-home-promo-card">
