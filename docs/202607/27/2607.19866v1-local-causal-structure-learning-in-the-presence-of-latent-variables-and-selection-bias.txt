@@ -1,0 +1,2278 @@
+Title: Local Causal Structure Learning in the Presence of Latent Variables and Selection Bias
+
+URL Source: https://arxiv.org/pdf/2607.19866v1
+
+Published Time: Thu, 23 Jul 2026 00:34:07 GMT
+
+Number of Pages: 57
+
+Markdown Content:
+# Local Causal Structure Learning in the Presence of Latent Variables and Selection Bias 
+
+Zheng Li 1, Hao Zhang 1, Ruxin Wang 1, Ruichu Cai 3,4 , Kun Zhang 5,6 , and Feng Xie 2
+
+Abstract 
+
+Discovering the direct causes and effects of a target variable from observational data is a fundamental problem in causal discovery, with broad applications in domains such as gene regulatory analysis and biomedical research. Existing causal discovery methods either learn a global causal structure, which incurs substantial computational cost, or assume the absence of latent variables and selection bias, assumptions that are often violated in real-world settings. Motivated by these challenges, we study local causal structure learning in the presence of latent variables and selection bias. Specifically, we first characterize a local region that enables target-specific causal discovery without recovering the entire global structure. We then establish a theoretical bridge between causal information learned from the observed distribution induced on this local region and the corresponding information in the global causal structure. Building on these foundations, we propose LoCaLS , a local causal structure learning algorithm that is sound and complete under standard assumptions and identifies the same direct causes and effects of a target variable as those identifiable by global causal discovery methods, while allowing for latent variables and selection bias. Extensive experiments on random and real-world structures demonstrate that the proposed method consistently achieves higher structural accuracy than existing local methods while requiring substantially less computational effort than state-of-the-art global methods. Furthermore, applications to two real-world gene expression datasets reveal biologically plausible target-specific causal structures, demonstrating its practical applicability in large-scale biological data analysis. 
+
+Keywords : Causal discovery, local learning, latent variables, selection bias, Markov blanket. 
+
+## 1 Introduction 
+
+Learning causal relations, commonly known as causal discovery, has attracted increasing attention across many fields, including computer science (Jonas et al., 2017; Pearl, 2018; Sch¨ olkopf, 2022; Chen et al., 2025; Zhu et al., 2026), social science (Spirtes et al., 2000), epidemiology (Hern´ an and Robins, 2010), biology (Glymour et al., 2019), and neuroscience (Smith et al., 2011; Sanchez-Romero et al., 2019). Such causal relationships are useful for predicting the behavior of a system under external interventions, which is a crucial step in both understanding and manipulating complex systems (Pearl, 2009). In observational studies, researchers are often interested in discovering the causes and effects of a target variable rather than discovering a global causal structure (Walters 
+
+> 1
+
+Shenzhen Institutes of Advanced Technology, Chinese Academy of Sciences, Shenzhen, China. 2Department of Ap-plied Statistics, Beijing Technology and Business University, Beijing, China. 3School of Computer Science, Guangdong University of Technology, Guangzhou, China. 4Peng Cheng Laboratory, Shenzhen, China. 5Department of Philos-ophy, Carnegie Mellon University, Pittsburgh, USA. 6Mohamed bin Zayed University of Artificial Intelligence, Abu Dhabi, United Arab Emirates. Corresponding authors: Hao Zhang and Feng Xie (e-mails: h.zhang10@siat.ac.cn; fengxie@btbu.edu.cn). 
+
+1arXiv:2607.19866v1 [cs.LG] 22 Jul 2026 Cell culture expansion      
+
+> Fitter cells gradually dominate
+> (a) Inital population (b) Expanded /Selected
+> population
+> Gene A Gene B Gene C
+> L
+> S
+> Latent factor
+> Cell fitness
+> (c) Underlying causal structure
+> Genes
+> Cells High
+> Expression
+> Levels
+> (d) Observed gene -expression data
+> Fitter/faster -growing cells
+> Less fit/slower -growing cells
+
+Figure 1: A Motivating example of local causal discovery in gene expression analysis under latent variables and selection bias. et al., 2007; Peter and Davidson, 2011; Geng et al., 2019; Ma et al., 2023), such as finding the causes of lung cancer, the effects of smoking, the causes and effects of hypertension, and the regulatory causes and effects of a particular gene (Geng et al., 2019). Driven by such practical demands, a growing body of work has focused on local causal dis-covery to efficiently identify the direct causes and effects of a target variable. Among the early contributions, Yin et al. (2008) and Zhou et al. (2010) introduced the PCD-by-PCD algorithm, where PCD denotes parents, children, and some descendants. This method leverages the MMPC algorithm (Tsamardinos et al., 2006) to extract the target’s initial PCD set, and sequentially ex-pands the structural boundary by computing the PCD sets of newly discovered adjacent variables. Throughout this expansion, local V-structures are identified, enabling the progressive orientation of edges incident to the target via Meek’s rules (Meek, 1995). Building upon this foundation, Wang et al. (2014) proposed a more efficient MB-by-MB (Markov Blanket) approach. Additional significant contributions to this field include the CMB (Causal Markov Blanket) algorithm (Gao and Ji, 2015), the ELCS (Efficient Local Causal Structure) algorithm (Yang et al., 2021), the PSL (Partial Bayesian Network Structure Learning) algorithm (Ling et al., 2022b), and the GraN-LCS (GradieNt-based LCS) algorithm (Liang et al., 2023). Despite their success across various domains, the reliability of these methods typically relies on two restrictive assumptions: 
+
+• No latent variables: There is no latent confounding among the observed variables; that is, no unobserved variable serves as a common cause of two or more measured variables. 
+
+• No selection bias: The observed data are assumed to be collected without unobserved selection effects, so that the sample is representative of the population of interest. However, in many real-world settings, such as clinical studies (Richardson, 1998; Zhang, 2008) and gene expression studies (Wille et al., 2004; Boquest et al., 2005; Frot et al., 2019; Versteeg et al., 2022), these assumptions are often violated. 
+
+Example 1 (Latent Variables and Selection Bias in Gene Expression Analysis) . Consider a gene-expression study in which a population of cells is cultured and expanded over multiple generations before expression profiling (Boquest et al., 2005; Kemmeren et al., 2014; Versteeg et al., 2022), as illustrated in Fig. 1(a)–(b). During this culture-expansion process, cells with higher survivability or faster growth rates gradually dominate the assayed population. Consequently, the measured gene-expression profiles are affected by selection bias, because the observed samples no longer represent the 
+
+2original cell population (Hern´ an et al., 2004; Boquest et al., 2005; Versteeg et al., 2022). Meanwhile, standard gene-expression assays do not capture all biologically relevant regulators. For instance, unmeasured upstream regulatory activities, such as the protein-level activity of transcription factors or transcription-factor complexes, can jointly regulate multiple observed genes but may remain unmeasured in expression profiles (Stegle et al., 2012; Buettner et al., 2015; Wei et al., 2018; Buccitelli and Selbach, 2020). The causal structure in Fig. 1(c) summarizes these two mechanisms, where A, B, and C rep-resent three distinct genes. The variable S represents an unobserved selection variable that encodes cell fitness or survivability, and is directly affected by the expressions of genes A and B. Thus, conditioning on the selected population can open the collider path A → S ← B and induce a spu-rious association between A and B. The latent variable L represents an unmeasured upstream regulatory activity and acts as a common cause of B and C, thereby inducing latent confounding between the two observed genes. As a result, the observed gene-expression data in Fig. 1(d) contain both selection-induced and latent-confounding-induced associations. These mechanisms can further create apparent dependencies among A, B, and C through paths involving both S and L. If latent variables and selection bias are disregarded, such dependencies may be incorrectly identified as direct or indirect causal relations among the observed genes; for example, one could falsely conclude that 
+
+A is an (indirect) cause of both B and C (Versteeg et al., 2022). 
+
+This example shows that latent variables and selection bias are not merely technical complica-tions, but pervasive features of real-world data collection processes. Therefore, overcoming these challenges is essential for reliable causal discovery in realistic settings (Spirtes and Zhang, 2016). A substantial body of work has studied causal discovery in the presence of latent variables and selection bias. Spirtes et al. (1995) proposed the seminal FCI (Fast Causal Inference) algorithm, which recovers an equivalence class of causal structures in this setting by leveraging conditional independence (CI) relations derived from observational data. Subsequent work has largely focused on improving the efficiency of global discovery procedures. Representative examples include RFCI (Really Fast Causal Inference) (Colombo et al., 2012b) and FCI + (Claassen et al., 2013), which improve efficiency by relaxing certain CI search steps, making them more suitable for sparse, high-dimensional settings. More recently, Rohekar et al. (2021) proposed the ICD (Iterative Causal Discovery) algorithm, which reduces the number of CI tests by restricting conditioning sets accord-ing to the topological distance between the testing variables. Additionally, Akbari et al. (2021) introduced L-MARVEL, which reduces CI testing complexity by identifying and recursively re-moving a particular class of variables. Other related developments include (Pellet and Elisseeff, 2008a; Claassen and Heskes, 2011; Claassen et al., 2013; Mokhtarian et al., 2023, 2025). Despite these important advances, existing methods in this line are primarily designed for global causal discovery, aiming to recover a causal structure over all observed variables. As a result, they can be unnecessarily expensive when the goal is only to identify the direct causes and effects of a single target variable. Taken together, these limitations naturally raise the following important yet underexplored question: 
+
+★ How can we efficiently and accurately identify the direct causes and effects of a target variable from observational data when latent variables and selection bias may both be present? 
+
+To address this question, we propose a novel local causal discovery algorithm that can efficiently identify the direct causes and effects of a target variable in the presence of latent confounding and selection bias. Specifically, we make the following contributions: 
+
+• We establish a theoretical foundation for local causal discovery in the presence of latent variables and selection bias. Specifically, we characterize an identifiable local region, and show which 3target-specific adjacencies and orientation information learned from this region are guaranteed to be consistent with the results of global causal discovery. 
+
+• Building on these foundations, we propose LoCaLS , a local causal structure learning algorithm for identifying the direct causes and effects of a target variable in the presence of latent con-founding and selection bias. We prove that LoCaLS is sound and complete with respect to the target-specific information identifiable from the global learning. 
+
+• We conduct extensive experiments on synthetic random structures and real-world benchmark structures. The results show that LoCaLS achieves strong target-specific structural accu-racy with higher efficiency compared to global methods, while outperforming existing local methods. We further apply LoCaLS to two real-world gene expression datasets. The results demonstrate its practical utility for recovering biologically plausible local causal structures in high-dimensional biological systems. 
+
+## 2 Related Work 
+
+This work studies local causal structure (LCS) learning in the presence of latent variables and selection bias. It is closely related to three lines of research: LCS learning , global causal structure 
+
+(GCS) learning, and Markov blanket (MB) learning. We briefly review these areas below and clarify how our problem setting differs from existing work. For comprehensive surveys of causal structure learning and MB learning, see (Spirtes and Zhang, 2016; Heinze-Deml et al., 2018; Glymour et al., 2019; Geng et al., 2019; Yu et al., 2020; Kitson et al., 2023; Zanga et al., 2022). 
+
+LCS learning. Existing methods for LCS learning can be broadly divided into two categories. The first category is based on small local causal patterns such as Y-structures. Representative methods include the LCD algorithm (Cooper, 1997) and its variants (Silverstein et al., 2000; Mani and Cooper, 2004; Mani et al., 2006; Versteeg et al., 2022). These methods typically infer causal relations from small local configurations involving only three or four variables. They are useful for detecting certain local causal patterns, but they do not aim to recover all causal edges incident to a target variable. The second category aims to identify the direct causes and effects of a target variable without reconstructing the entire causal graph. Representative methods include PCD-by-PCD (Yin et al., 2008; Zhou et al., 2010), MB-by-MB (Wang et al., 2014), and a series of extensions (Gao and Ji, 2015; Yang et al., 2021; Ling et al., 2022b; Liang et al., 2023; Dai et al., 2024; Ling et al., 2025a; Zheng et al., 2026). Most methods in this line are developed under causal sufficiency and assume that the observed data are not affected by selection bias. More recently, Xie et al. (2024) and related methods (Li et al., 2025; Ling et al., 2025b) extended local causal discovery to settings with latent variables. However, these methods do not explicitly handle selection bias. Therefore, the problem considered in this paper is more general: we aim to learn the target-specific local causal structure while allowing both latent variables and selection bias. 
+
+GCS learning. Under the assumptions that there are no latent variables and no selection bias, classical global causal discovery methods such as the IC algorithm (Verma and Pearl, 1990) and the PC algorithm (Spirtes and Glymour, 1991) recover a Markov equivalence class of DAGs from conditional independence relations. Numerous extensions have since been developed to improve computational efficiency, statistical robustness, and scalability (Chickering, 2002; Harris and Drton, 2013; Colombo and Maathuis, 2014; Le et al., 2016; Ramsey et al., 2017; Rohekar et al., 2018; Zheng et al., 2018; Yu et al., 2019b; Mokhtarian et al., 2021, 2022; Shiragur et al., 2024; Zhang et al., 2024; Dong and Gao, 2025). When latent variables and selection bias are allowed, the seminal FCI algorithm (Spirtes et al., 1995; Zhang, 2008) extends PC to this more general setting and is 4sound and complete under standard assumptions. Building on FCI, several methods have been proposed to improve the efficiency of global discovery, including RFCI (Colombo et al., 2012a) and FCI + (Claassen et al., 2013). Other relevant developments include (Pellet and Elisseeff, 2008a; Claassen and Heskes, 2011; Ogarrio et al., 2016; Tsirlis et al., 2018; Chen et al., 2023; Wang et al., 2023), as well as more recent iterative and recursive techniques (Rohekar et al., 2021, 2023; Akbari et al., 2021; Mokhtarian et al., 2025). These methods are designed for global causal discovery, namely, recovering a causal structure over all observed variables. By contrast, when the goal is only to identify the local causal structure around a single target variable, recovering a global structure may be unnecessarily costly, both computationally and statistically. 
+
+MB learning. MB learning is closely related to LCS learning because the Markov blanket can provide a compact local search space for identifying the direct causes and effects of a target variable. A large number of MB learning algorithms have been developed, including the GS (Grow-Shrink) algorithm (Margaritis and Thrun, 1999), IAMB (Tsamardinos et al., 2003b), and its variants such as inter-IAMB (Tsamardinos et al., 2003b), Fast-IAMB (Yaramakala and Margaritis, 2005), and KIAMB (Pena et al., 2007). Another important line of work adopts divide-and-conquer strategies, including MMMB (Min-Max MB) (Tsamardinos et al., 2003a), HITON-MB (Aliferis et al., 2003), PCMB (Pena et al., 2007), and STMB (Gao and Ji, 2016). Other advances include (Pellet and Elisseeff, 2008b; Yu et al., 2019a; Wu et al., 2019; Ling et al., 2022a). However, most of these methods are developed under the assumptions that there are no latent variables and no selection bias. Yu et al. (2018) proposed M3B for MB discovery in the presence of latent confounders, but it does not handle selection bias or recover the target-specific causal structure. Therefore, although MB learning is useful for narrowing the local search space, existing MB methods do not address the problem of recovering the local causal structure of a target variable in the presence of both latent variables and selection bias. To the best of our knowledge, no existing local causal structure learning method provides sound-ness and completeness guarantees for identifying target-specific causal relations in the presence of both latent variables and selection bias. 
+
+## 3 Preliminaries 
+
+This section introduces the notation and graphical background used throughout the paper. We begin in Section 3.1 by describing the structural causal model (SCM) associated with an underly-ing DAG, where latent variables and selection variables may be present. We then review maximal ancestral graphs (MAGs) and partial ancestral graphs (PAGs) in Section 3.2, which provide the standard graphical representations of the observed-variable structure in the presence of latent vari-ables and selection bias. Finally, in Section 3.3, we formalize the local causal structure learning problem considered in this paper. Throughout this paper, individual variables, or vertices, are denoted by uppercase letters, e.g., 
+
+V , while sets of variables, or vertices, are denoted by bold uppercase letters, e.g., V. Graphs are denoted by calligraphic letters, e.g., G. Additionally, Appendix A provides a summary of the main notation used throughout the paper in Table II, together with additional terminology and formal definitions. 
+
+3.1 SCMs with Latent Variables and Selection Bias 
+
+We consider a structural causal model (SCM) (Pearl, 2000) over a set of variables V = O ∪ L ∪
+
+S, where O, L, and S denote the observed variables, latent variables, and unobserved selection variables, respectively. The SCM is associated with an underlying directed acyclic graph (DAG) D
+
+5A T B G
+
+C
+
+S
+
+D E L1 F
+
+L2 K I
+
+HJ
+
+> (a) DAG
+
+A T B G
+
+C D
+
+E H F
+
+K I
+
+J
+
+> (b) MAG
+
+A T B G
+
+C D
+
+E H F
+
+K I
+
+J
+
+> (c) PAG
+
+Figure 2: (a) The underlying causal DAG for a subnetwork of the ANDES network (Conati et al., 1997), where L1 and L2 are latent variables and S represents an unobserved selection variable. (b) The MAG corresponding to the DAG in (a). (c) The PAG representing the Markov equivalence class of the MAG in (b). over V. Each variable Vi ∈ V is generated according to a structural equation Vi = fi
+
+ Pa( Vi, D), u i
+
+,
+
+where Pa( Vi, D) denotes the parents of Vi in D, and ui is an exogenous error term, and the exogenous errors are mutually independent. Accordingly, the joint distribution over V factorizes according to the underlying DAG: 
+
+P (V) = P (O, L, S) = Y
+
+> Vi∈V
+
+P  Vi | Pa( Vi, D).
+
+Following the standard setting for causal discovery in the presence of latent variables and selection bias (Spirtes et al., 1995; Richardson and Spirtes, 2002; Zhang, 2008; Colombo et al., 2012a), the latent variables L are unobserved and marginalized out, while the selection variables S
+
+are unobserved and conditioned upon. Thus, the distribution available from observational data is not the population marginal P (O), but the selected distribution 
+
+Pobs (O) = P (O | S = s) = 
+
+Z
+
+P (O, L | S = s) dL,
+
+where s denotes the selection event under which samples are included in the observed dataset. For discrete variables, the integral over L is replaced by summation. Therefore, the conditional independence relations available from data are those among the observed variables under Pobs (O). The formulation above describes the causal system at the level of the underlying DAG D.However, after marginalizing latent variables and conditioning on selection variables, the causal and (conditional) independence relations among the observed variables O are generally no longer adequately represented by a DAG over O (Spirtes et al., 1995; Richardson and Spirtes, 2002). We next introduce MAGs and PAGs, which provide the standard graphical language for representing observed-variable causal structures in this setting. 
+
+3.2 Ancestral Graphs 
+
+We first introduce the relevant graphical notions. We consider simple graphs, meaning that there are no self-loops or multiple edges between two vertices. The two ends of an edge are called marks ,which can be a tail (‘ −’) or an arrowhead (‘ >’). In partial graphs such as PAGs, a circle mark (‘ ◦’) is additionally used to represent an unresolved mark. For convenience, we use an asterisk (‘ ∗’) to denote any allowed edge mark. 
+
+Definition 1 (Mixed Graph ). A mixed graph is a graph that can contain three types of edges: directed edges ( →), bi-directed edges ( ↔), and undirected edges ( −), with at most one edge between any two vertices. 
+
+6In a mixed graph, X is called a parent of Y and Y a child of X if X → Y ; X is called a 
+
+spouse of Y if X ↔ Y ; and X is called an undirected neighbor of Y if X − Y . A directed path 
+
+from X to Y is a path of the form X → · · · → Y . We say that X is an ancestor of Y , and Y
+
+a descendant of X, if there is a directed path from X to Y . A non-endpoint vertex on a path is called a collider if both adjacent edges on the path have arrowheads pointing into it; otherwise, it is called a non-collider . A path π = ⟨V0, . . . , V k⟩ is uncovered (unshielded) if Vi−1 and Vi+1 are non-adjacent for every 1 ≤ i ≤ k − 1. It is called an uncovered (unshielded) collider path if, in addition, every non-endpoint vertex Vi on π is a collider. 
+
+Definition 2 (m-Separation ). In a mixed graph, let X, Y, and Z be disjoint sets of vertices. A path between vertices X and Y is m-connecting (active) given Z if every non-collider on the path is not in Z, and every collider on the path has a descendant in Z. The sets X and Y are m-separated 
+
+by Z in G if there is no m-connecting path between any X ∈ X and Y ∈ Y given Z.
+
+The notion of m-separation generalizes the classical d-separation criterion for DAGs to mixed graphs. 
+
+Definition 3 (Ancestral Graph ). An ancestral graph is a mixed graph satisfying the following conditions: (i) there is no directed cycle, i.e., there is no directed edge X → Y such that Y is an ancestor of 
+
+X;(ii) there is no almost directed cycle, i.e., there is no bi-directed edge X ↔ Y such that one endpoint is an ancestor of the other; (iii) for any undirected edge X − Y , neither X nor Y has any parents or spouses. 
+
+Intuitively, the conditions in Definition 3 ensure that the arrows and tails in the ancestral graph do not indicate conflicting ancestral relationships. 
+
+Definition 4 (Maximal Ancestral Graph ). A maximal ancestral graph (MAG, denoted by M)is an ancestral graph such that, for every pair of non-adjacent vertices, there exists a set of vertices that m-separates them. 
+
+DAGs are special cases of MAGs. Given an underlying DAG D over O ∪ L ∪ S, marginalizing over L and conditioning on S = s, we can uniquely induce a MAG M over O (Zhang, 2008). For example, the DAG in Fig. 2(a) induces the MAG in Fig. 2(b) over the observed variables 
+
+O = {A, B, C, D, E, F, G, H, I, J, K, T } by marginalizing out the latent variables L = {L1, L 2} and conditioning on the selection variable S = {S}. Importantly, this MAG preserves the conditional independence statements of Pobs (O) and ancestral relations among O in D (Richardson and Spirtes, 2002; Zhang, 2006, 2008). 1
+
+Notably, the MAG M is generally not uniquely identifiable from Pobs (O). Instead, one can at most identify its Markov equivalence class. 
+
+Definition 5 (Markov Equivalence ). Two MAGs over the same vertex set are Markov equivalent 
+
+if they entail the same set of m-separation relations. Given a MAG M, we denote its Markov equivalence class by [M].
+
+An edge mark in M is called invariant if the same mark appears in all MAGs in [ M]. The invariant information in [ M] can be represented by a partial ancestral graph. 
+
+> 1The construction from a DAG with latent and selection variables to the corresponding induced MAG, together with its preservation properties, is detailed in Appendix B.
+
+7Definition 6 (Partial Ancestral Graph ). A partial ancestral graph (PAG, denoted by P) repre-sents a Markov equivalence class [M] of MAGs. It has the same adjacencies as M and any member of [M]. A tail ‘ −’ or arrowhead ‘ >’ appears in P if the corresponding mark is invariant in [M];otherwise, a circle ‘ ◦’ appears. 2
+
+The above definition describes the global graphical object that can be recovered from Pobs (O)under the standard causal Markov and faithfulness conditions (Spirtes et al., 2000). For example, the PAG in Fig. 2(c) represents the Markov equivalence class induced by the MAG in Fig. 2(b). It retains all edge marks shared by every MAG in the class and uses circle marks for those that remain ambiguous. Thus, the PAG provides a maximally informative summary of the causal information identifiable from Pobs (O). 
+
+3.3 Problem Formulation 
+
+We now state the target-specific problem considered in this paper. Let D be the underlying causal DAG over O ∪ L ∪ S, and let M be the induced MAG over the observed variables O obtained by marginalizing latent variables and conditioning on unobserved selection variables (Richardson and Spirtes, 2002; Zhang, 2008). Let P denote the PAG representing the Markov equivalence class [ M]. Under the standard causal Markov and faithfulness conditions (Spirtes et al., 2000), given a target variable T ∈ O, our goal is to learn the local causal structure around T from the observational distribution Pobs (O) without recovering the entire global structure over O. In particular, we aim to identify the direct causes and effects of T that are identifiable from Pobs (O). The desired local structure should be consistent with the target-specific causal information obtainable from global causal discovery, i.e., PAG P, while avoiding the cost of learning the full graph. 
+
+## 4 Local Causal Structure Learning 
+
+In this section, we study how to learn the local causal structure around a target variable in the presence of latent variables and selection bias. To address this problem, we need to answer the following two key questions. 
+
+★ Q1. How can we avoid learning the entire global structure over all observed variables? 
+
+To answer Q1 , Section 4.1 introduces the Markov blanket in MAGs under latent variables and selection bias. The Markov blanket serves as an instrumental local region around the target variable, allowing us to learn a local structure from the marginal distribution over this region instead of performing causal discovery over all observed variables. 
+
+★ Q2. Given such a local region, which structural information learned from it is guaranteed to be consistent with the global PAG? 
+
+To answer Q2 , Section 4.2 establishes a theoretical bridge between the local structure learned from Markov-blanket-based marginal information and the corresponding global PAG. These results characterize which local adjacencies and orientation information are sound, and in some cases complete, with respect to the global structure. Building on these theoretical results, Section 4.3 presents LoCaLS , a Lo cal Ca usal struc-ture learning method designed to allow for Latent variables and Selection bias, together with its theoretical guarantee and complexity analysis.     
+
+> 2In the terminology of (Zhang, 2006, 2008), such PAGs are referred to as complete (or maximally oriented ) partial ancestral graphs. In this paper, we do not consider PAGs that fail to display all invariant edge marks in the equivalence class of MAGs, and we therefore use the term ‘PAG’ to mean a ‘maximally oriented PAG’.
+
+84.1 Markov Blanket under Latent Variables and Selection Bias 
+
+The concept of the Markov blanket (MB) was first introduced by Pearl (1988) and has since become a foundational principle for feature selection and dimensionality reduction, enabling more efficient and robust model construction (Guyon and Elisseeff, 2003; Pellet and Elisseeff, 2008b; Gao and Ji, 2016; Dong and Gao, 2025). Intuitively, the Markov blanket of a target variable X is the minimal set of variables that contains all the relevant information about X not already provided by any other variable (Aliferis et al., 2010). This fundamental property is formally stated in Definition 7. 
+
+Definition 7 (Markov Blanket ). Let V be a set of variables and let X ∈ V. A set B ⊆ V \ { X}
+
+is called the Markov blanket of X, denoted by MB( X), if it satisfies the following two conditions: (i) MB Property: for every V ∈ V \ (B ∪ { X}),
+
+X ⊥⊥ V | B.
+
+(ii) Minimality: 3 no proper subset B′ ⊊ B satisfies the above property, i.e., there does not exist 
+
+B′ ⊊ B such that 
+
+X ⊥⊥ V | B′ for all V ∈ V \ (B′ ∪ { X}).
+
+While Definition 7 characterizes the MB through conditional independence relations, it is often useful in causal graphical models to have an explicit graphical characterization. Assuming the absence of latent variables and selection bias, the graphical formulation of the MB for a vertex X
+
+in a DAG takes the form given in Definition 8. 
+
+Definition 8 (Markov Blanket for DAGs (Pearl, 1988, 2000)) . Under causal faithfulness, in a DAG D, the Markov blanket of a vertex X is unique and consists of its parents, children, and the parents of the children of X.
+
+Remark 1. The idealized assumptions of no latent variables and no selection bias are often violated in real-world settings. Previous studies have established graphical characterizations of the MB of a vertex X in the presence of latent variables, together with theoretical guarantees (Richardson, 2003; Pellet and Elisseeff, 2008a; Yu et al., 2018). However, these works do not account for selection bias. To fill this gap, we introduce Definition 9. 
+
+Definition 9 (Markov Blanket for MAGs ). Under causal faithfulness, allowing for latent variables and selection bias, consider a MAG M over observed variables O. The Markov blanket of a vertex X, denoted MB( X, M), is the union of: (i) the parents, children, and undirected neighbors of X;(ii) the parents of the children of X;(iii) the district of X (the set of vertices reachable from X using only bidirected edges) and the districts of X’s children; and (iv) the parents of every vertex in these districts. 
+
+> 3While some literature distinguishes between a “Markov blanket” (which may not require minimality) and a “Markov boundary” (the strictly minimal set), we adopt the convention where the Markov blanket inherently implies minimality.
+
+9A
+
+B C
+
+L
+
+D E
+
+F
+
+G
+
+H
+
+I
+
+J
+
+K
+
+X
+
+M
+
+O
+
+P
+
+Figure 3: An illustration of the MB in a MAG. The target variable is X, and the blue vertices constitute MB( X, M). 
+
+Example 2. Consider the MAG M in Fig. 3, where X is the target variable of interest. The Markov blanket of X in M is MB( X, M) = {B, F, H, L, M, I, J }. This set includes the child H,the undirected neighbor I, the district members associated with X and its child H, namely {B, F, L },and the parents of vertices in these districts, namely {M, J }.
+
+Next, we justify Definition 9 theoretically by showing that the proposed set satisfies the MB property and the minimality condition, as established in Lemmas 1 and 2. 
+
+Lemma 1 (MB Property ). Let M be a MAG over observed variables O. For any X ∈ O, X is m-separated from all vertices in O \ (MB( X, M) ∪ { X}) given MB( X, M).
+
+Lemma 2 (Minimality ). Let M be a MAG over observed variables O. For any X ∈ O, no proper subset B′ of MB( X, M) m-separates X from all vertices in O \ (B′ ∪ { X}).
+
+Combining Lemma 1 and Lemma 2, we can conclude that the defined MB( X, M) is indeed the MB of X in M.Furthermore, under the causal Markov and faithfulness assumptions, the MB defined in Defi-nition 9 admits the following conditional-independence characterization. 
+
+Proposition 1. Let M be the MAG induced over the observed variables O, and let Pobs (O) be Markov and faithful to M. For any distinct X, Y ∈ O, the following holds: 
+
+Y ∈ MB( X, M) ⇔ X̸ ⊥⊥ Y | O \ { X, Y } (1) Proposition 1 indicates that the MB of a vertex X in a MAG M can be identified by testing the conditional independence relations between X and other vertices in O given the rest of the observed variables. This equivalence is crucial for learning the MB from data, as it allows us to use conditional independence tests to determine the MB of a target variable. Based on this theoretical guarantee, algorithms such as the TC algorithm (Pellet and Elisseeff, 2008b) can be applied in practice to identify the MB efficiently in the presence of latent variables and selection bias, with a linear number of conditional independence tests with respect to the number of observable variables. 
+
+Remark 2. The results in this subsection answer Q1 . For target-specific causal discovery, the Markov blanket provides a compact local region, allowing us to avoid global structure learning over all variables. Notably, the PAG P represents the Markov equivalence class of M and therefore entails the same conditional independence relations among observed variables. By Proposition 1, the same Markov blanket is characterized equivalently by the MAG, the PAG, and the observed distribution: 
+
+MB( X, M) = MB( X, P) = MB( X, P obs (O)) .
+
+10 Therefore, in the remainder of the paper, we simply write MB( X) for this common Markov blanket, and define 
+
+MB +(X) = MB( X) ∪ { X}
+
+as the Markov-blanket-based instrumental local region. 
+
+4.2 Foundations of Local Structure Learning 
+
+Throughout this subsection, LX denotes the PAG learned, in the oracle setting, from the marginal selected distribution Pobs (MB +(X)) over MB +(X) by a sound and complete PAG-learning pro-cedure. Having identified MB +(X) as a Markov-blanket-based local region, we now turn to Q2 :which structural information learned from this region is guaranteed to be consistent with the global PAG? This question is nontrivial because learning a causal structure from the marginal distribution over MB +(X) does not, in general, automatically reproduce the structure obtained by global causal discovery over all observed variables. We therefore establish theoretical results that connect the locally learned PAG LX to the global PAG P.Specifically, we focus on the following question: 
+
+★ Which adjacency relations and orientation information in the locally learned structure LX are guaranteed to be consistent with the global PAG P?
+
+We first establish the consistency of locally learned adjacencies. A key observation is that, in a MAG, whether a target variable X can be m-separated from another observed variable can be determined using only the MB of X.
+
+Theorem 1. Let M be the underlying MAG over O, and let X ∈ O be a target variable. For any 
+
+V ∈ MB( X), there exists a set Z ⊆ O \ { X, V } that m-separates X and V if and only if there exists a set Z′ ⊆ MB( X) \ { V } that m-separates X and V .
+
+Theorem 1 shows that the separability between X and any vertex in its MB can be decided within the local region MB +(X). Together with the MB property, this yields a local characterization of adjacencies incident to X. Specifically, for any V ∈ O \ { X}, if there exists a separating set 
+
+Z ⊆ O \ { X, V } for X and V , then Theorem 1 guarantees the existence of a local separating set 
+
+Z′ ⊆ MB +(X) \ { X, V }. Conversely, if no such local separating set exists within MB +(X) \ { X, V },then no separating set exists within O \ { X, V }. Therefore, the adjacency between X and any vertex can be determined from the MB-based local region. This leads to the following consistency result for the locally learned structure LX .
+
+Corollary 1. Let LX denote the inferred local structure over MB +(X), and let V ∈ MB( X). Then 
+
+X and V are adjacent in LX if and only if they are adjacent in the global PAG P.
+
+Corollary 1 implies that all adjacencies incident to X in the locally learned graph LX are exactly the same as those incident to X in the global PAG. Thus, local learning over MB +(X) preserves the target-specific adjacency information that would be obtained by global causal discovery. Next, we show that certain structures carrying orientation information in LX are also consistent with the global PAG. 
+
+Theorem 2. Let LX denote the inferred local structure over MB +(X), and let Vi (1 ≤ i ≤| MB( X)|) be vertices in MB( X). Then an uncovered collider path 
+
+X∗→ V1 ↔ · · · ←∗ Vi
+
+exists in LX if and only if the same uncovered collider path exists in the global PAG. 
+
+11 Theorem 2 indicates that the uncovered collider paths between X and any vertex in MB( X)in the locally learned LX are consistent with the global PAG. Conversely, if there is an uncovered collider path between X and any vertex in MB( X) in the global PAG, then the same uncovered collider path must exist in the locally learned LX .
+
+Theorem 3. Let LX denote the inferred local structure over MB +(X), and let Vi (1 ≤ i ≤| MB( X)|) be vertices in MB( X). If an unshielded collider triple 
+
+V1∗→ X ←∗ V2
+
+exists in LX , then the same triple exists in the global PAG. 
+
+Theorem 3 states that any unshielded collider triple with X as a collider in the locally learned 
+
+LX must also exist in the global PAG. Together, Theorem 2 and Theorem 3 show that the collider-orientation information involving the current target X and identified in the locally learned LX is sound with respect to the global PAG. 
+
+Remark 3. It is worth noting that these results do not cover all collider information. First, collider information in LX that does not involve the current target X may be unreliable. Second, some collider information involving X in the global PAG may not be recoverable from MB +(X).The following two examples illustrate these cases using the global PAG in Fig. 2(c). 
+
+• Spurious. Collider information in LX that does not involve the current target X may be spurious. For example, let B be the target variable, and consider the locally learned graph LB
+
+shown in Fig. 4(a). From the marginal distribution over MB +(B), one may identify T ∗→ K ←∗ I
+
+because T ⊥⊥ I | ∅ but T̸ ⊥⊥ I | K. However, this collider is not consistent with the global PAG. In the global structure, the corresponding collider information is T ∗ → K ← ∗ J, rather than 
+
+T ∗→ K ←∗ I. 
+
+• Missing. Not all collider information involving the current target X can necessarily be recovered from the marginal distribution over MB +(X). For example, let E be the target variable. In this case, MB +(E) = {B, E, T }, and the locally learned graph LE is shown in Fig. 4(b). Although the global PAG contains the uncovered collider T ∗→ E ←∗ B, this collider cannot be identified from the marginal distribution over MB +(E), as the separating set for T and B (i.e., K) is not contained in MB +(E).
+
+T B G
+
+E F
+
+K I 
+
+> (a) LB
+
+T B
+
+E 
+
+> (b) LE
+
+Figure 4: Causal graphs accompanying Remark 3. (a) The locally learned structure LB ; (b) the locally learned structure LE . The red shaded region highlights the current target variable, and red edges denote local results whose consistency with the global learning results is not guaranteed. 12 4.3 The LoCaLS Algorithm 
+
+Building on the theoretical results in Sections 4.1 and 4.2, we present the LoCaLS algorithm in Algorithm 1. The algorithm starts from the target variable T and sequentially learns local structures over Markov-blanket-based regions. 
+
+Algorithm 1 LoCaLS 
+
+Input: Target variable T , observed data over O.
+
+Output: The learned local structure around T in ˆP. 
+
+> 1:
+
+Initialize Waitlist ← { T }, Donelist ← ∅ , ˆP ← ∅ , and Sepsets ← ∅ . 
+
+> 2:
+
+repeat  
+
+> 3:
+
+X ← the first variable of Waitlist.  
+
+> 4:
+
+MB +(X) ← MBLearn (X).  
+
+> 5:
+
+(LX , Sepsets X ) ← LocalLearn (MB +(X)).  
+
+> 6:
+
+Sepsets ← Sepsets ∪ Sepsets X . 
+
+> 7:
+
+ˆP ← PreserveConsistentInfo ( ˆP, LX , X ).  
+
+> 8:
+
+ˆP ← OrientPAG ( ˆP, Sepsets ).  
+
+> 9:
+
+Add X to Donelist.  
+
+> 10:
+
+Waitlist ← UpdateWaitlist (T, ˆP, Donelist).  
+
+> 11:
+
+until one of the stopping rules R1– R3 is satisfied  
+
+> 12:
+
+return the local structure around T in ˆP.The algorithm maintains four key objects during this sequential procedure. First, Waitlist contains variables whose local structures may provide useful information for determining the local causal structure around the original target T . Second, Donelist records variables that have already been processed. Third, ˆP stores the locally learned structural information that is guaranteed to be consistent with the global PAG. Finally, Sepsets stores the separating sets obtained during local structure learning and is used for subsequent PAG orientation. The algorithm is initialized with Waitlist = {T }, Donelist = ∅, ˆP = ∅, and Sepsets = ∅. At each iteration, it selects a variable X from Waitlist, identifies the Markov-blanket-based local re-gion MB +(X) using MBLearn (Pellet and Elisseeff, 2008b), and applies a constraint-based learner 
+
+LocalLearn (Spirtes et al., 1995; Akbari et al., 2021; Rohekar et al., 2021) to the marginal distri-bution over MB +(X) to obtain a local structure LX and separating sets Sepsets X . The algorithm then updates Sepsets , preserves in ˆP only the locally learned structural information justified by Section 4.2 through PreserveConsistentInfo , and applies the complete PAG orientation rules 
+
+OrientPAG summarized in Appendix D.1. After X is processed, it is added to Donelist, and Waitlist is updated to retain variables that may still help determine the local structure around the original target T . This procedure continues until one of the stopping rules in Theorem 4 is satisfied. The full pseudocode is shown in Algorithm 1. We next describe the conceptual stopping conditions. If one updates Waitlist in a coarse manner, for example by adding all unprocessed vertices connected to T in the current graph ˆP, then the following three stopping rules are sufficient for termination. 
+
+Theorem 4 (Stopping Rules ). Let T be the target variable and let Waitlist be the current set of variables to be processed. If any of the following rules is satisfied, then the local structure identified for T , including its direct causes and direct effects, is equivalent to the corresponding target-specific structure obtained from global causal discovery: 
+
+R1. All edge marks incident to the target T have been determined. 
+
+13 A T B
+
+D
+
+E
+
+K
+
+J 
+
+> (a) LT
+
+A T B
+
+D
+
+E
+
+K
+
+J  
+
+> (b) ˆPafter learning LT
+
+T
+
+C D K
+
+J 
+
+> (c) LD
+
+A T B
+
+C D
+
+E
+
+K
+
+J  
+
+> (d) ˆPafter learning LD
+
+A T
+
+C 
+
+> (e) LA
+
+A T B
+
+C D
+
+E
+
+K
+
+J       
+
+> (f) ˆPafter learning LA
+> Waitlist = {D, A }
+> Donelist = {T}
+> Waitlist = {A, C }
+> Donelist = {T, D }
+
+Figure 5: Illustration of the sequential procedure for identifying the local structure of the target variable T in Example 3. The underlying SCM with latent and selection variables is shown in Fig. 2(a), and the corresponding ground-truth PAG is shown in Fig. 2(c). The first row shows the sequentially learned local structures, and the second row shows the corresponding updates to the global PAG. In each local structure, the red shaded region indicates the current target variable, and the red edges denote local results whose consistency with the global PAG is not guaranteed. 
+
+R2. The set Waitlist is empty. 
+
+R3. Every path from any unprocessed variable to T is not a potentially anterior path toward T .A path π = ⟨V1, V 2, . . . , T ⟩ is said to be not potentially anterior toward T if it contains a vertex Vi
+
+such that the edge adjacent to Vi along π has an arrowhead into Vi, i.e., is of the form Vi ← ∗ .
+
+Rules R1 and R2 are both direct stopping criteria, meaning that all causal information of in-terest has been identified, or all variables have been fully processed. By contrast, R3 captures a structural redundancy condition. Roughly speaking, it states that continuing to learn the local structures of the remaining unprocessed variables cannot provide additional information for de-termining the local structure around T . Intuitively, if the remaining unprocessed variables have no potentially directed path to T , then their causal information cannot propagate toward T and therefore cannot further refine the target-specific local structure. In practice, we use a more selective waitlist update. Instead of adding all vertices connected to 
+
+T , UpdateWaitlist only retains vertices that have a potentially anterior path to T in the current graph ˆP. Consequently, vertices excluded by R3 are automatically removed from consideration. Thus, with this refined update strategy, the algorithm only needs to explicitly check R1 and R2. Detailed implementation is shown in Algorithm 4 in Appendix D.2. The Appendix E provides an example that terminates by R3 under a coarse update but by R2 when using UpdateWaitlist .14 Example 3. We illustrate LoCaLS using the example in Fig. 5. Assume that oracle conditional independence tests are available, and let T be the target variable of interest; consider the ground-truth global PAG shown in Fig. 2(c). The algorithm starts with Waitlist = {T }, Donelist = ∅, and 
+
+ˆP = ∅. The learning process proceeds as follows: 
+
+• Processing T . The algorithm first selects T from Waitlist and identifies its MB-based local region as MB +(T ) = {A, B, D, E, J, K, T }. Using the marginal distribution over MB +(T ), it learns the local structure LT shown in Fig. 5(a). From LT , LoCaLS preserves the local in-formation whose consistency with the global PAG is guaranteed. The red edges in Fig. 5(a) denote local results whose consistency with the global PAG is not guaranteed and are therefore not preserved. After this update, the current graph ˆP is shown in Fig. 5(b). The algorithm then updates Donelist = {T } and Waitlist = {D, A }.
+
+• Processing D. The algorithm next selects D from Waitlist and identifies MB +(D) = {C, D, J, K, T }.
+
+It then learns the local structure LD over MB +(D), as shown in Fig. 5(c). Again, only the locally learned structures that are guaranteed to be consistent with the global PAG are incorporated into 
+
+ˆP, while the red edge in LD is discarded. This yields the updated graph shown in Fig. 5(d). The algorithm then updates Donelist = {T, D } and Waitlist = {A, C }.
+
+• Processing A. The algorithm then selects A from Waitlist and identifies MB +(A) = {A, C, T }.
+
+It learns the local structure LA shown in Fig. 5(e). After incorporating the globally consistent local information from LA and applying the orientation rules, LoCaLS obtains the updated graph shown in Fig. 5(f ). At this point, the local structure around the original target T has been determined: the edge marks incident to T are determined as A−T, D−T, T → K, T → E. 
+
+Therefore, stopping rule R1 is satisfied, and the algorithm returns the local structure around T
+
+in ˆP.
+
+We now state the overall correctness guarantee of LoCaLS . The theorem shows that the local output of LoCaLS agrees with the target-specific information that would be obtained by global causal discovery. 
+
+Theorem 5 (Soundness and Completeness of LoCaLS ). Assume the causal Markov and faithfulness conditions, oracle access to the conditional independence relations in Pobs (O). Then 
+
+LoCaLS identifies the direct causes and effects of the target variable T that are identifiable from the global PAG P. Equivalently, the edges incident to T and their identifiable endpoint marks in the output ˆP are consistent with those in the global PAG P.
+
+4.4 Complexity Analysis 
+
+Let |O| denote the number of observed variables, and let r denote the number of local structures learned sequentially by LoCaLS . The computational cost of LoCaLS mainly consists of two components: identifying local search spaces via Markov blanket (MB) learning, and performing local causal structure learning within these search spaces. For the first component, if an MB discovery algorithm such as TC (Pellet and Elisseeff, 2008b) is used, the cost of learning the MBs of r variables is bounded by O(r|O|). For the second component, suppose a constraint-based causal discovery algorithm is used as the local learner, such as FCI algorithm (Spirtes et al., 1995). Then the total cost over the r local subproblems is bounded by 
+
+O(rL (| MB |)) , where | MB | denotes the maximum MB size encountered during the procedure, and 
+
+L(·) denotes the time complexity of the local learner as a function of the size of the local search space. 15 Therefore, the overall complexity of LoCaLS is bounded by O(r (|O| + L(| MB |))) . Since the MB size is typically much smaller than the total number of observed variables, i.e., | MB | ≪ | O|,
+
+LoCaLS can substantially reduce the computational burden compared with applying a global causal discovery algorithm to all observed variables. 
+
+## 5 Experiments 
+
+5.1 Baseline Methods 
+
+We compare LoCaLS with a broad collection of causal structure learning methods, including both global and local algorithms. For global causal discovery, we consider two types of baselines. The first type assumes the absence of latent variables and selection bias, including PC (Spirtes and Glymour, 1991) and EEMBI-PC (Dong and Gao, 2025). The second type allows for latent variables and selection bias, including FCI (Spirtes et al., 1995), RFCI (Colombo et al., 2012b), FCI + (Claassen et al., 2013), L-MARVEL (Akbari et al., 2021), and ICD (Rohekar et al., 2021). These global methods serve as important references for assessing whether LoCaLS can achieve comparable structural accuracy while avoiding the cost of learning the entire causal structure. For local causal structure learning, we include representative methods such as PCD-by-PCD (Yin et al., 2008), MB-by-MB (Wang et al., 2014), CMB (Gao and Ji, 2015), PSL (Ling et al., 2022b), and GraN-LCS (Liang et al., 2023), which were developed under the assumptions of no latent variables and no selection bias. We also include LatentLCD (Ling et al., 2025b), which allows for latent variables but does not account for selection bias. These local methods are designed to recover target-specific structures, but none of them can handle both latent variables and selection bias, which is the setting addressed by LoCaLS .Additional details of all compared methods, including their learning scope, supported assump-tions, and implementation settings, are provided in Table III in Appendix F.1. Our source code is available at github.com/zhengli0060/LoCaLS. 
+
+5.2 Evaluation Metrics 
+
+We evaluate all methods from two perspectives: target-specific structural accuracy and efficiency. Since the goal is to recover the local causal structure around a target variable T , all structural accuracy metrics are computed only on the edge marks incident to T .For structural accuracy, we report Mark-Precision, Mark-Recall, Mark-F1, and Local-SHD. Mark-Precision measures how many predicted local edge marks are correct, while Mark-Recall measures how many true local edge marks are successfully recovered. Mark-F1 summarizes the trade-off between these two quantities. Local-SHD further measures the total structural discrepancy around the target variable, penalizing missing adjacencies, false adjacencies, and incorrect edge marks. Thus, higher Mark-Precision, Mark-Recall, and Mark-F1 indicate better recovery, whereas lower Local-SHD indicates smaller local structural error. The formal definitions of all metrics are provided in Appendix F.2. For efficiency, we report the number of conditional independence (CI) tests and runtime. Fewer CI tests and lower runtime indicate higher computational efficiency. 
+
+5.3 Random Structures with Varying Dimensions 
+
+We first evaluate the performance of different methods as the problem dimensionality increases. Specifically, we generate random underlying causal structures from the Erd˝ os–R´ enyi model ER( n, d ) (Erd˝ os and R´ enyi, 1960), where n denotes the number of variables in V and d specifies the expected average 16 PC                                                                                        
+
+> EEMBI-PC
+> FCI
+> RFCI
+> FCI +
+> L-MARVEL
+> ICD
+> PCD-by-PCD
+> MB-by-MB
+> CMB
+> PSL
+> GraN-LCS
+> LatentLCD
+> LoCaLS (Ours)
+> 20
+> 40
+> 60
+> 80
+> 120
+> 160
+> 200
+> Number of Nodes
+> 0.02 >1.0 0.01 0.18 0.21 0.01 0.02 0.03 0.05 0.04 0.02 >1.0 0.02 0.00
+> 0.07 >1.0 0.06 0.19 0.23 0.02 0.82 0.14 0.18 0.14 0.08 >1.0 0.07 0.01
+> 0.17 >1.0 0.11 0.20 0.29 0.03 >1.0 0.31 0.30 0.22 0.13 >1.0 0.11 0.01
+> 0.30 0.18 0.21 0.34 0.03 >1.0 0.62 0.45 0.27 0.19 >1.0 0.22 0.01
+> 0.77 0.36 0.24 0.48 0.06 >1.0 >1.0 0.83 0.58 0.34 >1.0 0.41 0.02
+> >1.0 0.57 0.28 0.68 0.11 >1.0 >1.0 >1.0 >1.0 0.95 >1.0 0.68 0.02
+> >1.0 0.83 0.32 0.96 0.14 >1.0 >1.0 >1.0 >1.0 >1.0 >1.0 >1.0 0.02
+
+Runtime ( ↓ )                                                                              
+
+> PC
+> FCI
+> RFCI
+> FCI +
+> L-MARVEL
+> ICD
+> PCD-by-PCD
+> MB-by-MB
+> CMB
+> PSL
+> LatentLCD
+> LoCaLS (Ours)
+> 0.03 0.07 0.06 0.07 0.03 0.04 0.05 0.08 0.09 0.04 0.12 0.02
+> 0.13 0.25 0.21 0.28 0.12 0.17 0.20 0.29 0.25 0.13 0.41 0.04
+> 0.29 0.48 0.42 0.57 0.25 0.35 0.45 0.49 0.40 0.21 0.67 0.05
+> 0.50 0.78 0.67 0.91 0.38 0.58 0.83 0.61 0.47 0.29 >1.0 0.07
+> >1.0 >1.0 >1.0 >1.0 0.81 >1.0 >1.0 0.84 0.79 0.46 >1.0 0.09
+> >1.0 >1.0 >1.0 >1.0 >1.0 >1.0 >1.0 0.97 >1.0 0.44 >1.0 0.09
+> >1.0 >1.0 >1.0 >1.0 >1.0 >1.0 >1.0 >1.0 >1.0 0.71 >1.0 0.12
+
+Number of CI tests ( ↓ ) 20 40 60 80 120 160 200                   
+
+> Number of Nodes
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-Precision ( ↑ )
+> 20 40 60 80 120 160 200
+> Number of Nodes
+> 0.2
+> 0.4
+> 0.6
+> Mark-Recall ( ↑ )
+> 20 40 60 80 120 160 200
+> Number of Nodes
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-F1 ( ↑ )
+> 20 40 60 80 120 160 200
+> Number of Nodes
+> 5
+> 10
+> Local-SHD ( ↓ )
+> PC
+> EEMBI-PC
+> FCI
+> RFCI
+> FCI +
+> L-MARVEL
+> ICD
+> PCD-by-PCD
+> MB-by-MB
+> CMB
+> PSL
+> GraN-LCS
+> LatentLCD
+> LoCaLS (Ours)
+
+Figure 6: Results on random structures with varying dimensionality. The top panel reports nor-malized runtime and CI-test counts; runtime values are normalized by 5 seconds and CI-test counts by 8 × 10 3, with values above these thresholds shown as > 1.0. The bottom panel reports Mark-Precision, Mark-Recall, Mark-F1, and Local-SHD. degree. In this experiment, we fix d = 2 and vary n over {20 , 40 , 60 , 80 , 120 , 160 , 200 }. Following the convention in (Colombo et al., 2012b; Akbari et al., 2021; Rohekar et al., 2021; Wang et al., 2014; Ling et al., 2025b), each generated underlying causal structure is parameterized as a linear Gaussian structural causal model. The causal coefficients are sampled uniformly from [ −1, −0.5] ∪ [0 .5, 1], and all noise terms are independently drawn from a standard Gaussian distribution. To simulate the presence of latent variables and selection bias, we randomly select 5% of the variables as latent variables and another 5% as unobserved selection variables, i.e., |L| = |S| = 5% ·n.Latent variables are selected from vertices in the underlying DAG that have at least two children, so that marginalizing them can induce latent confounding among observed variables. Selection variables are selected from vertices that have at least two parents, so that conditioning on them can induce selection effects. Following the selection bias mechanism in (Versteeg et al., 2022), we first generate an initial pool of samples and then retain samples whose aggregate selection score P s
+
+falls within the rank interval [0 .5, 0.9] of the initial samples. This sampling procedure is repeated until the desired sample size is reached. The sample size is fixed at 1000 for all settings, and all reported results are averaged over 50 independently generated datasets. Target variables are selected from vertices with relatively large neighborhoods. 4
+
+The results are summarized in Fig. 6, with detailed runtime and CI-test results provided in Tables V and VI of Appendix F.3. EEMBI-PC is excluded from some plots due to excessive runtime. Overall, LoCaLS achieves strong target-specific structural accuracy while remaining highly efficient across all dimensions. Compared with global methods, LoCaLS requires substantially fewer CI 
+
+> 4
+
+Summary statistics of the underlying structures are provided in Appendix F.3. 
+
+17 PC 
+
+> FCI
+> RFCI
+> FCI +
+> L-MARVEL
+> ICD
+> PCD-by-PCD
+> MB-by-MB
+> CMB
+> PSL
+> GraN-LCS
+> LatentLCD
+> LoCaLS (Ours)
+
+0.05 
+
+0.1 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0                                                                                     
+
+> Density
+> 0.20 0.17 0.15 0.27 0.03 >1.0 0.23 0.14 0.26 0.10 >1.0 0.14 0.01
+> 0.24 0.22 0.18 0.34 0.05 >1.0 0.55 0.30 0.45 0.18 >1.0 0.28 0.02
+> 0.34 0.30 0.17 0.33 0.15 >1.0 >1.0 0.77 0.88 0.37 >1.0 0.44 0.02
+> 0.49 0.47 0.20 0.42 >1.0 >1.0 >1.0 >1.0 >1.0 0.60 >1.0 0.79 0.02
+> 0.59 0.53 0.21 0.45 >1.0 >1.0 >1.0 >1.0 >1.0 0.75 >1.0 0.57 0.03
+> 0.65 0.67 0.27 0.61 >1.0 >1.0 >1.0 >1.0 >1.0 0.84 >1.0 0.83 0.05
+> 0.67 0.68 0.26 0.56 >1.0 >1.0 >1.0 >1.0 >1.0 0.98 >1.0 0.91 0.05
+
+Runtime ( ↓ )                                                                              
+
+> PC
+> FCI
+> RFCI
+> FCI +
+> L-MARVEL
+> ICD
+> PCD-by-PCD
+> MB-by-MB
+> CMB
+> PSL
+> LatentLCD
+> LoCaLS (Ours)
+> 0.17 0.21 0.20 0.23 0.15 0.18 0.18 0.13 0.23 0.09 0.30 0.01
+> 0.21 0.36 0.31 0.42 0.21 0.25 0.40 0.27 0.38 0.16 0.82 0.02
+> 0.31 0.59 0.49 0.81 0.42 0.41 0.83 0.63 0.75 0.29 >1.0 0.02
+> 0.44 0.98 0.78 >1.0 >1.0 0.60 >1.0 0.93 >1.0 0.45 >1.0 0.02
+> 0.52 >1.0 0.96 >1.0 >1.0 0.83 >1.0 >1.0 >1.0 0.55 >1.0 0.03
+> 0.57 >1.0 >1.0 >1.0 >1.0 0.90 >1.0 >1.0 >1.0 0.63 >1.0 0.04
+> 0.59 >1.0 >1.0 >1.0 >1.0 0.91 >1.0 >1.0 >1.0 0.73 >1.0 0.04
+
+Number of CI tests ( ↓ ) 0.05 0.1 0.2 0.4 0.6 0.8 1.0                   
+
+> Density
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-Precision ( ↑ )
+> 0.05 0.1 0.2 0.4 0.6 0.8 1.0
+> Density
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-Recall ( ↑ )
+> 0.05 0.1 0.2 0.4 0.6 0.8 1.0
+> Density
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-F1 ( ↑ )
+> 0.05 0.1 0.2 0.4 0.6 0.8 1.0
+> Density
+> 5
+> 10
+> 15
+> Local-SHD ( ↓ )
+> PC
+> EEMBI-PC
+> FCI
+> RFCI
+> FCI +
+> L-MARVEL
+> ICD
+> PCD-by-PCD
+> MB-by-MB
+> CMB
+> PSL
+> GraN-LCS
+> LatentLCD
+> LoCaLS (Ours)
+
+Figure 7: Results on random structures with varying graph density. The top panel reports normal-ized runtime and CI-test counts; runtime values are normalized by 10 seconds and CI-test counts by 3 × 10 4, with values above these thresholds shown as > 1.0. The bottom panel reports Mark-Precision, Mark-Recall, Mark-F1, and Local-SHD. tests and shorter runtime, while achieving comparable or better structural accuracy. Compared with existing local methods, LoCaLS attains substantially better structural accuracy while preserving high efficiency, since these methods do not account for latent variables and selection bias. As the number of dimensions increases, the task becomes more challenging for all methods. Nevertheless, the efficiency advantage of LoCaLS over global methods becomes more pronounced in higher-dimensional settings, while its structural accuracy advantage over most baselines remains substantial. For example, when n = 200, LoCaLS performs fewer than 10 3 CI tests, whereas most competing methods require several thousand to tens of thousands of CI tests. The runtime results show a similar trend: LoCaLS remains highly efficient even in the largest setting, whereas many baselines become substantially more expensive. 
+
+5.4 Random Structures with Varying Density 
+
+We next evaluate the performance of LoCaLS and the baseline methods as the density of the underlying graph increases. Specifically, we generate random underlying causal structures from the Erd˝ os–R´ enyi model ER( n, p ) (Erd˝ os and R´ enyi, 1960), where p denotes the probability that an edge is present between a pair of vertices. Following the dense regime considered in (Mokhtarian et al., 2025; Akbari et al., 2021), we use log n/n as the reference upper density level. To obtain a gradual transition from sparse to dense graphs, we introduce a density scaling factor s and set 
+
+p = s · log nn .
+
+18 0 1 10 100 1000 5000              
+
+> Runtime ( ↓ )
+> 0
+> 1 × 10 4
+> 1 × 10 5
+> 5 × 10 5
+> 1 × 10 7
+> Number of CI Tests ( ↓ )
+> ANDES
+> Sample Size
+> 1000
+> 2000
+> 3000
+> 4000
+> PC
+> FCI
+> RFCI
+> FCI +
+> L-MARVEL
+> CMB
+> GraN-LCS
+> LatentLCD
+> LoCaLS (Ours)
+> 0
+> 5
+> 10
+> 15
+> Local SHD ( ↓ )
+> ANDES 0510 100 1000 3000
+> Runtime ( ↓ )
+> 0
+> 1 × 10 4
+> 1 × 10 5
+> 1 × 10 6
+> 1 × 10 7
+> 1 × 10 8
+> Number of CI Tests ( ↓ )
+> LINK
+> Sample Size
+> 1000
+> 2000
+> 3000
+> 4000
+> FCI
+> RFCI
+> FCI +
+> L-MARVEL
+> GraN-LCS
+> LatentLCD
+> LoCaLS (Ours)
+> 0
+> 10
+> 20
+> 30
+> 40
+> Local SHD ( ↓ )
+> LINK
+> PC FCI RFCI FCI +L-MARVEL CMB GraN-LCS LatentLCD LoCaLS (Ours)
+
+Figure 8: Results on the ANDES and LINK benchmark structures under varying sample sizes. The top and bottom panels correspond to ANDES and LINK, respectively. In each panel, the left plot reports runtime and CI-test counts, and the right plot reports Local-SHD. The symbol ↓ indicates that lower values are better. In our experiments, we fix n = 100 and vary s over {0.05 , 0.1, 0.2, 0.4, 0.6, 0.8, 1.0}. Here, s is referred to as the density level in the plots. All other settings are the same as those in Section 5.3. The results are summarized in Fig. 7, with detailed numerical runtime and CI-test results pro-vided in Tables VII and VIII of Appendix F.4. As the graph density increases, causal discovery becomes increasingly challenging: all methods show some degree of degradation in structural accu-racy, either through lower Mark-Precision, Mark-Recall, or Mark-F1, or through larger Local-SHD. Despite this difficulty, LoCaLS generally achieves better target-specific accuracy across different density levels. In particular, it outperforms existing local methods that do not account for latent variables and selection bias, and remains competitive with global methods designed for this more general setting. In terms of efficiency, LoCaLS shows a clear advantage. Across all density levels, it requires substantially fewer CI tests and shorter runtime than the baselines. This advantage becomes more pronounced in denser graphs, where global methods and many local baselines suf-fer from larger conditioning-set search space. EEMBI-PC is omitted from this experiment due to excessive runtime. 
+
+5.5 Real-World Benchmark Structures 
+
+We further evaluate the compared methods on four real-world benchmark structures, MILDEW, BARLEY, ANDES, and LINK, drawn from the Bayesian Network Repository 5. Their dimension-alities range from 35 to 724 variables. This experiment complements the random-graph evaluations 
+
+> 5
+
+https://www.bnlearn.com/bnrepository/ ; detailed descriptions of these structures are available therein. Sum-mary statistics of the underlying structures in this experiment are reported in Table IX of Appendix F.5. 
+
+19 in Sections 5.3 and 5.4 by testing whether the observed advantages persist on non-random real-world structures. We vary the sample size over {1000 , 2000 , 3000 , 4000 } and keep the remaining experimental settings the same as those in Section 5.3. Fig. 8 reports the main results on the two larger structures, ANDES and LINK. Complete results on MILDEW and BARLEY, as well as the Mark-Precision, Mark-Recall, and Mark-F1 curves for all four structures, are provided in Appendix F.5. Note that some methods are excluded from certain plots due to excessive runtime, and GraN-LCS is reported with zero CI tests because it does not perform CI tests. The results show that LoCaLS scales well on real-world benchmark structures. On ANDES, LoCaLS requires only around 10 3 CI tests and finishes within one second across all sample sizes. On LINK, which contains 724 variables, LoCaLS still requires only a few thousand CI tests and finishes within a few seconds. In terms of accuracy, LoCaLS maintains low and stable Local-SHD on both ANDES and LINK as the sample size increases, indicating that its efficiency gain does not come at the cost of target-specific structural accuracy. The supplementary Mark-Precision, Mark-Recall, and Mark-F1 curves further show that LoCaLS is consistently among the top-performing methods. Similar trends are observed on MILDEW and BARLEY. 
+
+5.6 Sensitivity to the Number of Latent Variables 
+
+We evaluate how sensitive different methods are to the number of latent variables. This experiment is designed to isolate the effect of latent confounding while keeping the observed problem size fixed. Specifically, we first generate an observed backbone from ER( n, d ) models with n = 100 and d = 2, and then augment the underlying DAG with additional latent and selection variables. The latent ratio rL is varied over {0.05 , 0.10 , 0.15 , 0.20 }, where rL = 0 .05 corresponds to adding 5 = rL · n
+
+latent variables. To focus on the effect of latent variables, the selection ratio is fixed at rS = 0 .05. All other experimental settings follow Section 5.3. All results are provided in Appendix F.6. As the latent ratio increases, all methods show some degree of degradation in structural accuracy, either through lower Mark-Precision, Mark-Recall, or Mark-F1, or through larger Local-SHD. Notably, as the latent ratio increases, LoCaLS retains its advantage in requiring substantially fewer CI tests and shorter runtime than the baselines, while maintaining higher Mark-Precision, Mark-Recall, Mark-F1, and lower Local-SHD. 
+
+5.7 Sensitivity to the Number of Selection Variables 
+
+We further evaluate the sensitivity of different methods to the number of selection variables. This experiment complements Section 5.6 by isolating the effect of selection bias while keeping the observed problem size fixed. Specifically, we first generate an observed backbone from ER( n, d )models with n = 100 and d = 2, and then augment the underlying DAG with additional latent and selection variables. The selection ratio rS is varied over {0.05 , 0.10 , 0.15 , 0.20 }, where rS = 0 .05 corresponds to adding 5 = rS · n selection variables. To focus on the effect of selection variables, the latent ratio is fixed at rL = 0 .05. All other experimental settings follow Section 5.3. All results are provided in Appendix F.7. Consistent with the latent-variable sensitivity ex-periment, increasing the selection ratio leads to some degradation in structural accuracy for all methods. As expected, LoCaLS still keeps the advantage of requiring substantially fewer CI tests and shorter runtime than the baselines, while maintaining higher Mark-Precision, Mark-Recall, Mark-F1, and lower Local-SHD, even as the selection ratio increases. 20 6 Applications to Gene Expression Datasets 
+
+In this section, we apply LoCaLS to two gene expression datasets: a low-dimensional Arabidopsis thaliana dataset with 33 genes and a high-dimensional melanoma dataset with over 1,000 genes. To-gether, these applications evaluate the effectiveness of LoCaLS in both low- and high-dimensional real-world biological settings. 
+
+6.1 Application to Arabidopsis thaliana Gene Expression Data 
+
+In this subsection, we apply LoCaLS to the gene expression dataset from Wille et al. (Wille et al., 2004). The dataset contains expression measurements of Arabidopsis thaliana collected under 118 experimental conditions, including light and dark treatments and exposure to growth hormones. In Arabidopsis thaliana , isoprenoids are synthesized through two major pathways located in distinct cellular compartments: the cytosolic mevalonate (MVA) pathway and the plastidial non-mevalonate, or MEP, pathway. The dataset includes the 33 genes analyzed in (Wille et al., 2004), which are involved in these two pathways or localized in the mitochondrion. Although the true causal graph is not available, biological studies and previous graphical-model analyses suggest a modular organization: genes within the MEP and MVA pathways tend to form dense pathway-specific groups, while cross-talk between the two compartments is mediated by a smaller number of bridge loci (Laule et al., 2003; Rodri´ eguez-Concepcio´ en et al., 2004; Wille et al., 2004; Frot et al., 2019).     
+
+> MEP
+> MCT
+> DXR CMK
+> MECPS FPPS1
+> (a) T = MCT
+> MVA
+> HMGS
+> PPDS2 FPPS1
+> FPPS2 DPPS1
+> (b) T = HMGS
+
+Figure 9: Local causal structures learned for representative Arabidopsis thaliana target genes. Dashed contours indicate genes from the same pathway group. (a) Target MCT; (b) target HMGS. 
+
+Results. Fig. 9 reports the learned local structure for two representative target genes, MCT and HMGS. Comparing our results with the known isoprenoid metabolic organization and the graphical models reported by Wille et al. (Wille et al., 2004, Figure 3), we observe several biologically meaningful patterns. 
+
+• (1) Intra-pathway Connections: The local neighborhoods recovered by LoCaLS are mainly con-centrated within the corresponding biosynthetic pathways. For the MEP target MCT, the re-covered neighbors include DXR, CMK, and MECPS, which form a closely connected segment of the MEP pathway and agree with the pathway structure reported in (Wille et al., 2004). For the MVA-related target HMGS, the recovered neighbors include FPPS1, FPPS2, and DPPS1, which are located in the cytosolic MVA pathway. The recovered edges are also consistent with (Wille et al., 2004), except for the edge involving DPPS1. 
+
+• (2) Cross-pathway and Orientation Patterns: Beyond pathway-local connections, LoCaLS also identifies sparse links across pathway regions, such as MCT–FPPS1 and HMGS–PPDS2. These links are compatible with previously reported cross-talk between plastidial and cytosolic iso-21 prenoid biosynthesis (Laule et al., 2003; Rodri´ eguez-Concepcio´ en et al., 2004; Wille et al., 2004). Moreover, the recovered edge-mark information between MCT and CMK, and between HMGS and FPPS2, is consistent with known biological relationships (Wille et al., 2004). The remaining bi-directed edges indicate potential latent confounding, possibly arising from unmeasured genes or regulatory factors outside the observed gene set. Overall, these results show that LoCaLS can recover compact target-specific structures that pre-serve the main modular organization of the isoprenoid network and retain biologically plausible cross-pathway information. Additional local structures for DXR, PPDS1, and MECPS are pro-vided in Appendix G.1. 
+
+6.2 Application to Melanoma Gene Expression Data 
+
+To further evaluate the performance of LoCaLS on high-dimensional real-world data, we apply it to the melanoma (cancer) gene expression dataset from Frangieh et al. (Frangieh et al., 2021). The dataset contains 218 ,331 melanoma cells and 23 ,712 genes, with perturbations targeting 249 genes. For each cell, the dataset records the perturbation identity, i.e., the perturbation target or no perturbation, together with a genome-wide gene expression count vector. Cells were measured under three experimental conditions: co-culture with patient-derived tumor-infiltrating T cells, which can recognize and kill melanoma cells; interferon (IFN)-γ stimulation; and a control condition. We treat these three conditions as separate datasets. Following (Versteeg et al., 2022; Chevalley et al., 2025; Li et al., 2026), we use only the non-perturbed cells in each condition to learn the local causal structure around a target gene, and evaluate the learned structure using perturbation-induced distributional changes, since no ground-truth causal graph is available for this dataset. We retain genes that show nonconstant expression and are expressed in more than 60% of cells within each condition. After preprocessing, the three condition-specific datasets contain 5 ,039 cells and 1 ,494 genes for the control condition, 10 ,403 cells and 1 ,139 genes for IFN-γ stimulation, and 7 ,586 cells and 1 ,640 genes for co-culture. We then learn target-specific local causal structures separately for each condition. For evaluation, we use the two-sided Mann–Whitney U rank test (Mann and Whitney, 1947; Nachar et al., 2008; Chevalley et al., 2025) to assess whether each predicted definite causal mark in the learned local structures is supported by perturbation-induced distributional changes. Specif-ically, a predicted mark is counted as a true positive if perturbing the corresponding source gene leads to a significant distributional change in the target gene. We define the Interventional Valida-tion Rate (IVR) as the fraction of predicted local definite causal marks validated by perturbation data. A higher IVR indicates stronger support from interventional evidence. 
+
+Target genes. We report the main results for B2M in Table I. B2M is a key component of MHC class I antigen presentation and is directly related to tumor immune recognition; moreover, it is a biologically meaningful target in the cancer immune-evasion setting studied by Frangieh et al. (Frangieh et al., 2021). Additional results for HLA-A, another antigen-presentation gene relevant to immune response, and CD59, a complement-regulatory gene related to immune escape, are provided in Appendix G.2. 
+
+Results. Due to the high dimensionality of this dataset, we report results only for L-MARVEL and GraN-LCS as representative global and local baselines, respectively. The remaining com-pared methods are omitted because their runtime exceeds two hours. Table I shows that LoCaLS 
+
+achieves the highest IVR for B2M under all three conditions. These results indicate that the local structures learned by LoCaLS are not only computationally efficient, but also better aligned with perturbation-supported regulatory effects in this single-cell immune-evasion dataset. In contrast, GraN-LCS attains the lowest IVR, which is consistent with its inability to account for latent vari-22 Table I: Comparison on melanoma gene expression data for target B2M. 
+
+Condition Algorithm Runtime ↓ #CI Tests ↓ IVR ↑
+
+Co-culture L-MARVEL 1717.59 13064931 0.54 GraN-LCS 2172.13 – 0.33 LoCaLS (Ours) 13.35 177727 0.91 
+
+IFN-γ
+
+L-MARVEL 810.05 5632375 0.52 GraN-LCS 1888.14 – 0.33 LoCaLS (Ours) 52.10 886062 0.70 
+
+Control L-MARVEL 19.58 1194846 0.50 GraN-LCS 1909.46 – 0.47 LoCaLS (Ours) 4.76 50286 0.57 
+
+> Note: The best result in each group is highlighted in bold.
+
+ables and selection bias. The supplementary results in Appendix G.2 provide additional evidence on other immune-relevant targets, further supporting the effectiveness of LoCaLS on high-dimensional biological data. 
+
+## 7 Conclusion and Future Work 
+
+In this work, we studied local causal structure learning in the presence of latent variables and selec-tion bias. We proposed LoCaLS , a local causal discovery algorithm for identifying the direct causes and effects of a target variable. Compared with existing global methods, LoCaLS substantially reduces computational cost while remaining sound and complete, under standard assumptions, with respect to the target-specific information identifiable from global causal discovery. Compared with existing local methods, LoCaLS accommodates both latent variables and selection bias, thereby addressing a more realistic and challenging setting. Extensive experiments on random structures with varying dimensionalities, graph densities, latent-variable ratios, and selection-variable ratios, demonstrate that LoCaLS achieves strong target-specific structural accuracy while substantially reducing runtime and the number of condi-tional independence tests. Experiments on four real-world benchmark structures further confirm its efficiency and reliability. Moreover, applications to one low-dimensional and one high-dimensional gene expression datasets with more than 1000 genes provide additional evidence for the practical utility of LoCaLS in real-world biological data analysis. Several directions remain open for future work. First, some causal directions are inherently unidentifiable from purely observational data without additional assumptions, and can only be characterized up to a Markov equivalence class. An important direction is therefore to incorporate additional information, such as knowledge of data-generation mechanisms (Kaltenpoth and Vreeken, 2023) or expert knowledge (Wang et al., 2023; Zheng et al., 2026), to further refine local causal structures. Second, combining observational and interventional data (Hauser and B¨ uhlmann, 2015) is a promising direction, as interventional information may help resolve ambiguities that cannot be eliminated using observational conditional independence information alone. 23 References 
+
+Sina Akbari, Ehsan Mokhtarian, AmirEmad Ghassami, and Negar Kiyavash. Recursive causal structure learning in the presence of latent variables and selection bias. Advances in Neural Information Processing Systems , 34:10119–10130, 2021. Constantin F Aliferis, Ioannis Tsamardinos, and Alexander Statnikov. Hiton: a novel markov blanket algorithm for optimal variable selection. In AMIA annual symposium proceedings , volume 2003, page 21. American Medical Informatics Association, 2003. Constantin F Aliferis, Alexander Statnikov, Ioannis Tsamardinos, Subramani Mani, and Xenofon D Koutsoukos. Local causal and markov blanket induction for causal discovery and feature selection for classification part i: algorithms and empirical evaluation. Journal of Machine Learning Research , 11(1), 2010. Andrew C Boquest, Aboulghassem Shahdadfar, Katrine Frønsdal, Olafur Sigurjonsson, Siv H Tun-heim, Philippe Collas, and Jan E Brinchmann. Isolation and transcription profiling of purified uncultured human stromal stem cells: alteration of gene expression after in vitro cell culture. 
+
+Molecular biology of the cell , 16(3):1131–1141, 2005. Christopher Buccitelli and Matthias Selbach. mrnas, proteins and the emerging principles of gene expression control. Nature Reviews Genetics , 21(10):630–644, 2020. Florian Buettner, Kedar N Natarajan, F Paolo Casale, Valentina Proserpio, Antonio Scialdone, Fabian J Theis, Sarah A Teichmann, John C Marioni, and Oliver Stegle. Computational analysis of cell-to-cell heterogeneity in single-cell rna-sequencing data reveals hidden subpopulations of cells. Nature biotechnology , 33(2):155–160, 2015. Tieyuan Chen, Huabin Liu, Yi Wang, Yihang Chen, Tianyao He, Chaofan Gan, Huanyu He, and Weiyao Lin. Mecd+: Unlocking event-level causal graph discovery for video reasoning. IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. Wenyu Chen, Mathias Drton, and Ali Shojaie. Causal structural learning via local graphs. SIAM journal on mathematics of data science , 5(2):280–305, 2023. Mathieu Chevalley, Yusuf H Roohani, Arash Mehrjou, Jure Leskovec, and Patrick Schwab. Alarge-scale benchmark for network inference from single-cell perturbation data. Communications Biology , 8(1):412, 2025. David Maxwell Chickering. Optimal structure identification with greedy search. Journal of machine learning research , 3(Nov):507–554, 2002. Tom Claassen and Tom Heskes. A logical characterization of constraint-based causal discovery. In Proceedings of the Twenty-Seventh Conference on Uncertainty in Artificial Intelligence , pages 135–144, 2011. Tom Claassen, Joris M Mooij, and Tom Heskes. Learning sparse causal models is not np-hard. In Proceedings of the Twenty-Ninth Conference on Uncertainty in Artificial Intelligence (UAI) ,page 172. Citeseer, 2013. Diego Colombo and Marloes H Maathuis. Order-independent constraint-based causal structure learning. J. Mach. Learn. Res. , 15(1):3741–3782, 2014. 24 Diego Colombo, Marloes H Maathuis, Markus Kalisch, and Thomas S Richardson. Learning high-dimensional directed acyclic graphs with latent and selection variables. The Annals of Statistics ,pages 294–321, 2012a. Diego Colombo, Marloes H Maathuis, Markus Kalisch, and Thomas S Richardson. Learning high-dimensional directed acyclic graphs with latent and selection variables. The Annals of Statistics ,pages 294–321, 2012b. Cristina Conati, Abigail S Gertner, Kurt VanLehn, and Marek J Druzdzel. On-line student mod-eling for coached problem solving using bayesian networks. In User Modeling: Proceedings of the Sixth International Conference UM97 Chia Laguna, Sardinia, Italy June 2–5 1997 , pages 231–242. Springer, 1997. Gregory F Cooper. A simple constraint-based algorithm for efficiently mining observational databases for causal relationships. Data Mining and Knowledge Discovery , 1:203–224, 1997. Haoyue Dai, Ignavier Ng, Yujia Zheng, Zhengqing Gao, and Kun Zhang. Local causal discovery with linear non-gaussian cyclic models. In International Conference on Artificial Intelligence and Statistics , pages 154–162. PMLR, 2024. Yiran Dong and Chuanhou Gao. Intersecting the markov blankets of endogenous and exogenous variables for causal discovery. IEEE Transactions on Pattern Analysis and Machine Intelligence ,2025. Paul Erd˝ os and Alfr´ ed R´ enyi. On the evolution of random graphs. Publications of the Mathematical Institute of the Hungarian Academy of Sciences, , 5:17–61, 1960. Chris J Frangieh, Johannes C Melms, Pratiksha I Thakore, Kathryn R Geiger-Schuller, Patricia Ho, Adrienne M Luoma, Brian Cleary, Livnat Jerby-Arnon, Shruti Malu, Michael S Cuoco, et al. Multimodal pooled perturb-cite-seq screens in patient models define mechanisms of cancer immune evasion. Nature genetics , 53(3):332–341, 2021. Benjamin Frot, Preetam Nandy, and Marloes H Maathuis. Robust causal structure learning with some hidden variables. Journal of the Royal Statistical Society Series B: Statistical Methodology ,81(3):459–487, 2019. Tian Gao and Qiang Ji. Local causal discovery of direct causes and effects. Advances in Neural Information Processing Systems , 28, 2015. Tian Gao and Qiang Ji. Efficient markov blanket discovery and its application. IEEE transactions on Cybernetics , 47(5):1169–1179, 2016. Zhi Geng, Yue Liu, Chunchen Liu, and Wang Miao. Evaluation of causal effects and local structure learning of causal networks. Annual review of statistics and its application , 6(1):103–124, 2019. Clark Glymour, Kun Zhang, and Peter Spirtes. Review of causal discovery methods based on graphical models. Frontiers in genetics , 10:524, 2019. Isabelle Guyon and Andr´ e Elisseeff. An introduction to variable and feature selection. Journal of machine learning research , 3(Mar):1157–1182, 2003. Naftali Harris and Mathias Drton. Pc algorithm for nonparanormal graphical models. Journal of Machine Learning Research , 14(1):3365–3383, 2013. 25 Alain Hauser and Peter B¨ uhlmann. Jointly interventional and observational data: estimation of interventional markov equivalence classes of directed acyclic graphs. Journal of the Royal Statistical Society Series B: Statistical Methodology , 77(1):291–318, 2015. Christina Heinze-Deml, Marloes H Maathuis, and Nicolai Meinshausen. Causal structure learning. 
+
+Annual Review of Statistics and Its Application , 5:371–391, 2018. Miguel A Hern´ an and James M Robins. Causal inference, 2010. Miguel A Hern´ an, Sonia Hern´ andez-D´ ıaz, and James M Robins. A structural approach to selection bias. Epidemiology , 15(5):615–625, 2004. Peters Jonas, Janzing Dominik, and Bernhard Sch¨ olkopf. Elements of Causal Inference . MIT Press, 2017. David Kaltenpoth and Jilles Vreeken. Nonlinear causal discovery with latent confounders. In 
+
+International Conference on Machine Learning , pages 15639–15654. PMLR, 2023. Patrick Kemmeren, Katrin Sameith, Loes AL Van De Pasch, Joris J Benschop, Tineke L Lenstra, Thanasis Margaritis, Eoghan O’Duibhir, Eva Apweiler, Sake van Wageningen, Cheuk W Ko, et al. Large-scale genetic perturbations reveal regulatory networks and an abundance of gene-specific repressors. Cell , 157(3):740–752, 2014. Neville Kenneth Kitson, Anthony C Constantinou, Zhigao Guo, Yang Liu, and Kiattikun Chobtham. A survey of bayesian network structure learning. Artificial Intelligence Review ,pages 1–94, 2023. Oliver Laule, Andreas F¨ urholz, Hur-Song Chang, Tong Zhu, Xun Wang, Peter B Heifetz, Wilhelm Gruissem, and Markus Lange. Crosstalk between cytosolic and plastidial pathways of isoprenoid biosynthesis in arabidopsis thaliana. Proceedings of the National Academy of Sciences , 100(11): 6866–6871, 2003. Thuc Duy Le, Tao Hoang, Jiuyong Li, Lin Liu, Huawen Liu, and Shu Hu. A fast pc algorithm for high dimensional causal discovery with multi-core pcs. IEEE/ACM transactions on computational biology and bioinformatics , 16(5):1483–1495, 2016. Jinzhou Li, Benjamin B Chu, Ines F Scheller, Julien Gagneur, and Marloes H Maathuis. Root cause discovery via permutations and cholesky decomposition. Journal of the Royal Statistical Society Series B: Statistical Methodology , 88(3):779–798, 2026. Zheng Li, Zeyu Liu, Feng Xie, Hao Zhang, Chunchen Liu, and Zhi Geng. Local identifying causal relations in the presence of latent variables. In International Conference on Machine Learning ,pages 35390–35418. PMLR, 2025. Jiaxuan Liang, Jun Wang, Guoxian Yu, Carlotta Domeniconi, Xiangliang Zhang, and Maozu Guo. Gradient-based local causal structure learning. IEEE Transactions on Cybernetics , 2023. Zhaolong Ling, Ying Li, Yiwen Zhang, Kui Yu, Peng Zhou, Bo Li, and Xindong Wu. A light causal feature selection approach to high-dimensional data. IEEE Transactions on Knowledge and Data Engineering , 35(8):7639–7650, 2022a. Zhaolong Ling, Kui Yu, Lin Liu, Jiuyong Li, Yiwen Zhang, and Xindong Wu. Psl: an algorithm for partial bayesian network structure learning. ACM Transactions on Knowledge Discovery from Data (TKDD) , 16(5):1–25, 2022b. 26 Zhaolong Ling, Honghui Peng, Yiwen Zhang, Debo Cheng, Xingyu Wu, Peng Zhou, and Kui Yu. Hybrid local causal discovery. In Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelligence , pages 5725–5733, 2025a. Zhaolong Ling, Jiale Yu, Yiwen Zhang, Debo Cheng, Peng Zhou, Xingyu Wu, Bingbing Jiang, and Kui Yu. Local causal discovery without causal sufficiency. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pages 18737–18745, 2025b. Sisi Ma, Jinhua Wang, Cameron Bieganek, Roshan Tourani, and Constantin Aliferis. Local causal pathway discovery for single-cell rna sequencing count data: a benchmark study. Journal of Translational Genetics and Genomics , 7(1):50–65, 2023. Subramani Mani and Gregory F Cooper. Causal discovery using a bayesian local causal discovery algorithm. In MEDINFO 2004 , pages 731–735. IOS Press, 2004. Subramani Mani, Peter Spirtes, and Gregory F Cooper. A theoretical study of y structures for causal discovery. In Proceedings of the Twenty-Second Conference on Uncertainty in Artificial Intelligence , pages 314–323, 2006. Henry B Mann and Donald R Whitney. On a test of whether one of two random variables is stochastically larger than the other. The annals of mathematical statistics , pages 50–60, 1947. Dimitris Margaritis and Sebastian Thrun. Bayesian network induction via local neighborhoods. 
+
+Advances in neural information processing systems , 12, 1999. Christopher Meek. Causal inference and causal explanation with background knowledge. In Pro-ceedings of the Eleventh conference on Uncertainty in artificial intelligence , pages 403–410, 1995. Ehsan Mokhtarian, Sina Akbari, AmirEmad Ghassami, and Negar Kiyavash. A recursive markov boundary-based approach to causal structure learning. In The KDD’21 Workshop on Causal Discovery , pages 26–54. PMLR, 2021. Ehsan Mokhtarian, Sina Akbari, Fateme Jamshidi, Jalal Etesami, and Negar Kiyavash. Learning bayesian networks in the presence of structural side information. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 36, pages 7814–7822, 2022. Ehsan Mokhtarian, Mohmmadsadegh Khorasani, Jalal Etesami, and Negar Kiyavash. Novel ordering-based approaches for causal structure learning in the presence of unobserved variables. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 37, pages 12260–12268, 2023. Ehsan Mokhtarian, Sepehr Elahi, Sina Akbari, and Negar Kiyavash. Recursive causal discovery. 
+
+Journal of Machine Learning Research , 26(61):1–65, 2025. Nadim Nachar et al. The mann-whitney u: A test for assessing whether two independent samples come from the same distribution. Tutorials in quantitative Methods for Psychology , 4(1):13–20, 2008. Juan Miguel Ogarrio, Peter Spirtes, and Joe Ramsey. A hybrid causal search algorithm for latent variable models. In Conference on probabilistic graphical models , pages 368–379. PMLR, 2016. Judea Pearl. Probabilistic reasoning in intelligent systems: networks of plausible inference . Morgan Kaufmann Publishers Inc., San Francisco, CA, USA, 1988. ISBN 0934613737. 27 Judea Pearl. Causality: Models, Reasoning, and Inference . Cambridge University Press, 2000. Judea Pearl. Causality: Models, Reasoning, and Inference . Cambridge University Press, New York, 2nd edition, 2009. Judea Pearl. Theoretical impediments to machine learning with seven sparks from the causal revolution. In Proceedings of the Eleventh ACM International Conference on Web Search and Data Mining , pages 3–3, 2018. Jean-Philippe Pellet and Andr´ e Elisseeff. Finding latent causes in causal networks: an efficient approach based on markov blankets. Advances in Neural Information Processing Systems , 21, 2008a. Jean-Philippe Pellet and Andr´ e Elisseeff. Using markov blankets for causal structure learning. 
+
+Journal of Machine Learning Research , 9(7), 2008b. Jose M Pena, Roland Nilsson, Johan Bj¨ orkegren, and Jesper Tegn´ er. Towards scalable and data efficient learning of markov boundaries. International Journal of Approximate Reasoning , 45(2): 211–232, 2007. Isabelle S Peter and Eric H Davidson. A gene regulatory network controlling the embryonic speci-fication of endoderm. Nature , 474(7353):635–639, 2011. Joseph Ramsey, Madelyn Glymour, Ruben Sanchez-Romero, and Clark Glymour. A million vari-ables and more: the fast greedy equivalence search algorithm for learning high-dimensional graph-ical causal models, with an application to functional magnetic resonance images. International journal of data science and analytics , 3(2):121–129, 2017. Thomas Richardson. Markov properties for acyclic directed mixed graphs. Scandinavian Journal of Statistics , 30(1):145–157, 2003. Thomas Richardson and Peter Spirtes. Ancestral graph markov models. The Annals of Statistics ,30(4):962–1030, 2002. Thomas S Richardson. Chain graphs and symmetric associations. In Learning in graphical models ,pages 231–259. Springer, 1998. Manuel Rodri´ eguez-Concepcio´ en, Oriol Fore´ es, Jaime F Marti´ enez-Garci´ ea, Vi´ ector Gonza´ elez, Michael A Phillips, Albert Ferrer, and Albert Boronat. Distinct light-mediated pathways regulate the biosynthesis and exchange of isoprenoid precursors during arabidopsis seedling development. 
+
+The Plant Cell , 16(1):144–156, 2004. Raanan Y Rohekar, Yaniv Gurwicz, Shami Nisimov, Guy Koren, and Gal Novik. Bayesian structure learning by recursive bootstrap. Advances in Neural Information Processing Systems , 31, 2018. Raanan Y Rohekar, Shami Nisimov, Yaniv Gurwicz, and Gal Novik. Iterative causal discovery in the possible presence of latent confounders and selection bias. Advances in Neural Information Processing Systems , 34:2454–2465, 2021. Raanan Yehezkel Rohekar, Shami Nisimov, Yaniv Gurwicz, and Gal Novik. From temporal to contemporaneous iterative causal discovery in the presence of latent confounders. In International Conference on Machine Learning , pages 39939–39950. PMLR, 2023. 28 Ruben Sanchez-Romero, Joseph D Ramsey, Kun Zhang, Madelyn RK Glymour, Biwei Huang, and Clark Glymour. Estimating feedforward and feedback effective connections from fmri time series: Assessments of statistical methods. Network Neuroscience , 3(2):274–306, 2019. Bernhard Sch¨ olkopf. Causality for machine learning. In Probabilistic and Causal Inference: The Works of Judea Pearl , pages 765–804. 2022. Kirankumar Shiragur, Jiaqi Zhang, and Caroline Uhler. Causal discovery with fewer conditional in-dependence tests. In International Conference on Machine Learning , pages 45060–45078. PMLR, 2024. Craig Silverstein, Sergey Brin, Rajeev Motwani, and Jeff Ullman. Scalable techniques for mining causal structures. Data Mining and Knowledge Discovery , 4:163–192, 2000. Stephen M Smith, Karla L Miller, Gholamreza Salimi-Khorshidi, Matthew Webster, Christian F Beckmann, Thomas E Nichols, Joseph D Ramsey, and Mark W Woolrich. Network modelling methods for fmri. Neuroimage , 54(2):875–891, 2011. Peter Spirtes and Clark Glymour. An algorithm for fast recovery of sparse causal graphs. Social science computer review , 9(1):62–72, 1991. Peter Spirtes and Kun Zhang. Causal discovery and inference: concepts and recent methodological advances. Applied Informatics , 3(1):1–28, 2016. Peter Spirtes, Christopher Meek, and Thomas Richardson. Causal inference in the presence of latent variables and selection bias. In Proceedings of the Eleventh conference on Uncertainty in artificial intelligence (UAI) , pages 499–506, 1995. Peter Spirtes, Clark Glymour, and Richard Scheines. Causation, Prediction, and Search . MIT press, 2000. Oliver Stegle, Leopold Parts, Matias Piipari, John Winn, and Richard Durbin. Using probabilistic estimation of expression residuals (peer) to obtain increased power and interpretability of gene expression analyses. Nature protocols , 7(3):500–507, 2012. Ioannis Tsamardinos, Constantin F Aliferis, and Alexander Statnikov. Time and sample efficient discovery of markov blankets and direct causal relations. In Proceedings of the ninth ACM SIGKDD international conference on Knowledge discovery and data mining , pages 673–678, 2003a. Ioannis Tsamardinos, Constantin F Aliferis, Alexander R Statnikov, and Er Statnikov. Algorithms for large scale markov blanket discovery. In FLAIRS , volume 2, pages 376–81, 2003b. Ioannis Tsamardinos, Laura E Brown, and Constantin F Aliferis. The max-min hill-climbing bayesian network structure learning algorithm. Machine learning , 65(1):31–78, 2006. Konstantinos Tsirlis, Vincenzo Lagani, Sofia Triantafillou, and Ioannis Tsamardinos. On scoring maximal ancestral graphs with the max–min hill climbing algorithm. International Journal of Approximate Reasoning , 102:74–85, 2018. Thomas Verma and Judea Pearl. Equivalence and synthesis of causal models. In Proceedings of the Sixth Annual Conference on Uncertainty in Artificial Intelligence , pages 255–270, 1990. 29 Philip Versteeg, Joris Mooij, and Cheng Zhang. Local constraint-based causal discovery under selection bias. In Conference on Causal Learning and Reasoning , pages 840–860. PMLR, 2022. Graham R Walters, Wellcome Trust Case Control Consortium, et al. Genome-wide association study of 14,000 cases of seven common diseases and 3,000 shared controls. Nature , 447(7145): 661–678, 2007. Changzhang Wang, You Zhou, Qiang Zhao, and Zhi Geng. Discovering and orienting the edges connected to a target variable in a dag via a sequential local learning approach. Computational Statistics & Data Analysis , 77:252–266, 2014. Tian-Zuo Wang, Tian Qin, and Zhi-Hua Zhou. Sound and complete causal identification with latent variables given local background knowledge. Artificial Intelligence , page 103964, 2023. Bei Wei, Arttu Jolma, Biswajyoti Sahu, Lukas M Orre, Fan Zhong, Fangjie Zhu, Teemu Kivioja, Inderpreet Sur, Janne Lehti¨ o, Minna Taipale, et al. A protein activity assay to measure global transcription factor activity reveals determinants of chromatin accessibility. Nature Biotechnol-ogy , 36(6):521–529, 2018. Anja Wille, Philip Zimmermann, Eva Vranov´ a, Andreas F¨ urholz, Oliver Laule, Stefan Bleuler, Lars Hennig, Amela Preli´ c, Peter von Rohr, Lothar Thiele, et al. Sparse graphical gaussian modeling of the isoprenoid gene network in arabidopsis thaliana. Genome biology , 5(11):1–13, 2004. Xingyu Wu, Bingbing Jiang, Kui Yu, Huanhuan Chen, et al. Accurate markov boundary discovery for causal feature selection. IEEE transactions on cybernetics , 50(12):4983–4996, 2019. Feng Xie, Zheng Li, Peng Wu, Yan Zeng, Chunchen Liu, and Zhi Geng. Local causal structure learning in the presence of latent variables. In Proceedings of the 41st International Conference on Machine Learning , pages 54511–54530, 2024. Shuai Yang, Hao Wang, Kui Yu, Fuyuan Cao, and Xindong Wu. Towards efficient local causal structure learning. IEEE Transactions on Big Data , 8(6):1592–1609, 2021. Sandeep Yaramakala and Dimitris Margaritis. Speculative markov blanket discovery for optimal feature selection. In Fifth IEEE International Conference on Data Mining (ICDM’05) , pages 4–pp. IEEE, 2005. Jianxin Yin, You Zhou, Changzhang Wang, Ping He, Cheng Zheng, and Zhi Geng. Partial orienta-tion and local structural learning of causal networks for prediction. In Causation and Prediction Challenge , pages 93–105. PMLR, 2008. Kui Yu, Lin Liu, Jiuyong Li, and Huanhuan Chen. Mining markov blankets without causal suffi-ciency. IEEE transactions on neural networks and learning systems , 29(12):6333–6347, 2018. Kui Yu, Lin Liu, Jiuyong Li, Wei Ding, and Thuc Duy Le. Multi-source causal feature selection. 
+
+IEEE transactions on pattern analysis and machine intelligence , 42(9):2240–2256, 2019a. Kui Yu, Xianjie Guo, Lin Liu, Jiuyong Li, Hao Wang, Zhaolong Ling, and Xindong Wu. Causality-based feature selection: Methods and evaluations. ACM Computing Surveys (CSUR) , 53(5): 1–36, 2020. Yue Yu, Jie Chen, Tian Gao, and Mo Yu. Dag-gnn: Dag structure learning with graph neural networks. In International conference on machine learning , pages 7154–7163. PMLR, 2019b. 30 Alessio Zanga, Elif Ozkirimli, and Fabio Stella. A survey on causal discovery: Theory and practice. 
+
+International Journal of Approximate Reasoning , 151:101–129, 2022. Hao Zhang, Yixin Ren, Yewei Xia, Shuigeng Zhou, and Jihong Guan. Towards effective causal partitioning by edge cutting of adjoint graph. IEEE Transactions on Pattern Analysis and Machine Intelligence , 46(12):10259–10271, 2024. Jiji Zhang. Causal inference and reasoning in causally insufficient systems . PhD thesis, Citeseer, 2006. Jiji Zhang. On the completeness of orientation rules for causal discovery in the presence of latent confounders and selection bias. Artificial Intelligence , 172(16-17):1873–1896, 2008. Qingyuan Zheng, Yue Liu, and Yangbo He. Local causal discovery with background knowledge. 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence , 2026. Xun Zheng, Bryon Aragam, Pradeep K Ravikumar, and Eric P Xing. Dags with no tears: Con-tinuous optimization for structure learning. Advances in neural information processing systems ,31, 2018. You Zhou, Changzhang Wang, Jianxin Yin, and Zhi Geng. Discover local causal network around a target to a given depth. In Causality: Objectives and Assessment , pages 191–202. PMLR, 2010. Lin Zhu, Weihan Yin, Yiyao Yang, Yifei Wu, Qinying Gu, Xinbing Wang, Chenghu Zhou, and Nanyang Ye. Cfsm: A novel causal feature selection module for two-dimensional out-of-distribution generalization. IEEE Transactions on Pattern Analysis and Machine Intelligence ,48(2):1590–1607, 2026. 31 Appendix Contents 
+
+A Supplementary Preliminaries 33 B Additional Background on MAGs Induced by DAGs 34 C Proofs 36 
+
+C.1 Proofs of Results on Markov Blanket in MAGs . . . . . . . . . . . . . . . . . . . . . 36 C.2 Proof of Theorem 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37 C.3 Proof of Theorems 2 and 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38 C.4 Proof of Theorem 4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 43 C.5 Proof of Theorem 5 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 44 
+
+D Additional Technical Details for LoCaLS 45 
+
+D.1 Orientation Rules . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 45 D.2 Update Waitlist . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 46 
+
+E Supplementary Examples 46 F Supplementary Experiments 48 
+
+F.1 Additional Details on Baseline Methods . . . . . . . . . . . . . . . . . . . . . . . . . 48 F.2 Additional Details on Evaluation Metrics . . . . . . . . . . . . . . . . . . . . . . . . 49 F.3 Supplementary Results on Random Structures with Varying Dimensions . . . . . . . 49 F.4 Supplementary Results on Random Structures with Varying Density . . . . . . . . . 51 F.5 Supplementary Results on Real-World Structures . . . . . . . . . . . . . . . . . . . . 51 F.6 Supplementary Results on Latent-Variable Sensitivity . . . . . . . . . . . . . . . . . 53 F.7 Supplementary Results on Selection-Variable Sensitivity . . . . . . . . . . . . . . . . 54 
+
+G Supplementary Results for Gene Expression Applications 55 
+
+G.1 Additional Results on Arabidopsis thaliana Gene Expression Data . . . . . . . . . . 55 G.2 Additional Results on Melanoma Gene Expression Data . . . . . . . . . . . . . . . . 56 32 A Supplementary Preliminaries 
+
+Table II: Main symbols and notation used in this paper. 
+
+Symbol Description V The full set of variables in the underlying causal system. 
+
+O, L, S The sets of observed, latent, and selection variables, respectively, with V =
+
+O ∪ L ∪ S.T ∈ O The target observed variable whose local causal structure is to be recovered. 
+
+|K| The cardinality of a variable set K.
+
+D The underlying directed acyclic graph (DAG) over V.
+
+M The maximal ancestral graph (MAG) induced over the observed variables O.
+
+P The ground-truth partial ancestral graph (PAG) over O.ˆP The PAG estimate maintained and updated by LoCaLS .
+
+LX The locally learned graph over the MB-based region MB +(X). MB( X, M), MB( X) The Markov blanket of X in M; after identifiability is established, MB( X)denotes the common MB. MB +(X) The MB-based local region MB( X) ∪ { X}.An( X, G), An +(X, G) The ancestors of X in G, and the ancestors including X itself. Ant( X, G), Ant +(X, G)The anterior vertices of X in G, and the anterior vertices including X itself. Sepset( X, Y ), 
+
+Sepsets 
+
+A separating set for X and Y , and the collection of separating sets recorded during learning. 
+
+X ⊥⊥ Y | Z X and Y are conditionally independent given Z; graphically, this corresponds to m-separation under the stated assumptions. 
+
+X̸ ⊥⊥ Y | Z X and Y are conditionally dependent given Z.
+
+n, d, p, s, r L, r S Experimental parameters: number of variables, expected degree, edge probabil-ity, density scaling factor, latent ratio, and selection ratio. 
+
+We first recall several definitions used throughout the paper. We refer to graphs with three possible edge marks—tail ‘ −’, arrowhead ‘ >’, and circle ‘ ◦’—as 
+
+partial mixed graphs (PMGs). Hence, a PMG may contain six types of edges: →, ↔, ◦ → , ◦− , ◦-
+
+−◦ , −.
+
+Definition 10 (Potentially Anterior Path ). A path π between X and Y in a PMG is a poten-tially anterior path from X to Y if there is no arrowhead on the path pointing toward X.
+
+Definition 11 (Causal Markov Condition (Spirtes et al., 2000)) . Let G be a causal graph with vertex set V, and let P (V) denote a probability distribution over V generated by the causal structure represented by G. We say that P (V) satisfies the Causal Markov Condition with respect to G if, for any triplet of disjoint subsets X, Y, Z ⊆ V, whenever X and Y are m-separated by Z in G, then X
+
+and Y are conditionally independent given Z in P (V).
+
+Definition 12 (Causal Faithfulness Condition (Spirtes et al., 2000)) . Let G be a causal graph with vertex set V, and let P (V) denote a probability distribution over V generated by the causal 
+
+33 structure represented by G. We say that P (V) satisfies the Causal Faithfulness Condition with respect to G if, for any triplet of disjoint subsets X, Y, Z ⊆ V, whenever X and Y are conditionally independent given Z in P (V), then X and Y are m-separated by Z in G.
+
+Under these two conditions, the conditional independence relations among the observed vari-ables correspond exactly to m-separation relations in the causal graph. Accordingly, when the context is clear, we use the notation ⊥⊥ interchangeably to denote conditional independence in the distribution and m-separation in MAGs. The following notions are mainly used in the proofs. 
+
+Definition 13 (Ancestors and Anterior Vertices ). Let G be a mixed graph and let X, Y be vertices in G. We say that X is an ancestor of Y if there exists a directed path X → · · · → Y in 
+
+G. The set of all ancestors of X in G is denoted by An( X, G).We say that X is anterior to Y if there exists a path from X to Y consisting only of undirected (−) and directed ( →) edges, such that no edge on the path is oriented toward X. The set of all anterior vertices of X in G is denoted by Ant( X, G).
+
+For a vertex set X, we define An( X, G) = [
+
+> X∈X
+
+An( X, G), An +(X, G) = An( X, G) ∪ X,
+
+and similarly, Ant( X, G) = [
+
+> X∈X
+
+Ant( X, G), Ant +(X, G) = Ant( X, G) ∪ X.
+
+Definition 14 (Induced Subgraph ). Given a graph G = ( V, E) and a subset V′ ⊆ V, the 
+
+induced subgraph of G on V′, denoted by G[V′], is the graph whose vertex set is V′ and whose edge set consists of all edges in G with both endpoints in V′.
+
+Definition 15 (Augmented Graph ). Given a mixed graph G, the augmented graph of G, denoted by (G)a, is an undirected graph over the same set of vertices as G such that two vertices are adjacent in (G)a if and only if they are collider connected in G.
+
+Two vertices X and Y are collider connected in a mixed graph G if there exists a path between 
+
+X and Y in which every non-endpoint vertex is a collider, including the case where X and Y are adjacent in G.In an undirected graph, a vertex X is said to be separated from a vertex Y by a set of vertices 
+
+Z if every path between X and Y contains at least one vertex in Z. More generally, two vertex sets X and Y are said to be separated by Z if, for every pair ( X, Y ) with X ∈ X and Y ∈ Y, the vertices X and Y are separated by Z.
+
+## B Additional Background on MAGs Induced by DAGs 
+
+This appendix provides additional background on how a DAG with latent variables and selection variables induces a MAG over the observed variables. This construction complements the discussion in Section 3.2. Let D be an underlying DAG over V = O ∪ L ∪ S, where O denotes observed variables, L
+
+denotes latent variables, and S denotes selection variables. Since variables in L are unobserved and variables in S are conditioned on, the conditional independence information available from data is 34 of the form X ⊥⊥ Y | Z under Pobs (O) = P (O | S = s), for disjoint sets X, Y, Z ⊆ O. Equivalently, this corresponds to conditional independences among observed variables after marginalizing over L
+
+and conditioning on S.A key property of MAGs is that they represent these observable conditional independence relations without explicitly including the latent and selection variables. The following construction gives the induced MAG over O.
+
+Definition 16 (Inducing Path Relative to (L, S)) . Let D be a DAG over O ∪ L ∪ S, and let 
+
+X, Y ∈ O. A path between X and Y in D is called an inducing path relative to ( L, S) if every non-endpoint vertex on the path is either in L or is a collider, and every collider on the path is an ancestor of X, Y , or some variable in S.
+
+Algorithm 2 InduceMAG from an Underlying DAG 
+
+Input: A DAG D over V = O ∪ L ∪ S.
+
+Output: The induced MAG M over O. 
+
+> 1:
+
+Initialize M as an empty mixed graph over vertex set O. 
+
+> 2:
+
+for all distinct pairs A, B ∈ O do  
+
+> 3:
+
+if there exists an inducing path relative to ( L, S) between A and B in D then  
+
+> 4:
+
+Add an edge between A and B in M. 
+
+> 5:
+
+end if  
+
+> 6:
+
+end for  
+
+> 7:
+
+for all adjacent pairs A, B in M do  
+
+> 8:
+
+if A ∈ An( B ∪ S, D) and B / ∈ An( A ∪ S, D) then  
+
+> 9:
+
+Orient the edge as A → B in M. 
+
+> 10:
+
+else if B ∈ An( A ∪ S, D) and A / ∈ An( B ∪ S, D) then  
+
+> 11:
+
+Orient the edge as A ← B in M. 
+
+> 12:
+
+else if A / ∈ An( B ∪ S, D) and B / ∈ An( A ∪ S, D) then  
+
+> 13:
+
+Orient the edge as A ↔ B in M. 
+
+> 14:
+
+else if A ∈ An( B ∪ S, D) and B ∈ An( A ∪ S, D) then  
+
+> 15:
+
+Orient the edge as A − B in M. 
+
+> 16:
+
+end if  
+
+> 17:
+
+end for  
+
+> 18:
+
+return M.The MAG M constructed by Algorithm 2 preserves the observable conditional independence structure of the underlying DAG. More precisely, for any disjoint sets X, Y, Z ⊆ O, X and Y
+
+are m-separated by Z in M if and only if they are d-separated by Z ∪ S in D after marginalizing over L. Thus, under the standard causal Markov and faithfulness assumptions, M represents the conditional independence relations in Pobs (O). The edge marks in the induced MAG also carry qualitative ancestral information inherited from the underlying DAG. Specifically, for adjacent observed variables A and B:
+
+• A → B indicates that A is an ancestor of B or of some selection variable, whereas B is not an ancestor of A or of any selection variable; 
+
+• A ↔ B indicates that neither A nor B is an ancestor of the other or of any selection variable; in the presence of adjacency, this is typically interpreted as evidence of latent confounding between 
+
+A and B;35 • A − B indicates that both A and B are ancestors of the other variable or of some selection variable. Since the underlying causal graph is acyclic, such undirected edges arise from selection effects. Therefore, the induced MAG provides a compact representation of both the conditional inde-pendence structure and the qualitative ancestral information among observed variables, after latent variables have been marginalized out and selection variables have been conditioned on. 
+
+## C Proofs 
+
+C.1 Proofs of Results on Markov Blanket in MAGs 
+
+Proof of Lemma 1. Let Y ∈ O \ MB +(X, M). Suppose there exists an m-connecting path π =
+
+⟨X = V0, V 1, . . . , V k = Y ⟩ between X and Y given MB( X, M). We analyze cases according to the form of π:(1) X ← V1 · · · Y or X − V1 · · · Y . Then V1 is respectively a parent or a neighbor of X, hence 
+
+V1 ∈ MB( X, M). Since V1 is a non-collider on π, the path cannot be m-connecting given MB( X, M). (2) X ↔ V1 · · · Y . If all edges on π are bidirected, then Y lies in the bidirected district of X,hence Y ∈ MB( X, M), contradicting Y /∈ MB +(X, M). Otherwise, let i be the largest index with 0 < i < k such that all edges between X and Vi are bidirected. The next edge is either 
+
+Vi → Vi+1 or Vi ← Vi+1 ; an undirected edge Vi − Vi+1 would violate the ancestral property of MAGs. If Vi → Vi+1 , then Vi ∈ MB( X, M) and, as a non-collider, blocks π. If Vi ← Vi+1 , then 
+
+Vi+1 ∈ MB( X, M) and, as a non-collider, blocks π.(3) X → V1 · · · Y . Let i be the smallest index with 0 < i < k such that the edge between Vi
+
+and Vi+1 is not Vi → Vi+1 . If i > 1, then V1 is a non-collider and V1 ∈ MB( X, M), so π is blocked. If i = 1. V1 − V2 contradicts the ancestral property by X → V1. If V1 ← V2, then 
+
+V2 ∈ MB( X, M) and, as a non-collider, blocks π. If V1 ↔ V2, we reduce to case (2), which we have shown cannot yield an m-connecting path given MB( X, M). Thus, in all cases, π cannot be m-connecting given MB( X, M). 
+
+Proof of Lemma 2. Suppose there is a nonempty set Z ⊂ MB( X, M) such that X ⊥⊥ Y | MB ′(X, M)for all Y ∈ O \ { MB ′(X, M) ∪ { X}} , where MB ′(X, M) = MB( X, M) \ Z. We argue by cases, according to the role of Z in the graphical structure. (1) If Z ∈ Z is an adjacent vertex of X, then X ⊥⊥ Z | MB ′(X, M) does not hold, due to the presence of the direct edge between X and Z.(2) If Z ∈ Z is a non-adjacent vertex of X, by the definition of MB( X, M), there exists a collider path π between X and Z. Without loss of generality, we suppose non-endpoint vertices on π
+
+are not in Z, otherwise, we can find a shorter collider path between X and another Z′ ∈ Z.Since all non-endpoint vertices on π are colliders and in MB ′(X, M), π is m-connecting given MB ′(X, M). Thus X ⊥⊥ Z | MB ′(X, M) not holds. In either case, MB ′(X, M) fails to separate X from at least one vertex outside MB ′(X, M) ∪ { X},proving minimality. 
+
+Proof of Proposition 1. If Y ∈ MB( X, M), by the definition of MB( X, M), O \ { X, Y } does not m-separate X and Y . Thus, X̸ ⊥⊥ Y | O \ { X, Y }.If Y /∈ MB( X, M), X is m-separated from Y given O \ { X, Y }. Thus, X ⊥⊥ Y | O \ { X, Y }.36 C.2 Proof of Theorem 1 
+
+In this section, we present the proof of Theorem 1. The proof relies on several lemmas that establish key properties of m-separation and ancestral relationships in MAGs. The overall structure of the proof is illustrated in Fig. 10. Lemma 3 Lemma 4 Lemma 5 Lemma 6 Theorem 1 Figure 10: Proof structure of Theorem 1. 
+
+Lemma 3. Let A, B, and C be three disjoint subsets of vertices in a MAG M. Then A and B are m-separated by C in M if and only if A and B are separated by C in (M[Ant +(A ∪ B ∪ C, M)]) a.Proof of Lemma 3. This is a direct consequence of Theorem 3.18 in (Richardson and Spirtes, 2002). 
+
+Lemma 4. Let S be a subset of vertices in a MAG M. For any two vertices X and Y in S,
+
+X and Y are m-separated by a subset of S \ { X, Y } in M if and only if they are m-separated by 
+
+Ant( {X, Y }, M) ∩ S.Proof of Lemma 4. Let 
+
+S′ = Ant( {X, Y }, M) ∩ S.
+
+We prove the two directions separately. (⇒) Suppose X and Y are not m-separated by S′ in M. Since Ant +({X, Y }, M)∪S′ = Ant +({X, Y }, M), Lemma 3 implies that X and Y are not separated by S′ in ( M [Ant +({X, Y }, M)]) a. Thus, there exists a path π between X and Y in ( M [Ant +({X, Y }, M)]) a such that no non-endpoint vertex of π lies in S′. Every non-endpoint vertex of π is contained in Ant( {X, Y }, M), and 
+
+S′ = Ant( {X, Y }, M) ∩ S. Hence, no non-endpoint vertex of π lies in S. Now consider an ar-bitrary subset Z ⊆ S \ { X, Y }. Because the same path π also exists in each augmented graph (M [Ant +({X, Y } ∪ Z, M)]) a, the vertices X and Y are not separated by Z in any such graph. Applying Lemma 3 again, we conclude that X and Y are not m-separated by Z in M.(⇐) The reverse direction is immediate, since S′ ⊆ S \ { X, Y }.This completes the proof. 
+
+Lemma 5. If π is a path m-connecting X and Y given Z in a MAG M, then every vertex on π is in Ant +({X, Y } ∪ Z, M).Proof of Lemma 5. This is a direct consequence of Lemma 3.13 in (Richardson and Spirtes, 2002). 
+
+Lemma 6. Suppose that π is a path that connects two nonadjacent vertices X and Y . If π is not contained completely in Ant +({X, Y }, M), then π is m-separated by any subset of Ant( {X, Y }, M).Proof of Lemma 6. Since π is not contained completely in Ant +({X, Y }, M) and has length |π| > 1, there exists a vertex V on π such that 
+
+V /∈ Ant +({X, Y }, M).
+
+37 Let Z ⊆ Ant( {X, Y }, M) be arbitrary. We will show that π is not m-connecting X and Y given Z.First note that in a MAG M, Ant( ·, M) is closed under taking anteriors, so in particular Ant(Ant( {X, Y }, M), M) = Ant( {X, Y }, M).
+
+Because Z ⊆ Ant( {X, Y }, M), monotonicity of Ant( ·, M) implies Ant( Z, M) ⊆ Ant(Ant( {X, Y }, M), M),
+
+Ant(Ant( {X, Y }, M), M) = Ant( {X, Y }, M).
+
+Therefore, Ant +({X, Y } ∪ Z, M) = Ant +({X, Y }, M).
+
+By construction, the vertex V satisfies 
+
+V /∈ Ant +({X, Y }, M) = Ant +({X, Y } ∪ Z, M).
+
+Consequently, by Lemma 5, π cannot be m-connecting X and Y given Z. Thus, π is m-separated by any subset of Ant( {X, Y }, M). 
+
+Proof of Theorem 1. We prove the two directions separately. (⇒) Suppose X and Y are m-separated by a subset of O. By Lemma 4, they are m-separated by 
+
+Z = Ant( {X, Y }, M) ∩ O.
+
+Define 
+
+S = Ant( {X, Y }, M) ∩ MB( X), B = O \ MB +(X)We will show that X and Y are m-separated by S.Consider an arbitrary path π between X and Y . If π is not contained completely in Ant +({X, Y }, M), then by Lemma 6, π is m-separated by any subset of Ant( {X, Y }, M), including S.Then all vertices on π lie in Ant +({X, Y }, M). Suppose π is not m-separated by S. Since Z m-separates π and S ⊆ Z, there must be at least one vertex V ∈ { π∩(Z\S)} ⊆ B. Let V be the closest such vertex to X along π. Then the subpath π(X, V ) is also not m-separated by S. Since all non-endpoint vertices on π(X, V ) are not in B, by π(X, V ) ⊆ π ⊆ Ant( {X, Y }, M) and the definition of 
+
+S, all non-endpoint vertices on π(X, V ) belong to S. Thus π(X, V ) m-connects X and V given S,and therefore also given MB( X) ∪ S = MB( X). However, the condition X ⊥⊥ B | MB( X), implies 
+
+X ⊥⊥ B | MB( X) for any B ∈ B. This contradicts the existence of the m-connecting subpath 
+
+π(X, V ) given MB( X). Hence π must be m-separated by S. In conclusion, there is a subset of MB( X) that m-separates X and Y .(⇐) The reverse direction is immediate, since MB( X) ⊆ O.The proof is complete. 
+
+C.3 Proof of Theorems 2 and 3 
+
+In this section, we present the proofs of Theorem 3 and Theorem 2. The proofs rely on the following lemmas that establish key properties of edge marks in MAGs and PAGs, as well as the concept of arrow-collider paths. 38 Lemma 7. Let D be a DAG over the variable set V = O∪L∪S, where O denotes the set of observed variables, L denotes the set of latent variables, and S denotes the set of selection biases. Let M be the MAG that causally represents 6 D over O, and let M′ be the MAG that causally represents D
+
+over any subset O′ ⊂ O. Then, every edge mark in M′ encodes the same causal information with respect to its endpoint as in M. In particular, for any two adjacent vertices X, Y ∈ O′,(1) X −∗ Y in M′ means that X is an ancestor of Y ∪ S in D, and hence also in M;(2) X ←∗ Y in M′ means that X is not an ancestor of Y ∪ S in D, and hence also in M.Proof of Lemma 7. The edge marks in a MAG admit causal interpretations (Zhang, 2008): a tail at a vertex X on an edge indicates that X is an ancestor of the adjacent vertex or selection biases in D, whereas an arrowhead indicates that X is not its ancestor. Constructing M′ over a subset 
+
+O′ of observed variables corresponds to treating the remaining variables O \ O′ as latent. By the definition of MAGs, the causal semantics of edge marks are preserved under such a projection. Therefore, if X −∗ Y appears in M′, the tail at X implies that X is an ancestor of Y in the underlying DAG and hence also in M. Conversely, if X ←∗ Y appears in M′, the arrowhead at X
+
+implies that X is not an ancestor of Y in the underlying DAG and thus also not an ancestor of Y
+
+in M. This completes the proof. Then, we can get a straightforward corollary as follows. 
+
+Corollary 2. Let M be a MAG over O, and let LO′ denote the local PAG over any subset O′ ⊂ O.Then, every non-circle edge mark in LO′ encodes the same causal information as in M. Specifically, for any two adjacent vertices X, Y ∈ O′,(1) X −∗ Y in LO′ means that X is an ancestor of Y ∪ S,(2) X ←∗ Y in LO′ means that X is not an ancestor of Y ∪ S.
+
+Definition 17 (Arrow-Collider Path (Li et al., 2025)) . In a mixed graph, a path π = ⟨V0, . . . , V n⟩
+
+is called an arrow-collider path from V0 to Vn if every non-endpoint vertex is a collider on π, and the edge between V0 and V1 points into V0, i.e., V0 ↔ V1 · · · ←∗ Vn. If n = 1 , π simplifies to V0 ←∗ V1.
+
+Lemma 8. Let M be a MAG over O, and let V1 and V2 be two non-adjacent vertices in M such that V1 /∈ Ant( V2, M). Let 
+
+Z = {ArrColl( V1, M) ∩ Ant( {V1, V 2}, M)} \ { V1, V 2},
+
+where ArrColl( V1, M) denotes the set of vertices reachable from V1 via arrow-collider paths in M.Then Z m-separates V1 and V2 in M.Proof of Lemma 8. We show that Z blocks every path between V1 and V2 in M. Let 
+
+π = ⟨V1 = A0, A 1, . . . , A i, . . . , V 2 = An⟩
+
+be an arbitrary path between V1 and V2 in M. We analyze cases according to the form of π:
+
+• If π forms V1 ← A1 . . . V 2, then Z blocks the path because A1 ∈ Z and A1 is a non-collider on π.
+
+> 6The MAG obtained by applying the construction procedure described in (Zhang, 2008) (see Algorithm 2), which preserves the causal relations among the observed variables.
+
+39 • If π forms V1 ↔ A1 . . . A i . . . V 2, then Z also blocks the path. Specifically, if all edges on π are bi-directed, there must exist some Ai /∈ Ant( {V1, V 2}, M); otherwise, π would be an inducing path between V1 and V2 but they are not adjacent. Thus, Z blocks π since Ai is a collider and Ai /∈ Ant +(Z, M). Otherwise, let i (0 < i < n ) be the largest index such that all edges between V1 and Ai are bi-directed. Then the edge between Ai and Ai+1 is either Ai → Ai+1 or Ai ← Ai+1 . The case 
+
+Ai − Ai+1 is impossible, as it would contradict the ancestral property due to the presence of 
+
+Ai−1 ↔ Ai. We proceed by considering the direction of this edge: 
+
+– If Ai → Ai+1 and 
+
+Ai ∈ Ant( {V1, V 2}, M),
+
+then Ai ∈ Z, so Z blocks π as Ai is a non-collider and Ai ∈ Z.
+
+– If Ai → Ai+1 and 
+
+Ai /∈ Ant( {V1, V 2}, M),
+
+then there must exist a collider on π(Ai, V 2), let Aj be the collider that is the nearest to 
+
+Ai with i < j < n . Since 
+
+Ai ∈ Ant( Aj , M),
+
+we have Aj /∈ Ant( {V1, V 2}, M); otherwise, Ai would belong to Ant( {V1, V 2}, M). There-fore, Z blocks this path because Aj is a collider on π and Aj /∈ Ant +(Z, M). 
+
+– If Ai ← Ai+1 and 
+
+Ai+1 ∈ Ant( {V1, V 2}, M),
+
+then Ai+1 ∈ Z, so Z blocks π as Ai+1 is a non-collider and Ai+1 ∈ Z.
+
+– If Ai ← Ai+1 and 
+
+Ai+1 /∈ Ant( {V1, V 2}, M),
+
+then Ai /∈ Ant( {V1, V 2}, M). Hence, Z blocks this path because Ai is a collider on π and 
+
+Ai /∈ Ant +(Z, M). 
+
+• If π forms V1 −∗ A1 . . . A i . . . V 2. Since V1 /∈ Ant( V2, M), there must exist at least one collider on π. Let Ai be the collider nearest to V1. Since V1 ∈ Ant( Ai, M), we have 
+
+Ai /∈ Ant( {V1, V 2}, M). Therefore, Z blocks π because Ai is a collider and Ai /∈ Ant( Z, M). Consequently, every path π between V1 and V2 is blocked by Z. Therefore, Z m-separates V1 and 
+
+V2, which completes the proof. We then prove Theorem 2 and Theorem 3 respectively. For notational convenience, let Sepset( X, Y )denote the set of vertices that m-separates X and Y . Let P denote the ground-truth PAG over O.
+
+Proof of Theorem 2. We prove the two directions separately. (⇒) Without loss of generality, suppose that an uncovered collider path 
+
+X∗→ V1 ↔ · · · ←∗ Vi
+
+is identified in LX , with i ≥ 2. By definition, all intermediate vertices along this path are colliders, with every consecutive triplet forming an unshielded collider. Consider the first triplet ⟨X, V 1, V 2⟩. Since this triplet is identified over MB +(X), the following hold: 40 (1) ∀S ⊂ MB( X), we have X̸ ⊥⊥ V1 | S.(2) ∃ Sepset( X, V 2) ⊂ MB( X) such that 
+
+X ⊥⊥ V2 | Sepset( X, V 2).
+
+(3) ∀S ⊂ MB +(X), we have V1̸ ⊥⊥ V2 | S.(4) V1 /∈ Sepset( X, V 2). From Theorem 1, (1) ensures that the edge between X and V1 in LX is consistent with P, and (2) ensures that no edge between X and V2 exists in both. Assume for contradiction that the edge between X and V1 in P is X ∗− V1. Then, together with (3) and (4), we would have ∀S ⊆ MB( X), 
+
+X̸ ⊥⊥ V2 | S, contradicting (2). Therefore, the edge must be X∗→ V1 in P (this can also be inferred from Corollary 2). Next, suppose that the edge between V1 and V2 in LX is spurious, meaning there is no direct edge between V1 and V2 in the underlying M, but at least one active path connects them. Define 
+
+Z = {ArrColl( V1, M) ∩ Ant( {V1, V 2}, M)} \ { V1, V 2},
+
+since X∗→ V1, it follows that ArrColl( V1, M) ⊂ MB +(X),
+
+hence Z ⊂ MB +(X). Since V1 ←∗ V2 in LX , by Corollary 2, V1 is not an ancestor of V2 in M.Then, by Lemma 8, Z ⊂ MB +(X) m-separates V1 and V2. We have thus confirmed that the edge 
+
+V1 ←∗ V2 in LX is consistent with P.Next, consider the second triplet ⟨V1, V 2, V 3⟩. The following holds: (1) ∀S ⊂ MB +(X), V 1̸ ⊥⊥ V2 | S,(2) ∃ Sepset( V1, V 3) ⊂ MB( X),V1 ⊥⊥ V3 | Sepset( V1, V 3),
+
+(3) ∀S ⊂ MB +(X), V 2̸ ⊥⊥ V3 | S, and (4) V2 /∈ Sepset( V1, V 3). As discussed above, the direct edge between V1 and V2 in LX is consistent with P, and the absence of a direct edge between V2 and V3 in LX is also consistent with P. Assuming the edge between 
+
+V1 and V2 in P is V1 ← V2, conditions (3) and (4) lead to ∀S ⊆ MB( X), V 1̸ ⊥⊥ V3 | S, which contradicts condition (2). Therefore, the edge between V1 and V2 must be V1 ↔ V2 in P. Similarly, ArrColl( V2, M) ⊂ MB( X) since X∗→ V1 ↔ V2. Thus, by Lemma 8, the direct edge between V2
+
+and V3 in LX is the same as P. The edges along this triplet in LX are consistent with P, and the analysis extends iteratively to the remaining unshielded collider triples along the path. Hence, all uncovered collider paths of the form X∗→ Vi ↔ · · · ←∗ Vj identified in LX are consistent with those in the ground-truth P.(⇐) Conversely, suppose that an uncovered collider path 
+
+π : ⟨X(= V0)∗→ V1 ↔ · · · ←∗ Vi⟩
+
+exists in the ground-truth P, where i ≥ 2. Then, for every adjacent pair of vertices on π, there exists no Z ⊆ O that m-separates them; consequently, no such Z ⊆ MB( X) m-separates them either. We consider triples ⟨Vj , V j+1 , V j+2 ⟩ along π according to the index j.41 (1) If j = 0, then by Theorem 1, there exists a set Z ⊂ MB( X) that m-separates V0 and V2.Hence, there is no edge between V0 and V2 in LX , and V1 /∈ Z.(2) If 0 < j < i − 2, then Vj ↔ Vj+1 ↔ Vj+2 .If Vj+2 ∈ Ant( Vj , M), then necessarily 
+
+Vj /∈ Ant( Vj+2 , M).
+
+By Lemma 8, the set 
+
+Z = {ArrColl( Vj , M) ∩ Ant( {Vj , V j+2 }, M)} \ { Vj , V j+2 }
+
+m-separates Vj and Vj+2 , and Vj+1 /∈ Z ⊂ MB( X). If 
+
+Vj ∈ Ant( Vj+2 , M) and Vj+2 /∈ Ant( Vj , M),
+
+or 
+
+Vj /∈ Ant( Vj+2 , M) and Vj+2 /∈ Ant( Vj , M),
+
+then, by an argument analogous to the above and by Lemma 8, there also exists a set Z ⊂
+
+MB( X) that m-separates Vj and Vj+2 , with Vj+1 /∈ Z.Therefore, there is no edge between Vj and Vj+2 in LX , and Vj+1 does not belong to the separating set of Vj and Vj+2 .(3) If j = i − 2. Suppose Vi−1 ← Vi. Then 
+
+Vi−2 /∈ Ant( Vi, M)must hold; otherwise this would contradict the edge Vi−2 ↔ Vi−1. By Lemma 8, the set 
+
+Z = {ArrColl( Vi−2, M) ∩ Ant( {Vi−2, V i}, M)} \ { Vi−2, V i}
+
+m-separates Vi−2 and Vi, and Vi−1 /∈ Z.If Vi−1 ↔ Vi, then by reasoning analogous to case (2), there exists a set Z ⊂ MB( X) that m-separates Vi−2 and Vi, with Vi−1 /∈ Z.Hence, there is no edge between Vi−2 and Vi in LX , and Vi−1 does not belong to the separating set of Vi−2 and Vi.Consequently, all unshielded triples along π are identified in LX , and for each j, the vertex Vj+1 
+
+is not contained in the separating set of Vj and Vj+2 . Therefore, the uncovered collider path π is correctly identified in LX . This completes the proof. 
+
+Proof of Theorem 3. Without loss of generality, suppose an unshielded collider V1∗→ X ←∗ V2 is identified in LX . By Theorem 1, the existence of direct edges between X and V1, and between X
+
+and V2, is consistent with P. Likewise, the absence of a direct edge between V1 and V2 in LX is also consistent with P.Furthermore, since ∃ Sepset( V1, V 2) ⊂ MB +(X) and X / ∈ Sepset( V1, V 2), X must be a collider in the triple ⟨V1, X, V 2⟩ in P (this conclusion also follows from Corollary 2). Hence, the identified collider V1∗→ X ←∗ V2 in LX agrees with that in P.42 C.4 Proof of Theorem 4 
+
+We prove that each stopping rule in Theorem 4 is sufficient for terminating the sequential learning procedure without losing target-specific causal information. The proof relies on the following ele-mentary observation: removing variables that are irrelevant leaf variables with respect to a retained set does not change the joint distribution over the retained variables. 
+
+Lemma 9. Let M be the underlying MAG over the observed variable set O induced by a DAG D,and let X ⊆ O be a set of variables to be retained. Let Y ⊆ O \ X be a set of variables that can be removed in an order Y1, . . . , Y m such that, at each step, Yk is a leaf relative to the variables retained at that step. Then removing Y does not change the marginal distribution over X, i.e., 
+
+PM(X) = PM \ Y(X).
+
+Lemma 9 implies that deleting variables outside the retained set does not affect the distribution of interest, provided that they are removed as relative leaves. In particular, when a variable Y /∈ X
+
+has no remaining descendants that are relevant to X, marginalizing out Y only removes its own local factor and leaves the marginal distribution over X unchanged. Thus, the distribution over X
+
+in the reduced MAG M \ Y is identical to that in the original MAG M.
+
+Proof. It is sufficient to prove the claim for the removal of a single variable. Let Y ∈ O \ X be a variable to be removed, and let 
+
+R = O \ { Y }.
+
+Since Y is a leaf relative to the currently retained variables, it does not appear in the anterior set of any variable in R under the corresponding underlying causal structure representation. Therefore, the factor associated with Y can be separated from the remaining factors when marginalizing over 
+
+Y . Specifically, 
+
+PM(X) = X
+
+> O\X
+
+PM(O)= X
+
+> R\X
+
+X
+
+> y
+
+PM(R, y )= X
+
+> R\X
+
+PM \ Y (R)= PM \ Y (X). (2) Thus, removing such a relative leaf preserves the marginal distribution over X.Applying the same argument sequentially to Y1, . . . , Y m gives 
+
+PM(X) = PM \ Y1 (X) = · · · = PM \ Y(X),
+
+which proves the claim. 
+
+Proof of Theorem 4. Throughout the sequential procedure, LoCaLS only inserts adjacencies and endpoint marks whose consistency with the global PAG is guaranteed by the local learning results in Section 4.2 (i.e., Corollaries 1 and 2 and Theorems 2 and 3), and OrientPAG applies sound orientation rules. Thus, every structural mark currently recorded in ˆP is sound with respect to the global PAG. 43 Rule R1 If all edge marks incident to T have been determined, then the target-specific infor-mation of interest has already been fixed. Since all determined adjacencies and endpoint marks incident to T in ˆP are sound with respect to the global PAG, no later local learning step can validly change them. Hence the direct causes and direct effects of T encoded by the target-specific structure have already been recovered. 
+
+Rule R2 If Waitlist is empty under the update, then there is no unprocessed vertex in the current 
+
+T -connected active region that is still selected for local learning. Thus, when Waitlist is empty, the current local structure around T is equivalent to the target-specific structure obtained from global causal discovery. 
+
+Rule R3 Let Y be the set of remaining unprocessed variables. Under R3, these variables lie outside the anterior region that does not affect the target-specific structure around T . Relative to the retained region consisting of T and the currently relevant processed vertices, variables in Y can be treated as removable relative leaves: marginalizing them out does not change the distribution over the retained region by Lemma 9. Hence, further local learning around variables in Y cannot supply additional conditional independence constraints or orientation information for determining the adjacencies and endpoint marks incident to T .This completes the proof that each stopping rule is sufficient for terminating the sequential procedure without losing target-specific causal information. 
+
+C.5 Proof of Theorem 5 
+
+Let P denote the global PAG that would be obtained by applying a sound and complete global causal discovery procedure to Pobs (O). We first note the following invariant of LoCaLS : after each iteration, all adjacencies and endpoint marks inserted into ˆP are consistent with those in P.Indeed, for each processed variable X, Corollaries 1 and 2 guarantees that the adjacencies incident to X in the locally learned structure LX coincide with those in the global PAG. Moreover, LoCaLS 
+
+preserves only the local orientation information justified by Theorems 2 and 3, and the subsequent call to OrientPAG applies sound PAG orientation rules. Thus, no adjacency or endpoint mark added to ˆP contradicts the global PAG. Since the target variable T is processed first, the adjacencies incident to T are correctly recovered from LT by Corollaries 1 and 2. Subsequent iterations may further orient endpoint marks incident to T , but by the invariant above, every such orientation remains consistent with P. Therefore, throughout the sequential procedure, the learned target-specific structure in ˆP is always sound with respect to the global PAG. It remains to justify that the algorithm does not stop before all target-specific information has been recovered. This follows from Theorem 4. If R1 holds, then all endpoint marks incident to 
+
+T have been determined. If R2 holds, then there is no remaining variable selected for further local learning. If R3 holds, then every path from an unprocessed variable to T is blocked by a non-potentially-anterior mark, so no remaining variable can provide additional information for resolving the local structure around T . Hence, upon termination, the local structure around T in ˆP contains exactly the adjacencies and identifiable endpoint marks incident to T that would be obtained from the global PAG P.Therefore, LoCaLS identifies the direct causes and direct effects of T that are identifiable from 
+
+P, and the returned local structure is consistent with the target-specific structure obtained by global causal discovery. 44 D Additional Technical Details for LoCaLS 
+
+D.1 Orientation Rules 
+
+Let Sepsets denote the collection of all conditional independence relations identified during the local learning process. A separator Sepset( X, Y ) between two variables X and Y recorded in 
+
+Sepsets implies that there is no edge between X and Y in the learned graph. (Zhang, 2008) presented sound and complete orientation rules for learning a PAG. These rules are summarized as Algorithm 3. 
+
+Algorithm 3 OrientPAG 
+
+Input: A PAG P and a collection of separating sets Sepsets .
+
+Output: The oriented PAG P. 
+
+> 1:
+
+Initialize P with the current skeleton and existing edge marks.    
+
+> 2: ▷Apply any of the following rules whenever its antecedent is satisfied.
+> 3:
+
+repeat  
+
+> 4:
+
+Rule 1. If X∗→ Y ◦−∗ Z, Sepset( X, Z ) ∈ Sepsets , and Y ∈ Sepset( X, Z ), then orient the triple as X∗→ Y → Z. 
+
+> 5:
+
+Rule 2. If X → Y ∗→ Z or X∗→ Y → Z, and X ∗−◦ Z, then orient X ∗−◦ Z as X∗→ Z. 
+
+> 6:
+
+Rule 3. If X∗ → Y ← ∗ Z, X ∗− ◦ W ◦−∗ Z, W ∗− ◦ Y , Sepset( X, Z ) ∈ Sepsets , and 
+
+W ∈ Sepset( X, Z ), then orient W ∗−◦ Y as W ∗→ Y . 
+
+> 7:
+
+Rule 4.  
+
+> 8:
+
+if there exists a discriminating path π = ⟨W, . . . , X, Y, Z ⟩ between W and Z for Y , Y ◦−∗ Z,and Sepset( W, Z ) ∈ Sepsets then  
+
+> 9:
+
+if Y ∈ Sepset( W, Z ) then  
+
+> 10:
+
+Orient Y ◦−∗ Z as Y → Z. 
+
+> 11:
+
+else  
+
+> 12:
+
+Orient the triple ⟨X, Y, Z ⟩ as X ↔ Y ↔ Z. 
+
+> 13:
+
+end if  
+
+> 14:
+
+end if  
+
+> 15:
+
+Rule 5. For every remaining edge X ◦− ◦ Y , if there exists an uncovered circle path 
+
+p = ⟨X, Z, . . . , W, Y ⟩ between X and Y such that Sepset( X, W ) ∈ Sepsets and Y ∈
+
+Sepset( X, W ), and Sepset( Y, Z ) ∈ Sepsets and X ∈ Sepset( Y, Z ), then orient X ◦− ◦ Y
+
+and every edge on p as undirected edges.  
+
+> 16:
+
+Rule 6. If X − Y ◦−∗ Z, then orient Y ◦−∗ Z as Y −∗ Z. 
+
+> 17:
+
+Rule 7. If X −◦Y ◦−∗ Z, Sepset( X, Z ) ∈ Sepsets , and Y ∈ Sepset( X, Z ), then orient Y ◦−∗ Z
+
+as Y −∗ Z. 
+
+> 18:
+
+Rule 8. If X → Y → Z or X −◦ Y → Z, and X◦→ Z, then orient X◦→ Z as X → Z. 
+
+> 19:
+
+Rule 9. If X◦→ Z, and p = ⟨X, Y, W, . . . , Z ⟩ is an uncovered potentially directed path from 
+
+X to Z such that Sepset( Z, Y ) ∈ Sepsets and X ∈ Sepset( Z, Y ), then orient X◦→ Z as 
+
+X → Z. 
+
+> 20:
+
+Rule 10. Suppose X◦→ Z, Y → Z ← W , π1 is an uncovered potentially directed path from 
+
+X to Y , and π2 is an uncovered potentially directed path from X to W . Let U be the vertex adjacent to X on π1 (U could be Y ) and let V be the vertex adjacent to X on π2 (V could be W ). If U and V are distinct, Sepset( U, V ) ∈ Sepsets , and X ∈ Sepset( U, V ), then orient 
+
+X◦→ Z as X → Z. 
+
+> 21:
+
+until no rule can further orient any edge mark in P 
+
+> 22:
+
+return P.45 D.2 Update Waitlist 
+
+Algorithm 4 UpdateWaitlist 
+
+Input: Target variable T , current graph ˆP, processed set Donelist. 
+
+Output: Updated set Waitlist.  
+
+> 1:
+
+Initialize Waitlist ← ∅ . 
+
+> 2:
+
+for each variable V in ˆP do  
+
+> 3:
+
+if V has a potentially anterior path to T in ˆP then  
+
+> 4:
+
+Add V to Waitlist.  
+
+> 5:
+
+end if  
+
+> 6:
+
+end for  
+
+> 7:
+
+Remove all variables in Donelist from Waitlist.  
+
+> 8:
+
+return Waitlist. The selective update in Algorithm 4 does not change the completeness argument above. It is a refinement of the coarse waitlist update: instead of retaining all unprocessed vertices connected to 
+
+T , it keeps only those that still have a potentially anterior path to T in the current graph ˆP. Vertices discarded by this rule are exactly the vertices covered by the structural redundancy condition in R3, and by Theorem 4, learning their local structures cannot further affect the target-specific structure around T . Therefore, replacing the coarse update with Algorithm 4 preserves completeness, while making R3 implicit in the waitlist update; in practice, the algorithm only needs to explicitly check 
+
+R1 and R2. 
+
+## E Supplementary Examples 
+
+This example illustrates a learning process that terminates by R3 under a coarse waitlist update and, when using UpdateWaitlist , terminates instead by R2. 
+
+B A H
+
+S
+
+T E G
+
+L1 L2
+
+C
+
+D F
+
+> (a) DAG
+
+B A H
+
+T E GC
+
+D F
+
+> (b) Induced MAG
+
+B A H
+
+T E GC
+
+D F
+
+> (c) Ground-truth PAG
+
+Figure 11: Underlying causal graphs for Example 4: (a) the DAG, where L1 and L2 are latent vari-ables and S is an unobserved selection variable; (b) the induced MAG over the observed variables; and (c) the corresponding ground-truth PAG. 46 B A
+
+T EC 
+
+> (a) LT
+
+B A
+
+T EC      
+
+> (b) ˆPafter learning LT
+> Waitlist = {A, E }Donelist = {T}
+
+B A
+
+T E 
+
+> (c) LA
+
+B A
+
+T EC     
+
+> (d) ˆPafter learning LA
+> Waitlist = {E, B }Donelist = {T, A }
+
+A H
+
+T E G 
+
+> (e) LE
+
+B A H
+
+T EC G     
+
+> (f) ˆPafter learning LE
+> Waitlist = {B}Donelist = {T, A, E }
+
+B A
+
+TC 
+
+> (g) LB
+
+B A H
+
+T EC G      
+
+> (h) ˆPafter learning LB
+> Waitlist = {} Donelist = {T, A, E, B }
+> Terminate: Waitlist = ∅
+
+Figure 12: Sequential execution of LoCaLS in Example 4. Each row shows the learned local structure (left) and the updated ˆP (right). Red shading marks the currently processed variable, red edges are discarded because their global consistency is not guaranteed, and the blue arrows in the final update block all remaining potentially anterior paths to T . Thus, UpdateWaitlist 
+
+returns an empty waitlist and the procedure terminates by R2. 
+
+Example 4. Consider the causal graphs in Fig. 11, and assume oracle conditional independence tests. Let T be the target variable. The algorithm starts with Waitlist = {T }, Donelist = ∅, and 
+
+ˆP = ∅. Its execution is illustrated in Fig. 12 and proceeds as follows: 
+
+• Processing T . The algorithm first identifies MB +(T ) = {A, B, C, E, T } and learns the local graph LT shown in Fig. 12(a). It then incorporates the locally learned information that is guaranteed to be globally consistent and discards the red edge. The resulting graph is shown in Fig. 12(b). Since A and E have potentially anterior paths to T , the waitlist update gives 
+
+Donelist = {T }, Waitlist = {A, E }.
+
+• Processing A. Next, the algorithm identifies MB +(A) = {A, B, E, T } and learns LA, shown 
+
+47 in Fig. 12(c). After preserving the globally consistent information and applying the orientation rules, the algorithm obtains the graph in Fig. 12(d). The waitlist update yields Donelist = 
+
+{T, A }, Waitlist = {E, B }.
+
+• Processing E. The algorithm then identifies MB +(E) = {A, E, G, H, T }. The learned local graph LE and the updated graph are shown in Figs. 12(e) and 12(f ), respectively. After pre-serving the globally consistent information and applying the orientation rules, only B remains on the waitlist: Donelist = {T, A, E }, Waitlist = {B}.
+
+• Processing B. Finally, the algorithm identifies MB +(B) = {A, B, C, T } and learns LB ,shown in Fig. 12(g). After the update, ˆP becomes the graph shown in Fig. 12(h). At this point, every remaining unprocessed variable has no potentially anterior path to T . Therefore, 
+
+UpdateWaitlist returns Donelist = {T, A, E, B }, Waitlist = ∅. The algorithm consequently terminates by R2. Under a coarser waitlist update, the same structural redundancy would instead be detected by R3.
+
+## F Supplementary Experiments 
+
+F.1 Additional Details on Baseline Methods 
+
+For all compared methods, we use the default hyperparameter settings provided by their official or publicly available implementations, unless otherwise stated. For conditional-independence-test-based methods, the same significance level α = 0 .01 is used throughout all experiments to ensure comparability across methods. All experiments are conducted on a machine equipped with an Intel i9-14900K CPU and 64 GB RAM. Table III summarizes the baseline methods used in our experiments, including their learning scope, supported assumptions, and code sources. Table III: Overview of compared causal structure learning methods.                                                              
+
+> Method Local Latent Variables Selection Bias Code Source
+> PC (Spirtes and Glymour, 1991) ✗✗✗https://github.com/kuiy/pyCausalFS
+> EEMBI-PC (Dong and Gao, 2025) ✗✗✗https://github.com/ronedong/EEMBI
+> FCI (Spirtes et al., 1995) ✗✓✓https://github.com/cmu-phil/causal-learn
+> RFCI (Colombo et al., 2012b) ✗✓✓https://pcalg.r-forge.r-project.org/
+> FCI +(Claassen et al., 2013) ✗✓✓https://pcalg.r-forge.r-project.org/
+> L-MARVEL (Akbari et al., 2021) ✗✓✓https://github.com/ban-epfl/rcd
+> ICD (Rohekar et al., 2021) ✗✓✓https://github.com/IntelLabs/causality-lab
+> PCD-by-PCD (Yin et al., 2008) ✓✗✗https://github.com/kuiy/pyCausalFS
+> MB-by-MB (Wang et al., 2014) ✓✗✗https://github.com/kuiy/pyCausalFS
+> CMB (Gao and Ji, 2015) ✓✗✗https://github.com/kuiy/pyCausalFS
+> PSL (Ling et al., 2022b) ✓✗✗https://github.com/z-dragonl/Causal-Learner
+> GraN-LCS (Liang et al., 2023) ✓✗✗https://www.sdu-idea.cn/codes.php?name= GraN-LCS
+> LatentLCD (Ling et al., 2025b) ✓✓✗https://github.com/z-dragonl/Causal-Learner
+> LoCaLS (Ours) ✓✓✓https://github.com/zhengli0060/LoCaLS
+
+Note. “Local” indicates whether the method is designed to learn target-specific local causal structures rather than the entire causal graph. “Latent Variables” and “Selection Bias” indicate whether the method can handle latent confounders and selection bias, respectively. 
+
+48 F.2 Additional Details on Evaluation Metrics 
+
+Let P and ˆP denote the true PAG and the learned PAG, respectively. For a target variable T ,we evaluate the target row and target column of the corresponding PAG matrices, excluding the diagonal entry ( T, T ). Formally, define ΩT = {(T, V ) : V ∈ O \ { T }} ∪ { (V, T ) : V ∈ O \ { T }} .
+
+The set Ω T contains all matrix entries corresponding to the endpoint marks of edges incident to T .Each nonzero entry encodes a PAG endpoint mark, while a zero entry indicates the absence of an edge. 
+
+Mark-Precision, Mark-Recall, and Mark-F1 A predicted mark is counted as a true positive only when it is nonzero and exactly matches the corresponding true mark: TP mark = X
+
+> (i,j )∈ΩT
+
+I
+
+h ˆP(i, j )̸ = 0 ∧ ˆP(i, j ) = P(i, j )
+
+i
+
+.
+
+Then Mark-Precision, Mark-Recall, and Mark-F1 are defined as Mark-Precision = TP mark 
+
+P 
+
+> (i,j )∈ΩT
+
+I
+
+h ˆP(i, j )̸ = 0 
+
+i ,
+
+Mark-Recall = TP mark 
+
+P 
+
+> (i,j )∈ΩT
+
+I[P(i, j )̸ = 0] ,
+
+and Mark-F1 = 2 · Mark-Precision · Mark-Recall Mark-Precision + Mark-Recall .
+
+If the denominator of a metric is zero, the corresponding score is set to zero. 
+
+Local-SHD Structural Hamming Distance (SHD) is a widely used metric in causal structure learning for measuring the discrepancy between a learned graph and the ground-truth graph. In this work, we also report a target-specific version of Structural Hamming Distance, termed Local-SHD, defined as Local-SHD = X
+
+> (i,j )∈ΩT
+
+I
+
+h ˆP(i, j )̸ = P(i, j )
+
+i
+
+.
+
+Local-SHD counts the number of mismatched PAG entries associated with the target variable, including missing adjacencies, false adjacencies, and incorrect endpoint marks. 
+
+F.3 Supplementary Results on Random Structures with Varying Dimensions 
+
+This section provides supplementary results for the experiment in Section 5.3, including summary statistics of the underlying induced MAGs and detailed efficiency results. Because marginalizing latent variables and conditioning on selection variables may change the sparsity of the observed-variable structure, Table IV reports the average degree of the underlying induced MAGs used in this experiment. The induced MAGs remain sparse across all settings, with average degrees ranging from approximately 2 .05 to 2 .16. Therefore, this experiment primarily evaluates scalability with respect to the number of variables rather than changes in graph density. 49 Tables V and VI provide the detailed runtime and CI-test results corresponding to Fig. 6. Table IV: Summary statistics for random structures with varying dimensionality. 
+
+Underlying Structure |V| |O| |L| |S| Avg. Degree in Induced MAGs 
+
+ER(20 , 2) graphs 20 18 1 1 2.05 ±0.25 ER(40 , 2) graphs 40 36 2 2 2.11 ±0.21 ER(60 , 2) graphs 60 54 3 3 2.13 ±0.16 ER(80 , 2) graphs 80 72 4 4 2.11 ±0.17 ER(120 , 2) graphs 120 108 6 6 2.16 ±0.19 ER(160 , 2) graphs 160 144 8 8 2.16 ±0.17 ER(200 , 2) graphs 200 180 10 10 2.13 ±0.13 Table V: Runtime on random structures with varying dimensionality. 
+
+Algorithm Number of variables 20 40 60 80 120 160 200 
+
+PC 0.09 ± 0.02 0.37 ± 0.08 0.85 ± 0.17 1.48 ± 0.27 3.83 ± 0.61 17.57 ± 3.69 36.02 ± 7.69 EEMBI-PC 1120.61 ± 237.41 6008.58 ± 1716.68 13733.03 ± 595.24 – – – –FCI 0.07 ± 0.02 0.29 ± 0.09 0.56 ± 0.13 0.92 ± 0.26 1.79 ± 0.38 2.86 ± 0.41 4.17 ± 0.45 RFCI 0.90 ± 0.40 0.93 ± 0.40 0.98 ± 0.41 1.04 ± 0.42 1.21 ± 0.41 1.39 ± 0.43 1.60 ± 0.43 FCI + 1.03 ± 0.42 1.17 ± 0.41 1.46 ± 0.47 1.69 ± 0.44 2.41 ± 0.56 3.40 ± 0.66 4.82 ± 0.60 L-MARVEL 0.03 ± 0.02 0.08 ± 0.04 0.15 ± 0.12 0.16 ± 0.07 0.29 ± 0.08 0.55 ± 0.19 0.72 ± 0.15 ICD 0.10 ± 0.07 4.12 ± 7.27 67.13 ± 131.27 108.39 ± 184.79 235.84 ± 296.21 314.58 ± 355.24 454.36 ± 393.13 PCD-by-PCD 0.14 ± 0.06 0.68 ± 0.27 1.56 ± 0.73 3.11 ± 0.89 8.73 ± 2.54 30.43 ± 9.73 65.60 ± 15.14 MB-by-MB 0.23 ± 0.11 0.90 ± 0.61 1.51 ± 1.30 2.26 ± 1.33 4.16 ± 2.86 11.32 ± 7.44 16.58 ± 9.87 CMB 0.22 ± 0.21 0.70 ± 0.64 1.09 ± 1.06 1.34 ± 1.57 2.92 ± 3.07 15.08 ± 12.83 27.99 ± 32.40 PSL 0.10 ± 0.06 0.38 ± 0.19 0.67 ± 0.45 0.96 ± 0.58 1.71 ± 1.28 4.74 ± 2.96 9.37 ± 5.38 GraN-LCS 98.04 ± 40.84 103.93 ± 53.11 136.32 ± 83.38 126.59 ± 69.37 136.55 ± 89.04 139.10 ± 77.14 161.75 ± 128.57 LatentLCD 0.10 ± 0.04 0.33 ± 0.17 0.55 ± 0.36 1.08 ± 0.67 2.07 ± 1.45 3.38 ± 2.73 5.51 ± 3.89 LoCaLS (Ours) 0.02 ± 0.01 0.04 ± 0.02 0.04 ± 0.03 0.05 ± 0.03 0.08 ± 0.05 0.10 ± 0.05 0.11 ± 0.04 
+
+Note: “–” indicates that the method was excluded due to excessive runtime. The best result in each group is highlighted in bold. 
+
+Table VI: Number of CI tests on random structures with varying dimensionality. 
+
+Algorithm Number of variables 20 40 60 80 120 160 200 
+
+PC 269.9 ± 44.7 1067.0 ± 155.4 2325.4 ± 311.5 3976.2 ± 463.9 8101.7 ± 618.9 13569.1 ± 696.6 20702.8 ± 1189.3 FCI 520.8 ± 137.7 1986.5 ± 511.3 3830.0 ± 848.2 6225.8 ± 1670.8 11495.5 ± 2255.4 17679.7 ± 2022.3 25342.9 ± 2301.2 RFCI 463.1 ± 99.9 1705.8 ± 277.8 3353.2 ± 570.5 5364.0 ± 670.9 10243.6 ± 1331.7 16113.0 ± 1062.4 23557.7 ± 1583.9 FCI + 578.1 ± 157.6 2262.3 ± 444.6 4550.9 ± 1071.6 7245.1 ± 1373.1 13256.9 ± 2475.7 20215.7 ± 2254.6 29245.8 ± 3874.8 L-MARVEL 244.7 ± 76.1 938.0 ± 313.2 1966.7 ± 794.7 3065.1 ± 291.2 6464.2 ± 330.4 11270.2 ± 571.7 17116.7 ± 286.6 ICD 346.9 ± 56.4 1370.1 ± 169.1 2769.0 ± 403.9 4652.0 ± 564.3 8983.4 ± 680.1 15118.3 ± 1233.4 22359.0 ± 2143.0 PCD-by-PCD 391.7 ± 153.3 1620.0 ± 602.7 3592.9 ± 1676.2 6665.7 ± 1889.8 13479.3 ± 3529.9 21081.2 ± 5269.9 34744.4 ± 4194.0 MB-by-MB 667.7 ± 340.4 2344.5 ± 1603.0 3887.3 ± 4633.0 4848.7 ± 3131.5 6748.4 ± 4928.5 7744.9 ± 6971.3 9511.9 ± 6029.1 CMB 682.4 ± 776.5 1960.2 ± 2025.8 3214.6 ± 4013.1 3760.0 ± 5119.9 6321.6 ± 7113.8 9874.0 ± 9466.8 19788.4 ± 30942.8 PSL 307.9 ± 173.6 1017.3 ± 502.4 1695.0 ± 1226.6 2311.6 ± 1678.2 3684.9 ± 3465.7 3514.7 ± 2459.0 5651.3 ± 4162.4 LatentLCD 983.2 ± 442.7 3287.8 ± 1827.2 5398.3 ± 3844.3 9460.4 ± 5985.3 15194.2 ± 11109.6 20657.9 ± 17861.9 36316.1 ± 26655.3 LoCaLS (Ours) 159.0 ± 87.1 357.1 ± 190.8 433.4 ± 243.6 558.8 ± 268.9 706.0 ± 431.7 757.4 ± 478.2 978.1 ± 449.6 
+
+Note: The best result in each group is highlighted in bold. 
+
+50 F.4 Supplementary Results on Random Structures with Varying Density 
+
+This section provides supplementary numerical results for the experiment in Section 5.4. Specifi-cally, Tables VII and VIII report the detailed runtime and CI-test results corresponding to Fig. 7. EEMBI-PC is omitted due to excessive runtime. Table VII: Runtime on random structures with varying graph density. 
+
+Algorithm Density 0.05 0.1 0.2 0.4 0.6 0.8 1.0 
+
+PC 1.96 ± 0.34 2.35 ± 0.45 3.39 ± 0.75 4.90 ± 0.95 5.93 ± 1.20 6.48 ± 1.17 6.69 ± 1.17 FCI 1.66 ± 0.36 2.16 ± 0.50 2.96 ± 0.75 4.67 ± 1.49 5.33 ± 0.97 6.67 ± 1.17 6.82 ± 1.44 RFCI 1.50 ± 0.62 1.79 ± 0.64 1.69 ± 0.60 2.01 ± 0.65 2.05 ± 0.63 2.74 ± 0.80 2.61 ± 0.72 FCI + 2.73 ± 0.69 3.35 ± 0.89 3.32 ± 0.87 4.17 ± 1.03 4.46 ± 1.09 6.05 ± 1.26 5.63 ± 1.16 L-MARVEL 0.28 ± 0.09 0.53 ± 0.84 1.53 ± 1.69 17.42 ± 18.09 32.09 ± 28.93 88.85 ± 61.77 150.31 ± 113.99 ICD 37.10 ± 114.49 1704.42 ± 3036.36 3129.47 ± 1864.21 1555.47 ± 1213.07 2508.14 ± 1044.65 2693.20 ± 1204.20 3143.88 ± 1775.54 PCD-by-PCD 2.30 ± 1.12 5.54 ± 2.95 11.05 ± 3.41 18.51 ± 4.06 22.76 ± 5.60 27.88 ± 7.26 27.86 ± 5.45 MB-by-MB 1.37 ± 1.41 3.00 ± 3.31 7.71 ± 5.81 12.87 ± 7.67 16.60 ± 10.49 20.62 ± 12.40 23.16 ± 16.24 CMB 2.58 ± 1.79 4.45 ± 3.76 8.77 ± 5.50 23.77 ± 19.21 32.09 ± 24.40 23.73 ± 14.02 55.92 ± 36.06 PSL 1.02 ± 0.59 1.85 ± 1.50 3.68 ± 1.87 5.98 ± 3.37 7.52 ± 3.23 8.44 ± 4.30 9.82 ± 4.46 GraN-LCS 155.33 ± 102.98 123.29 ± 77.04 125.30 ± 56.99 164.29 ± 101.18 182.34 ± 123.93 179.46 ± 126.89 204.91 ± 160.07 LatentLCD 1.37 ± 0.65 2.75 ± 1.49 4.41 ± 3.52 7.93 ± 7.14 5.73 ± 5.51 8.26 ± 8.99 9.08 ± 9.86 LoCaLS (Ours) 0.12 ± 0.05 0.15 ± 0.07 0.18 ± 0.07 0.20 ± 0.08 0.28 ± 0.19 0.46 ± 0.29 0.47 ± 0.40 
+
+Note: The best result in each group is highlighted in bold. 
+
+Table VIII: Number of CI tests on random structures with varying graph density. 
+
+Algorithm Density 0.05 0.1 0.2 0.4 0.6 0.8 1.0 
+
+PC 4955.3 ± 367.0 6397.0 ± 942.2 9299.2 ± 1722.7 13147.1 ± 1992.1 15475.9 ± 2489.4 17081.3 ± 2420.6 17638.3 ± 2539.4 FCI 6436.2 ± 931.6 10701.7 ± 2628.1 17559.6 ± 4267.4 29473.9 ± 7846.5 35188.3 ± 6540.5 40727.4 ± 7262.5 42031.6 ± 8354.8 RFCI 5984.7 ± 698.7 9235.1 ± 2037.7 14705.3 ± 3187.4 23463.6 ± 4114.1 28652.4 ± 5000.5 32858.9 ± 5628.6 34058.3 ± 6224.9 FCI + 6971.4 ± 1171.5 12733.1 ± 4164.3 24253.2 ± 7199.3 42573.2 ± 9145.9 54814.1 ± 12403.1 63872.5 ± 12577.2 67575.8 ± 15107.2 L-MARVEL 4381.1 ± 243.4 6448.2 ± 7022.9 12607.7 ± 13010.5 107921.2 ± 125798.5 191199.7 ± 209637.3 415518.9 ± 314416.8 678769.8 ± 630760.4 ICD 5314.4 ± 509.3 7468.7 ± 1223.3 12180.0 ± 2467.3 18060.4 ± 2891.2 24911.2 ± 3926.0 27085.8 ± 3549.3 27360.4 ± 3283.2 PCD-by-PCD 5353.3 ± 2766.7 12113.7 ± 6587.6 25001.8 ± 7602.9 41267.8 ± 8217.4 50762.8 ± 10952.1 59922.7 ± 13524.6 60804.2 ± 11682.4 MB-by-MB 3795.9 ± 5408.7 7957.1 ± 11382.0 19009.5 ± 19035.0 27815.6 ± 16671.5 34630.6 ± 21526.2 41856.1 ± 26189.3 48282.1 ± 35115.3 CMB 6812.5 ± 5954.4 11527.7 ± 11732.8 22616.2 ± 15742.7 39088.9 ± 34534.5 46467.1 ± 32405.8 53827.5 ± 35395.8 59007.0 ± 42992.4 PSL 2638.0 ± 1819.9 4794.3 ± 4771.1 8829.4 ± 4765.7 13581.0 ± 8804.0 16611.1 ± 7713.0 18843.0 ± 10145.5 22048.9 ± 11609.0 LatentLCD 9010.3 ± 4878.1 24738.3 ± 15588.3 44342.4 ± 39417.8 85422.0 ± 82438.2 65808.3 ± 78557.0 100936.1 ± 129444.6 108625.3 ± 144386.5 LoCaLS (Ours) 407.0 ± 304.2 459.1 ± 436.2 563.9 ± 390.3 632.8 ± 435.9 823.7 ± 744.1 1158.7 ± 857.8 1109.8 ± 857.0 
+
+Note: The best result in each group is highlighted in bold. 
+
+F.5 Supplementary Results on Real-World Structures 
+
+This section provides supplementary results for the real-world benchmark experiments in Sec-tion 5.5. Specifically, Table IX summarizes the causal structures used in this experiment. Fig. 13 reports the runtime, number of CI tests, and Local-SHD results on the smaller structures MILDEW and BARLEY. Fig. 14 reports the Mark-Precision, Mark-Recall, and Mark-F1 curves for all four benchmark structures. 51 Table IX: Summary statistics for real-world benchmark structures. 
+
+Real-World Structure |V| | O| | L| | S| Avg. Degree in DAGs Avg. Degree in Induced MAGs 
+
+MILDEW 35 31 2 2 2.63 3.37 ±0.55 BARLEY 48 42 3 3 3.5 3.86 ±0.30 ANDES 223 213 5 5 3.03 3.31 ±0.20 LINK 724 694 15 15 3.11 3.19 ±0.04 0 0.1 0.2 0.5 1 5 10 100 200 350 4000 
+
+Runtime ( ↓ ) 
+
+> 0
+> 1 × 10 3
+> 3 × 10 3
+> 5 × 10 3
+> 1 × 10 4
+> 1 × 10 5
+> Number of CI Tests ( ↓ )
+
+MILDEW 
+
+> Sample Size
+> 1000
+> 2000
+> 3000
+> 4000
+> PC
+> EEMBI-PC
+> FCI
+> RFCI
+> FCI +
+> L-MARVEL
+> ICD
+> PCD-by-PCD
+> MB-by-MB
+> CMB
+> PSL
+> GraN-LCS
+> LatentLCD
+> LoCaLS (Ours)
+
+0
+
+10 
+
+20 
+
+> Local SHD ( ↓ )
+
+MILDEW 0 0.1 0.2 0.5 1 5 10 100 200 350 
+
+Runtime ( ↓ ) 
+
+> 0
+> 1 × 10 3
+> 3 × 10 3
+> 5 × 10 3
+> 1 × 10 4
+> 1 × 10 5
+> 2 × 10 5
+> 4 × 10 5
+> Number of CI Tests ( ↓ )
+
+BARLEY 
+
+> Sample Size
+> 1000
+> 2000
+> 3000
+> 4000
+> PC
+> FCI
+> RFCI
+> FCI +
+> L-MARVEL
+> ICD
+> PCD-by-PCD
+> MB-by-MB
+> CMB
+> PSL
+> GraN-LCS
+> LatentLCD
+> LoCaLS (Ours)
+
+0
+
+10 
+
+20 
+
+30 
+
+> Local SHD ( ↓ )
+
+BARLEY PC 
+
+EEMBI-PC 
+
+FCI 
+
+RFCI 
+
+FCI +
+
+L-MARVEL 
+
+ICD 
+
+PCD-by-PCD 
+
+MB-by-MB 
+
+CMB 
+
+PSL 
+
+GraN-LCS 
+
+LatentLCD 
+
+LoCaLS (Ours) 
+
+Figure 13: Results on the smaller real-world benchmark structures MILDEW and BARLEY under varying sample sizes. The panels report runtime, CI-test counts, and Local-SHD. The symbol ↓
+
+indicates that lower values are better. 52 1000 2000 3000 4000 
+
+Sample Size    
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-Precision ( ↑ )
+> 1000 2000 3000 4000
+
+Sample Size    
+
+> 0.2
+> 0.4
+> 0.6
+> Mark-Recall ( ↑ )
+> 1000 2000 3000 4000
+
+Sample Size 
+
+> 0.2
+> 0.4
+> 0.6
+> Mark-F1 ( ↑ )
+
+MILDEW 1000 2000 3000 4000 
+
+Sample Size    
+
+> 0.2
+> 0.4
+> 0.6
+> Mark-Precision ( ↑ )
+> 1000 2000 3000 4000
+
+Sample Size    
+
+> 0.2
+> 0.4
+> 0.6
+> Mark-Recall ( ↑ )
+> 1000 2000 3000 4000
+
+Sample Size 
+
+> 0.2
+> 0.4
+> 0.6
+> Mark-F1 ( ↑ )
+
+BARLEY 1000 2000 3000 4000 
+
+Sample Size    
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-Precision ( ↑ )
+> 1000 2000 3000 4000
+
+Sample Size    
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-Recall ( ↑ )
+> 1000 2000 3000 4000
+
+Sample Size 
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-F1 ( ↑ )
+
+ANDES 1000 2000 3000 4000 
+
+Sample Size    
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-Precision ( ↑ )
+> 1000 2000 3000 4000
+
+Sample Size    
+
+> 0.4
+> 0.6
+> Mark-Recall ( ↑ )
+> 1000 2000 3000 4000
+
+Sample Size 
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-F1 ( ↑ )
+
+LINK PC 
+
+> EEMBI-PC
+> FCI
+> RFCI
+> FCI +
+> L-MARVEL
+> ICD
+> PCD-by-PCD
+> MB-by-MB
+> CMB
+> PSL
+> GraN-LCS
+> LatentLCD
+> LoCaLS (Ours)
+
+Figure 14: Mark-based accuracy on real-world benchmark structures under varying sample sizes. The panels report Mark-Precision, Mark-Recall, and Mark-F1 for MILDEW, BARLEY, ANDES, and LINK. The symbol ↑ indicates that higher values are better. 
+
+F.6 Supplementary Results on Latent-Variable Sensitivity 
+
+This section provides supplementary results for the latent-variable sensitivity experiment in Sec-tion 5.6. As shown in Table X, increasing the latent ratio only slightly increases the average degree of the induced MAGs, indicating that the main varying factor in this experiment is the amount of latent confounding rather than the overall graph density. Table XI reports the detailed runtime and CI-test results, and Fig. 15 reports the Mark-Precision, Mark-Recall, Mark-F1, and Local-SHD 53 results. Table X: Summary statistics under varying latent ratios. The selection ratio is fixed at 0 .05. 
+
+Latent Ratio |O| | L| |S| Avg. Degree in Induced MAGs 
+
+0.05 100 5 5 2.38 ±0.11 0.10 100 10 5 2.44 ±0.06 0.15 100 15 5 2.45 ±0.04 0.20 100 20 5 2.46 ±0.04 Table XI: Runtime and number of CI tests under varying latent ratios. 
+
+Algorithm Runtime (seconds) ↓ Number of CI tests ↓
+
+rL = 0 .05 rL = 0 .10 rL = 0 .15 rL = 0 .20 rL = 0 .05 rL = 0 .10 rL = 0 .15 rL = 0 .20 PC 3.51 ± 0.59 3.65 ± 0.58 3.70 ± 0.64 3.75 ± 0.66 7349.8 ± 597.5 7789.8 ± 655.2 8081.3 ± 741.6 7988.3 ± 602.5 FCI 1.88 ± 0.28 2.04 ± 0.30 2.22 ± 0.36 2.49 ± 0.60 10187.1 ± 1271.5 10875.5 ± 1066.0 11311.8 ± 1236.7 11368.4 ± 1785.4 RFCI 1.83 ± 0.73 1.91 ± 0.68 1.95 ± 0.73 1.98 ± 0.69 9362.0 ± 988.7 9931.1 ± 902.9 10274.2 ± 929.0 10337.5 ± 1012.0 FCI + 3.71 ± 0.98 3.94 ± 1.11 3.82 ± 1.01 4.12 ± 1.26 12994.2 ± 2304.7 14118.0 ± 2180.9 14865.1 ± 2439.6 14427.6 ± 2270.3 L-MARVEL 0.25 ± 0.06 0.27 ± 0.07 0.27 ± 0.07 0.27 ± 0.08 5476.8 ± 170.4 5496.9 ± 278.2 5454.9 ± 199.4 5479.0 ± 247.8 ICD 16.02 ± 11.22 16.18 ± 8.53 24.73 ± 17.24 19.90 ± 12.89 8772.5 ± 992.7 9358.0 ± 1090.9 9645.2 ± 1049.6 9624.6 ± 1069.4 PCD-by-PCD 6.24 ± 2.90 6.98 ± 2.41 7.22 ± 2.12 8.16 ± 1.92 12395.7 ± 5467.3 14502.3 ± 4411.9 15474.8 ± 4219.0 16853.5 ± 3318.8 MB-by-MB 2.46 ± 1.87 3.14 ± 2.11 2.58 ± 1.69 3.75 ± 3.22 5208.5 ± 4508.4 5928.6 ± 4582.5 5067.0 ± 3649.3 8132.0 ± 9952.7 CMB 5.33 ± 5.57 5.36 ± 4.32 6.24 ± 5.94 6.54 ± 5.48 12544.6 ± 15395.1 12968.0 ± 13290.0 14293.8 ± 15664.4 14072.0 ± 12831.9 PSL 1.93 ± 1.40 2.45 ± 1.62 2.41 ± 1.70 2.39 ± 1.40 3845.6 ± 3073.9 4809.2 ± 3860.5 5042.7 ± 4338.8 4753.2 ± 3408.7 GraN-LCS 124.11 ± 67.15 137.94 ± 74.30 139.78 ± 95.75 129.08 ± 70.33 – – – –LatentLCD 3.08 ± 1.54 3.37 ± 1.61 3.53 ± 1.74 2.92 ± 1.62 12275.5 ± 6620.6 13834.2 ± 7179.8 13616.9 ± 6988.5 12063.5 ± 6576.6 LoCaLS (Ours) 0.14 ± 0.05 0.15 ± 0.05 0.17 ± 0.07 0.20 ± 0.09 515.0 ± 365.5 636.9 ± 452.9 611.7 ± 433.4 748.4 ± 580.1 
+
+Note: “–” indicates that the number of CI tests is not applicable for the corresponding method. The best result in each group is highlighted in bold. 0.05 0.1 0.15 0.2 
+
+Latent Ratio    
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-Precision ( ↑ )
+> 0.05 0.1 0.15 0.2
+
+Latent Ratio    
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-Recall ( ↑ )
+> 0.05 0.1 0.15 0.2
+
+Latent Ratio    
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Mark-F1 ( ↑ )
+> 0.05 0.1 0.15 0.2
+
+Latent Ratio 
+
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+> 12.5
+> Local-SHD ( ↓ )
+
+PC 
+
+EEMBI-PC 
+
+FCI 
+
+RFCI 
+
+FCI +
+
+L-MARVEL 
+
+ICD 
+
+PCD-by-PCD 
+
+MB-by-MB 
+
+CMB 
+
+PSL 
+
+GraN-LCS 
+
+LatentLCD 
+
+LoCaLS (Ours) 
+
+Figure 15: Structural accuracy under varying latent ratios. The panels report Mark-Precision, Mark-Recall, Mark-F1, and Local-SHD, with the selection ratio fixed at 0 .05. The symbols ↑ and 
+
+↓ indicate that higher and lower values are better, respectively. 
+
+F.7 Supplementary Results on Selection-Variable Sensitivity 
+
+This section provides supplementary results for the selection-variable sensitivity experiment in Section 5.7. Specifically, Table XII summarizes the induced MAGs under different selection ratios, showing that the average degree changes only mildly as the number of selection variables increases. Table XIII reports the detailed runtime and CI-test results, and Fig. 16 reports the Mark-Precision, Mark-Recall, Mark-F1, and Local-SHD results. 54 Table XII: Summary statistics under varying selection ratios. The latent ratio is fixed at 0 .05. 
+
+Selection Ratio |O| | L| |S| Avg. Degree in Induced MAGs 
+
+0.05 100 5 5 2.36 ±0.10 0.10 100 5 10 2.43 ±0.04 0.15 100 5 15 2.43 ±0.05 0.20 100 5 20 2.48 ±0.11 Table XIII: Runtime and number of CI tests under varying selection ratios. 
+
+Algorithm Runtime (seconds) ↓ Number of CI tests ↓
+
+rS = 0 .05 rS = 0 .10 rS = 0 .15 rS = 0 .20 rS = 0 .05 rS = 0 .10 rS = 0 .15 rS = 0 .20 PC 3.65 ± 0.68 3.33 ± 0.55 3.36 ± 0.57 3.39 ± 0.57 7585.6 ± 714.6 7564.8 ± 808.9 7416.0 ± 576.8 7532.3 ± 576.4 FCI 2.12 ± 0.36 2.07 ± 0.30 2.09 ± 0.33 2.13 ± 0.22 10498.7 ± 1256.0 10082.2 ± 1342.8 9866.0 ± 1143.9 9824.1 ± 1110.7 RFCI 2.90 ± 1.02 2.88 ± 0.98 2.89 ± 1.00 2.87 ± 0.98 9618.2 ± 1006.5 9336.8 ± 1064.6 9119.1 ± 914.1 9157.6 ± 883.5 FCI + 5.54 ± 1.35 5.49 ± 1.26 5.40 ± 1.23 5.05 ± 1.63 13449.2 ± 2294.4 12949.1 ± 2477.2 12460.5 ± 2240.3 12540.6 ± 2109.8 L-MARVEL 0.25 ± 0.06 0.28 ± 0.08 0.29 ± 0.12 0.28 ± 0.09 5506.4 ± 239.6 5400.3 ± 168.6 5421.2 ± 250.3 5413.3 ± 187.2 ICD 18.00 ± 12.27 13.52 ± 9.08 10.53 ± 6.84 10.37 ± 6.33 8935.0 ± 1099.4 8829.5 ± 1156.9 8595.4 ± 921.0 8792.2 ± 979.3 PCD-by-PCD 7.20 ± 1.95 6.30 ± 2.13 6.56 ± 1.68 6.23 ± 2.46 14173.6 ± 3421.5 12499.5 ± 4040.7 13107.1 ± 3326.5 12259.7 ± 4381.3 MB-by-MB 3.78 ± 3.49 2.09 ± 1.73 2.81 ± 1.54 2.70 ± 2.22 8666.0 ± 11543.0 4637.8 ± 5040.3 5873.4 ± 3953.7 5718.4 ± 5245.6 CMB 5.90 ± 6.20 4.73 ± 4.62 4.77 ± 4.23 4.73 ± 4.33 14597.8 ± 17670.4 12176.2 ± 14096.1 12281.2 ± 13659.3 11306.5 ± 11248.1 PSL 2.31 ± 1.69 1.64 ± 1.11 2.01 ± 1.29 2.07 ± 1.45 4772.7 ± 3891.1 3577.7 ± 3123.2 4232.7 ± 3296.0 4163.4 ± 3217.9 GraN-LCS 88.90 ± 31.59 104.78 ± 41.62 130.17 ± 58.22 111.36 ± 54.73 – – – –LatentLCD 2.99 ± 1.47 2.93 ± 1.37 2.54 ± 1.41 2.76 ± 1.43 12515.8 ± 6502.9 11285.8 ± 5542.6 9724.4 ± 5448.3 10995.0 ± 6036.4 LoCaLS (Ours) 0.14 ± 0.06 0.13 ± 0.06 0.16 ± 0.06 0.15 ± 0.06 468.6 ± 341.4 489.5 ± 346.9 548.5 ± 417.3 523.0 ± 393.3 
+
+Note: “–” indicates that the number of CI tests is not applicable for the corresponding method. The best result in each group is highlighted in bold. 0.05 0.1 0.15 0.2 
+
+Selection Ratio 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+> Mark-Precision ( ↑ )
+
+0.05 0.1 0.15 0.2 
+
+Selection Ratio 
+
+0.2 
+
+0.4 
+
+0.6 
+
+> Mark-Recall ( ↑ )
+
+0.05 0.1 0.15 0.2 
+
+Selection Ratio 
+
+0.2 
+
+0.4 
+
+0.6 
+
+> Mark-F1 ( ↑ )
+
+0.05 0.1 0.15 0.2 
+
+Selection Ratio 
+
+2.5 
+
+5.0 
+
+7.5 
+
+10.0 
+
+12.5 
+
+> Local-SHD ( ↓ )
+
+PC 
+
+EEMBI-PC 
+
+FCI 
+
+RFCI 
+
+FCI +
+
+L-MARVEL 
+
+ICD 
+
+PCD-by-PCD 
+
+MB-by-MB 
+
+CMB 
+
+PSL 
+
+GraN-LCS 
+
+LatentLCD 
+
+LoCaLS (Ours) 
+
+Figure 16: Structural accuracy under varying selection ratios. The panels report Mark-Precision, Mark-Recall, Mark-F1, and Local-SHD, with the latent ratio fixed at 0 .05. The symbols ↑ and ↓
+
+indicate that higher and lower values are better, respectively. 
+
+## G Supplementary Results for Gene Expression Applications 
+
+G.1 Additional Results on Arabidopsis thaliana Gene Expression Data 
+
+This appendix provides additional target-specific local structures learned from the Arabidopsis thaliana gene expression data of Wille et al. (Wille et al., 2004). The three targets complement the two representative examples shown in Section 6.1 and further illustrate how LoCaLS captures local pathway organization under possible latent regulatory effects and selection bias. 55 MEP  
+
+> DXR
+> DXPS2
+> MCT
+> CMK
+> HDS
+> UPPS1
+> (a) T = DXR
+> MEP
+> PPDS1
+> HDR
+> PPDS2
+> DPPS2
+> (b) T = PPDS1
+> MEP
+> MECPS
+> MCT
+> AACT1 HMGR1
+> HMGR2
+> (c) T = MECPS
+
+Figure 17: Local causal structures learned for additional Arabidopsis thaliana target genes. Dashed contours indicate genes from the same pathway group. (a) Target DXR; (b) target PPDS1; (c) target MECPS. Comparing the supplementary local structures in Fig. 17 with the known isoprenoid pathway organization and the graphical models reported by Wille et al. (Wille et al., 2004, Figure 3), we observe the following additional results. 
+
+• (1) Intra-pathway Connections: The recovered neighborhoods preserve several pathway-local relations reported in (Wille et al., 2004). For the target DXR, LoCaLS recovers DXPS2, MCT, CMK, and HDS as neighbors, which are consistent with the core MEP chain shown in Wille et al. (Wille et al., 2004, Figure 3). For the downstream MEP-side target PPDS1, the learned neighborhood contains HDR, PPDS2, and DPPS2, which also agrees with the reference graph. For MECPS, the recovered neighbor MCT lies in the same MEP module and is consistent with the reference structure. 
+
+• (2) Cross-pathway and Orientation Patterns: The supplementary results also recover sparse links between pathway regions. In particular, DXR − UPPS1, PPDS1 − DPPS2, MECPS −
+
+HMGR2, and MECPS − AACT1 are compatible with the cross-compartment connections in Wille et al. (Wille et al., 2004, Figure 3), where the plastidial MEP pathway, cytosolic MVA pathway, and mitochondrial genes are not completely separated but interact through a small number of bridge genes. This supports the view that LoCaLS captures not only pathway-local neighborhoods, but also biologically plausible cross-talk between compartments (Laule et al., 2003; Wille et al., 2004). Most recovered edges are bi-directed, suggesting the possible presence of unmeasured common regulators or other latent factors in the gene expression data. 
+
+G.2 Additional Results on Melanoma Gene Expression Data 
+
+This appendix reports additional results for the melanoma gene expression application in Sec-tion 6.2. As in the main text, we report L-MARVEL and GraN-LCS as representative baselines; the other compared methods are omitted because a single run exceeds two hours on these datasets. 56 Table XIV: Comparison on melanoma gene expression data for target HLA-A. 
+
+Condition Algorithm Runtime ↓ #CI Tests ↓ IVR ↑
+
+Co-culture L-MARVEL 1717.59 13064931 0.50 GraN-LCS 1897.23 – 0.25 LoCaLS (Ours) 6.87 68108 0.79 
+
+IFN-γ
+
+L-MARVEL 810.05 5632375 0.50 GraN-LCS 1916.61 – 0.00 LoCaLS (Ours) 53.40 993871 0.52 
+
+Control L-MARVEL 19.58 1194846 1.00 
+
+GraN-LCS 1277.83 – 0.00 LoCaLS (Ours) 6.01 78693 0.00 
+
+> Note: The best result in each group is highlighted in bold.
+
+Table XV: Comparison on melanoma gene expression data for target CD59. 
+
+Condition Algorithm Runtime ↓ #CI Tests ↓ IVR ↑
+
+Co-culture L-MARVEL 1717.59 13064931 0.00 GraN-LCS 2129.69 – 0.00 LoCaLS (Ours) 7.63 95995 0.89 
+
+IFN-γ
+
+L-MARVEL 810.05 5632375 0.00 GraN-LCS 2056.80 – 0.00 LoCaLS (Ours) 3.56 43579 1.00 
+
+Control L-MARVEL 19.58 1194846 0.00 GraN-LCS 1360.88 – 0.00 LoCaLS (Ours) 10.32 171202 0.73 
+
+> Note: The best result in each group is highlighted in bold.
+
+Results. Tables XIV and XV provide complementary evidence for two immune-relevant targets beyond B2M. For HLA-A and CD59, LoCaLS achieves the highest IVR in nearly all conditions while requiring substantially fewer CI tests and much less runtime than the baselines. Although L-MARVEL obtains the highest IVR in the control condition for HLA-A, its IVR for CD59 is 0 .00 across all three conditions. In contrast, LoCaLS obtains nonzero IVR for CD59 under all three conditions, further supporting its robustness on immune-relevant targets. These supplementary results are consistent with the main B2M analysis. Across antigen-presentation targets (B2M and HLA-A) and the complement-regulatory target CD59, LoCaLS 
+
+generally recovers local directed relations that are better supported by perturbation-induced dis-tributional changes, while requiring substantially fewer CI tests than L-MARVEL and much less runtime than GraN-LCS. This suggests that the proposed LoCaLS remains effective for high-dimensional single-cell gene expression data, where latent regulatory factors and selection effects may be present. 57
