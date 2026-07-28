@@ -6,30 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-27
-- 运行时间：2026-07-27 20:44:07 UTC
+- 最新运行日期：2026-07-28
+- 运行时间：2026-07-28 21:36:24 UTC
 - 运行状态：成功
 - 本次总论文数：3
-- 精读区：0
-- 速读区：3
+- 精读区：2
+- 速读区：1
 
 ### 今日简报（AI）
-今日速读3篇论文，涵盖因果结构学习、生成选择模型与药物发现。重点关注局部因果结构学习在隐藏变量下的方法，以及药物-受体相互作用预测的通用模型。建议深入这两篇，探索因果推断与AI制药的前沿应用。
-- 详情：[/202607/27/README](/202607/27/README)
+今日精读两篇高分论文，覆盖药物扰动建模与因果发现前沿。PerturbPFN（10分）探明合成先验在药物扰动建模中的极限，Amortized Bayesian（9分）实现扩展因子图的高效因果推断。建议优先精读PerturbPFN，其方法对药物研发有直接启发。
+- 详情：[/202607/28/README](/202607/28/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [PerturbPFN: Probing the Limits of Synthetic Priors in Drug Perturbation Modelling](/202607/28/2607.23447v1-perturbpfn-probing-the-limits-of-synthetic-priors-in-drug-perturbation-modelling)  
+   标签：评分：10.0/10、query:virtual-cell
+   evidence：直接针对药物扰动响应预测
+2. [Amortized Bayesian Causal Discovery of Extended Factor Graphs](/202607/28/2607.22934v1-amortized-bayesian-causal-discovery-of-extended-factor-graphs)  
+   标签：评分：9.0/10、query:virtual-cell
+   evidence：直接针对扰动数据中的因果基因网络发现，是扰动响应预测的核心
 
 ### 速读区论文标签
-1. [Local Causal Structure Learning in the Presence of Latent Variables and Selection Bias](/202607/27/2607.19866v1-local-causal-structure-learning-in-the-presence-of-latent-variables-and-selection-bias)  
+1. [From Hodgkin-Huxley to Pretrained Neural Inference AI](/202607/28/biorxiv-10-64898-2026-07-13-738120-v1-from-hodgkin-huxley-to-pretrained-neural-inference-ai)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：局部因果结构学习用于扰动建模
-2. [Closed-Loop Generative Selection: Convergence, Memory, and Noisy Oracles](/202607/27/2607.22211v1-closed-loop-generative-selection-convergence-memory-and-noisy-oracles)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：闭环生成选择用于药物扰动
-3. [Target Preference Maps: A machine learning model generalizing transferable drug-receptor interactions and guiding drug discovery](/202607/27/biorxiv-10-1101-2025-08-01-668090-v11-target-preference-maps-a-machine-learning-model-generalizing-transferable-drug-receptor-interactions-and-guiding-drug-discovery)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：药物扰动建模与虚拟细胞
+   evidence：利用生物物理模拟预训练神经网络进行神经元活动推断，方法论上与虚拟细胞模型的扰动模拟类似
 
 
 <div class="dpr-home-promo-card">

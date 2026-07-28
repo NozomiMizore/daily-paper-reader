@@ -1,0 +1,3932 @@
+Title: Amortized Bayesian Causal Discovery of Extended Factor Graphs
+
+URL Source: https://arxiv.org/pdf/2607.22934v1
+
+Published Time: Tue, 28 Jul 2026 00:25:07 GMT
+
+Number of Pages: 48
+
+Markdown Content:
+Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+# Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+Yichen Gu gyichen@umich.edu 
+
+Department of Electrical and Computer Engineering University of Michigan Ann Arbor, MI 48109, USA 
+
+Yuxuan Song yuxuans@umich.edu 
+
+Department of Computational Medicine and Bioinformatics University of Michigan, Ann Arbor Ann Arbor, MI 48109, USA 
+
+Weizhou Qian wzqian@umich.edu 
+
+Department of Computational Medicine and Bioinformatics University of Michigan, Ann Arbor Ann Arbor, MI 48109, USA 
+
+Yixin Wang yixinw@umich.edu 
+
+Department of Statistics University of Michigan, Ann Arbor Ann Arbor, MI 48109, USA 
+
+Joshua Welch welchjd@umich.edu 
+
+Department of Computer Science and Engineering Department of Computational Medicine and Bioinformatics University of Michigan, Ann Arbor Ann Arbor, MI 48109, USA 
+
+Abstract 
+
+Learning causal graphs from interventional data is a challenging problem with broad applications. In molecular biology, for example, a central goal is to uncover gene regulatory networks from large-scale perturbation data. An ideal algorithm for this task should scale to thousands of nodes, incorporate interventions even when their targets are unknown, quantify uncertainty, and provide identifiability guarantees. However, existing approaches—e.g. approaches using score-based optimization or approximate Bayesian inference—often fail to meet all of these criteria. To address these limitations, we develop Amortized Bayesian Causal Discovery of Extended Factor Graphs (ABCDEFG). Our method guarantees exact acyclicity, scales to graphs with thousands of nodes, and naturally handles interventions even when their targets are unknown. Additionally, ABCDEFG estimates a posterior distribution whose maximum a posteriori estimate provably identifies the true causal graph up to an equivalence class. On simulated datasets, ABCDEFG achieves state-of-the-art accuracy, producing a well-calibrated posterior distribution while outperforming previous score-based and approximate Bayesian methods. Applied to large-scale single-cell perturbation data, ABCDEFG identifies both established and novel gene targets of growth factors [2]. 
+
+Keywords: causal discovery, variational inference, graphical model 1arXiv:2607.22934v1 [stat.ML] 24 Jul 2026 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+1 Introduction 
+
+Discovering causal relationships is a fundamental challenge across scientific domains. In many settings, both observational and interventional data are available to probe underlying causal mechanisms. Yet, inferring causal relationships remains difficult in large, complex systems. For example, in computational biology, understanding how genes influence one another through gene regulatory networks is crucial for understanding cellular development and homeostasis. Recent biotechnological advances now enable high-throughput perturbation experiments, providing measurements of gene expression across thousands to millions of cells under various interventions, providing exciting new data for inferring causal relationships in the cell. However, existing causal discovery methods fall short when applied to inferring a gene regulatory network from high-throughput perturbation data. Many approaches cannot scale to the large number of variables in the gene regulatory network (more than 20,000 genes) or the large number of samples ( 10 4 −10 6 cells). Very noisy data, correlated causal edge probabilities, and interventions with unknown targets (such as drug treatments) pose additional challenges. While approximate Bayesian methods offer the advantage of uncertainty quantification (a crucial property for noisy biological data), they typically struggle to scale to problems of this size. Although prior work has addressed some of these issues in isolation, no existing method satisfies all the requirements simultaneously. There remains a need for new causal inference approaches that are scalable, uncertainty-aware, and capable of jointly learning causal gene relationships and intervention targets from large-scale single-cell drug or growth factor screens. To address these challenges, we develop Amortized Bayesian Causal Discovery of 
+
+Extended Factor Graphs (ABCDEFG). Our key idea is to represent causal structures using extended factor graphs , where feature nodes and intervention nodes are connected through auxiliary factor nodes. This extended factor graph formulation enables accurate and scalable distributional estimation of causal DAGs, while incorporating interventions with unknown targets and guaranteeing acyclicity. Moreover, it supports joint modeling of edge probabilities as coupled random variables, capturing complex dependencies among edges. ABCDEFG also possesses strong theoretical guarantees: we prove that the argmax of the estimated posterior recovers the true causal graph up to an equivalence class. 
+
+Contributions. Our core contributions include: (1) we introduce a new parametric model for sampling extended factor graphs that are acyclic by construction and have explicit intervention nodes; (2) we develop a variational Bayesian approach for discovering causal extended factor graphs from interventional data with known or unknown targets; (3) we integrate sum-product networks into the generative model to flexibly model complex joint distributions over causal edges; (4) we develop new theoretical results connecting our Bayesian framework to the identifiability guarantees of score-based methods; and (5) we demonstrate the effectiveness of ABCDEFG on a large-scale single-cell perturbation dataset, recovering both known and novel gene-to-gene and growth factor-to-gene interactions. 
+
+Related Work. Classical causal discovery methods are typically divided into constraint-based and score-based methods. Constraint-based methods date back to the 90s when Spirtes and Glymour [23] proposed the PC algorithm. In contrast, score-based differentiable causal discovery methods have gained popularity in recent years due to their better performance and 
+
+> 2Amortized Bayesian Causal Discovery of Extended Factor Graphs
+
+Table 1: Summary of the proposed and existing approaches. n and m denotes the number of vertices in a graph/factor graph and m denotes the number of factors in a factor graph. Max nodes and samples indicate the size of the largest dataset evaluated in the original publication.                                                                                                                                        
+
+> Method DAG Graph Guaranteed Intvn Unknown Max Max Uncertainty Model Size Acyclic Data Target Nodes Samples NO-TEARS ✗O(n2)✗✗✗100 7,466
+> DCDI ✗O(n2)✗✓✓100 10 6
+> DAGMA ✗O(n2)✗✗✗2,000 1,000
+> DCD-FG ✗O(mn )✗✓✗1,000 87 ,590
+> ENCO ✗O(n2)✗✓✗1,000 110 ,000
+> SDCD ✗O(n2)✗✓✗4,000 10 ,500
+> DeepITE ✗O(n2)✗✓✓500 10 ,000
+> LIT ✗O(n2)✗✓✓16 32
+> iSCAN ✗O(n2)✗✓✓50 1,000
+> BaCaDI ✓O(n2)✗✓✓20 300
+> ProDAG ✓O(n2)✓✗✗100 7,466
+> DECI ✓O(n2)✗✗✗64 5,000
+> DP-DAG ✓O(n2)✓✗✗100 1,000
+> VDESP ✓O(n2)✓✗✗20 4,200
+> ABCDEFG (ours) ✓O(mn )✓✓✓1,000 31 ,425
+
+computational efficiency. Zheng et al. [30] pioneered the formulation of causal DAG discovery as a continuous optimization problem under a linear causal model, using an augmented Lagrangian approach with a matrix exponential constraint to enforce acyclicity. Lee et al. [14] built on this by designing a polynomial regression loss tailored to gene expression data and reducing computational cost. Subsequent works improved performance and expanded the modeling framework. Bello et al. [4] proposed an alternative log-det function for the acyclicity constraint, resulting in better performance, better-behaved gradient and faster convergence. Lippe et al. [15] designed an optimization strategy alternating between distribution and graph fitting and proved convergence to the true graph under specific conditions. A parallel line of work developed Bayesian methods for causal discovery. Cundy et al. [9] applied variational inference (VI) to linear Gaussian SEMs. Annadani et al. [3] adopted the NoCurl DAG model [ 29 ] and derived a VI method for the parameters. Charpentier et al. [7] proposed a fully probabilistic and differentiable DAG model and performs VI by maximizing the ELBO. Geffner et al. [10] developed a Bayesian method based on a previous probabilistic DAG model [ 15 ] and applied a flow-based generative model for distributional fitting. Thompson et al. [25] proposed a Bayesian method for DAGs by first pruning a weighted matrix to be acyclic and projecting it onto an L1 ball. Bonilla et al. [5] designed a differentiable DAG distribution using a continuous relaxation of permutation [ 20 ]. These Bayesian methods tend to be significantly less scalable than the score-based methods, as reflected in the relatively small datasets used for evaluation. 
+
+> 3Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch
+
+The methods discussed above focus exclusively on observational data and are not designed to incorporate interventional data, which is critical for accurate causal discovery in applications such as computational biology. To address this, a separate line of work has explored causal discovery with interventions. Brouillard et al. [6] proposed a differentiable method that incorporates observational and interventional data; guarantees identifiability with known or unknown intervention targets; and models nonlinear effects using deep neural networks. Lopez et al. [16] used factor graphs to learn a low-rank approximation of DAGs, a key foundation for our approach. Nazaret et al. [17] proposed a robust acyclicity penalty loss. Hägele et al. [11] set up a Bayesian framework for causal discovery with interventional data. Our work is also distinct from intervention target estimation methods, which can infer the nodes targeted by interventions but cannot simultaneously estimate the causal graph (e.g., iSCAN [ 8], LIT [ 27 ], and DeepITE [ 24 ]). We summarize these and related methods, along with our own, in Table 1. 
+
+2 Methods 
+
+2.1 Definitions 
+
+Our definitions and notation closely parallel previous differentiable causal discovery methods [6], but we summarize the key points here to make the presentation of our approach more self-contained. Let X = {X1, . . . , X n} be a set of random variables. A causal graphical model (CGM) for these variables consists of a joint distribution and a graph {G = ( V, E ), p (X)}.
+
+G ∈ G (where G is the set of DAGs) and G and p are related as follows: 
+
+p(X) = Y
+
+> i∈V
+
+p(Xi|Xπi )
+
+Here, πi is the set of parents of vertex i in G. Intuitively, an intervention on a variable modifies its conditional dependence on its parent. Interventions can be performed on multiple variables simultaneously; the interventional target for each intervention is thus a set of vertices I ⊂ V .Given a CGM with {G, p (X)}, intervening on targets I modifies p into pI :
+
+pI (X) = Y
+
+> i∈I
+
+pI (Xi|Xπi ) Y
+
+> i̸∈ I
+
+p(Xi|Xπi )
+
+Note that the causal sufficiency assumption is implicit in this definition of intervention. The 
+
+I-faithfulness assumption ensures that pI (Xi|Xπi )̸ = p(Xi|Xπi ). A hard intervention removes all dependence on parents, so pIk (Xi|Xπi ) = pIk (Xi).To accommodate multiple interventions, we define an intervention set as I := ( I1, . . . , I nI ),where nI is the number of interventions. Note that the intervention set may include multiple interventions with the same targets, Ij = Ik. For convenience, we include the observational distribution in the intervention set and define it as I1 := ∅. We also abbreviate pIk (X) as 
+
+p(k)(X). The set of joint distributions induced by a causal graph and intervention set is 
+
+MI∗ (G), which we can factorize according to the Markov property: MI∗ (G) := {pIk (X) = Qni=1 pIk (Xi|Xπi )}
+
+> 4Amortized Bayesian Causal Discovery of Extended Factor Graphs
+
+Our goal is to estimate q(G; Λ) , a probability mass function (PMF) over G parameterized by a set of real numbers Λ. In estimating q(G; Λ) , we will make use of f (X; Φ) and f I (X; Φ) ,density models of p(X) and p(k)(X), respectively, parameterized by a set of real numbers Φ.
+
+2.2 Factor Directed Acyclic Graphs (f-DAGs) 
+
+Our goal is to build a generative model for DAGs and ultimately a Bayesian framework for inferring causal DAGs. To do this, we start with a type of graph called a factor DAG (f-DAG), following Lopez et al. [16]. An f-DAG is formally defined as follows: 
+
+Definition 2.1 (Lopez et al. [16] ). Given a set of nodes, V , and factors, F , a factor directed acyclic graph (f-DAG), denoted as (V, F, E ), is a directed acyclic graph (V ∪ F, E ) where edges E ⊂ { (i, j ) : i ∈ V, j ∈ F or i ∈ F, j ∈ V }.Given an f-DAG, we can preserve the connection between any two nodes (factors) by removing all intermediate factors (nodes) along paths. This results in a node-only (factor-only) graph: 
+
+Definition 2.2 (Lopez et al. [16] ). Given an f-DAG, D = ( V, F, E ), its half-square node graph is defined as D2[V ] = ( V, {(i, j ) : ∃f ∈ F, (i, f ), (f, j ) ∈ E}), and half-square factor graph is defined as D2[F ] = ( F, {(f, g ) : ∃i ∈ V, (f, i ), (i, g ) ∈ D}).Let A be the adjacency matrix of a causal DAG. An f-DAG can be viewed as a Boolean factorization of A, A = UV . Here U ∈ { 0, 1}n×m and V ∈ { 0, 1}m×n are binary node-to-factor and factor-to-node connection matrices. Intuitively, if m < n , the node-only half-square graph of an f-DAG can be interpreted as a low-rank approximation of the full-rank DAG, and the factors represent groups of related nodes (modules, topics, etc.). Lopez et al. [16] proved that, with probability exponentially approaching one, adding incorrect edges to a random graph increases its Boolean rank. Viewing an f-DAG as a Boolean matrix factorization of the binary adjacency matrix (Fig. 1), this result implies that the low-rank property of the f-DAG acts as a regularization for graph structure and increases robustness to noisy edges. This low-rank assumption is common in computational biology [28; 31]. We further extend the f-DAG framework for identifying unknown intervention targets. We model the effect of each intervention on target nodes via factors. This is a natural abstraction for interventions whose exact targets are unknown, such as drugs that affect a biological pathway. Suppose I = {I1, . . . , I nI } is a set of unknown intervention targets, and 
+
+W is a nI -by-m binary matrix, where Wkj represents whether the k-th intervention targets the j-th factor. We next define extended f-DAGs, a.k.a. extended factor graphs. 
+
+Definition 2.3 (Extended f-DAG) . Let D = ( V, F, E ) be an f-DAG and I = {I1, . . . , I nI }
+
+be a set of interventions. Let Ξ = {ξk, k ∈ [nI ]} be nI nodes corresponding to the nI
+
+interventions. An extended f-DAG is defined as an f-DAG DI = ( V ∪ Ξ, F, E ∪ EI ) where 
+
+EI ⊆ { (ξk, l ) : l ∈ F }, i.e. set of edges from intervention nodes to factors. 
+
+Definition 2.4 (Extended Half-Square Graph) . Let DI be an extended f-DAG obtained from an f-DAG D = ( V, F, E ) and a set of interventions I = {I1, . . . , I nI } and intervention nodes Ξ = {ξk, k ∈ [nI ]}. An extended half-square node graph is defined as (DI )2[V ] = (V ∪ Ξ, {(i, j ) : ∃f ∈ F, (i, f ), (f, j ) ∈ E ∪ EI }).
+
+> 5Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch
+
+We could also define an extended half-square factor graph, but that would be the same as a regular half-square factor graph because there is no edge from any factor to any intervention. Thus, we omit it in Def. 2.4. 
+
+2.3 Probabilistic Modeling of f-DAGs Generative Model for f-DAGs. A key innovation of our approach is a generative process for efficiently sampling large-scale f-DAGs that guarantees acyclicity by construction. This eliminates the need for computationally expensive acyclicity penalties used in differentiable causal discovery methods, ensures that all sampled graphs are acyclic, and forms the foundation for probabilistic causal f-DAG inference. Given a set of n nodes, {vi : i ∈ [n]}, and m factors, {fj : j ∈ [m]}, we construct an f-DAG by forming a partial order of nodes and factors together and determining the node-to-factor or factor-to-node edge connection (Fig. 1). Since node-to-node edges are disallowed in f-DAGs (nodes are only connected via factors), we do not need to explicitly model the relative order between nodes. Instead, we form a total order of factors, τ : [ m] → [m], such that fτ (1) < . . . < f τ (m). They partition all nodes into m + 1 subsets and each node vi is randomly inserted into one partition, i.e. ∃k ∈ [m], f τ (k−1) < v i < f τ (k) or vi < f τ (1) or 
+
+vi > f τ (m). We model this assignment using n categorical distributions with m + 1 categories, denoted as Y = {Yi : i ∈ [n]}. The second step determines edge existence , regardless of direction. These edge connection probabilities are related to a joint distribution of all edge connections. We use a binary matrix B ∈ { 0, 1}n×m to represent edge connections. Thus, Y
+
+contains all the direction information and B contains all the connection information. Hence, 
+
+Y and B uniquely determine an f-DAG, and we can generate an f-DAG by sampling Y and 
+
+B (Fig. 1). 
+
+Sampling Independently or Jointly Distributed Causal Edges. Using the above generative process, we can infer a causal DAG by optimizing a score function with respect to Y and B. But what is the best way to sample Y and B? One possibility is to model the edges as independent Bernoulli random variables sampled using the Gumbel softmax trick [ 12 ]. However, such a naive approach neglects possible correlation between edges. A more general approach is to model the joint distribution of edges using a sum-product network (SPN) [ 19 ; 22 ]. SPNs combine sum and product operations over latent variables, enabling flexible sampling from a categorical joint distribution (see Appendix A for further details). We implemented and evaluated both strategies on real and simulated data. 
+
+2.4 Bayesian Causal Discovery of DAGs A Differentiable Bayesian Framework for Causal Discovery. Let G be the set of all DAGs. Consider a generative process where a DAG is first sampled from a prior, p(G) with support on G, and a generative model p(X|G, I ) under the intervention I. Given empirical ob-servations, we can obtain a MAP estimate of the causal graph as G∗ = arg max G∈G p(G|X, I ).Because |G| is super-exponential in n [21 ], searching through the discrete space is computationally inefficient for large n. Instead, we resort to continuous optimization. As the true posterior is often intractable, we apply variational Bayes using a variational distribution q(G; Λ). In this way, we are able to find G∗ by optimizing a KL divergence: G∗ =arg min G∈G KL (q(G; Λ)|| p(G|X, I )) . In real experimental scenarios, the random intervention 
+
+> 6Amortized Bayesian Causal Discovery of Extended Factor Graphs
+
+Figure 1: Causal inference using extended factor graphs. (a) Generative process for sampling extended factor graphs that are guaranteed to be acyclic. Factors are ordered to form partitions, then nodes and interventions are inserted into partitions. Finally, edges are added from earlier nodes, factors or interventions to later. Removing factors gives a “half-square” graph with direct node-to-node and intervention-to-node connnections. (b) An extended factor graph factor-izes a node/intervention-to-node adjacency matrix as a Boolean product of a node/intervention-to-factor and factor-to-node matrix. ABCDEFG samples edges in these matrices using either independent Bernoulli random variables or a joint PMF parametrized by a sum-product network. is replaced with Monte Carlo sampling, I1, . . . , I nI . From our derivation (Appendix B.2), minimizing the KL divergence is equivalent to maximizing the evidence lower bound (ELBO): 
+
+q∗(G) = arg max 
+
+> q(G;Λ)
+> nI
+
+X
+
+> k=1
+
+Ep(k)(X|G∗)
+
+h
+
+Eq(G;Λ)
+
+h
+
+log p(k)Φ (X|G)
+
+ii 
+
+− KL (q(G; Λ)|| p(G)) . (1) This ELBO objective is directly connected to autoencoding variational Bayes [ 13 ]. A slight difference compared to the traditional autoencoding variational Bayes setting is that we treat the causal graph as a constant during the likelihood calculation, so the expectation is over p(k)(X|G∗) instead of p(k)(X). (We provide a detailed derivation of the ELBO in the Appendix.) The posterior can be estimated by optimizing the ELBO to yield 
+
+q∗(G) = p(k)Φ (G|X), assuming enough capacity of the variational family. As mentioned in Section 2.2, we can narrow down the search space by considering extended f-DAGs as a reasonable low-rank approximation of the true causal DAG. In this work, we use either independent Bernoullis or SPNs as a parametric model for f-DAGs, but the Bayesian framework is general to parametric DAG models. 
+
+2.5 Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+With the problem setup in Section 2.4, we now formally introduce our method, Amortized Bayesian Causal Discovery of Extended Factor Graphs (ABCDEFG). (Note that “amortized” here refers to using a common inference function in contrast to traditional mean-field 
+
+> 7Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch
+
+variational inference. Variational autoencoders (VAEs) are a type of amortized variational inference [ 1].) Given a set of random variables X = {Xi : i ∈ [n]} generated via a causal graph 
+
+G∗, we apply a Bayesian method by estimating p(G|X, I ∗) via optimization as described in section 2.4: 
+
+q∗(G) = arg max 
+
+> q(G;Λ)
+> nI
+
+X
+
+> k=1
+
+Ep(k)(X|G∗)
+
+h
+
+Eq(G;Λ)
+
+h
+
+log p(k)Φ (X|G)
+
+ii 
+
+− KL (q(G; Λ)|| p(G)) .
+
+The key to convert discrete search into continuous optimization is thus to create a differentiable parametric model for DAGs and estimate the ELBO using Monte Carlo sampling. We assume the true causal graph is or can be approximated by an f-DAG. Thus, we use either independent Bernoullis sampled by Gumbel softmax or joint PMF sampled from an SPN to parameterize 
+
+q(G; Λ).The model architecture (bottom panel of Fig. 11) consists of an f-DAG parametric model (Gumbel softmax or SPN) and a VAE for data distribution fitting. The output is a node-to-factor matrix U ∈ Rn×m and a factor-to-node matrix V ∈ Rm×n. Next, we model the data distribution under the f-DAG as p(X) = R
+
+> Z
+
+Qnj=1 g(Xj |Zπj ) Qmi=1 f (Zi|Xπi )dZ.Here, πi and πj are the parent nodes and factors in the f-DAG. Instead of using separate encoding and decoding functions to obtain the posterior of each Zj and conditional likelihood of each Xi, we follow Lopez et al. [16] and amortize all conditional distributions into a single encoding and decoding feed-forward neural network. Causal relations are injected into the VAE via masking operations Uj ⊙ X and Vi ⊙ Z, where Uj is the j-th column of U, Vi is the i-th column of V and ⊙ denotes the Hadamard product. When the intervention targets are unknown, the causal discovery problem can be treated as recovering an extended f-DAG with intervention nodes. Equivalently, our Gumbel softmax or SPN sampling procedure can be extended to generate an intervention-to-factor matrix 
+
+W ∈ { 0, 1}k×m. The causal mask operation becomes [Uj ⊙ X; Wj ⊙ I] where I is a one-hot encoding of the intervention. We can apply the same optimization approach to jointly infer the causal graph and intervention targets. Extended f-DAGs could also include intervention information such as the dosage of a chemical treatment, though we did not explore this in detail here. 
+
+2.6 Identifiability 
+
+We next provide identifiability guarantees for our approach. Our main theorem proves that the DAG with highest posterior probability (MAP estimate) belongs to the same equivalence class as the true causal DAG. We use the notion of I-Markov equivalence from [ 6]: two DAGs 
+
+G1 and G2 are I-Markov equivalent if and only if MI (G1) = MI (G2). Our theorem relies on the same four assumptions as previous identifiability results for differentiable causal inference methods [ 6]: sufficient model capacity, I-faithfulness, positivity, and finite differential entropy. This result applies to any DAG, including half-square graphs obtained from f-DAGs. 
+
+Theorem 2.5 (Identifiability via ELBO maximization) . Let X be a set of causally related random variables with a causal DAG G∗ and I∗ be a set of interventions with I∗ 
+
+> 1
+
+= ∅. Let G be a subset of all causal DAGs and q∗(G) be an optimal graph distribution from the optimization 
+
+> 8
+
+Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+problem: 
+
+sup 
+
+> q(G;Λ): supp (q)⊆G
+
+L(q(G; Λ)) ,
+
+where 
+
+L(q(G; Λ)) = Eq(G;Λ) [SI∗ (G)] − βKL (q(G; Λ)|| p(G)) , β > 0,SI∗ (G) = sup 
+
+> Φ
+> nI∗
+
+X
+
+> k=1
+
+Ep(k)(X)
+
+h
+
+log f (k)(X|G; Φ)
+
+i
+
+− λ|G|.
+
+In addition, assume the following: 1. Sufficient capacity: The set of distributions from our parametric models contains the ground truth interventional distributions: {p(k)(X) : k ∈ [nI∗
+
+]} ∈ F I∗ (G∗) where 
+
+FI∗ (G∗) = {{ f (k)(X|G∗; Φ)} : Φ ∈ Ω( Φ)}.2. I-faithfulness as defined in [6] (See appendix B, Thm. B.13 for details). 3. Positivity: ∀G, I, Φ, f (k)(X|G, I ; Φ) > 0.4. Finite differential entropy: ∀k ∈ [nI∗
+
+], Ep(k)(X)
+
+log p(k)(X) < +∞.If G∗ ∈ G, then, under the assumptions 1-4 [ 6] and with a proper β > 0, ˆG = arg max G q∗(G)
+
+is I∗-Markov equivalent to G∗.
+
+The key idea of the proof is that any posterior distribution whose MAP is not I∗-Markov equivalent to the true causal DAG must have a lower ELBO. Here, we present a sketch proof. See Appendix B.2 for details. 
+
+Proof. The proof is by contradiction. Suppose ∃ ˆG = arg max G q∗(G) that is not I∗-Markov equivalent to G∗. We can create another distribution q′ such that q∗( ˆG) − q′( ˆG) = 
+
+q′(G∗) − q∗(G∗) = ϵ > 0 and for any other graph G, q′(G) = q∗(G). From algebraic calculation, we have 
+
+L(q′) − L(q∗) = ϵ
+
+
+
+SI∗ (G∗) − SI∗ ( ˆG)
+
+
+
++ β∆.
+
+Because SI∗ (G∗) − SI ( ˆG) > 0, ∃β > 0 such that L(q′) − L(q∗) > 0. Then, we have a contradiction about q∗ being an optimal solution to the optimization problem. □
+
+Furthermore, our method can be extended to the unknown-target setting by replacing the causal DAG with an interventional DAG ( I-DAG)[ 26 ], following a derivation analogous to the known-target case above. So far, we have shown that our Bayesian framework is able to recover the true causal graph up to an Interventional Markov equivalent class. This result is general to any causal DAG, including f-DAGs. We motivated using f-DAG not only because of its robustness to noise[ 16 ], but also because of the underlying physical meaning - the factors inform us about 
+
+9Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+the organization of causal relations. Thus, we are motivated to answer the following question: does identifying the causal DAG guarantee identifying the underlying f-DAG? It turns out a subset of f-DAGs can be identified given a fixed number of factors. We call this subset "identifiable f-DAGs" and denote it as Dm where m is the number of factors. Below we give a formal definition of Dm based on relevant concepts. 
+
+Definition 2.6. Let D = ( V, F, E ) be any f-DAG, ∀f ∈ V ∪ F . Denote par (·; D) and 
+
+chd (·; D) as the set of parents and children of a vertex in D. The set of unique parents and children of f are defined as Pf (G) := {i : i ∈ par (f ; D), chd (i; D) = {f }} and Cf (D) := {j :
+
+j ∈ chd (f ; D), par (j; D) = {f }} .
+
+Definition 2.7. Let I be a set of interventions. Dm ⊆ { (V, F, E ) : |F | = m} is defined as the set of f-DAGs with m factors and the following properties: 1. ∀f ∈ F , Pf (DI )̸ = ∅ and Cf (DI )̸ = ∅.2. ∀f1, f 2 ∈ F such that f1̸ = f2, f 1 → f2 in (DI )2[F ], |Pf1 (DI )| > 1 (inclusively) or 
+
+|Pf2 (DI )| > 1.3. ∀f ∈ F , |par (f ; DI )| > 1, there is at most one factor g ∈ par (f ; ( DI )2[F ]) such that 
+
+|par (g; DI )| = 1 .Intuitively, the three additional conditions for f-DAGs mean 1. Any factor should have a unique parent and unique child that distinguish it from other factors. 2. There cannot be adjacent “chain" or “tree" structures in the f-DAG. 3. There should be enough v-structures in the f-DAG. Based on the definition, we further define the resulting half-square graphs. 
+
+Definition 2.8. Given a set of f-DAGs Dm defined as in Def. 2.7, Gm is defined as the set of all DAGs having a rank-m f-DAG factorization: 
+
+Gm := {G : ∃D ∈ Dm, G = D2[V ]}.
+
+Def. 2.7 and 2.8 describe exactly the subset of f-DAGs that are identifiable given our proposed Bayesian framework. Because we already proved identifiability of any causal DAG in Thm. Theorem 2.5, the identifiability of f-DAG is straightforward given the following lemma: 
+
+Lemma 2.9. Let D1 = ( V, F, E 1) and D2 = ( V, F, E 2) be two f-DAGs on the same set of nodes, V , and factors, F , and I be a set of interventions. Denote ≃I as the I-Markov equivalence relation. Let Ξ = {ξk : k ∈ [nI ]} be intervention nodes. In addition, suppose 
+
+D1, D 2 ∈ Dm defined as in Def. 2.7. Then, under a permutation of factors, we have 
+
+D1 ≃I D2 ⇐⇒ D21[V ] ≃I D22[V ].
+
+> 10 Amortized Bayesian Causal Discovery of Extended Factor Graphs
+
+The exact proof is lengthy. For conciseness, we present a proof sketch here and include all details in Appendix B.3. 
+
+Proof. By Theorem B.10 [ 26 ], we convert the proof of I-Markov equivalence to proof of equivalent graph structure. The general strategy is proof by contradiction under a discussion of different graph structures. We first show the forward direction. Suppose D1 ≃I D2 but D21[V ]̸ ≃I D22[V ]. There must be a mismatch in skeleton or v-structure. The former case implies a mismatch in skeleton between f-DAGs, while the latter implies a v-structure mismatch between f-DAGs. Hence, we have contradiction in both cases. For the reverse direction, the main idea is to show that there is a bijection ϕ : F → F
+
+such that par (f ; D1) = par (ϕ(f ); D2) and chd (f ; D1) = chd (ϕ(f ); D2). In fact, we partition 
+
+F into three subsets in D1: (1) F1 := {f : f ∈ F, |par (f ; D)| = |chd (f ; D)| = 1 }, (2) 
+
+F2 := {f : f ∈ F, |par (f ; D)| = 1 , |chd (f ; D)| > 1} and (3) F3 : {f : f ∈ F, |par (f ; D)| > 1.Similarly, we also partition factors into F ′
+
+> 1
+
+, F ′
+
+> 2
+
+, F ′ 
+
+> 3
+
+in the same way in D2. Next, we introduce three propositions: 
+
+Proposition 2.10. Given (DI 
+
+> 1
+
+)2[V ] ≃ (DI 
+
+> 2
+
+)2[V ] under the assumptions of lemma 2.9. Then, 
+
+∀j ∈ F such that par (j; DI 
+
+> 1
+
+) = {i}, chd (j; DI 
+
+> 1
+
+) = {k}, ∃j′ ∈ F such that par (j′; DI 
+
+> 2
+
+) = 
+
+{i}, chd (j′; DI 
+
+> 2
+
+) = {k} or par (j′; DI 
+
+> 2
+
+) = {k}, chd (j′; DI 
+
+> 2
+
+) = {i}.
+
+Proposition 2.11. Given (DI 
+
+> 1
+
+)2[V ] ≃ (DI 
+
+> 2
+
+)2[V ] under the assumptions of lemma 2.9. Then, 
+
+∀j ∈ F such that par (j; DI 
+
+> 1
+
+) = Pj (DI 
+
+> 1
+
+) = {i}, |chd (j; DI 
+
+> 1
+
+)| > 1, ∃j′ ∈ F , par (j′; DI 
+
+> 2
+
+) = 
+
+{i}, chd (j′; DI 
+
+> 2
+
+) = chd (j; DI 
+
+> 1
+
+).
+
+Proposition 2.12. If (DI 
+
+> 1
+
+)2[V ] ≃I (DI 
+
+> 2
+
+)2[V ] under the assumptions of lemma B.18, then 
+
+∀j ∈ F such that |par (j; DI 
+
+> 1
+
+)| > 1, ∃j′ ∈ F such that par (j; DI 
+
+> 1
+
+) = par (j′; DI 
+
+> 2
+
+) and 
+
+chd (j; DI 
+
+> 1
+
+) = chd (j′; DI 
+
+> 2
+
+).
+
+Because (DI 
+
+> 1
+
+)2[V ] ≃I (DI 
+
+> 2
+
+)2[V ], by proposition 2.10, ∀j ∈ F1, ∃j′ ∈ F ′ 
+
+> 1
+
+with the same parents and children and ∀j′ ∈ F ′
+
+> 1
+
+, ∃j ∈ F1 with the same parents and children. Hence, there is a bijection between F1 and F ′
+
+> 1
+
+. Similarly, we have bijections from F2 to F ′ 
+
+> 2
+
+by proposition 2.11 and F3 to F ′ 
+
+> 3
+
+by proposition 2.12. Finally, we have a bijection ϕ : F → F from all factors in 
+
+DI 
+
+> 1
+
+to factors in DI 
+
+> 2
+
+. ∀f ∈ F2 ∪F3, f and ϕ(f ) share the same parent(s) and children. ∀f ∈ F1,
+
+f and ϕ(f ), either par (f ; DI 
+
+> 1
+
+) = par (ϕ(f ); DI 
+
+> 2
+
+), chd (f ; DI 
+
+> 1
+
+) = chd (ϕ(f ); DI 
+
+> 2
+
+) or par (f ; DI 
+
+> 1
+
+) = 
+
+chd (ϕ(f ); DI 
+
+> 2
+
+), chd (f ; DI 
+
+> 1
+
+) = par (ϕ(f ); DI 
+
+> 2
+
+). Since |par (f ; DI 
+
+> 1
+
+)| = |chd (f ; DI 
+
+> 1
+
+)| = 1 , flipping the parent and child maintains the same skeleton and does not introduce v-structure. Finally, we conclude that DI 
+
+> 1
+
+and DI 
+
+> 2
+
+share the same skeleton and v-structures and 
+
+D21[V ] ≃I D22[V ] = ⇒ D1 ≃I D2 □
+
+Finally, we present the main theorem on the identifiability of f-DAGs. Here, we consider a variational distribution over f-DAGs, q(D; Λ). With a slight abuse of notation, we use 
+
+q(D2[V ]) to represent the induced distribution over half-squared graphs given a f-DAG distribution, q(D; Λ).
+
+Theorem 2.13 (Identifiability of the f-DAG via ELBO maximization) . Let X be a set of causally related random variables with a causal DAG G∗ and I∗ be a set of interventions 
+
+> 11 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch
+
+with I∗ 
+
+> 1
+
+= ∅. Suppose (G∗)I∗
+
+∈ GI∗ 
+
+> m
+
+. Let q∗(D) be an optimal graph distribution from the optimization problem: 
+
+sup 
+
+> q(D): supp (q)⊆Dm
+
+L(q(D; Λ)) ,
+
+where 
+
+L(q(D; Λ)) = Eq(D2[V ]) 
+
+SI∗ (D2[V ])  − βKL (q(D2[V ]) || p(G)) , β > 0,SI∗ (D2[V ]) = sup 
+
+> Φ
+> nI∗
+
+X
+
+> k=1
+
+Ep(k)(X)
+
+h
+
+log f (k)(X|D2[V ]; Φ)
+
+i
+
+− λ|D2[V ]|.
+
+If G∗ = ( D∗)2[V ] ∈ Gm, then, under the assumptions 1-4 as in Theorem 2.5 [ 6] and with a proper β > 0, ˆD = arg max D q∗(D) is I∗-Markov equivalent to D∗ up to a permutation of factors. 
+
+The theorem is a direct result of Theorem 2.5 and lemma B.18. By Theorem 2.5, 
+
+( ˆD)2[V ] ≃I∗ (D∗)2[V ]. Since ˆG, G ∗ ∈ Gm, ∃ ˆD, D ∗ such that ˆG = ˆD2[V ] and G∗ = ( D∗)2[V ].By lemma B.18, ˆD ≃I∗ D∗ under a permutation of factors. 
+
+3 Experiments 
+
+3.1 Simulation Results 
+
+We simulated data based on the approach of [ 16 ]. We further explored the effects of correlations between edge probabilities, which our approach explicitly models but previous approaches do not, by constructing an SPN and then sampling from the joint distribution of edges. We also simulated interventions with unknown targets. To evaluate our method, we benchmarked ABCDEFG on 24 datasets and compared with four SOTA score-based methods: DCDI [ 6], DCDFG [ 16 ], ENCO [ 15 ] and SDCD [ 17 ]. The 24 datasets include eight types of SEMs – a combination of (1) linear vs. non-linear causal effects, (2) independent vs. jointly distributed edge probabilities, and (3) hard vs. soft interventions. Each simulated graph includes 100 nodes and 10 factors. We simulated three separate graphs for each type of SEM. Similar to previous studies, we report Structural Hamming Distance (SHD) and F1 score for edge prediction. We used consistent hyperparameter settings for ABCDEFG across all simulations (Appendix C.3). ABCDEFG significantly outperformed all other approaches on graphs with nonlinear causal effects and edge probabilities that are jointly distributed and sampled from an SPN (Table 2). ABCDEFG performed similarly or better than SOTA methods on nonlinear SEMs, though SDCD showed strong performance in the nonlinear, non-SPN setting (Fig. 12). We also found that the other methods frequently produced cyclic graphs that required heuristic pruning to obtain a final DAG (Fig.13, Fig.14). We next evaluated how ABCDEFG performs for interventions with unknown targets, a key advantage of our approach. To test target identification, we generated causal graphs but withheld the intervention target information during inference. SDCD, ENCO, and DCDFG cannot incorporate interventions with unknown targets. Although DCDI can in principle identify both causal relations and unknown intervention targets, we excluded it from this evaluation because it required extremely long runtimes and showed poor performance in the easier targeted case. In addition to SHD and F1 of the causal graph, we evaluated the 
+
+> 12
+
+Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+Table 2: F1 score and SHD of Scored methods on Nonlinear Targeted Simulated Datasets 
+
+Metric Method Hard Soft SPN SPN Intvn Intvn Hard Soft F1 DCDI 0.19 ± 0.05 0.25 ± 0.07 0.34 ± 0.01 0.35 ± 0.04 
+
+DCDFG 0.05 ± 0.08 0.20 ± 0.14 0.23 ± 0.18 0.57 ± 0.14 
+
+ENCO 0.10 ± 0.01 0.10 ± 0.03 0.25 ± 0.01 0.23 ± 0.03 
+
+SDCD 0.31 ± 0.01 0.30 ± 0.06 0.25 ± 0.02 0.30 ± 0.06 
+
+ABCDEFG 0.29 ± 0.03 0.25 ± 0.01 0.64 ± 0.01 0.61 ± 0.03 
+
+ABCDEFG 0.29 ± 0.04 0.21 ± 0.01 0.61 ± 0.02 0.60 ± 0.02 
+
+(SPN) SHD DCDI 740 ± 291 559 ± 106 4293 ± 301 3337 ± 120 
+
+DCDFG 2513 ± 0 900 ± 272 2500 ± 198 2030 ± 125 
+
+ENCO 1952 ± 126 1992 ± 141 2855 ± 177 2896 ± 100 
+
+SDCD 421 ± 77 421 ± 78 2973 ± 72 2793 ± 83 
+
+ABCDEFG 1114 ± 328 1406 ± 361 2046 ± 49 2248 ± 200 
+
+ABCDEFG 1125 ± 248 1791 ± 249 2206 ± 81 2228 ± 85 
+
+(SPN) 
+
+Table 3: F1 score and SHD of ABCDEFG on Nonlinear Untargeted Simulated Datasets 
+
+Metric Method Hard Soft SPN SPN Intvn Intvn Hard Soft F1 ABCDEFG 0.23 ± 0.01 0.23 ± 0.05 0.22 ± 0.06 0.46 ± 0.03 
+
+ABCDEFG 0.20 ± 0.02 0.17 ± 0.02 0.28 ± 0.04 0.55 ± 0.05 
+
+(SPN) ABCDEFG 0.36 ± 0.01 0.38 ± 0.01 0.46 ± 0.10 0.85 ± 0.02 
+
+Intv. ABCDEFG 0.35 ± 0.01 0.35 ± 0.02 0.51 ± 0.01 0.84 ± 0.01 
+
+(SPN) Intv. SHD ABCDEFG 857 ± 112 1121 ± 261 3067 ± 56 2632 ± 217 
+
+ABCDEFG 1076 ± 326 1399 ± 342 3132 ± 148 2307 ± 239 
+
+(SPN) ABCDEFG 1659 ± 240 1426 ± 346 2584 ± 440 1021 ± 56 
+
+Intv. ABCDEFG 1761 ± 204 1516 ± 280 2438 ± 187 1071 ± 71 
+
+(SPN) Intv. 
+
+accuracy of the intervention-to-node graph (Table 3). The accuracy of inferred node-to-node relationships was lower compared to interventions with known targets, indicating that causal inference is more challenging under unknown interventions. Nevertheless, ABCDEFG inferred the intervention targets more accurately than the node-to-node causal relationships, achieving relatively high precision and recall, particularly for SPN-simulated graphs. 
+
+13 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+Table 4: F1 score and SHD of Bayesian methods on Simulated Datasets with 16 Nodes.                                                                                                                                                         
+
+> Metric Method LINEAR LINEAR NONLINEAR NONLINEAR SPN SPN F1 BaCaDi 0.18 ±0.02 0.22 ±0.03 0.16 ±0.03 0.20 ±0.03
+> DECI 0.09 ±0.02 0.11 ±0.01 0.08 ±0.01 0.08 ±0.02
+> VI-DP-DAG 0.20 ±0.04 0.20 ±0.03 0.13 ±0.00 0.21 ±0.06
+> ProDAG 0.17 ±0.01 0.20 ±0.02 0.16 ±0.03 0.23 ±0.05
+> ABCDEFG 0.74 ±0.13 0.49 ±0.13 0.23 ±0.31 0.35 ±0.24
+> ABCDEFG 0.40 ±0.03 0.24 ±0.06 0.13 ±0.13 0.30 ±0.24
+> (SPN) SHD BaCaDi 108 .28 ±0.95 106 .50 ±1.49 109 .34 ±0.82 107 .78 ±0.85
+> DECI 37 .27 ±0.76 41 .89 ±5.36 36 .75 ±4.17 41 .88 ±4.35
+> VI-DP-DAG 83 .88 ±4.32 79 .48 ±1.97 86 .51 ±5.35 79 .78 ±4.28
+> ProDAG 98 .24 ±1.56 94 .79 ±1.56 81 .16 ±0.60 88 .00 ±2.52
+> ABCDEFG 12 .74 ±5.02 29 .25 ±3.57 22 .14 ±5.44 27 .68 ±0.88
+> ABCDEFG 34 .40 ±1.80 43 .11 ±2.86 30 .38 ±6.76 34 .31 ±3.87
+> (SPN)
+
+We also benchmarked ABCDEFG against SOTA Bayesian causal inference methods: BaCaDi [ 11 ], ProDAG [ 25 ], DECI [ 10 ] and VI-DP-DAG [ 7]. These methods required significantly longer runtimes than the score-based approaches, so we used smaller datasets with 16 nodes and 260 samples. ABCDEFG and ProDAG were significantly faster than the other Bayesian approaches (see Table 12). For each method, we sampled 100 graphs from the posterior after training. ABCDEFG outperformed the other methods by achieving the highest F1 score and the lowest SHD across four different linear and nonlinear settings (Table 4). We also evaluated the posterior calibration of each method by comparing the expected and predicted edge probabilities. The posterior estimated by ABCDEFG showed the best match between the predicted edge probability and empirical estimation (Fig. 2a). 
+
+3.2 Application to Real Cellular Perturbation Screen 
+
+We applied our model to a large-scale single-cell perturbation screen in which cells were treated with 46 combinations of 14 growth factors [ 2]. Growth factors are biomolecules that induce significant molecular changes through signaling pathways and are used to steer cells toward desired cell types in the dish. Though some downstream targets of growth factors are known, the targets are highly context-specific. The raw data contains gene expression counts for 34,469 genes in 31,475 cells. Following standard preprocessing steps for this type of data, we extracted the 1,000 most highly variable genes for causal graph inference. We used 10 factors in our model. To evaluate intervention target identification, we collected (growth factor,gene) pairs from the Gene Ontology and used these true positives to calculate recall. We cannot calculate precision because the full signaling network is unknown, so true negatives are not available. As a baseline model, we compared against random factor graphs with the same edge density as the graphs inferred by ABCDEFG. ABCDEFG achieved a recall of 0.325 (Basic) and 0.376 (SPN), significantly better than the baseline model (recall: 
+
+> 14 Amortized Bayesian Causal Discovery of Extended Factor Graphs
+
+Figure 2: Posterior calibration plot of Bayesian methods and extended factor graph inferred from growth factor screen. (a) 95% confidence intervals estimated empirically (colored regions) across the range of posterior edge probabilities for each method. The black dotted line indicates perfect calibration. (b) Inferred causal edges among interventions with unknown targets (growth factors; pentagons), factors (circles), and genes (text) are shown. Factor colors indicate gene ontology terms enriched in the upstream (blue) and downstream (orange) genes. Edges from interventions to factors are shown in gray arrows, and edges between genes and factors are shown in black arrows. 0.196). Second, we evaluated data reconstruction on held-out interventions. Both DCDI and ENCO failed to run on the real data. The remaining approaches DCDFG and SDCD cannot incorporate interventions with unknown targets, so we treated the data as observational when training them. We held out four intervention combinations during training, then calculated the MSE of reconstructed data on these held-out interventions. ABCDEFG achieved better MSE on the held-out samples (Basic: 0.917, SPN: 0.922) compared with DCDFG (0.957) and SDCD (1.029). Finally, we visualized the causal factor graph learned by ABCDEFG (Fig. 2b). 
+
+4 Conclusion 
+
+ABCDEFG fills a key gap in the field by enabling scalable Bayesian causal discovery from interventional data with known or unknown intervention targets. However, we acknowledge several limitations. First, gene regulatory networks often contain cycles, violating the acyclicity assumption. Second, the f-DAG approach could poorly approximate a causal DAG when the true graph is high-rank (or when the number of factors in the f-DAG is too low). Also, our identifiability theorems do not describe the influence of sample size, though we think that our framework provides a promising foundation for future efforts to extend identifiability results into the limited data regime. ABCDEFG opens exciting new opportunities to infer gene regulatory networks and perturbation targets from large-scale cellular perturbation data. 
+
+> 15 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch
+
+Acknowledgments and Disclosure of Funding 
+
+This project was supported by NIH grant R01HG010883 to J.D.W. The authors declare that there are no competing interests. 
+
+> 16 Amortized Bayesian Causal Discovery of Extended Factor Graphs
+
+Appendix A. Overview of Sum-Product Network 
+
+Using the generative process we developed for constructing extended factor graphs, we can infer a causal DAG by optimizing a score function with respect to two binary matrices Y and 
+
+B. But what is the best way to do this, given that Y and B are discrete? One possibility is the Gumbel softmax trick [ 12 ], often applied due to its simplicity. For Y , we can parameterize each Yi with logits θi and sample Yi using Gumbel softmax. Similarly we can treat each edge in B as a Bernoulli random variable and sample from Gumbel softmax. However, such a naive approach treats all edges as independent and neglects possible correlation between edges. A more general approach is to model the joint distribution of edges in B using a sum-product network [ 19 ]. Two naive ways to sample a binary vector b ∈ { 0, 1}d are (1) sample from a single categorical distribution over all binary vectors or (2) sample each entry independently from a Bernoulli distribution. The former involves 2d categories, which is impractical for large d, while the latter neglects dependency between any two entries and lacks expressiveness. In contrast, SPNs provide an appealing parametric model for B due to their balance between model complexity and expressiveness. Let B = [ B1, . . . , B d]T ∈ { 0, 1}d be a random binary vector. We applied and extended the algorithm by Shih and Ermon [22] to construct an SPN to model the joint distribution of B. The construction of an SPN is analogous to building a neural network by sequentially adding layers. Each layer contains one type of computation nodes: (1) input node, (2) product node and (3) sum node and acts as a function of input as shown in Fig. 3a. The SPN starts with singletons {b1}, . . . , {bd} as an initial partition. Each bi is passed to two input nodes outputting 0 and 1 respectively. Next, each product layer merges the partitions from the previous layer by creating all combinations of bit sequences for each merge. When the number of sequences from a merge exceeds a threshold, w, a sum layer is added to filter out sequences from the previous layer while keeping the same number of partitions. The merge filter process continues until a single partition remains. Thus, the SPN can also be interpreted as a deep mixture model whose trainable parameters are the mixture weights of all sum nodes. The original algorithm by Shih and Ermon [22] only works when d is a power of two due to recursively halving the partitions, but we extended it to the general case. To do this, we divide d into powers of two based on its binary representation: d = Pki=0 bi × 2i. Next, for each bi = 1 , we build an SPN modeling joint PMF of 2i bits. Finally, we apply a product and sum unit to merge the outputs from each SPN together. The number of parameters in an SPN with a maximum width of w for an f-DAG with m factors and n nodes scales as 
+
+Θ
+
+ mnw 2 
+
+> log w
+
+
+
+, achieving a balance between model size and model expressiveness. We further provide a theoretical bound on the space complexity of the SPN-FG model we used for ABCDEFG. 
+
+Notation. As introduced in section 2.3, an SPN-FG model contains partition variables 
+
+Y = {Yi : i ∈ [n]} and connection matrix B ∈ { 0, 1}n×m parameterized by sum-product networks (SPN). We use the following notation throughout the derivation. 1. n: number of graph nodes. 2. m: number of factors. 
+
+> 17 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch
+
+3. l: SPN layer index 4. pl: number of partitions in the l-th layer of an SPN 5. ul: number of sum or product nodes in each partition in the l-th layer of an SPN. 6. w: maximum number of bit sequences from a product node. 7. s: Total number of trainable parameters of a single SPN. 8. S: Total number of trainable parameters of an SPN-FG model. We define model complexity as the total number of trainable parameters of an SPN-FG. In our implementation, the joint PMF of either a row or a column of B can be parameterized with a separate SPN. We consider the case of building an SPN for each row of B, i.e. each SPN models the joint distribution of connections between one node and all factors. This results in the following general formula for trainable parameters: 
+
+S = n(m + 1) + ns (2) The first part n(m + 1) represents n categorical distributions with m + 1 categories for modeling Y . The second part ns represents n SPNs, each having s parameters and modeling a single row of B. Later, we will see that the space complexity stays the same when we choose to parameterize each column of B with an SPN. Notice that s is a function of m, n
+
+and w. Next, we derive bounds of s.
+
+Special Case. Here, we consider a special case of both m and w being a power of 2. Suppose m = 2 d and w = 2 k. This is also the assumption in the original algorithm by Shih and Ermon [22]. We build an SPN by sequentially adding either a product or a sum layer to the network. The algorithm by Shih et al. keeps adding product layers until the Cartesian product of two partitions has a size exceeding the bound w. Here, we further assume w < 2m because if it’s not the case, the width bound, w, has no effect and the SPN will be equivalent to a categorical distribution over all 2m binary vectors. Once the width of an SPN exceeds 
+
+w, we add sum and product layers alternatingly. Each sum node constraints the partition size ul to be w, while each product node always combines two sets of w sequences into w2
+
+combinations. That is, we have 
+
+pl =
+
+ 
+
+> 12
+
+pl−1 l ≤ L0
+
+pl−1 l > L 0, l − L0 odd (sum)  
+
+> 12
+
+pl−1 l > L 0, l − L0 even (product) (3) 
+
+ul =
+
+
+
+u2 
+
+> l−1
+
+l ≤ L0
+
+w l > L 0, l − L0 odd (sum) 
+
+w2 l > L 0, l − L0 even (product) (4) Here L0 + 1 is the lowest index of the layer whose partition size exceeds the budget w, i.e. 
+
+L0 := max l ul ≤ w. Using Eq. 3-4, we have ul = 2 2l
+
+when l < L 0. This implies 
+
+L0 := max {l : 2 2l
+
+≤ 2k} =⇒ L0 = ⌊log 2 k⌋. (5) 
+
+> 18
+
+Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+Figure 3: Illustration of Sum-Product Network (SPN). (a) Building blocks of an SPN. 
+
+Top : An input node encodes a PMF or PDF given an input value x. Middle : A product node generates a product of input distributions as the output. Bottom :A sum node generates a mixture of input distributions as the output. (b) An Example of SPN Architecture. Assume inputs are random bits x1 . . . x 4. Input nodes generate both 0’s and 1’s for each bit. Next, a product layer merges x1, x 2
+
+and x3, x 4 by generating all 2-bit sequences for {x1, x 2} and {x3, x 4} respectively. Then, a sum layer downsamples inputs. Finally, a product and a sum layer merge 
+
+x1, . . . , x 4 together and output a 4-bit sequence. The trainable parameters of our SPN are the mixture weights of sum nodes and in each sum layer, the number of sum nodes equals the number of partitions times number of nodes for each partition. Therefore, the total number of trainable parameters of each SPN equals: 
+
+s = pL0+1 · uL0+1 +
+
+> d−L0−1
+
+X
+
+> l′=1
+
+pL0+2 l′+1 · uL0+2 l′+1 (6) 
+
+= 2 2L0+1 m
+
+2L0+1 +
+
+> d−L0−1
+
+X
+
+> l′=1
+
+m
+
+2L0+1+ l′ w2 (7) 
+
+= 2 2L0+1 −L0−1m + mw 2
+
+ 12L0+1 − 12d
+
+
+
+(8) 
+
+19 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+From Eq. 5, we have 
+
+log 2 k − 1 < L 0 ≤ log 2 k
+
+⇐⇒ k
+
+2 < 2L0 ≤ k
+
+⇐⇒ √w = 2 k 
+
+> 2
+
+< 22L0 ≤ 2k = w. (9) By plugging the upper and lower bound in the above inequality into Eq. 8, we have 
+
+mw 
+
+2 log w + mw 2
+
+ 12 log w − 1
+
+m
+
+
+
+< s < mw 2
+
+ 2log w − 1
+
+m
+
+
+
+(10) 
+
+=⇒ s = Θ
+
+ mw 2
+
+log w
+
+
+
+(11) 
+
+=⇒ S = n(m + 1) + ns = Θ
+
+ mnw 2
+
+log w
+
+
+
+. (12) When each SPN models a column of B instead of a row, we have s = Θ( nw 2  
+
+> log w
+
+) and hence, 
+
+S = n(m + 1) + ms = Θ
+
+ mnw 2
+
+log w
+
+
+
+.
+
+Finally, we conclude that 
+
+S = Θ
+
+ mnw 2
+
+log w
+
+
+
+.
+
+Now we consider the alternative way of modeling each column of B with an SPN. Then, the total number of parameters becomes 
+
+S = n(m + 1) + ms. 
+
+Following exactly the same derivation with m replaced with n, we have each SPN s = Θ( nw 2  
+
+> log w
+
+)
+
+and the overall m parallel SPNs have a space complexity of S = Θ
+
+ mnw 2 
+
+> log w
+
+
+
+. Hence, we end up with the same space complexity. 
+
+General Case. The bound s(m) = Θ
+
+ mw 2 
+
+> log w
+
+
+
+, and hence S = Θ
+
+ mnw 2 
+
+> log w
+
+
+
+, continues to hold when m (or n) is not a power of two, since the binary decomposition described above changes the complexity only by lower-order terms. 
+
+Appendix B. Identifiability of Causal DAGs by ABCDEFG 
+
+In this section, we will introduce key concepts from existing literature[ 26 ; 6; 16 ] and prove the identifiability of our method. Previously, Yang et al. introduced the concept of I-Markov equivalence as an extension of Markov equivalence. Brouillard et al. proved the identifiability of I -Markov equivalent graphs under score maximization. Later, Lopez et al. provided a sufficient condition for a causal DAG to be unique given its corresponding f-DAG. Here, we extend the theory of causal discovery of DAGs and f-DAGs showing (1) a derivation of variational Bayes approach to causal discovery, (2) identifiability of I-Markov equivalent causal graphs under ELBO maximization and (3) a sufficient and necessary condition for equivalence between I-Markov equivalence of f-DAGs and I-Markov equivalence of their half-square graphs. 
+
+> 20 Amortized Bayesian Causal Discovery of Extended Factor Graphs
+
+B.1 Theoretical Foundation for Bayesian Causal Discovery of Factor DAGs 
+
+We first introduce concepts about causal discovery and factor DAG as from DCDI Brouillard et al. [6] and DCD-FG [16]. 
+
+Definition B.1 (Lopez et al. [16] ). Given a set of nodes, V , and factors, F , a factor directed acyclic graph (f-DAG), denoted as (V, F, E ), is a directed acyclic graph (V ∪ F, E ) where edges E ⊂ { (i, j ) : i ∈ V, j ∈ F or i ∈ F, j ∈ V }.An f-DAG is a DAG with two different types of vertices, nodes and factors. All edges connect two vertices of different types. Alternatively, if we represent an f-DAG using an adjacency matrix A, we can use U and V to represent node-to-factor and factor-to-node adjacency matricies. Then we have A = U ◦ V where ◦ denotes the matrix Boolean product. Furthermore, we can condense an f-DAG to a node-only graph as defined below. 
+
+Definition B.2 (Lopez et al. [16] ). Given an f-DAG, D = ( V, F, E ), its half-square node graph is defined as D2[V ] = ( V, {(i, j ) : ∃f ∈ F, (i, f ), (f, j ) ∈ E}), and half-square factor graph is defined as D2[F ] = ( F, {(f, g ) : ∃i ∈ V, (f, i ), (i, g ) ∈ D}).A half-square graph essentially keeps all dependency relations between nodes in the original factor graph. The factors can be interpreted as intermediate nodes on the paths between causally-related observations. We also note that the mapping from the set of f-DAGs to half-square graphs is a surjection. Denote par (·; D) and chd (·; D) as the set of parent and child nodes in any graph D.
+
+Definition B.3. Let G = ( V, E ) be any graph, ∀f ∈ V , the set of unique parents and children of f are defined as Pf (G) := {i : i ∈ par (f ; G), chd (i; G) = {f }} and Cf (G) := {j :
+
+j ∈ chd (f ; G), par (j; G) = {f }} .With the above definition, we define a subset of f-DAGs: Given a set of causally related random variables X = {X1, . . . , X n} with a causal graph 
+
+G. A fundamental assumption of a causal DAG underlying X is the Markov property, which leads to a factorization of the joint distribution. Here, we denote πi as the set of all parents of i in G.
+
+Definition B.4 (Brouillard et al. [6] ). Let G = ( V, E ) be a causal DAG with n nodes and I∗ = {Ik : k ∈ [l]} be a set of interventions. We define MI∗ (G) as the set of joint distributions factorized according to the Markov property, i.e. MI∗ (G) := {{ p(k) : k ∈
+
+[nI∗
+
+]} : p(k)(X) = Qni=1 p(k)(Xi|Xπi )}.By convention, I1 = ∅ represents a pure observational setting. Based on the definition above, Brouillard et al. [6] defined a type of equivalence relation called I-Markov equivalence relation to describe DAG equivalence under interventions. 
+
+Definition B.5 (I-Markov Equivalence [ 6]) . Two DAGs G1 and G2 are I-Markov equivalence if and only if MI (G1) = MI (G2). We denote by I-MEC (G) as the set of all DAGs which are I-Markov equivalent to G.
+
+> 21 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch
+
+In the rest of section B, we use the notation ≃I to denote I-Markov equivalence relation. Since we consider the set of f-DAGs, the causal relations between i and j are passed through latent factors. Denote πDi as the set of parents of a vertex i(node or factor) in the graph D. Next, we use a continuous random variable Z = {Z1, . . . , Z m} to represent the factors. Then, we have a class of joint distributions of X and Z produced by an f-DAG. 
+
+Definition B.6 (Family of Distributions associated with an f-DAG) . Let D = ( V, F, E ) be an f-DAG with n nodes and m factors. Then, MI∗ (D) is defined as the set of probabilistic models with the following form: 
+
+MI∗ (D) = 
+
+{p(k)(X, Z) : k ∈ [nI∗
+
+]} : p(k)(X, Z) = 
+
+> n
+
+Y
+
+> i=1
+
+p(k)(Xi|ZπDi )
+
+> m
+
+Y
+
+> j=1
+
+p(k)(Zj |XπDj )
+
+
+
+(13) where p(k)(Xi|XπDi )̸ = p(1) (Xi|XπDi ) if and only if i ∈ Ik and p(k)(Zj |XπDj )̸ = p(1) (Zj |XπDj )
+
+if and only if j ∈ Ik.The above definition assumes knowledge of the intervention targets. When interventions are unknown, we are able to extend f-DAGs in a similar way to the I-DAG introduced by Yang et al.[26]. We first mention the concept of I-DAG and then extend it to f-DAGs. 
+
+Definition B.7 (Yang et al. [26] ). Let G = ( V, E ) be a DAG and I = {I1, . . . , I nI } be a set of interventions with Ik ⊆ V, ∀k. An interventional DAG ( I-DAG) is defined as an augmented graph 
+
+GI = ( V ∪ Ξ, E ∪ EI ),
+
+where Ξ := {ξk : k ∈ [nI ]} is a set of intervention nodes representing I1, . . . , I k and 
+
+EI ⊆ { (ξk, i ) : i ∈ Ik, k ∈ [nI ]} is a set of edges from interventions to targets. 
+
+Definition B.8 (Extended f-DAG) . Let D = ( V, F, E ) be an f-DAG and I = {I1, . . . , I nI }
+
+be a set of interventions. Let Ξ = {ξk, k ∈ [nI ]} be nI nodes corresponding to the l
+
+interventions. An extended f-DAG is defined as an f-DAG DI = ( V ∪ Ξ, F, E ∪ EI ) where 
+
+EI ⊆ { (ξk, f ) : f ∈ F }, i.e. set of edges from intervention nodes to factors. An extended f-DAG is obtained by adding intervention nodes to an f-DAG. Here, we also have low-rank assumption that interventions causally affects downstream nodes via a small number of factors. Put in a matrix form, the adjacency matrix of an extended f-DAG has a low-rank Boolean matrix factorization as 
+
+AI =
+
+ UW
+
+
+
+◦ V 0 m×nI
+
+ ,
+
+where W ∈ RnI ×m is an adjacency matrix representing edges from intervention nodes to factors. Given the definition of MI∗ (D) and I-Markov equivalence, we can further define I-Markov equivalence relation between f-DAGs. 
+
+Definition B.9 (I-Markov Equivalence Class of f-DAGs) . Given a set of interventions, I,two f-DAGs D1 and D2 are I-Markov equivalent if MI (D1) = MI (D2).
+
+> 22
+
+Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+The concept of MI (D) and I-Markov equivalence for f-DAGs are just the same as those for DAGs except for classifying vertices into nodes and factors. The following theorem regarding the concept of I-DAG connects statistical independence to graph structures. 
+
+Theorem B.10 (Yang et al. [26] ). Two DAGs G1 and G2 belong to the same I-Markov Equivalence Class ( I-MEC) if and only if their I-DAGs have the same skeleton and v-structures. 
+
+Since f-DAGs are one type of DAG, we easily obtain the following corollary. 
+
+Corollary B.11. Two f-DAGs D1 and D2 belong to the same I-MEC if and only if their extended f-DAGs have the same skeleton and v-structures. 
+
+Proof Suppose D1 and D2 have n nodes and m factors. Let G1 and G2 be two DAGs obtained by removing the labeling of node or factor in D1 and D2, i.e. we treat all nodes and factors as simply nodes in G1 and G2. We still keep the bijection between vertices and random variables X = {Xi : i ∈ [n]} and Z = {Zj : j ∈ [m]}. We have 
+
+D1 ∈ I -MEC (D2)
+
+⇐⇒ M I (D1) = MI (D2)
+
+⇐⇒ M I (G1) = MI (G2)
+
+⇐⇒ G1 ∈ I -MEC (G2)
+
+⇐⇒ GI 
+
+> 1
+
+and GI 
+
+> 2
+
+have the same skeleton and v-structures 
+
+⇐⇒ DI 
+
+> 1
+
+and DI 
+
+> 2
+
+have the same skeleton and v-structures The second line is by definition B.9. The third line implication is by the fact DI and GI
+
+have exactly the same structure. The fourth line is by definition B.5. The fifth line is by Theorem B.10. The last line is again by the identical structure between DI and GI .In reality, we can use a single encoder function to get Zj ∼ p(fenc (Uj ⊙ X; Θ)) and Xi ∼
+
+p(fdec (Vi ⊙ X; Φ)) to represent the conditional distribution p(k)(Xi|ZπDi ) and p(k)(Zj |XπDj ).Thus, we define a second set of joint distributions representing our model capacity. 
+
+Definition B.12 (Family of Parametric Distributions associated with an f-DAG) . Let 
+
+D = ( V, F, E ) be an f-DAG with n nodes and m factors. Consider two parametric functions 
+
+fenc : Rn → Rm, parameterized by Θ ∈ Ω( Θ) and fdec : Rm → Rn, parameterized by 
+
+Φ ∈ Ω( Φ). In addition, let U and V be node-to-factor and factor-to-node matrices of an f-DAG D. Then, FI∗ (D) is defined as the set of probabilistic models with the following form: 
+
+FI∗ (D) = 
+
+{f (k)(X, Z) : k ∈ [nI∗
+
+]} : f (k)(X, Z) = 
+
+> n
+
+Y
+
+> i=1
+
+f (k)(Xi|ZπDi )
+
+> m
+
+Y
+
+> j=1
+
+f (k)(Zj |XπDj )
+
+ ,
+
+(14) where f (k)(Zj |XπDj ) = p(fenc (Uj ⊙ X)) , f (k)(Xi|ZπDi ) = p(fenc (Vi ⊙ Z)) , f (k)(Xi|ZπDi )̸ =
+
+f (1) (Xi|ZπDi ) if and only if i ∈ Ik and f (k)(Zj |XπDj )̸ = f (1) (Zj |XπDj ) if and only if j ∈ Ik.
+
+23 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+B.2 Derivation of Bayesian Framework for Differentiable Causal Discovery 
+
+We present a Bayesian framework for differentiable causal discovery and show that it reduces to score maximization under a uniform prior over the space of DAGs. Consider a set of causally related random variables X = {Xi : i ∈ [n]} and a random intervention set I∗ ⊆ [n]. First, we assume the observations are generated from a single causal graph G∗ via a generative model p(X|G∗, I ∗). We assume each intervention either removes edges towards targets (hard) or keeps the same graph structure (soft). Thus, the generative model becomes p(X|G∗, I ∗) under different interventions. When I∗ is known, we can obtain a MAP estimate of G:
+
+ˆG = arg max  
+
+> G∈G
+
+p(G|X, I ∗). (15) In order to convert this optimization problem to a differentiable one, we consider a variational distribution q(G) and optimize a KL divergence instead: 
+
+ˆG = arg max  
+
+> G
+
+q∗(G) where q∗(G) = arg min  
+
+> q(G)
+
+KL (q(G)|| p(G|X, I ∗)) . (16) Because we have control over q(G), finding its argmax will be easy. Directly optimizing 
+
+KL (q(G)|| p(G|X)) suffers from the intractability problem since p(G|X, I ∗) = p(X|G,I ∗)p(G|I∗)P 
+
+> G′p(X|G′,I ∗)p(G′|I∗)
+
+and the space of DAGs is super-exponential in the number of nodes. Thus, we can derive an alternative objective in the following form: 
+
+KL (q(G)|| p(G|X, I ∗)) = Ep(X,I ∗)
+
+
+
+Eq(G)
+
+
+
+log q(G)
+
+p(G|X, I ∗)
+
+ 
+
+= Ep(X,I ∗)
+
+
+
+Eq(G)
+
+
+
+log q(G)p(X|I∗)
+
+p(X|G, I ∗)p(G|I∗)
+
+ 
+
+= Ep(X,I ∗)
+
+log p(X|I∗) − Eq(G) [log p(X|G, I ∗)] + KL (q(G)|| p(G|I∗)) 
+
+=⇒ min  
+
+> q(G)
+
+KL (q(G) || p(G|X, I ∗)) = max  
+
+> q(G)
+
+Ep(X,I ∗)
+
+Eq(G) [log p(X|G, I ∗)] − KL (q(G)|| p(G|I∗)) 
+
+= max  
+
+> q(G)
+
+ELBO (G) (17) In reality, p(X, I ∗) is replaced with an empirical distribution from any dataset. For I∗, we can conduct additional experiments by perturbing some nodes Ik in the k-th experiment. For the empirical data distribution, we assume the data samples are generated from p(X|G∗)
+
+instead of p(X). The data samples are not drawn from the marginal over X because we assume a single causal graph G∗ underlying the data generative process. We use parametric 
+
+f (k)(Xi|XπGi ; Φ) for distributional fitting and q(G; Λ) for graph fitting. Here, πi is the set of all parents nodes of node i in a graph G. In addition, we need to add an L1 regularization on G to account for the sparsity constraint. Now the optimization problem becomes: 
+
+sup 
+
+> Λ,Φ
+> nI
+
+X
+
+> k=1
+
+Ep(k)(X|G∗)
+
+h
+
+Eq(k)(G;Λ)
+
+h
+
+log f (k)(X|G; Φ)
+
+i
+
+− KL (q(k)(G; Λ)|| p(k)(G)) 
+
+i
+
+− λEq(k)(G;Λ)[|G|]
+
+(18) 
+
+24 Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+The objective function is similar to the one proposed in the VAE paper [ 13 ] except that we have a latent space of DAGs instead of a low-dimensional latent embedding. In addition, we assume interventions change neither the prior graph distribution nor our variational posterior. The objective can be extended to that of a β-VAE: 
+
+sup 
+
+> Φ,Λ
+> nI
+
+X
+
+> k=1
+
+Ep(k)(X|G∗)
+
+h
+
+Eq(G;Λ)
+
+h
+
+log f (k)(X|G; Φ)
+
+ii 
+
+− βKL (q(G; Λ)|| p(G)) − λEq(G;Λ)[|G|]= sup 
+
+> Φ,Λ
+
+Eq(G;Λ)
+
+
+
+> nI
+
+X
+
+> k=1
+
+Ep(k)(X|G∗)
+
+h
+
+log f (k)(X|G; Φ)
+
+i
+
+− λ|G|
+
+ − βKL (q(G; Λ)|| p(G)) (19) Notice that the score function is under the expectation of q(G; Λ). If we set β = 0 and 
+
+q(G; Λ) = δ(G), the Dirac delta function, the optimization problem becomes exactly the same as a score maximization problem as presented in previous score-based methods. The constraint on q(G; Λ) ensures that q(G; Λ) does not deviate from the prior arbitrarily. Next, we will prove the identifiability of this Bayesian framework. 
+
+Theorem B.13 (Brouillard et al. [6] ). Let X = {X1, . . . , X n} be a set of causally related random variables with a causal DAG G∗ = ( V, E ) and I∗ = {Ik : k ∈ [nI∗
+
+]} be a set of interventions with I1 = ∅. Assume the following: 1. The set of distributions from our parametric models contains the ground truth in-terventional distributions: {p(k)(X) : k ∈ [nI∗
+
+]} ∈ F I∗ (G∗) where FI∗ (G∗) = 
+
+{{ f (k)(X|G∗; Φ)} : Φ ∈ Ω( Φ)}.2. Denote ⊥⊥G∗ as the d-separation relation in G∗. I-faithfulness contains the following two conditions. (a) For any disjoint set A, B, C ⊂ V , XA ⊥⊥ XB |XC =⇒ A ⊥⊥G∗ B|C
+
+(b) For any disjoint sets A, C ⊂ V and k ∈ [nI∗
+
+], p(k)(XA|XC ) = p(1) (XA|XC ) = ⇒
+
+A ⊥⊥G∗I ∗ ξk|C
+
+3. ∀G, I, Φ, f (k)(X|G, I ; Φ) > 0.4. ∀k ∈ [nI∗
+
+], Ep(k)(X)
+
+log p(k)(X) < +∞.Define the score function as 
+
+SI∗ (G) = sup 
+
+> Φ
+> nI∗
+
+X
+
+> k=1
+
+Ep(k)(X)
+
+h
+
+log f (k)(X|G; Φ)
+
+i
+
+− λ|G|
+
+Then, with a small enough λ > 0, we have SI∗ (G∗) > S I∗ (G).
+
+The previous theorem claims optimality of the score function when the causal DAG is treated as a deterministic object. Next, we give a probabilistic view of this optimality. First, we define the Bayesian score function as follows. 
+
+25 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+Definition B.14 (Bayesian Score Function) . Let X = {X1, . . . , X n} be a set of causally related random variables with a causal DAG G∗ and I∗ = {Ik : k ∈ [nI ]} be a set of interventions with I1 = ∅. Let p(G) be a prior over DAGs and q(G; Λ) be a variational distribution. The Bayesian score function, L(q(G; Λ)) is defined as 
+
+L(q(G; Λ)) = Eq(G;Λ) [SI∗ (G)] − βKL (q(G; Λ)|| p(G)) 
+
+where SI∗ (G) is the score function defined in Theorem B.13. 
+
+Theorem B.15 (Identifiability via ELBO maximization) . Let X = {X1, . . . , X n} be a set of causally related random variables with a causal DAG G∗ and I∗ = {Ik : k ∈ [nI ]} be a set of interventions with I1 = ∅. Let G be a subset of all causal DAGs and q∗(G) be an optimal graph distribution from the optimization problem: 
+
+sup 
+
+> q(G;Λ): supp (q)⊆G
+
+L(q(G; Λ)) ,
+
+where 
+
+L(q(G; Λ)) = Eq(G;Λ) [SI∗ (G)] − βKL (q(G; Λ)|| p(G)) ,SI∗ (G) = sup 
+
+> Φ
+> nI
+
+X
+
+> k=1
+
+Ep(k)(X)
+
+h
+
+log f (k)(X|G; Φ)
+
+i
+
+− λ|G|.
+
+If G∗ ∈ G, then, under the same assumptions as those in Theorem B.13, for small enough 
+
+β > 0 and small enough λ > 0, ˆG = arg max G q∗(G) is I∗-Markov equivalent to G∗.
+
+Proof We prove this theorem by contradiction. Suppose ∃ ˆG = arg max G q∗(G) such that 
+
+ˆG̸ ≃I∗ G∗.Consider another PMF q′(G) which has the same support and same mass as q∗(G) except for q′(G∗) − q∗(G∗) = ϵ > 0 and q′( ˆG) − q∗( ˆG) = −ϵ < 0. Because q∗( ˆG) > 0, such q′ and ϵ
+
+exist. By the definition of q∗, L(q∗) ≥ L(q′). Then, we have 
+
+L(q′) − L(q∗)= Eq′(G) [SI∗ (G)] − βKL (q′(G)|| p(G))  − Eq∗(G) [SI∗ (G)] − βKL (q∗(G)|| p(G)) 
+
+= X
+
+> G∈G
+
+(q′(G) − q∗(G)) SI∗ (G) + β KL (q∗(G)|| p(G)) − KL (q′(G)|| p(G)) 
+
+= ϵ
+
+
+
+SI∗ (G∗) − SI∗ ( ˆG)
+
+
+
++ β KL (q∗(G)|| p(G)) − KL (q′(G)|| p(G))  . (20) By Theorem B.13, ∃λ > 0 such that SI∗ (G∗) > S I∗ (G), ∀G̸ ≃I∗ G∗. Therefore, SI∗ (G∗) −
+
+SI∗ ( ˆG) = ∆ > 0. If PnI∗ 
+
+> k=1
+
+[KL (q∗(G)|| p(G)) − KL (q′(G)|| p(G))] ≥ 0, we already have 
+
+L(q′) > L(q∗). Otherwise, we can pick 
+
+0 < β < ϵ∆
+
+KL (q′(G)|| p(G) − KL (q∗(G)|| p(G))) 
+
+and L(q′) > L(q∗). Both cases contradict the fact that L(q∗) ≥ L(q′). Therefore, we conclude that G∗ must be a argmax of q.
+
+26 Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+Notice that we add a constraint on the support of q(G; Λ) to account for cases when we have prior knowledge about the DAG and only need to search over a subset. As discussed below, this applies when the true causal DAG is a half-square graph of an f-DAG. If we set G to the set of all DAGs, the constraint will be removed. ABCDEFG aims at optimizing KL (q(D2[V ]) || p(G|X)) with respect to a distribution on f-DAGs instead of DAGs. As long as the adjacency matrix of the true causal DAG can be factorized as a Boolean product of a node-to-factor and factor-to-node matrices, optimization over f-DAGs guarantees identifiability of the true causal DAG, as a half-square graph of an optimal f-DAG. 
+
+B.3 Identifiability of the True f-DAG 
+
+So far, our theory has covered the major interest of causal discovery. However, if we also assume there is a ground truth for the f-DAG, it is not obvious that identifying the causal DAG is equivalent to identifying an f-DAG. Identifying causal connection between nodes and latent factors may have important implications in applications such as computational biology, where genes often function together through some pathways. Thus, we introduce additional theoretical results about f-DAG identifiability in this section. The first question we would like to ask is: Is I-Markov equivalence between f-DAGs equivalent to I-Markov equivalence between their half-square graphs? To answer this question, we first need to introduce some notations and new concepts. 1. We denote par (·; D) and chd (·; D) as the set of parents and children of a vertex in an f-DAG, D
+
+2. We denote ≃ as the Markov equivalence and ≃I as the I-Markov equivalence relation. 3. For any factor f in an f-DAG G, we define the set Pf (G) = {i : chd (i) = {f }} as the set of parents with f as the unique child in G.4. For any factor f in an f-DAG G, we define the set Cf (G) = {i : par (i) = {f }} as the set of children with only f as the unique parent in G.In fact, not every f-DAG can be identified up to an I-Markov equivalence class. We consider a subset of f-DAGs defined as follows. 
+
+Definition B.16. Let D = ( V, F, E ) be an f-DAG where |F | = m. Let I be a set of interventions. Dm is defined as the set of f-DAGs with m factors and the following properties: 1. ∀f ∈ F , Pf (D)̸ = ∅ and Cf (D)̸ = ∅.2. ∀f1, f 2 ∈ F, f 1̸ = f2, f 1 → f2 ∈ D2[F ], |Pf1 (D)| > 1 (inclusively) or |Pf2 (D)| > 1.3. ∀f ∈ F , if |par (f ; D)| > 1, there is at most one factor g ∈ par (f ; D2[F ]) such that 
+
+|par (g; D)| = 1 .Intuitively, the three additional conditions for f-DAGs mean 1. Any factor should have a unique parent and unique child that distinguish it from other factors. 
+
+> 27 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch
+
+2. There cannot be adjacent “chain" or “tree" structures in the f-DAG. 3. There should be enough v-structures in the f-DAG. We give three counterexamples (Fig. 4-6) when each of the three conditions is violated. In these cases, the f-DAGs are no longer Markov equivalent but their half-square graphs are Markov equivalent. Thus, we note the three conditions are all necessary for proving the identifiability of f-DAGs. 
+
+Figure 4: Markov equivalence of DAGs does not imply Markov equivalence of f-DAGs when condition 1 in Def. B.16 is violated. Definition B.17. Let G = ( V, E ) be a DAG which can be represented as a half-square graph of an f-DAG with m factors. Gm is defined as the set of all DAGs having an identifiable f-DAG representation: 
+
+Gm := {G : ∃D ∈ Dm, G = D2[V ]}
+
+Now we present the following lemma. 
+
+Lemma B.18. Let D1 = ( V, F, E 1) and D2 = ( V, F, E 2) be two f-DAGs on the same set of nodes, V , and factors, F , and I be a set of interventions. Let Ξ = {ξk : k ∈ [nI ]} be the intervention nodes. In addition, suppose D1, D 2 ∈ Dm defined as in Def. B.16. Then, under a permutation of factors, we have D1 ≃I D2 ⇐⇒ D21[V ] ≃I D22[V ].
+
+Proof ( By Theorem B.10, we convert the proof of I-Markov equivalence to proof of equal graph structure. Let DI 
+
+> 1
+
+and DI 
+
+> 2
+
+be the corresponding extended f -DAGs. 
+
+> 28
+
+Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+Figure 5: Markov equivalence of DAGs does not imply Markov equivalence of f-DAGs when condition 2 in Def. B.16 is violated. 
+
+First, we prove the forward direction by contradiction. Suppose D1 ≃I D2 but (DI 
+
+> 1
+
+)2[V ]̸ ≃I
+
+(DI 
+
+> 2
+
+)2[V ]. Then, either there is an edge (i, j ) in (DI 
+
+> 1
+
+)2[V ], (i, j ) not in (DI 
+
+> 2
+
+)2[V ] or a v-structure i → k ← j mismatch between (DI 
+
+> 1
+
+)2[V ] and (DI 
+
+> 2
+
+)2[V ]. In the former case, ∃f ∈ F
+
+such that i → f → j in D1, but no such factor in D2. This leads to a mismatch in skeleton between D1 and D2 and results in contrdiction. In the latter case, without loss of generality, we assume i → k ← j in (DI 
+
+> 1
+
+)2[V ] but 
+
+i → k ← j not in (DI 
+
+> 2
+
+)2[V ]. In addition, we can also assume the skeletons of (DI 
+
+> 1
+
+)2[V ] and 
+
+(DI 
+
+> 2
+
+)2[V ] match. Otherwise, we will be in the former case again. Let f1 and f2 be the factors such that i → f1 → k and j → f2 → k in DI 
+
+> 1
+
+.If f1 = f2, we have a v-structure i → f1 ← j in DI 
+
+> 1
+
+. Because D1 ≃I D2 and i → k ← j
+
+not in (DI 
+
+> 2
+
+)2[V ], i → f1 ← j and k → f1 must exist in DI 
+
+> 2
+
+. This implies two additional v-structures k → f1 ← i and k → f1 ← j in DI 
+
+> 2
+
+but not in DI 
+
+> 1
+
+, contradicting the fact 
+
+D1 ≃I D2.If f1̸ = f2, we have a v-structure f1 → k ← f2 in DI 
+
+> 1
+
+and DI 
+
+> 2
+
+. Because (DI 
+
+> 1
+
+)2[V ] and 
+
+(DI 
+
+> 2
+
+)2[V ] share the same skeleton but not the v-structure i → k ← j, either f1 → i or 
+
+f2 → j exists in DI 
+
+> 2
+
+. Without loss of generality, we assume f1 → i in DI 
+
+> 2
+
+, now that we have k ← f1 → i in DI 
+
+> 2
+
+, there must be another factor f ′ such that k → f ′ → i in DI 
+
+> 2
+
+. If 
+
+f ′ = f2, there will be a cycle between k and f2. Thus, f ′̸ = f2. Now we have a v-structure 
+
+f1 → i ← f ′ in DI 
+
+> 2
+
+but not in DI 
+
+> 1
+
+, leading to a contraction. 
+
+29 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+Figure 6: Markov equivalence of DAGs does not imply Markov equivalence of f-DAGs when condition 3 in Def. B.16 is violated. 
+
+Therefore, we conclude that D1 ≃I D2 =⇒ D21[V ] ≃I D22[V ].Next, we prove the reverse direction. We first claim and prove propositions about the three types of factors. Before presenting the propositions, we repeat important notations here: 1. par (i; D): the set of all parents of node i in an f-DAG D.2. chd (i; D): the set of all children of node i in an f-DAG D.3. Pi(D) := {h : chd (h; D) = {i}} : the set of parents unique to node i in an f-DAG D.
+
+> 30
+
+Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+4. Ci(D) := {j : par (j; D) = {i}} : the set of children unique to node i in an f-DAG D.5. A → f → B: all nodes in set A are connected to all nodes in set B via a factor f . We slightly abuse the notation here for conciseness. 
+
+Proposition B.19. Given (DI 
+
+> 1
+
+)2[V ] ≃ (DI 
+
+> 2
+
+)2[V ] under the assumptions of lemma B.18. Then, ∀j ∈ F such that par (j; DI 
+
+> 1
+
+) = {i}, chd (j; DI 
+
+> 1
+
+) = {k}, ∃j′ ∈ F such that par (j′; DI 
+
+> 2
+
+) = 
+
+{i}, chd (j′; DI 
+
+> 2
+
+) = {k} or par (j′; DI 
+
+> 2
+
+) = {k}, chd (j′; DI 
+
+> 2
+
+) = {i}.
+
+Proof Because (DI 
+
+> 1
+
+)2[V ] and (DI 
+
+> 2
+
+)2[V ] share the same skeleton, ∃j′ ∈ F such that i → j′ → k
+
+in (DI 
+
+> 2
+
+)2[V ] or i ← j′ ← k in (DI 
+
+> 2
+
+)2[V ]. By assumption Pj (DI 
+
+> 1
+
+) = par (j; DI 
+
+> 1
+
+) = {i} and 
+
+Cj (DI 
+
+> 1
+
+) = chd (j; DI 
+
+> 1
+
+) = {k}. Now let’s consider two cases. 
+
+Case I: i → j′ → k. Because k is not a collider in DI 
+
+> 1
+
+, par (j′; DI 
+
+> 2
+
+) = {i}. Now we only need to prove chd (j′; DI 
+
+> 2
+
+) = {k}. Suppose ∃k′, k ′̸ = k and k′ ∈ chd (j′; DI 
+
+> 2
+
+). To match the skeleton in (DI 
+
+> 1
+
+)2[V ], we must have k′ → f → i in DI 
+
+> 1
+
+(Fig. 7(a)). Now consider f and j. By property 2 in Def. B.16, |Pf (DI 
+
+> 1
+
+)| > 1 or |Pj (DI 
+
+> 1
+
+)| > 1. Since Pj (DI 
+
+> 1
+
+) = {i}, we must have 
+
+|Pf (DI 
+
+> 1
+
+)| > 1. This implies i is a collider in (DI 
+
+> 1
+
+)2[V ] and k′ → i in (DI 
+
+> 1
+
+)2[V ] and hence, in 
+
+(DI 
+
+> 2
+
+)2[V ]. This leads to a contradiction. 
+
+Case II: k → j′ → i. Because i is not a collider in DI 
+
+> 1
+
+, par (j′; DI 
+
+> 2
+
+) = {k}. We only need to prove chd (j′; DI 
+
+> 2
+
+) = {i}. Suppose ∃i′, i ′̸ = i and i′ ∈ chd (j′; DI 
+
+> 2
+
+). Since Cj (DI 
+
+> 1
+
+) = {k}
+
+and Pj (DI 
+
+> 1
+
+) = {i}, we must have k → f → i′ in DI 
+
+> 1
+
+(Fig. 7(b)). Now consider j and f . By property 2 in Def. B.16, |Pf (DI 
+
+> 1
+
+)| > 1 or |Pj (DI 
+
+> 1
+
+)| > 1. Since par (j; DI 
+
+> 1
+
+) = {i}, we must have |Pf (DI 
+
+> 1
+
+)| > 1. Let k′̸ = k such that k′ ∈ Pf (DI 
+
+> 1
+
+). Now i′ is a collider in (DI 
+
+> 1
+
+)2[V ] and hence, (DI 
+
+> 2
+
+)2[V ]. We cannot have k′ → j′ → i′ because this would cause the v-structure 
+
+k′ → i ← k in (DI 
+
+> 2
+
+)2[V ] and contradicts i → k in (DI 
+
+> 1
+
+)2[V ]. Thus, ∃f ′̸ = j′, k′ → f ′ → i′ in 
+
+DI 
+
+> 2
+
+. This implies i′ /∈ Cf ′ (DI 
+
+> 2
+
+). We can pick l′ ∈ Cf ′ (DI 
+
+> 2
+
+). It is clear that k is not connected to l′ in (DI 
+
+> 2
+
+)2[V ]. Otherwise, we would have k → f ′ =⇒ k / ∈ Pj′ (DI 
+
+> 2
+
+) = ⇒ i is a collider in 
+
+(DI 
+
+> 2
+
+)2[V ] = ⇒ k → i in DI 
+
+> 1
+
+, which is a contradiction. Now consider l′ in DI 
+
+> 1
+
+. We claim that 
+
+k′ → l′ in (DI 
+
+> 1
+
+)2[V ]. Otherwise, ∃g ∈ F such that l′ → g → k′ in DI 
+
+> 1
+
+and par (g; DI 
+
+> 1
+
+) = {l′},which contradicts property 3 in Def. B.16. Now we can conclude that k′ → f → l′. Since 
+
+k ∈ Pf (DI 
+
+> 1
+
+), this implies k → l′ in (DI 
+
+> 1
+
+)2[V ] and leads to a contradiction. Thus, we conclude that ∃j′ such that par (j′; GI 
+
+> 2
+
+) = {i}, chd (j′; GI 
+
+> 2
+
+) = {k} or par (j′; GI 
+
+> 2
+
+) = 
+
+{k}, chd (j′; .3GI 
+
+> 2
+
+) = {i}.
+
+Figure 7: Illustration of Proposition B.19 (a) Case I: i → j′ → k in DI 
+
+> 2
+
+. (b) Case II: 
+
+k → j′ → i in DI 
+
+> 2
+
+. Contradictory edges are colored red. 
+
+31 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+Proposition B.20. Given (DI 
+
+> 1
+
+)2[V ] ≃ (DI 
+
+> 2
+
+)2[V ] under the assumptions of lemma B.18. Then, ∀j ∈ F such that par (j; DI 
+
+> 1
+
+) = Pj (DI 
+
+> 1
+
+) = {i}, |chd (j; DI 
+
+> 1
+
+)| > 1, ∃j′ ∈ F , par (j′; DI 
+
+> 2
+
+) = 
+
+{i}, chd (j′; DI 
+
+> 2
+
+) = chd (j; DI 
+
+> 1
+
+).
+
+Proof Because (DI 
+
+> 1
+
+)2[V ] and (DI 
+
+> 2
+
+)2[V ] share the same skeleton and |chd (j; DI 
+
+> 1
+
+)| > 1,
+
+∀k ∈ chd (j; DI 
+
+> 1
+
+), either (i, k ) or (k, i ) exists in (DI 
+
+> 2
+
+)2[V ]. We first claim that the edges between i and chd (j; DI 
+
+> 1
+
+) in (DI 
+
+> 2
+
+)2[V ] should all be from i to chd (j; DI 
+
+> 1
+
+). To prove this, we consider any k ∈ chd (j; DI 
+
+> 1
+
+). If k / ∈ Cj (DI 
+
+> 1
+
+), ∃f ∈ F, f ̸ = j, h ∈ V, h ̸ = i such that 
+
+h → f → k in DI 
+
+> 1
+
+. Hence, there is a v-structure h → k ← i in (DI 
+
+> 1
+
+)2[V ] and it has to exist in (DI 
+
+> 2
+
+)2[V ]. This implies i → k in (DI 
+
+> 2
+
+)2[V ] (Fig. 8(a)). We have shown i → chd (j; DI 
+
+> 1
+
+)\Cj (DI 
+
+> 1
+
+) in (DI 
+
+> 2
+
+)2[V ]. Now we prove i → Cj (DI 
+
+> 1
+
+) in 
+
+(DI 
+
+> 2
+
+)2[V ] by contradiction. If this is not the case, there are two cases: 
+
+Case I. ∃k1, k 2 ∈ Cj (DI 
+
+> 1
+
+), k 1̸ = k2, f 1, f 2 ∈ F such that k1 → f1 → i, k 2 → f2 → i in DI 
+
+> 2
+
+.There will be a v-structure k1 → i ← k2, k 1, k 2 ∈ A, but such a v-structure does not exist in 
+
+(DI 
+
+> 1
+
+)2[V ] (Fig. 8(b)). Therefore, we have a contradiction. 
+
+Case II. There is only one h ∈ Cj (DI 
+
+> 1
+
+), f ′ ∈ F such that h → f ′ → i in DI 
+
+> 2
+
+. Since 
+
+|chd (j; DI 
+
+> 2
+
+)| > 1, ∃k̸ = h, k ∈ chd (j; DI 
+
+> 2
+
+) and j′ ∈ F such that i → j′ → k in DI 
+
+> 2
+
+. By property 2 of Def. B.16, |Pf ′ (DI 
+
+> 1
+
+)| > 1 or |Pj′ (DI 
+
+> 1
+
+)| > 1. If |Pf ′ (DI 
+
+> 1
+
+)| > 1, i will be a collider and h → i is in (DI 
+
+> 2
+
+)2[V ], but i → h in (DI 
+
+> 1
+
+)2[V ] and we have a mismatch in the v structure. Therefore, the only possibility is |Pj′ (DI 
+
+> 1
+
+)| > 1 and let i′̸ = i be one of them (Fig. 8(c)). Because par (j; DI 
+
+> 1
+
+) = {i}, i′̸ → j in DI 
+
+> 1
+
+and consequently, ∃f ∈ F, f ̸ = j such that i′ → f → k in DI 
+
+> 1
+
+. Since j → k and f → k in DI 
+
+> 1
+
+, k / ∈ Cf (DI 
+
+> 1
+
+). Thus, we can pick 
+
+l ∈ Cf (DI 
+
+> 1
+
+), l ̸ = k. We claim that i′ → l in (DI 
+
+> 2
+
+)2[V ]. Otherwise, we will have l → g → i′
+
+and par (g; DI 
+
+> 2
+
+) = {l}, just like case II in the proof of proposition B.19. Thus, we have i → l
+
+in (DI 
+
+> 2
+
+)2[V ], which contradicts i̸ → l in (DI 
+
+> 1
+
+)2[V ].So we conclude that ∀k ∈ chd (j; DI 
+
+> 1
+
+), ∃j′ ∈ F such that i → j′ → k in DI 
+
+> 2
+
+.Now that all edges between i and chd (j; DI 
+
+> 2
+
+) start from i, the remaining piece is to show such j′ is unique. If ∃J ⊆ F, |J| > 1 such that ∀k ∈ chd (j; DI 
+
+> 1
+
+), ∃j′ ∈ J, i → j′ → k in DI 
+
+> 2
+
+,
+
+i / ∈ Pj′ (DI 
+
+> 2
+
+) ∀j′ ∈ J. Now consider any k ∈ Cj (DI 
+
+> 1
+
+). Suppose i → j′ → k in DI 
+
+> 2
+
+. Because 
+
+i / ∈ Pj′ (DI 
+
+> 2
+
+), ∃h ∈ Pj′ (DI 
+
+> 2
+
+) such that h → k in DI 
+
+> 2
+
+. Now, we have the v-structure h → k ← i
+
+in (DI 
+
+> 2
+
+)2[V ] and (DI 
+
+> 1
+
+)2[V ]. However, h → k cannot exist in (DI 
+
+> 1
+
+)2[V ] because h / ∈ par (j; DI 
+
+> 1
+
+)
+
+and k ∈ Pj (DI 
+
+> 1
+
+) (Fig. 8(d)). We have a contradiction. Thus, we know that ∃ unique j′ such that i → j′ → chd (j; DI 
+
+> 1
+
+) in DI 
+
+> 2
+
+and consequently 
+
+chd (j; DI 
+
+> 1
+
+) ⊆ chd (j′; DI 
+
+> 2
+
+). The last step is to prove chd (j′; DI 
+
+> 2
+
+) = chd (j; DI 
+
+> 1
+
+), which only requires proving chd (j′; DI 
+
+> 2
+
+) ⊆ chd (j; DI 
+
+> 1
+
+). Suppose ∃k′ ∈ chd (j′; DI 
+
+> 2
+
+) such that j′ /∈
+
+chd (j; DI 
+
+> 1
+
+), (i, k ′) is in (DI 
+
+> 2
+
+)2[V ] but not (DI 
+
+> 1
+
+)2[V ]. To match the skeleton, (k′, i ) must exist in (DI 
+
+> 1
+
+)2[V ]. Then, ∃f ∈ F such that k′ → f → i in DI 
+
+> 1
+
+(Fig. 8(e)). We claim that k′ ∈ Cj′ (DI 
+
+> 2
+
+). Otherwise, k′ is a collider in (DI 
+
+> 2
+
+)2[V ] and we must have a v-structure with i → k′ in (DI 
+
+> 2
+
+)2[V ] but not in (DI 
+
+> 1
+
+)2[V ]. Now we can assume k′ ∈ Cj′ (DI 
+
+> 2
+
+).By property 2 in Def. B.16, |Pj (DI 
+
+> 1
+
+)| > 1 or |Pf (DI 
+
+> 1
+
+)| > 1. Because |par (jD I 
+
+> 1
+
+)| = 1 by assumption, |Pf (DI 
+
+> 1
+
+)| > 1 and this implies i is a collider with k′ as its parent in DI 
+
+> 1
+
+(Fig.8(e)). However, this cannot happen in DI 
+
+> 2
+
+. We have a contradiction. Finally, we conclude that for any factor in DI 
+
+> 1
+
+under the conditions in proposition B.20, there exists a factor in DI 
+
+> 2
+
+with the same parent and children. 
+
+32 Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+Figure 8: Illustration of Cases in Proposition B.20 (a) k ∈ chd (j), k / ∈ Cj (DI 
+
+> 1
+
+). (b) 
+
+Contradictory Case I: ∃k1, k 2 ∈ Cj (DI 
+
+> 1
+
+) s.t. k1 → f1 → i, k 2 → f2 → i in DI 
+
+> 2
+
+(c) 
+
+Contradictory case II: ∃ unique h s.t. h → f ′ → i in DI 
+
+> 2
+
+. (d) Contradictory Case: there exists multiple factors connecting i to chd (j; DI 
+
+> 1
+
+). (e) Contradictory Case: 
+
+chd (j; DI 
+
+> )
+
+⊂ chd (j′; DI 
+
+> 2
+
+).
+
+Proposition B.21. If (DI 
+
+> 1
+
+)2[V ] ≃I (DI 
+
+> 2
+
+)2[V ] under the assumptions of lemma B.18, then 
+
+∀j ∈ F such that |par (j; DI 
+
+> 1
+
+)| > 1, ∃j′ ∈ F such that par (j; DI 
+
+> 1
+
+) = par (j′; DI 
+
+> 2
+
+) and 
+
+chd (j; DI 
+
+> 1
+
+) = chd (j′; DI 
+
+> 2
+
+).
+
+Proof The proof is trivial when |F | = 1 . Now we assume |F | > 1. We first prove 
+
+∃j′, P j (DI 
+
+> 1
+
+) = Pj′ (DI 
+
+> 2
+
+) and Cj (DI 
+
+> 1
+
+) = Cj′ (DI 
+
+> 2
+
+).Since |par (j; DI 
+
+> 1
+
+)| > 1, any node in Cj (DI 
+
+> 1
+
+) is a collider in (DI 
+
+> 1
+
+)2[V ]. Thus, ∀i ∈
+
+Pj (DI 
+
+> 1
+
+), k ∈ Cj (DI 
+
+> 1
+
+), (i, k ) ∈ (DI 
+
+> 2
+
+)2[V ]. Thus, Pj (DI 
+
+> 1
+
+) is still connected to Cj (DI 
+
+> 1
+
+) in 
+
+(DI 
+
+> 2
+
+)2[V ] via a set of factors FC = {f1, . . . , f M } in DI 
+
+> 2
+
+. Now we consider two cases. 
+
+Case I. First, we consider M > 1. ∀fm ∈ FC , we define Pm = par (fm; DI 
+
+> 2
+
+) ∩ Pj (DI 
+
+> 1
+
+)
+
+and Cm = chd (fm; DI 
+
+> 2
+
+) ∩ Cj (DI 
+
+> 1
+
+). By our assumption Pm̸ = ∅, C m̸ = ∅, ∀m.Pick any two factors f1 and f2. We consider the following two conditions 1. ∃i ∈ Pj (DI 
+
+> 1
+
+) such that i → f1 and i → f2 in DI 
+
+> 2
+
+.2. ∃k ∈ Cj (DI 
+
+> 1
+
+) such that f1 → k and f2 → k in DI 
+
+> 2
+
+.Each condition can be either true or false. The combination of these two conditions give us four different subcases. 
+
+Subcase I-1: Condition (1) and (2) are True. 
+
+33 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+This means i is a common parent of f1, f 2 in DI 
+
+> 2
+
+. Now consider Pf1 (DI 
+
+> 2
+
+) and Pf2 (DI 
+
+> 2
+
+).
+
+Pf1 (DI 
+
+> 2
+
+) and {i} are disjoint and they form v-structures at any node in Cf1 (DI 
+
+> 2
+
+) in DI 
+
+> 2
+
+.Similarly, Pf2 (DI 
+
+> 2
+
+) and {i} form v-structures at any node in Cf2 (DI 
+
+> 2
+
+). We also have Pf1 (DI 
+
+> 2
+
+)
+
+and Pf2 (DI 
+
+> 2
+
+) form v-structures at k in DI 
+
+> 2
+
+. By the definition of k, Pf1 (DI 
+
+> 2
+
+) ∪ Pf2 (DI 
+
+> 2
+
+) is connected to j in DI 
+
+> 1
+
+. Because both Pf1 (DI 
+
+> 2
+
+) and Pf2 (DI 
+
+> 2
+
+) are connected to j in DI 
+
+> 1
+
+, we have Pf1 (DI 
+
+> 2
+
+), Pf2 (DI 
+
+> 2
+
+) form v-structures at Cf1 (DI 
+
+> 2
+
+) in (DI 
+
+> 1
+
+)2[V ], but such a v-structure cannot exist in (DI 
+
+> 2
+
+)2[V ] by the definition of Cf1 (DI 
+
+> 2
+
+). We reach contradiction. Fig. 9(a) shows this scenario. 
+
+Subcase I-2: Condition (1) is False but (2) True. 
+
+We claim that |par (f1; DI 
+
+> 2
+
+)| > 1. Otherwise, by proposition 2.11, ∃j′ in DI 
+
+> 1
+
+such that 
+
+par (j′) = par (f1) = P1, chd (j′) = chd (f1). Because C1 ⊂ Cj (DI 
+
+> 1
+
+), the only possibility is j′ = j. But we know |par (j′; DI 
+
+> 1
+
+)| = |P1| = 1 and |par (j; DI 
+
+> 1
+
+)| > 1. This leads to a contradiction. Hence, |par (f1; DI 
+
+> 2
+
+)| > 1. Similarly, |par (f2; DI 
+
+> 2
+
+)| > 1. Consequently, we must have v-structures at Cf1 (DI 
+
+> 2
+
+) and Cf2 (DI 
+
+> 2
+
+) in DI 
+
+> 2
+
+. This implies the edge connections between 
+
+P1 and Cf1 (DI 
+
+> 2
+
+) are all from P1 to Cf1 (DI 
+
+> 2
+
+). Similarly, edge connections between P2 and 
+
+Cf2 (DI 
+
+> 2
+
+) are all from P2 to Cf2 (DI 
+
+> 2
+
+). By the definition of P1 and P2, we have j → Cf1 (DI 
+
+> 2
+
+)
+
+and j → Cf2 (DI 
+
+> 2
+
+). This means P1 and P2 form v-structures at Cf1 (DI 
+
+> 2
+
+) in (DI 
+
+> 1
+
+)2[V ]. But such v-structure(s) cannot exist in (DI 
+
+> 2
+
+)2[V ]. Again we have a contradiction. Fig. 9(b) shows the scenario. 
+
+Subcase I-3: Condition (1) is True but (2) False. 
+
+This implies C1 and C2 are disjoint sets. Now consider Pf1 (DI 
+
+> 2
+
+) and Pf2 (DI 
+
+> 2
+
+). Pf1 (DI 
+
+> 2
+
+)
+
+and i form v-structures at C1 in (DI 
+
+> 2
+
+)2[V ]. Hence, such a v-structure must exist in (DI 
+
+> 1
+
+)2[V ].By the definition of C1, Pf1 (DI 
+
+> 2
+
+) → j in DI 
+
+> 1
+
+. Similarly, Pf2 (DI 
+
+> 2
+
+) → j in DI 
+
+> 1
+
+. Again, we have 
+
+Pf1 (DI 
+
+> 2
+
+) and Pf2 (DI 
+
+> 2
+
+) for v-structures at C1, which contradicts the fact that C1 and C2 are disjoint. Fig. 9(c) shows the scenario. 
+
+Subcase I-4: Condition (1) and (2) are false. 
+
+This implies C1 and C2 are disjoint and P1 and P2 are disjoint. By proposition B.19 and B.20, |par (f1; DI 
+
+> 2
+
+)| > 1 and |par (f2; DI 
+
+> 2
+
+)| > 1 under the same argument as in subcase I-2. Hence, we have v-structures from par (f1; DI 
+
+> 2
+
+) to C1 and par (f2; DI 
+
+> 2
+
+) to C2. This means the edges must point from P1 to C1 and from P2 to C2 in (DI 
+
+> 1
+
+)2[V ]. By the definition of 
+
+P1, P 2, C 1, C 2, they are all connected via j in DI 
+
+> 1
+
+. Hence, P1 is also connected to C2, but in 
+
+(DI 
+
+> 2
+
+)2[V ] this is not true. We reach contradiction again. Fig. 9(d) shows the scenario. Thus, we know that M > 1 is impossible. 
+
+Case II. We already excluded the possibility of M > 1 in case I. Now we consider M = 1 .There are two parts: prove equality of unique parents and equality of unique children. Let FC = {f }. We first prove Pj (DI 
+
+> 1
+
+) ⊆ Pf (DI 
+
+> 2
+
+). Suppose ∃i ∈ Pj (DI 
+
+> 1
+
+), i / ∈ Pf (DI 
+
+> 2
+
+). At the beginning of this proof, we concluded that Pj (DI 
+
+> 1
+
+) must connect to Cj (DI 
+
+> 1
+
+) in (DI 
+
+> 2
+
+)2[V ]
+
+due to the presence of v-structures. Since i ∈ Pj (DI 
+
+> 1
+
+), i / ∈ Pf (DI 
+
+> 2
+
+), the only possibility is i
+
+being connected to another factor f ′̸ = f in DI 
+
+> 2
+
+. This further implies i / ∈ Pf ′ (DI 
+
+> 2
+
+).Now consider the v-structure formed by i, any node in Pf ′ (DI 
+
+> 2
+
+) and any node in Cf ′ (DI 
+
+> 2
+
+).Due to such a v-structure, connection between i and Cf ′ (DI 
+
+> 2
+
+) should be from i to Cf ′ (DI 
+
+> 2
+
+) in 
+
+(DI 
+
+> 1
+
+)2[V ]. Because i ∈ Pj (DI 
+
+> 1
+
+), Pj (DI 
+
+> 1
+
+) should all be connected to Cf ′ (DI 
+
+> 2
+
+) via j. In short, we have j → Cf ′ (DI 
+
+> 2
+
+) in DI 
+
+> 1
+
+.On the other hand, i, Pf (DI 
+
+> 2
+
+) and Cf (DI 
+
+> 2
+
+) ∪ Cj (DI 
+
+> 1
+
+) form v-structures in (DI 
+
+> 2
+
+)2[V ].Hence, Pf (DI 
+
+> 2
+
+) is connected to Cj (DI 
+
+> 1
+
+) via j in DI 
+
+> 1
+
+.
+
+34 Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+Figure 9: Illustration of Cases in Case I of Proposition B.21 (a) Subcase I-1. (b) 
+
+Subcase I-2. (c) Subcase I-3. (d) Subcase I-4. Based on the reasoning above, we have (1) j → Cf ′ (DI 
+
+> 2
+
+) and (2) Pf (DI 
+
+> 2
+
+) → j in DI 
+
+> 1
+
+.This implies Pf (DI 
+
+> 2
+
+) → Cf ′ in (DI 
+
+> 1
+
+)2[V ]. Due to the v-structure formed by i, Pf ′ (DI 
+
+> 2
+
+) and 
+
+Cf ′ (DI 
+
+> 2
+
+) in (DI 
+
+> 2
+
+)2[V ], we also have Pf ′ (DI 
+
+> 2
+
+) → Cf ′ (DI 
+
+> 2
+
+) in (DI 
+
+> 1
+
+)2[V ]. The previous two facts further imply we have a v-structure Pf (DI 
+
+> 2
+
+) → Cf ′ (DI 
+
+> 2
+
+) ← Pf ′ (DI 
+
+> 2
+
+) in (DI 
+
+> 1
+
+)2[V ], but such v-structure is not present in (DI 
+
+> 2
+
+)2[V ]. Thus, we reach a contradiction. Fig. 10(a) shows the scenario. To conclude, so far we have proven Pj (DI 
+
+> 1
+
+) ⊆ Pf (DI 
+
+> 2
+
+).Next, we prove Pf (DI 
+
+> 2
+
+) ⊆ Pj (DI 
+
+> 1
+
+). Suppose ∃i ∈ Pf (DI 
+
+> 2
+
+), i / ∈ Pj (DI 
+
+> 1
+
+). First, by our previous argument, Pj (DI 
+
+> 1
+
+) → j → Cj (DI 
+
+> 1
+
+) in DI 
+
+> 1
+
+and Pj (DI 
+
+> 1
+
+) → f → Cj (DI 
+
+> 1
+
+) in DI 
+
+> 2
+
+. By our assumption, we also have i → j → Cj (DI 
+
+> 1
+
+)in DI 
+
+> 1
+
+due to the v-structures at Cj (DI 
+
+> 1
+
+). However, since i / ∈ Pj (DI 
+
+> 1
+
+), ∃j′̸ = j, i → j′ in DI 
+
+> 1
+
+. Apparently, i / ∈ Pj′ (DI 
+
+> 1
+
+), so we can consider the v-structure formed by i, P j′ (DI 
+
+> 1
+
+), C j′ (DI 
+
+> 1
+
+). This implies i → Cj′ (DI 
+
+> 1
+
+) in (DI 
+
+> 2
+
+)2[V ]. Because 
+
+i ∈ Pf (DI 
+
+> 2
+
+), we must have f → Cj′ (DI 
+
+> 1
+
+) in DI 
+
+> 2
+
+. This means Pj (DI 
+
+> 1
+
+), i, C j′ (DI 
+
+> 1
+
+) form v-structures at Cj′ (DI 
+
+> 1
+
+) in (DI 
+
+> 2
+
+)2[V ] and hence, Pj (DI 
+
+> 1
+
+) → Cj′ (DI 
+
+> 1
+
+) in (DI 
+
+> 1
+
+)2[V ]. However, there is no connection between Pj (DI 
+
+> 1
+
+) and Cj′ (DI 
+
+> 1
+
+). We reach a contradiction. Now we can conclude that Pj (DI 
+
+> 1
+
+) = Pf (DI 
+
+> 2
+
+). Fig. 10(b) shows the scenario. Next, we can proceed to prove Cj (DI 
+
+> 1
+
+) = Cf (DI 
+
+> 2
+
+). First, we prove Cj (DI 
+
+> 1
+
+) ⊆ Cf (DI 
+
+> 2
+
+) by contradiction. Suppose ∃k ∈ Cj (DI 
+
+> 1
+
+), k / ∈ Cf (DI 
+
+> 2
+
+). By the assumption of case II, Pj (DI 
+
+> 1
+
+) is connected to Cj (DI 
+
+> 1
+
+) via a unique factor, f , in DI 
+
+> 2
+
+. We have Pj (DI 
+
+> 1
+
+) → f → k in DI 
+
+> 2
+
+. Due to the v-structures at Cj (DI 
+
+> 1
+
+) in (DI 
+
+> 1
+
+)2[V ], all nodes in par (j; DI 
+
+> 1
+
+) must connect to Cj (DI 
+
+> 1
+
+)
+
+in DI 
+
+> 2
+
+. Therefore, we have a stronger conclusion: 
+
+∀i ∈ par (j; DI 
+
+> 1
+
+), i → f → Cj (DI 
+
+> 1
+
+) ∪ Cf (DI 
+
+> 2
+
+) in DI
+
+> 2
+
+Because k / ∈ Cf (DI 
+
+> 2
+
+), there must be another factor f ′̸ = f such that f ′ → k in DI 
+
+> 2
+
+. Now pick l ∈ Pf ′ (DI 
+
+> 2
+
+) and m ∈ Cf (DI 
+
+> 2
+
+). Since |par (f ; DI 
+
+> 2
+
+)| > 1, |par (j; DI 
+
+> 1
+
+)| > 1, we can pick 
+
+i′ ∈ par (f ; DI 
+
+> 2
+
+), i ′̸ = i. We have the v-structures i → k ← l, i′ → k ← l and i → m ← i′.in (DI 
+
+> 2
+
+)2[V ]. Because f̸ = f ′, l and m are not connected in (DI 
+
+> 2
+
+)2[V ]. On the other hand, 
+
+35 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+because k ∈ Cj (DI 
+
+> 1
+
+) and the v-structure i → k ← l must exist in (DI 
+
+> 1
+
+)2[V ], we must have 
+
+l → j → m in DI 
+
+> 1
+
+and hence, l and m are connected. This leads to a contradiction. Fig. 10c shows the scenario. Next, we prove Cf (DI 
+
+> 2
+
+) ⊆ Cj (DI 
+
+> 1
+
+) using a similar argument. Suppose ∃k ∈ Cf (DI 
+
+> 2
+
+), k / ∈
+
+Cj (DI 
+
+> 1
+
+). Consider i ∈ Pf (DI 
+
+> 2
+
+), i ′ ∈ par (f ; DI 
+
+> 2
+
+), we have v-structures i → k ← i′ and 
+
+i → m ← i′, ∀m ∈ Cj (DI 
+
+> 1
+
+) in (DI 
+
+> 2
+
+)2[V ]. This implies {i, i ′} → Cj (DI 
+
+> 1
+
+) ∪ { k} in (DI 
+
+> 1
+
+)2[V ]. By the definition of Cf (DI 
+
+> 2
+
+) and our previous conclusion that Pj (DI 
+
+> 1
+
+) = Pf (DI 
+
+> 2
+
+), we must have 
+
+i → j → Cj (DI 
+
+> 1
+
+) ∪ { k} in DI 
+
+> 1
+
+. Because k / ∈ Cj (DI 
+
+> 1
+
+), ∃j′̸ = j such that j′ → k in DI 
+
+> 1
+
+. Now pick l ∈ Pj′ (DI 
+
+> 1
+
+). We have the v-structure l → k ← i in (DI 
+
+> 1
+
+)2[V ]. Hence, such a v-structure must exist in (DI 
+
+> 2
+
+)2[V ]. Because k ∈ Cf (DI 
+
+> 2
+
+), we must have l → f → k in DI 
+
+> 2
+
+. This implies the v-structure l is connected to any m ∈ Cj (DI 
+
+> 2
+
+) in (DI 
+
+> 2
+
+)2[V ], but such connection does not exist in (DI 
+
+> 1
+
+)2[V ] since l ∈ Pj′ (DI 
+
+> 1
+
+), m ∈ Cj (DI 
+
+> 1
+
+), j ′̸ = j. Fig. 10d shows the scenario. From the proof above, we have ∀j, ∃f , Pj (DI 
+
+> 1
+
+) = Pf (DI 
+
+> 2
+
+) and Cj (DI 
+
+> 1
+
+) = Cf (DI 
+
+> 2
+
+).
+
+Figure 10: Illustration of Cases in Case II of Proposition B.21. (a) Contradictory case when Pj (DI 
+
+> 1
+
+)̸ ⊆ Pf (DI 
+
+> 2
+
+). (b) Contradictory case when Pj (DI 
+
+> 1
+
+) ⊆ Pf (DI 
+
+> 2
+
+)
+
+but Pf (DI 
+
+> 2
+
+)̸ ⊆ Pj (DI 
+
+> 1
+
+). (c) Contradictory case when Cj (DI 
+
+> 1
+
+)̸ ⊆ Cf (DI 
+
+> 2
+
+). (d) 
+
+Contradictory case when Cj (DI 
+
+> 1
+
+) ⊆ Cf (DI 
+
+> 2
+
+) but Cf (DI 
+
+> 2
+
+)̸ ⊆ Cj (DI 
+
+> 1
+
+).Because |par (j; DI 
+
+> 1
+
+)| > 1 and |chd (j; DI 
+
+> 1
+
+)| > 1, a v-structure forms ∀i1, i 2 ∈ par (j; DI 
+
+> 1
+
+), k ∈
+
+chd (j; DI 
+
+> 1
+
+). Hence, ∀i ∈ par (j; DI 
+
+> 1
+
+), k ∈ chd (j; DI 
+
+> 1
+
+), the direction of edge (i, k ) must be from 
+
+i to k. Because we have Pj (DI 
+
+> 1
+
+) = Pf (DI 
+
+> 2
+
+) and Cj (DI 
+
+> 1
+
+) = Cf (DI 
+
+> 2
+
+) and any i ∈ par (j; DI 
+
+> 1
+
+)
+
+must form v-structures at any k ∈ Cj (DI 
+
+> 1
+
+) in (DI 
+
+> 2
+
+)2[V ], we have i → k in both (DI 
+
+> 1
+
+)2[V ]
+
+and (DI 
+
+> 2
+
+)2[V ]. The only possibility for (i, k ) exist in (DI 
+
+> 2
+
+)2[V ] is i → f → k. This im-plies par (j; DI 
+
+> 1
+
+) ⊆ par (f ; DI 
+
+> 2
+
+). Similarly, chd (j; DI 
+
+> 1
+
+) ⊆ chd (f ; DI 
+
+> 2
+
+). ∀i′ ∈ par (f ; DI 
+
+> 2
+
+),
+
+i′ ∈ par (j; DI 
+
+> 1
+
+) because otherwise (i′, k ), ∀k ∈ Cj (DI 
+
+> 1
+
+) will not be in (DI 
+
+> 1
+
+)2[V ]. Therefore, we have par (f ; DI 
+
+> 2
+
+) ⊆ par (j; DI 
+
+> 1
+
+) and similarly chd (f ; DI 
+
+> 2
+
+) ⊆ chd (j; DI 
+
+> 1
+
+).
+
+36 Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+Finally, we conclude that ∀j ∈ F, ∃f ∈ F , par (f ; DI 
+
+> 2
+
+) = par (j; DI 
+
+> 1
+
+) and similarly 
+
+par (f ; DI 
+
+> 2
+
+) = par (j; DI 
+
+> 1
+
+).Propositions B.19-B.21 provide insights about extra conditions in order for two f-DAGs to be I-Markov equivalent. The proof of lemma B.18 will be straightforward given these propositions. Given the conditions in lemma B.18, we have two f-DAGs with the same set of nodes and factors. Now let’s consider any factor j ∈ F . For any extended f-DAG, D, and interventions, 
+
+I, We define the following three types of factors: 1. j : |par (j; DI )| = |chd (j; DI )| = 1 
+
+2. j : |par (j; DI )| = 1 , |chd (j; DI )| > 1
+
+3. j : |par (j; DI )| > 1
+
+We can partition F into three subsets F1, F 2, F 3 for DI 
+
+> 1
+
+and F ′
+
+> 1
+
+, F ′
+
+> 2
+
+, F ′ 
+
+> 3
+
+for DI 
+
+> 2
+
+. Because 
+
+(DI 
+
+> 1
+
+)2[V ] ≃I (DI 
+
+> 2
+
+)2[V ], by proposition B.19, ∀j ∈ F1, ∃j′ ∈ F ′ 
+
+> 1
+
+with the same parents and children and ∀j′ ∈ F ′
+
+> 1
+
+, ∃j ∈ F1 with the same parents and children. Hence, there is a bijection between F1 and F ′
+
+> 1
+
+. Similarly, we have bijections from F2 to F ′ 
+
+> 2
+
+by proposition B.20 and F3
+
+to F ′ 
+
+> 3
+
+by proposition B.21. Finally, we have a bijection ϕ : F → F from all factors in DI 
+
+> 1
+
+to factors in DI 
+
+> 2
+
+. ∀f ∈ F2 ∪ F3, f and ϕ(f ) share the same parent(s) and children. ∀f ∈ F1, f
+
+and ϕ(f ), either par (f ; DI 
+
+> 1
+
+) = par (ϕ(f ); DI 
+
+> 2
+
+), chd (f ; DI 
+
+> 1
+
+) = chd (ϕ(f ); DI 
+
+> 2
+
+) or par (f ; DI 
+
+> 1
+
+) = 
+
+chd (ϕ(f ); DI 
+
+> 2
+
+), chd (f ; DI 
+
+> 1
+
+) = par (ϕ(f ); DI 
+
+> 2
+
+). Since |par (f ; DI 
+
+> 1
+
+)| = |chd (f ; DI 
+
+> 1
+
+)| = 1 , flipping the parent and child maintains the same skeleton and does not introduce v-structure. Finally, we conclude that DI 
+
+> 1
+
+and DI 
+
+> 2
+
+share the same skeleton and v-structures and 
+
+D21[V ] ≃I D22[V ] = ⇒ D1 ≃I D2
+
+Next, we discuss the identifiability of an f-DAG. The following theorem summarizes our conclusion. 
+
+Theorem B.22 (Identifiability of the f-DAG via ELBO maximization) . Let {Xi : i ∈ [n]}
+
+be a set of causally related random variables whose joint distribution follows a causal DAG 
+
+G∗ and I∗ = {I∗ 
+
+> k
+
+: k ∈ [nI ]} be a set of interventions where I1 = ∅. Suppose G∗ ∈ Gm and there is a true f-DAG representation, D∗ ∈ Dm, such that (D∗)2[V ] = G∗. Let q(G; Λ) be a variational distribution on Gm. Define the Bayesian score function as 
+
+SI∗ (q) := Eq(G;Λ) [SI∗ (G)] − βKL (q(G; Λ)|| p(G)) 
+
+where SI∗ (G) = sup Φ
+
+PnI 
+
+> k=1
+
+Ep(k)(X)
+
+log f (k)(X|G; Φ) − λ|G| is the score function. Suppose 
+
+q∗(G; Λ) = arg max q(G;Λ) SI∗ (q) and ˆG = arg max G q∗(G; Λ). Let ˆG. Then, under the same assumptions of Theorem B.13, namely sufficient capacity, I-faithfulness, positivity and finite entropy, and for sufficiently small λ > 0 and β > 0, ˆD = arg max D q∗(D2[V ]; Λ) is 
+
+I∗-Markov equivalent to D∗ under a permutation of factors. 
+
+Proof The proof is a direct result of previous results. 
+
+37 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+Figure 11: Overview of ABCDEFG. Top Left: Bayesian framework. A prior p with a support of all DAGs and a variational distribution with a support of f-DAGs. The red star represents the ground-truth DAG and light blue dots with increasing transparency show an optimization process w.r.t. the variational distribution. 
+
+Top Right: Real vs. generated data distribution. Bottom: ABCDEFG model architecture. Binary matrices U, V, W are sampled from a parametric f-DAG model such as SPN-FG. Next, observations are masked by sampled causal relations (under Hadamard product, ⊙) and fed to a VAE model fitting data distribution. Arrows show direction of data flow and back propagation. First, we have G∗ ∈ Gm. Therefore, by Theorem B.15, q∗(G) = arg max q(G;Λ): supp (q)⊆Gm L(q)
+
+has an argmax graph ˆG = ( ˆD)2[V ] such that ˆG ≃I∗ G∗. Next, since ˆD, D ∗ ∈ Dm, by lemma B.18, ˆD ≃I∗ D∗ under a permutation of factors. The proposed model architecture is presented in Figure 11 
+
+Appendix C. Supplementary Results 
+
+C.1 Results on Toy and Extended Datasets 
+
+We benchmarked existing methods on simulated data using both SPN-FG and previous f-DAG simulation method from Lopez et al. [16] . In a preliminary study, we tested all methods on simple toy datasets simulated with 16 nodes and 2 factors (Table 5). We changed 
+
+> 38
+
+Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+the sparsity penalty in ENCO but it produced mainly zero adjacency matrix except for one dataset with 0.13 F1 score. Hence, we report zero F1 scores here as a placeholder. Then we extend our experiment to 200 and 500 nodes with nonlinear intervention, to evaluate the performance on larger graph (Table 6). Note that ENCO and DCDI were too slow and/or required too much memory on larger graphs, so we omitted them from this comparison. We also evaluate our methods on denser graphs containing 100, 200, and 500 nodes (Table 7), using targeted and hard interventions. For graphs of 100 nodes, the edge number increased by 100 edges per graph for the factor graph dataset, and 1,000 per graph for the spn dataset. In addition to F1 and SHD, we also report the structural intervention distance (SID) Peters and Bühlmann [18] for score-based and Bayesian methods (Table 8 and Table 9). Table 5: Performance on Simulated Datasets with 16 Nodes. Best performance is in bold text and second best is underlined.                                                                                                                                                                   
+
+> Metric Method Linear (FG) Linear (SPN-FG) Nonlinear (FG) Nonlinear (SPN-FG) D1 D2 D3 D1 D2 D3 D1 D2 D3 D1 D2 D3 SHD ↓DCDI 12 426 14 12 25 14 74228 14 DCDFG 48 33 31 43 43 56 48 18 546 36 17 ENCO 27 24 28 28 54 29 27 18 29 37 41 29 SDCD 11 16 312 15 5476816 5
+> ABCDEFG 00012 00212 13 312 9ABCDEFG 010 12 521 126 28 26 22 17 25 (SPN) F1 ↑DCDI 0.842 0.923 0.678 0.793 0.876 0.679 0.781 0.759 0.935 0.964 0.682 0.774 DCDFG 0.529 0.190 0.644 0.566 0.650 0.509 0.529 N/A 0.915 0.477 0.667 0.691 ENCO 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.128 0.000 SDCD 0.825 0.750 0.949 0.818 0.842 0.918 0.931 0.759 0.889 0.833 0.795 0.915
+> ABCDEFG 1.000 1.000 1.000 0.806 1.000 1.000 0.964 0.500 0.800 0.949 0.842 0.857 ABCDEFG 1.000 0.828 0.824 0.912 0.753 0.983 0.675 0.333 0.690 0.718 0.805 0.683 (SPN)
+
+C.2 Availability of Benchmark Results 
+
+We conducted benchmark studies on a variety of data simulation settings at a larger scale, with 100 nodes and 10 factors. We classify the simulations by (1) SEM - linear vs. nonlinear, (2) factor graph model - SPN-FG vs. regular f-DAG and (3) type of intervention (hard vs. soft). We included all results as csv files in our supplementary material. Each csv file records a metric (precision, recall, f1, SHD) for all methods run on one type of simulation. The tables summarized in Table 2 and Table 3 show the mean ± standard deviation for each dataset type, based on the corresponding experimental results. Moreover, the benchmarking results for score-based methods on linear datasets are presented in Fig. 12, as discussed in the main text. In addition, as proof that our model can construct acyclic graphs by design, we calculated the number of cycles when compared with score-based methods (Fig. 13), as well as the number of edges that would need to be removed to obtain an acyclic graph (Fig. 14). Both results suggest that the graphs predicted by our model are naturally acyclic. 
+
+39 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+Table 6: F1 score and SHD of Scored methods on Nonlinear Targeted Simulated Datasets with 200 and 500 nodes.                                                                                                                                                                                                                 
+
+> Metric Method Hard Soft SPN SPN Intvn Intvn Hard Soft F1 DCDFG 0.10 ±0.03 0.13 ±0.03 0.06 ±0.04 0.40 ±0.26
+> (200 nodes) SDCD 0.50 ±0.08 0.43 ±0.06 0.16 ±0.01 0.14 ±0.01
+> ABCDEFG 0.52 ±0.13 0.49 ±0.07 0.61 ±0.05 0.62 ±0.04
+> ABCDEFG 0.48 ±0.13 0.42 ±0.05 0.62 ±0.04 0.62 ±0.03
+> (SPN) SHD DCDFG 7678 ±1846 4954 ±1147 13901 ±272 10892 ±1959
+> (200 nodes) SDCD 517 ±38 592 ±16 13634 ±368 13854 ±516
+> ABCDEFG 657 ±401 583 ±285 8978 ±966 8739 ±743
+> ABCDEFG 770 ±525 583 ±169 8950 ±697 8854 ±565
+> (SPN) F1 DCDFG 0.11 ±0.10 0.06 ±0.00 0.07 ±0.04 0.17 ±0.10
+> (500 nodes) SDCD 0.34 ±0.01 0.32 ±0.00 0.10 ±0.01 0.09 ±0.01
+> ABCDEFG 0.56 ±0.00 0.55 ±0.03 0.49 ±0.05 0.52 ±0.06
+> ABCDEFG 0.48 ±0.01 0.50 ±0.04 0.54 ±0.04 0.56 ±0.05
+> (SPN) SHD DCDFG 22507 ±17922 25849 ±2023 105723 ±2134 99553 ±6921
+> (500 nodes) SDCD 1777 ±180 1849 ±134 105352 ±518 105834 ±508
+> ABCDEFG 1262 ±25 1228 ±94 72836 ±6061 69401 ±7637
+> ABCDEFG 1562 ±50 1340 ±132 67007 ±4940 64650 ±5395
+> (SPN)
+
+C.3 Experiment Settings 
+
+In this section, we report the hyperparameters used in our simulation study. Because ABCDEFG has many hyperparameters, we did not comprehensively tune each of them. Instead, we fixed hyperparameters across the same SEM model type. Here, we report some key hyperparameter values. For the other hyperparameters, our python program contains default values and we used the same value in all experiments. Table 10 summarizes the most important hyperparameters. In addition, we unexhaustively tuned the L1 regularization coefficient by trying two different values per simulation type. We also have a separate L1 regularization coefficient for the intervention-to-node bipartite graph in simulation with unknown intervention targets. Table 11 lists the set of best parameters we chose for each simulation type. For conciseness, we name a simulation type by a sequence of four attributes: (1) targeted (T) vs. untargeted (U), (2) canonical f-DAG (FG) vs. SPN-FG (SPNFG), (3) linear (L) vs nonlinear (N) SEM, and (4) hard (H) vs. soft (S) intervention, separated by “-". 
+
+> 40
+
+Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+Table 7: F1 score and SHD of Scored methods on Nonlinear Targeted Simulated Datasets on dense graphs with hard interventions. 
+
+Metric Method non linear non linear SPN F1 DCDI 0.47 ± 0.04 0.34 ± 0.05 
+
+(100 nodes) DCDFG 0.25 ± 0.03 0.11 ± 0.06 
+
+ENCO 0.04 ± 0.00 0.12 ± 0.06 
+
+SDCD 0.66 ± 0.06 0.35 ± 0.06 
+
+ABCDEFG 0.53 ± 0.07 0.69 ± 0.04 
+
+ABCDEFG 0.43 ± 0.05 0.65 ± 0.01 
+
+(SPN) SHD DCDI 475 ± 81 3882 ± 135 
+
+(100 nodes) DCDFG 1464 ± 910 3866 ± 98 
+
+ENCO 2185 ± 223 3982 ± 228 
+
+SDCD 245 ± 30 3283 ± 148 
+
+ABCDEFG 567 ± 92 1909 ± 182 
+
+ABCDEFG 770 ± 525 2132 ± 59 
+
+(SPN) F1 DCDFG 0.18 ± 0.06 0.11 ± 0.02 
+
+(200 nodes) SDCD 0.42 ± 0.05 0.18 ± 0.02 
+
+ABCDEFG 0.56 ± 0.08 0.59 ± 0.03 
+
+ABCDEFG 0.49 ± 0.06 0.60 ± 0.01 
+
+(SPN) SHD DCDFG 6933 ± 2978 17035 ± 257 
+
+(200 nodes) SDCD 885 ± 168 16575 ± 142 
+
+ABCDEFG 932 ± 408 9817 ± 600 
+
+ABCDEFG 1130 ± 445 9649 ± 104 
+
+(SPN) F1 DCDFG 0.09 ± 0.07 0.03 ± 0.03 
+
+(500 nodes) SDCD 0.26 ± 0.01 0.10 ± 0.00 
+
+ABCDEFG 0.33 ± 0.05 0.45 ± 0.04 
+
+ABCDEFG 0.25 ± 0.06 0.47 ± 0.03 
+
+(SPN) SHD DCDFG 4298 ± 131 118625 ± 1433 
+
+(500 nodes) SDCD 4294 ± 191 114183 ± 421 
+
+ABCDEFG 6598 ± 1804 80315 ± 5300 
+
+ABCDEFG 8662 ± 3101 77089 ± 3660 
+
+(SPN) 
+
+C.4 Time and Memory Consumption 
+
+All simulated datasets with known intervention targets contain 25k samples and those with unknown intervention targets contain 30k samples. With a batch size of 128, we were able to train our model on a server with 2 2x 2.9 GHz Intel Xeon Gold 6226R, 16 GB of RAM and an NVIDIA A40 GPU with 48GB of memory. The training time of ABCDEFG is shown in 
+
+41 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+Table 8: SID of Bayesian methods on Non linear Simulated Datasets with 16 Nodes. 
+
+Metric Method NON LINEAR NON LINEAR SPN SID DECI 65 .76 ± 34 .86 109 .32 ± 18 .75 
+
+VI-DP-DAG 83 .52 ± 35 .83 92 .19 ± 7.59 
+
+ProDAG 62 .01 ± 25 .20 90 .1 ± 21 .78 
+
+ABCDEFG 41 .93 ± 27 .27 64 .33 ± 15 .75 
+
+ABCDEFG 50 .72 ± 27 .49 70 .85 ± 24 .81 
+
+(SPN) 
+
+Table 9: SID of score-based methods on Non linear Simulated Datasets with 100 Nodes. 
+
+Metric Method HARD SOFT SPN SPN INTVN INTVN HARD SOFT SID DCDFG 1839 ± 308 1595 ± 1418 5860 ± 1662 6976 ± 346 
+
+ENCO 3668 ± 864 3722 ± 945 8805 ± 221 8899 ± 200 
+
+SDCD 2189 ± 616 2224 ± 1009 6843 ± 504 6858 ± 381 
+
+ABCDEFG 1005 ± 327 771 ± 438 4615 ± 681 4710 ± 694 
+
+ABCDEFG 809 ± 510 671 ± 414 4724 ± 595 4783 ± 594 
+
+(SPN) 
+
+Table 10: Default Hyper-Parameter Setting of ABCDEFG in a Simulation Study. 
+
+Parameter Name Default Value Batch Size 128 Hidden Dimension 1000 Number of Epochs 1000 Number of Hidden Layers 1Width Bound of SPN (max_copies) 8Learning Rate (VAE) 5 × 10 −4
+
+Learning Rate (f-DAG Model) 5 × 10 −3
+
+KL Div. Coeff. ( β) 1 × 10 −8
+
+Gaussian Noise Level 0.05 VAE Weight L2 Reg. 1 × 10 −3
+
+Latent Factor Prior N (0, 10 −3 · I)
+
+Fig. 15. Since the datasets are of similar sizes, the training time is stable across different simulations. Training ABCDEFG with SPN-FG consumes more time due to a larger number of parameters and extra time for forward and backward through the network layers. The benchmarking of Bayesian methods was conducted on datasets with 16 nodes. The training times for the different methods are shown in Table 12. All methods, except BaCaDi, were run on an NVIDIA A40 GPU with 16GB of RAM. (No GPU implementation was available for BaCaDi.) 
+
+42 Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+Figure 12: Benchmarking of score-based methods on linear datasets. (a) Precision and recall for different score based methods, dataset types are shown in different shapes. (b) SHD comparison between different score based methods on targeted datasets(left two), and untargeted datasets (right two). 
+
+Appendix D. Preprocessing single cell perturbation data 
+
+The data used for single cell perturbation is downloaded from Amin et al. [2] and we followed the preprocessing steps described by Lopez et al. [16] . For each untargeted perturbation, we removed the description words like ’high’,’low’,’early’,eta, and only retain the name of each biomolecule as the perturbation. We used scanpy to select the top 1000 highly variable genes as input of our model, and used 10 factors. We performed gene ontology analysis using the online tool at the Gene Ontology Website. 
+
+> 43 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch
+
+Figure 13: Comparison of number of acyclic and cyclic graphs. 
+
+Figure 14: Comparison of to be removed number of edges for acyclic graphs. Upper and lower bound of number of to be removed edges are colored in blue and red, respectively. 
+
+References 
+
+[1] Abhinav Agrawal, Daniel Sheldon, and Justin Domke. Advances in Black-Box VI: Nor-malizing flows, importance weighting, and optimization. Neural Information Processing 
+
+> 44
+
+Amortized Bayesian Causal Discovery of Extended Factor Graphs 
+
+Table 11: Hyper-Parameter Setting of ABCDEFG in a Simulation Study. 
+
+Simulation Type L1 Reg. L1 Reg. (Intv.) Activation Function SPN Parallelism T-FG-L-H 0.1, 0.1 N/A Identity Node T-FG-L-S 0.01, 0.01 N/A Identity Factor T-FG-N-H 1.0, 1.0 N/A Tanh Factor T-FG-N-S 0.01, 0.001 N/A Tanh Node T-SPNFG-L-H 0.01, 0.01 N/A Identity Node T-SPNFG-L-S 1e-4, 1e-4 N/A Identity Node T-SPNFG-N-H 0.01, 0.01 N/A Tanh Node T-SPNFG-N-S 1e-4, 1e-4 N/A Tanh Factor U-FG-L-H 0.01, 0.01 10.0, 10.0 Identity Node U-FG-L-S 1e-4, 1e-4 10.0, 10.0 Identity Node U-FG-N-H 0.01, 0.01 10.0, 10.0 Tanh Node U-FG-N-S 1e-4, 1e-4 10.0, 10.0 Tanh Node U-SPNFG-L-H 1e-6, 1e-6 0.1, 0.1 Identity Factor U-SPNFG-L-S 1e-7, 1e-7 1.0, 1.0 Identity Node U-SPNFG-N-H 1e-6, 1e-6 0.1, 0.1 Tanh Factor U-SPNFG-N-S 1e-8, 1e-7 1.0, 1.0 Tanh Node 
+
+Table 12: Time usage on Simulated Datasets with 16 Nodes. 
+
+Method LINEAR LINEAR NONLINEAR NONLINEAR FG SPNFG FG SPNFG BaCaDi 1704 .56 ± 33 .70 1405 .64 ± 277 .53 1265 .71 ± 35 .65 1435 .08 ± 20 .63 
+
+DECI 987 .81 ± 5.72 985 .27 ± 1.64 994 .50 ± 0.91 991 .40 ± 0.30 
+
+VI-DP-DAG 764 .77 ± 255 .60 245 .63 ± 132 .17 501 .51 ± 328 .49 302 .64 ± 180 .52 
+
+ProDAG 79 .37 ± 0.76 79 .99 ± 2.34 N/A N/A ABCDEFG 82 .60 ± 24 .36 65 .95 ± 24 .61 70 .51 ± 34 .89 106 .71 ± 68 .05 
+
+ABCDEFG (SPN) 138 .64 ± 37 .63 67 .63 ± 32 .89 136 .17 ± 52 .82 177 .71 ± 154 .83 
+
+Systems , 2020. [2] Neal D. Amin, Kevin W. Kelley, Konstantin Kaganovsky, Massimo Onesto, Jin Hao, Yuki Miura, James P. McQueen, Noah Reis, Genta Narazaki, Tommy Li, Shravanti Kulkarni, Sergey Pavlov, and Sergiu P. Pa s, ca. Generating human neural diversity with a multiplexed morphogen screen in organoids. Cell Stem Cell , 31(12):1831–1846.e9, 2024. ISSN 1934-5909. [3] Yashas Annadani, Nick Pawlowski, Joel Jennings, Stefan Bauer, Cheng Zhang, and Wenbo Gong. Bayesdag: Gradient-based posterior inference for causal discovery. Ad-vances in Neural Information Processing Systems , 36:1738–1763, 2023. [4] Kevin Bello, Bryon Aragam, and Pradeep Ravikumar. Dagma: Learning dags via m-matrices and a log-determinant acyclicity characterization. In S. Koyejo, S. Mohamed, 
+
+45 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch 
+
+Figure 15: Training Time of ABCDEFG. Each box represents one type of simulation. We group simulation regarding the ground truth graph type and known vs. unknown intervention targets. We use the suffix “-T" for known intervention targets and “-U" for unknown ones. A. Agarwal, D. Belgrave, K. Cho, and A. Oh, editors, Advances in Neural Information Processing Systems , volume 35, pages 8226–8239. Curran Associates, Inc., 2022. [5] Edwin V Bonilla, Pantelis Elinas, He Zhao, Maurizio Filippone, Vassili Kitsios, and Terry O’Kane. Variational dag estimation via state augmentation with stochastic permutations. 
+
+arXiv preprint arXiv:2402.02644 , 2024. [6] Philippe Brouillard, Sébastien Lachapelle, Alexandre Lacoste, Simon Lacoste-Julien, and Alexandre Drouin. Differentiable causal discovery from interventional data. Advances in Neural Information Processing Systems , 33:21865–21877, 2020. [7] Bertrand Charpentier, Simon Kibler, and Stephan Günnemann. Differentiable DAG sampling. In International Conference on Learning Representations , 2022. [8] Tianyu Chen, Kevin Bello, Bryon Aragam, and Pradeep Kumar Ravikumar. iSCAN: Identifying causal mechanism shifts among nonlinear additive noise models. In Thirty-seventh Conference on Neural Information Processing Systems , 2023. URL https: //openreview.net/forum?id=GEtXhqKW6X .[9] Chris Cundy, Aditya Grover, and Stefano Ermon. Bcd nets: Scalable variational approaches for bayesian causal discovery. Advances in Neural Information Processing Systems , 34:7095–7110, 2021. [10] Tomas Geffner, Javier Antoran, Adam Foster, Wenbo Gong, Chao Ma, Emre Kiciman, Amit Sharma, Angus Lamb, Martin Kukla, Nick Pawlowski, Agrin Hilmkil, Joel Jennings, Meyer Scetbon, Miltiadis Allamanis, and Cheng Zhang. Deep end-to-end causal inference. 
+
+Transactions on Machine Learning Research , 2024. ISSN 2835-8856. [11] Alexander Hägele, Jonas Rothfuss, Lars Lorch, Vignesh Ram Somnath, Bernhard Schölkopf, and Andreas Krause. Bacadi: Bayesian causal discovery with unknown 
+
+> 46 Amortized Bayesian Causal Discovery of Extended Factor Graphs
+
+interventions. In International Conference on Artificial Intelligence and Statistics , pages 1411–1436. PMLR, 2023. [12] Eric Jang, Shixiang Gu, and Ben Poole. Categorical reparameterization with gumbel-softmax. In International Conference on Learning Representations , 2017. [13] Diederik P. Kingma and Max Welling. Auto-encoding variational bayes. In Yoshua Bengio and Yann LeCun, editors, 2nd International Conference on Learning Representations, ICLR 2014, Banff, AB, Canada, April 14-16, 2014, Conference Track Proceedings , 2014. [14] Hao-Chih Lee, Matteo Danieletto, Riccardo Miotto, Sarah T Cherng, and Joel T Dudley. Scaling structural learning with no-bears to infer causal transcriptome networks. In 
+
+Pacific Symposium on Biocomputing 2020 , pages 391–402. World Scientific, 2019. [15] Phillip Lippe, Taco Cohen, and Efstratios Gavves. Efficient neural causal discovery without acyclicity constraints. In International Conference on Learning Representations ,2022. [16] Romain Lopez, Jan-Christian Hütter, Jonathan K. Pritchard, and Aviv Regev. Large-scale differentiable causal discovery of factor graphs. In Advances in Neural Information Processing Systems , 2022. [17] Achille Nazaret, Justin Hong, Elham Azizi, and David Blei. Stable differentiable causal discovery. In Ruslan Salakhutdinov, Zico Kolter, Katherine Heller, Adrian Weller, Nuria Oliver, Jonathan Scarlett, and Felix Berkenkamp, editors, Proceedings of the 41st International Conference on Machine Learning , volume 235 of Proceedings of Machine Learning Research , pages 37413–37445. PMLR, 21–27 Jul 2024. [18] Jonas Peters and Peter Bühlmann. Structural intervention distance for evaluating causal graphs. Neural Computation , 27(3):771–799, 03 2015. ISSN 0899-7667. doi: 10.1162/NECO_a_00708. URL https://doi.org/10.1162/NECO_a_00708 .[19] Hoifung Poon and Pedro Domingos. Sum-product networks: A new deep architecture. In 
+
+2011 IEEE International Conference on Computer Vision Workshops (ICCV Workshops) ,pages 689–690. IEEE, 2011. [20] Sebastian Prillo and Julian Eisenschlos. SoftSort: A continuous relaxation for the argsort operator. In Hal Daumé III and Aarti Singh, editors, Proceedings of the 37th International Conference on Machine Learning , volume 119 of Proceedings of Machine Learning Research , pages 7793–7802. PMLR, 13–18 Jul 2020. [21] R. W. Robinson. Counting unlabeled acyclic digraphs. In Charles H. C. Little, editor, 
+
+Combinatorial Mathematics V , pages 28–43, Berlin, Heidelberg, 1977. Springer Berlin Heidelberg. ISBN 978-3-540-37020-8. [22] Andy Shih and Stefano Ermon. Probabilistic circuits for variational inference in discrete graphical models. Advances in neural information processing systems , 33:4635–4646, 2020. 
+
+> 47 Yichen Gu, Yuxuan Song, Weizhou Qian, Yixin Wang and Joshua Welch
+
+[23] Peter Spirtes and Clark Glymour. An algorithm for fast recovery of sparse causal graphs. 
+
+Social Science Computer Review , 9(1):62–72, 1991. [24] Hongyuan Tao, Hang Yu, and Jianguo Li. DeepITE: Designing variational graph autoencoders for intervention target estimation. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. URL https://openreview.net/ forum?id=GMsi9966DR .[25] Ryan Thompson, Edwin V Bonilla, and Robert Kohn. Prodag: Projection-induced variational inference for directed acyclic graphs. arXiv preprint arXiv:2405.15167 , 2024. [26] Karren Yang, Abigail Katcoff, and Caroline Uhler. Characterizing and learning equiva-lence classes of causal DAGs under interventions. In Jennifer Dy and Andreas Krause, editors, Proceedings of the 35th International Conference on Machine Learning , vol-ume 80 of Proceedings of Machine Learning Research , pages 5541–5550. PMLR, 10–15 Jul 2018. [27] Yuqin Yang, Saber Salehkaleybar, and Negar Kiyavash. Learning unknown interven-tion targets in structural causal models from heterogeneous data. In Sanjoy Das-gupta, Stephan Mandt, and Yingzhen Li, editors, Proceedings of The 27th Inter-national Conference on Artificial Intelligence and Statistics , volume 238 of Proceed-ings of Machine Learning Research , pages 3187–3195. PMLR, 02–04 May 2024. URL 
+
+https://proceedings.mlr.press/v238/yang24d.html .[28] Guibo Ye, Mengfan Tang, Jian-Feng Cai, Qing Nie, and Xiaohui Xie. Low-rank regularization for learning gene expression programs. PloS one , 8(12):e82146, 2013. [29] Yue Yu, Tian Gao, Naiyu Yin, and Qiang Ji. Dags with no curl: An efficient dag structure learning approach. In Marina Meila and Tong Zhang, editors, Proceedings of the 38th International Conference on Machine Learning , volume 139 of Proceedings of Machine Learning Research , pages 12156–12166. PMLR, 18–24 Jul 2021. [30] Xun Zheng, Bryon Aragam, Pradeep K Ravikumar, and Eric P Xing. Dags with no tears: Continuous optimization for structure learning. In S. Bengio, H. Wallach, H. Larochelle, K. Grauman, N. Cesa-Bianchi, and R. Garnett, editors, Advances in Neural Information Processing Systems , volume 31. Curran Associates, Inc., 2018. [31] Xiaofeng Zhu, Heung-Il Suk, Heng Huang, and Dinggang Shen. Low-rank graph-regularized structured sparse regression for identifying genetic biomarkers. IEEE Trans-actions on Big Data , 3(4):405–414, 2017.

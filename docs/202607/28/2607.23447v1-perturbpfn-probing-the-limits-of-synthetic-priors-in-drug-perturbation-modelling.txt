@@ -1,0 +1,651 @@
+Title: PerturbPFN: Probing the Limits of Synthetic Priors in Drug Perturbation Modelling
+
+URL Source: https://arxiv.org/pdf/2607.23447v1
+
+Published Time: Tue, 28 Jul 2026 01:06:29 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# PerturbPFN: Probing the Limits of Synthetic Priors in Drug Perturbation Modelling 
+
+Yuche Gao 1∗ José Miguel Hernández-Lobato 1 Siyuan Guo 2,1∗
+
+> 1
+
+University of Cambridge, Cambridge, United Kingdom 
+
+> 2
+
+Prior Labs, Freiburg, Germany 
+
+## Abstract 
+
+Predicting cellular responses to unseen chemical perturbations is challenging due to unknown targets and mechanisms, high-dimensional expression responses, and limited experimental coverage of the large small-molecule design space. We pro-pose PerturbPFN, a PFN-style amortized model for unknown-target perturbation prediction under a hierarchical synthetic structural prior. Instead of directly re-gressing high-dimensional expression responses, PerturbPFN infers a latent system graph, sparse atomic intervention targets, and intervention strengths, then prop-agates their effects through an SCM decoder. The model is trained entirely on prior-predictive synthetic episodes generated from biologically motivated graph and expression simulators, enabling structured in-context learning without test-time gradient updates. We evaluate PerturbPFN on both real single-cell perturbation data and synthetic benchmarks, covering effect prediction, target identification, and regulatory structure discovery. Our results show that PerturbPFN offers a complementary trade-off to specialized baselines, achieving competitive perturba-tion prediction with low inference cost while exposing interpretable intermediate estimates of targets, strengths, and system structure. 
+
+## 1 Introduction 
+
+Predicting how complex biological systems respond to novel interventions is a central challenge in drug discovery. The design of clinical therapeutics often relies on chemical perturbations [ 1]. Small-molecule drugs introduce a significantly more complex intervention modality than discrete genetic edits, such as CRISPR knockouts [ 2 ]. For example, the perturbation target, pathway, and effective mechanism may be unknown, context-dependent, or only partially captured by perturbation covariates. In this regime, effect prediction requires not only modelling the post-perturbation distribution, but also inferring latent atomic targets and mechanisms from observed response data and perturbation features [ 3 , 4 ]. Further, because the theoretical design space of these small molecules is vastly larger than what can be physically screened in a laboratory, interpolating between known drugs is insufficient. Predictive models must learn to generalize to unseen perturbations [5]. Existing deep learning approaches for perturbation prediction generally fall into three distinct paradigms. First, unstructured black-box models directly learn the statistical distribution shifts in-duced by a perturbation [ 6 –8 ], performing inference within a learned latent space. Second, structured 
+
+mechanistic models frame perturbation responses as explicit interventions on an underlying—often causal—representation of the system [ 9–11 ], offering advantages in interpretability. Finally, recent foundational model developments seek to learn robust representation spaces by pre-training on massive scales of real-world experimental data, utilizing broad biological priors as seen in scGPT [12], GenePT [13], and LPM [14].    
+
+> ∗Correspondence to yg473@cam.ac.uk and sguo26v@gmail.com .2nd ICML Workshop on Foundation Models for Structured Data, Seoul, South Korea, 2026. arXiv:2607.23447v1 [cs.LG] 26 Jul 2026
+
+Synthetic episode PerturbPFN Pre-training losses               
+
+> x1
+> x2
+> x3
+> x4x5
+> x6
+> latent system graph G
+> drug features γj
+> targets Ij={x2, x 5}
+> strengths ψj, 2, ψ j, 5
+> ψj, 2
+> ψj, 5
+> Training
+> Graph head
+> ˆG
+> Target head
+> ˆIj
+> Strength head
+> ˆψj
+> Graph head
+> ˆG
+> Target head
+> ˆIj
+> Strength head
+> ˆψj
+> x1
+> x2
+> x3
+> x4x5
+> x6
+> ˆψj, 2
+> ˆψj, 5
+> SCM rollout propagation on ˆG
+> Mechanistic explanation:
+> Which genes are targeted by the drug? Which regulatory edges drive the response?
+> In-silico simulation:
+> How does effect change across dosages? What is the effect of a drug combination?
+> prediction loss reference
+> ˆG
+> ˆIj
+> ˆψj
+> ˆpj(x)
+> LG+Ldag
+> LI
+> Lψ
+> Lobs
+> G
+> Ij
+> ψj
+> xj
+> synthetic references
+
+Figure 1: PerturbPFN pretraining pipeline. Synthetic episodes provide latent references for the system graph G, perturbation targets Ij , intervention strengths ψj , and outcomes xj . The model predicts a graph and query-specific intervention variables, propagates them through an SCM decoder to predict perturbation effects, and is trained with multi-task losses on all synthetic references. However, current structured approaches often rely on instance-specific optimization or dataset-specific fitting, which limits their ability to amortize knowledge across heterogeneous contexts such as differing cell lines, experimental batches, or diverse perturbation panels. To overcome these limitations, we draw inspiration from Prior-Data Fitted Networks (PFNs), which have demonstrated that pre-training on large-scale synthetic tasks can amortize the inference process [ 15 – 19 ]. This enables “in-context" prediction on novel datasets without the need for task-specific gradient updates. 
+
+Our contributions. 
+
+• We introduce PerturbPFN , a PFN-style framework for perturbation effect prediction under a hierarchical synthetic SCM prior, using biologically tailored generators to provide supervision for latent graphs, sparse intervention targets, and low-dimensional strength that are typically unavailable in empirical biological data, then propagates their effects through an inferred SCM decoder instead of directly regressing high-dimensional responses. • PerturbPFN provides competitive effect prediction on real single-cell perturbation data [ 20 ]through a single in-context forward pass, without dataset-specific optimization at test time. • We evaluate latent graph, target, and strength inference on held-out synthetic episodes, and assess the transferability of the learned gene regulatory structure on external benchmarks [ 21 ]. 
+
+## 2 Methodology 
+
+This section introduces the SCM background, defines the episodic perturbation prediction setting and latent SCM factorization used by PerturbPFN, and describes the model architecture, training objective, and inference procedure. 
+
+2.1 SCM Background and Shift Interventions 
+
+A structural causal model (SCM) M = {G, θ} represents a system by a directed acyclic graph (DAG) with adjacency matrix G ∈ { 0, 1}p×p over variables x = ( x1, . . . , x p) and a collection of local mechanisms parameterized by θ. The induced observational distribution factorizes as 
+
+p(x; G, θ) = 
+
+> p
+
+Y
+
+> i=1
+
+pi(xi | xGi ; θi), (1) where Gi denotes the parent set of variable i. This factorization is useful because modifying one local mechanism can change the distribution of its target variable and propagate to downstream descendants through the graph. 2An intervention on an SCM modifies a subset of local mechanisms. A general shift intervention changes the targeted mechanisms by applying a local shift or modulation, 
+
+pi(xi | xGi ; θi) −→ ˜pi(xi | xGi ; θi, ψ i), i ∈ I, (2) while leaving non-targeted mechanisms unchanged. Unlike hard interventions, which set variables externally and remove their dependence on parents, shift interventions retain parent-dependent regulation. In this work, we use additive mechanism shifts in the latent SCM. Writing a local mechanism as 
+
+xi = fi(xGi ; θi) + ϵi, (3) a targeted intervention with strength ψi changes it to 
+
+xi = fi(xGi ; θi) + ψi + ϵi, i ∈ I, (4) with ψi = 0 for non-targeted variables. The post-intervention distribution is obtained by rolling out the modified SCM in topological order. 
+
+2.2 Problem Setup 
+
+We study episodic perturbation prediction. Each episode represents one system observed under multiple perturbation regimes, such as a cell line exposed to different drugs. The system contains p
+
+measured variables. Each observation is written as (γi, xi), where xi ∈ Rp is the measured system state and γi ∈ Rd is a regime descriptor that parameterizes experimental conditions. For example, γi
+
+may encode the chemical embedding of a specific treatment, a continuous scalar for dosage levels, or a categorical indicator for control treatments. Given context observations Dctx = {(γi, xi)}nctx  
+
+> i=1
+
+, and a query regime γj , the desired prediction is the posterior predictive distribution (PPD) 
+
+p(xj | γj , Dctx ) = 
+
+Z
+
+p(xj | γj , t) p(t | D ctx ) dt, (5) where t denotes latent task variables, including the system structure and perturbation-response mechanisms that map each regime descriptor γj to unobserved atomic targets and intervention strengths. PerturbPFN approximates this target with point estimates of the latent graph, targets, and strengths. 
+
+Latent intervention model. We assume that each episode is governed by a latent causal generative process M = {G, θ}, where G ∈ { 0, 1}p×p is the adjacency matrix of a directed acyclic graph (DAG) over the measured variables and θ parameterizes the local mechanisms. A perturbation regime 
+
+γ does not directly determine the full high-dimensional response. Instead, it induces a latent atomic intervention I = {I, ψ}, where I ∈ { 0, 1}p denotes sparse intervention targets and ψ denotes their strengths. We factorize this intervention model as 
+
+p(I | γ, ϕ) = p I; gϕ(γ)p ψ; hϕ(I, γ), (6) where gϕ and hϕ are descriptor-to-intervention maps parameterized by ϕ: gϕ maps perturbation descriptors to target probabilities, and hϕ maps targets and descriptors to intervention-strength parameters. In PerturbPFN, these descriptor-to-intervention maps are amortized by MLPs that take context-conditioned node and query representations as input. Given I, the perturbation modifies only the targeted mechanisms through shift interventions. PerturbPFN uses this decomposition as a structural inductive bias: it predicts point estimates of G, I, and ψ, and decodes the response through the corresponding intervened causal generative process. 
+
+2.3 Hierarchical Synthetic Prior 
+
+PerturbPFN is trained on prior-predictive episodes from a hierarchical synthetic SCM prior tailored to single-cell perturbation data. At the episode level, the prior samples a gene-regulatory network (GRN) using a generator inspired by Aguirre et al. [22] , augmented with module structure to induce heterogeneous, scale-free topology with stronger within-module regulation [ 23 ]. At the perturbation level, descriptors γ generate sparse atomic targets from a truncated geometric distribution target-count prior, with similar descriptors tending to produce related targets and effect strengths. Interventions apply signed additive shifts whose magnitudes follow Hill-type dose–response functions, and nonlinear local mechanisms propagate these shifts to induce downstream changes in non-target 3variables. Observations are then sampled from a zero-inflated log-normal expression model with SERGIO noise injection [ 24 ]. For synthetic counterfactual supervision, we reuse exogenous noise across factual and intervened rollouts so that paired differences primarily reflect intervention-induced changes rather than independent sampling noise [ 25 ]. The prior supplies synthetic labels for graphs, targets, strengths, and outcomes; no real perturbation responses are used for training. Further details on synthetic data generation are provided in Appendix A. 
+
+2.4 PerturbPFN Architecture 
+
+PerturbPFN implements the latent factorization above with a transformer-based amortized predictor. Given context perturbation–response pairs and a query regime, the model first infers intervention variables for the context regimes and an episode-level system graph. It then conditions the query on the inferred context interventions, predicts query-specific targets and strengths, and rolls out an intervened SCM decoder. 
+
+Context intervention memory and structure branch. The shared context encoder processes perturbation–response pairs (γi, xi) and produces node-level representations, regime summaries zctx  
+
+> i
+
+,and a global episode summary. The target and strength heads are first applied to every context regime to obtain ˆIi and ˆψi. These predictions, together with the regime representation, descriptor, and observed response shift ∆xi, are encoded into one intervention-memory token per context regime: 
+
+mi = Emem 
+
+
+
+zctx  
+
+> i
+
+, γi, ˆIi, ˆψi, ∆xi
+
+
+
+, ˜qj = qj + MHA( qj , {mi}i∈ctx , {mi}i∈ctx ) . (7) Here, qj combines the query descriptor with the global episode representation, while ˜qj is passed to the query target, strength, and mechanism-modulation heads. The structure branch uses a set-to-graph encoder [ 26 ] to combine context response statistics with the inferred targets and strengths: 
+
+HG = EGη
+
+
+
+Dctx , ˆIctx , ˆψctx 
+
+
+
+. (8) Across context regimes, associations between interventions on node u and response shifts at node v
+
+provide evidence for the directed edge u → v. The graph is shared across query regimes within an episode and is therefore not conditioned on a particular query. During structure pretraining, graph evidence uses the synthetic ground-truth context interventions; joint training and deployment instead use the inferred context targets and strengths. 
+
+Structure head and DAG projection. For each ordered pair u̸ = v, the structure head uses a directed edge scorer augmented with context-level intervention–response evidence: 
+
+ℓuv = fedge 
+
+ hGu , h Gv ; Cctx 
+
+ , Puv = σ(ℓuv ), Puu = 0 , (9) where Cctx summarizes pairwise context representations and the relationships between inferred interventions and response shifts. In our implementation, fedge combines a biaffine source–destination scorer with learned context-pair and intervention–response features. To encourage acyclicity, we apply the NOTEARS-style penalty [27] 
+
+Ldag = tr(exp( P ⊙ P/p )) − p. (10) Rather than relying on a single fixed probability threshold, hard graph extraction calibrates an episode-specific threshold to a target edge density estimated from the synthetic prior: 
+
+ˆG = Π DAG (P ; ρG). (11) Candidate edges are sorted by score and greedily added until the target density is reached, while edges that create directed cycles are skipped. During synthetic training, the calibration can use the known graph density; at inference it uses the fixed prior-derived density. The resulting graph is therefore sparse and acyclic. 4Intervention heads and SCM rollout. Conditioned on the attended query representation, the target head predicts node-wise probabilities and constructs a sparse straight-through top-k target gate ˆIj .The strength head predicts a categorical bar distribution over intervention strengths and uses its expectation as ˆψj . A separate modulation head produces node- and query-specific scale, shift, and gate parameters for the SCM decoder. Let zu denote the generated latent log-state of variable u. For each variable v, the decoder represents every potential parent u in a dedicated input slot. The hard- and soft-graph parent inputs are 
+
+mhard  
+
+> v
+
+=  ˆGuv zu
+
+pu=1 , msoft  
+
+> v
+
+=  ˆGuv Puv zu
+
+pu=1 . (12) A shared nonlinear decoder, modulated by the node- and query-specific parameters, generates variables in topological order. The intervention enters once as an additive shift to the targeted latent mechanism, 
+
+zv = fθ (mv , qj,v ) + ˆIj,v ˆψj,v , (13) and the latent location zv , rather than the zero-inflated observation mean, is propagated to descendants. The decoder outputs the location, variance, and zero probability of a zero-inflated log-normal predictive distribution. Hard projected graphs are used at test time. 
+
+2.5 Training Curriculum and Inference 
+
+PerturbPFN is trained entirely on prior-predictive synthetic episodes, where the latent graph G,intervention targets Ij , strengths ψj , and outcomes xj are known by construction. As shown in Figure 1, the training objective is 
+
+L = λGLG + λI LI + λψ Lψ + Lobs + Adag . (14) Here, LG combines an edge-level graph loss with density regularization. LI aggregates weighted focal binary-cross-entropy losses for query and context targets. Lψ uses a target-aware bar-distribution likelihood for query and context strengths. Lobs is the negative log-likelihood of query responses under the zero-inflated log-normal decoder distribution, while Adag is an adaptive augmented-Lagrangian penalty based on the NOTEARS acyclicity measure. Training uses two stages for the checkpoint reported in Section 4. We first pretrain the structure branch using synthetic graph labels, with ground-truth context interventions used to construct structure evidence. We then jointly train the full model while rolling out the decoder on the ground-truth synthetic graph and supervising query and context intervention variables together with query outcomes. At test time, PerturbPFN performs one model forward pass without parameter updates. Continuous edge scores are converted into a hard graph using prior-density calibration followed by greedy DAG projection, and the decoder is rolled out on this hard graph. Further architecture and training details are provided in Appendix B. 
+
+## 3 Related Work 
+
+Perturbation response prediction. Many single-cell perturbation models treat the task as super-vised counterfactual response prediction. Autoencoder and latent-variable methods such as scGen [28 ], CPA [ 8 ], Biolord [ 29 ], and SAMS-VAE [ 30 ] learn perturbation or attribute representations that are recombined with cell-state embeddings to decode post-perturbation expression profiles, with ChemCPA additionally using chemical descriptors for unseen-drug prediction [ 6]. Optimal-transport methods such as CellOT [ 7] and CondOT [ 31 ] instead learn maps between unpaired control and treated-cell distributions, optionally conditioned on perturbation context. Knowledge-informed predictors such as GEARS incorporate gene–gene graphs with graph neural networks for genetic perturbation prediction [ 11 ]. These methods can be effective, but they typically predict responses end-to-end through latent spaces, transport maps, or external knowledge graphs, rather than jointly inferring unknown atomic targets, intervention strengths, and propagation through an inferred SCM. 
+
+Structured perturbation models. A complementary line of work represents perturbations as interventions on structured or causal models, aiming to recover mechanisms rather than only predict expression shifts. Classical multi-environment causal discovery methods, including JCI-PC [ 3], UT-IGSP [ 32 ], and BaCaDi [ 33 ], infer causal graphs and, in some cases, unknown intervention 50                  
+
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> Mean Distance ( )
+> 0.2
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Pearson Correlation ( )
+> 3.5
+> 4.0
+> 4.5
+> 5.0
+> 5.5
+> 6.0
+> 6.5
+> 7.0
+> W2(pred, true) ( )
+> PerturbPFN (ours) GIM CondOT RF X-Learner MLP Naive Observational PerturbPFN (ours) GIM CondOT RF X-Learner MLP Naive Observational
+> Protocol mean A549 K562 MCF7
+
+Figure 2: Raw effect-prediction performance on the 12-protocol highest-dosage holdout benchmark from Srivatsan et al. [20] . Each point represents one held-out cell line–drug protocol, and boxplots summarize performance across protocols. PerturbPFN achieves competitive performance across all three metrics and the strongest distributional accuracy measured by W2.targets from observational and interventional data. More recent perturbation models make this link explicit: GIM learns a generative map from perturbation descriptors to atomic interventions in a causal model [ 4 ], while SCCVAE combines a variational autoencoder with a learned regulatory network and shift interventions for genetic perturbation response prediction [ 34 ]. Related inverse-design methods such as PDGrapher use causally inspired graph neural networks to predict therapeutic target sets that would move a diseased state toward a desired treated state [ 10 ]. These approaches provide stronger mechanistic structure than end-to-end predictors, but their reliance on instance-specific fitting, iterative inference, or predefined proxy graphs increases computational cost and limits amortized transfer across new perturbation contexts. 
+
+Prior-data fitted networks and single-cell foundation models. Prior-data fitted networks (PFNs) show that transformers pretrained on synthetic tasks can amortize Bayesian-style inference and make predictions on new datasets by conditioning on examples in context, motivating recent tabular foundation models such as TabPFN and TabICL [ 15 , 16 , 35 ]. This paradigm has recently been extended to causal inference, including amortized causal effect estimation [ 17 , 36 ], interventional prediction under graph uncertainty [ 37 ], and general PFN frameworks for causal reasoning [ 38 ]; MapPFN is especially related, learning causal perturbation maps for biological response prediction in context [ 25 ]. In parallel, single-cell foundation models such as scGPT [ 12 ], Geneformer [ 39 ], and GenePT [ 13 ] learn transferable gene or cell representations from transcriptomic corpora or biomedical text, while perturbation-oriented models such as LPM [14] and Stack [40] use symbolic perturbation–readout–context tuples or in-context sets of cells for response prediction. PerturbPFN combines these directions: it uses PFN-style synthetic-prior pretraining, but specializes the prior to structured perturbation mechanisms, explicitly predicting latent graphs, unknown targets, and intervention strengths before decoding the perturbation response. 
+
+## 4 Experiments 
+
+We evaluate PerturbPFN along three axes: in-prior latent recovery, real perturbation effect prediction, and GRN structure discovery. Together, these tests assess whether a single synthetic-only checkpoint learns a non-collapsed graph–target–strength bottleneck, predicts held-out perturbation responses, and transfers useful regulatory signal to external biological data. All evaluations use the same pretrained checkpoint without task-specific gradient updates. 
+
+4.1 In-Prior Latent Recovery Protocol. We first evaluate whether PerturbPFN recovers the latent variables represented by its structured bottleneck on 1,024 fresh episodes drawn from the synthetic prior. Because the latent graph, intervention targets, strengths, and response distributions are known by construction, this evaluation isolates in-prior amortized inference before considering transfer to real biological data. 6Table 1: In-prior latent recovery over 128 held-out synthetic batches. Graph F1 uses the top-scoring acyclic edges at the ground-truth graph density.                             
+
+> Graph Target Strength / Response AUROC ↑0.8133 AUROC ↑0.9330 |ψ|ratio →10.9386 AUPRC ↑0.2980 AUPRC ↑0.7860 ∆cosine ↑0.7437 Proj. F1 ↑0.3261 F1 ↑0.7649 Obs. NLL ↓-0.1375
+
+Metrics. For graph recovery, AUROC and AUPRC evaluate the ranking of all directed non-self edges. We additionally report F1 after calibrating the extraction threshold to the ground-truth graph density and greedily projecting the selected edges to a DAG. This density-matched F1 measures whether the highest-ranked edges correspond to the true graph, while avoiding confounding from threshold calibration. Target AUROC and AUPRC evaluate node-wise target scores, and target F1 thresholds the predicted probabilities at 0.5. The target-strength ratio compares the mean absolute predicted and true strengths on targeted nodes. Finally, response-shift cosine similarity measures directional agreement between predicted and true mean intervention effects, while observation NLL evaluates the full zero-inflated log-normal predictive distribution. See Appendix C for details. 
+
+Results. Table 1 shows that all components of the latent bottleneck remain non-collapsed. Graph scores achieve an AUROC of 0.8133 and an AUPRC of 0.2980 , substantially above the underlying edge prevalence of 0.0363 . Target inference is even stronger, reaching an AUROC of 0.9330 , an AUPRC of 0.7860 , and a thresholded F1 of 0.7649 . The straight-through top-k gate used by the decoder obtains a lower F1 of 0.6287 , reflecting the additional sparsity constraint imposed during rollout. Predicted target-node strengths recover the overall intervention scale, with a mean absolute-strength ratio of 0.9386 . The response-shift cosine similarity of 0.7437 further shows that the decoder recovers much of the intervention direction. These results establish that PerturbPFN learns a functional graph–target–strength bottleneck under its training prior; transfer to real biological data is evaluated below. 
+
+4.2 Perturbation Effect Prediction Protocol. We evaluate perturbation-response prediction on the Sci-Plex single-cell drug perturbation dataset [ 20 ], using the highest-dosage holdout protocol of Schneider et al. [4] . The benchmark contains 12 cell line–drug protocols formed from three cell lines and four drugs. For each protocol, the highest-dose response is held out, while the model receives lower doses of the same drug and all observed doses of the remaining drugs. It must predict the held-out cell distribution without observing drug targets or updating model parameters. Full construction details are provided in Appendix D. 
+
+Metrics. We report three complementary metrics. Mean distance, MD = ∥ ˆμint − μint ∥2, measures error between predicted and true mean-response vectors. Pearson correlation r measures their gene-wise agreement. W2( ˆXint , X int ) compares the full predicted and observed cell distributions; we approximate it by a debiased Sinkhorn estimator. This is particularly important for perturbation modelling, where a model may obtain reasonable correlation while substantially under- or over-estimating the magnitude of the response. For each protocol and metric, we orient performance so that higher is better and min–max normalize scores across models. We then average over the 12 protocols to obtain each metric column and average the three columns for the overall ranking in Table 2. Because min–max normalization is relative to the models being compared, Figure 2 additionally reports the raw protocol-level distributions. Table 2 also reports runtime per protocol. For PerturbPFN, the ICL-only runtime measures application of the pretrained checkpoint, whereas the amortized runtime additionally allocates its one-time pretraining cost across the 12 protocols. Runtimes were measured on the same compute worker equipped with a single NVIDIA RTX 4090; further compute details are provided in Appendix B. 
+
+Baselines. We compare against GIM [ 4], CondOT [ 31 ], a multilayer perceptron (MLP) and a random-forest X-Learner (RF X-Learner) [ 41 ]. We also include a Naive baseline that uses the nearest observed lower dose of the held-out drug and an Observational baseline that predicts the control distribution. 7Table 2: Runtime per protocol and normalized Sci-Plex effect-prediction scores. Times are mean 
+
+± standard deviation. PerturbPFN (amortized) allocates its one-time pretraining cost across the 12 
+
+protocols, whereas PerturbPFN (ICL only) reports application of the pretrained model.                                                            
+
+> Model Time (s) / protocol ˆsMD ↑ˆsr↑ˆsW2↑Avg. ˆs/ rank RF X-Learner 1.83 ±0.32 0.8793 0.9696 0.8122 0.8870 (#1) CondOT 7266 .4±585 .90.8014 0.9323 0.7401 0.8246 (#3) MLP 0.82 ±0.25 0.7823 0.9216 0.7582 0.8207 (#4) GIM 4495 .6±116 .90.6909 0.8611 0.2934 0.6151 (#5) Naive /0.5435 0.6293 0.6299 0.6009 (#6) Observational /0.0000 0.0000 0.0698 0.0233 (#7) PerturbPFN (amortized) 432 .8±0.34 0.7186 0.8813 0.9183 0.8394 (#2) PerturbPFN (ICL only) 1.11 ±0.34
+
+Results. PerturbPFN achieves the best normalized W2 score and ranks second overall, behind RF X-Learner. Once pretrained, it requires 1.11 seconds per protocol, faster than all model-based baselines except MLP; even after amortizing pretraining, its 432 .8-second cost remains substantially below GIM and CondOT. Although PerturbPFN does not uniformly dominate the real-data baselines, it offers a favorable trade-off between predictive performance, structured interpretability, and test-time cost: Among the evaluated baselines, GIM is the only method that provides comparable latent estimates of graph structure, intervention targets, and strengths. However, PerturbPFN is substantially faster than GIM and achieves markedly stronger effect prediction. 
+
+4.3 GRN Structure Discovery Protocol. We evaluate whether the learned graph head transfers to external GRN recovery using the official GeneRNIB 300BCG benchmark [ 21 ]. Following the official split, methods infer a weighted, directed TF–gene network from baseline expression profiles collected from 38 donors. Held-out three-month profiles and external regulatory references are used only for evaluation. Each method outputs a ranked list of at most 50 ,000 directed TF–gene links, allowing the benchmark to evaluate both the predictive and biological utility of the inferred network. PerturbPFN is trained to infer an intervention-induced causal dependency graph over measured variables, which is related to but not identical to a curated GRN. GeneRNIB evaluates agreement with TF–target references, pathway activity, and predictive utility, whereas PerturbPFN’s graph is optimized to propagate intervention effects under a synthetic SCM prior. The benchmark there-fore evaluates whether its learned causal structure transfers to biologically meaningful regulatory relationships. 
+
+Metrics and baselines. Because a complete ground-truth human GRN is unavailable, GeneRNIB uses complementary biological and predictive metrics. GS-F1 compares pathways enriched among predicted TF targets with pathways active in the held-out expression data, averaged across multiple gene-set collections. TFB-F1 measures normalized agreement and coverage against TF-binding references from UniBind, ChIP-Atlas, and ReMap. R-Precision and R-Recall evaluate how well TFs selected from the inferred network predict target-gene expression under conservative and broader regulator budgets, respectively. VC evaluates whether a GRN-constrained virtual-cell model can predict held-out perturbed expression. Higher values are better for all metrics; we omit replicate consistency for space. We compare against Pearson correlation and partial Pearson correlation (PPCOR) [ 42 ], the tree-based GRNBoost2 method [ 43 ], the expression-based PORTIA method [ 44 ], and SCENIC [ 45 ], which combines co-expression inference with motif-based regulon pruning. All methods are evaluated using the same official GeneRNIB pipeline and link budget. 
+
+Results. PerturbPFN achieves the best GS-F1 on 300BCG and is competitive on TFB-F1. This suggests that the learned graph head captures transferable regulatory signal despite being trained only on synthetic prior-predictive episodes. However, the gains are not uniform: dedicated GRN baselines remain stronger on R-Precision, R-Recall, and VC. This is expected because PerturbPFN is 8Table 3: GeneRNIB 300BCG GRN recovery. Higher is better for all metrics.                                    
+
+> Model GS-F1 TFB-F1 R-Prec. R-Recall VC Pearson corr. 0.4693 0.1102 0.6154 0.2742 0.1882
+> PPCOR 0.0982 0.0000 0.1742 0.1920 0.0660 GRNBoost2 0.5566 0.1129 0.6082 0.3752 0.1576 PORTIA 0.6188 0.1014 0.3970 0.2668 0.1169 SCENIC 0.4813 0.1180 0.3802 0.2747 0.0672 PerturbPFN 0.6410 0.1146 0.2250 0.1977 0.0731
+
+not optimized to reproduce a static GRN annotation target; it learns a causal propagation graph for perturbation response modelling. Compared with conventional causal discovery methods [ 46 ], such as BaCaDi* [ 33 ] and JCI-PC [ 3, 47 ], PerturbPFN amortizes structural inference from synthetic biological priors rather than fitting each instance under relatively simple structural assumptions. Biological regulatory networks exhibit sparsity, modularity, degree heterogeneity, and other topological regularities captured by specialized GRN generators [ 22 , 24 , 48 ]. Training on these generators allows PerturbPFN to exploit simulator-defined biological priors, a key strength of PFNs [ 49 ]. Consistent with this interpretation, PerturbPFN achieves edge AUROC 0.9168 and edge average precision 0.7570 in the auxiliary graph-ranking evaluation (Appendix E), although these metrics are not included in the official GeneRNIB score table. 
+
+## 5 Discussion 
+
+PerturbPFN illustrates a broader route toward structured foundation models for biology: rather than scaling only with empirical observations, a model can be pretrained over mechanistic hypotheses sampled from a structured simulator. In this view, the transformer amortizes an inverse problem— inferring which latent graph, intervention targets, and mechanism changes could explain the observed context—and applies the resulting inference procedure to new perturbation tasks without gradient-based adaptation. The structured bottleneck therefore serves not only as an architectural constraint, but also as a way to expose inspectable hypotheses about how a perturbation acts and propagates through a system. 
+
+Limitations and Outlook. The meaning of PerturbPFN’s latent variables is determined by its synthetic prior. Recovering them in-prior does not guarantee that they correspond to uniquely identifiable biological mechanisms, and a causal propagation graph need not coincide with a static curated GRN. The current model also represents graphs, targets, and strengths using point estimates, assumes a sparse acyclic system, and operates on gene panels much smaller than a complete tran-scriptome. Future work could employ richer and empirically calibrated simulators, quantify posterior uncertainty over latent mechanisms, support context-dependent or cyclic regulatory dynamics, and scale structured inference by composing predictions over local gene subsystems. These directions would strengthen the connection between efficient amortized prediction and biologically grounded mechanism discovery. 
+
+## Acknowledgments and Disclosure of Funding 
+
+This work used resources provided by the Cambridge Service for Data-Driven Discovery (CSD3), op-erated by the University of Cambridge Research Computing Service (www.csd3.cam.ac.uk), provided by Dell EMC and Intel using Tier-2 funding from the Engineering and Physical Sciences Research Council (capital grant EP/T022159/1), and DiRAC funding from the Science and Technology Facili-ties Council (www.dirac.ac.uk). Additional experiments were run on GPU resources provided by the Computational and Biological Learning Lab (CBL) at the University of Cambridge. Y.G. gratefully acknowledges support from the Student Educational Development Award from St Edmund’s College, University of Cambridge. 9References 
+
+[1] Anastasiia V Sadybekov and Vsevolod Katritch. Computational approaches streamlining drug discovery. Nature , 616(7958):673–685, 2023. [2] Marloes H Maathuis, Diego Colombo, Markus Kalisch, and Peter Bühlmann. Predicting causal effects in large-scale systems from observational data. Nature methods , 7(4):247–248, 2010. [3] Joris M Mooij, Sara Magliacane, and Tom Claassen. Joint causal inference from multiple contexts. Journal of machine learning research , 21(99):1–108, 2020. [4] Nora Schneider, Lars Lorch, Niki Kilbertus, Bernhard Schölkopf, and Andreas Krause. Gen-erative intervention models for causal perturbation modeling. In Forty-second International Conference on Machine Learning , 2025. [5] Alejandro Tejada-Lapuerta, Paul Bertin, Stefan Bauer, Hananeh Aliee, Yoshua Bengio, and Fabian J Theis. Causal machine learning for single-cell genomics. Nature Genetics , 57(4): 797–808, 2025. [6] Leon Hetzel, Simon Boehm, Niki Kilbertus, Stephan Günnemann, Fabian Theis, et al. Predicting cellular responses to novel drug perturbations at a single-cell resolution. Advances in Neural Information Processing Systems , 35:26711–26722, 2022. [7] Charlotte Bunne, Stefan G Stark, Gabriele Gut, Jacobo Sarabia Del Castillo, Mitch Levesque, Kjong-Van Lehmann, Lucas Pelkmans, Andreas Krause, and Gunnar Rätsch. Learning single-cell perturbation responses using neural optimal transport. Nature methods , 20(11):1759–1768, 2023. [8] Mohammad Lotfollahi, Anna Klimovskaia Susmelj, Carlo De Donno, Leon Hetzel, Yuge Ji, Ignacio L Ibarra, Sanjay R Srivatsan, Mohsen Naghipourfar, Riza M Daza, Beth Martin, et al. Predicting cellular responses to complex perturbations in high-throughput screens. Molecular systems biology , 19(6):MSB202211517, 2023. [9] Giambattista Parascandolo, Niki Kilbertus, Mateo Rojas-Carulla, and Bernhard Schölkopf. Learning independent causal mechanisms. In International Conference on Machine Learning ,pages 4036–4044. PMLR, 2018. [10] Guadalupe Gonzalez, Xiang Lin, Isuru Herath, Kirill Veselkov, Michael Bronstein, and Marinka Zitnik. Combinatorial prediction of therapeutic perturbations using causally inspired neural networks. Nature Biomedical Engineering , pages 1–18, 2025. [11] Yusuf Roohani, Kexin Huang, and Jure Leskovec. Predicting transcriptional outcomes of novel multigene perturbations with gears. Nature Biotechnology , 42(6):927–935, 2024. [12] Haotian Cui, Chloe Wang, Hassaan Maan, Kuan Pang, Fengning Luo, and Bo Wang. scgpt: Towards building a foundation model for single-cell multi-omics using generative ai. bioRxiv ,2023. [13] Yiqun T. Chen and James Zou. Genept: A simple but hard-to-beat foundation model for genes and cells built from chatgpt. bioRxiv , 2023. [14] Djordje Miladinovic, Tobias Höppe, Mathieu Chevalley, Andreas Georgiou, Lachlan Stuart, Arash Mehrjou, Marcus Bantscheff, Bernhard Schölkopf, and Patrick Schwab. In-silico biologi-cal discovery with large perturbation models. arXiv preprint arXiv:2503.23535 , 2025. [15] Samuel Müller, Noah Hollmann, Sebastian Pineda Arango, Josif Grabocka, and Frank Hutter. Transformers can do bayesian inference. In International Conference on Learning Representa-tions , 2022. [16] Noah Hollmann, Samuel Müller, Lennart Purucker, Arjun Krishnakumar, Max Körfer, Shi Bin Hoo, Robin Tibor Schirrmeister, and Frank Hutter. Accurate predictions on small data with a tabular foundation model. Nature , 637(8045):319–326, 2025. 10 [17] Jake Robertson, Arik Reuter, Siyuan Guo, Noah Hollmann, Frank Hutter, and Bernhard Schölkopf. Do-pfn: In-context learning for causal effect estimation. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2025. [18] Jingang Qu, David Holzmüller, Gaël Varoquaux, and Marine Le Morvan. Tabicl: A tabular foundation model for in-context learning on large data. In International Conference on Machine Learning , pages 50817–50847. PMLR, 2025. [19] Léo Grinsztajn, Klemens Flöge, Oscar Key, Felix Birkel, Philipp Jund, Brendan Roof, Benjamin Jäger, Dominik Safaric, Simone Alessi, Adrian Hayler, et al. Tabpfn-2.5: Advancing the state of the art in tabular foundation models. arXiv preprint arXiv:2511.08667 , 2025. [20] Sanjay R Srivatsan, José L McFaline-Figueroa, Vijay Ramani, Lauren Saunders, Junyue Cao, Jonathan Packer, Hannah A Pliner, Dana L Jackson, Riza M Daza, Lena Christiansen, et al. Massively multiplex chemical transcriptomics at single-cell resolution. Science , 367(6473): 45–51, 2020. [21] Jalil Nourisa, Antoine Passemiers, Jeremie Kalfon, Marco Stock, Berit Zeller-Plumhoff, Ro-brecht Cannoodt, Christian Arnold, Alexander Tong, Jason Hartford, Mihai G Netea, et al. genernib: a living benchmark for gene regulatory network inference. bioRxiv , pages 2025–02, 2025. [22] Matthew Aguirre, Jeffrey P Spence, Guy Sella, and Jonathan K Pritchard. Gene regulatory network structure informs the distribution of perturbation effects. PLOS Computational Biology ,21(9):e1013387, 2025. [23] Thomas E. Bartlett, Melodie Li, Chenyu Song, Yuche Gao, and Qiulin Huang. Inferring gene-regulatory networks using epigenomic priors. iScience , 29:115165, 2026. doi: 10.1016/j.isci. 2026.115165. [24] Payam Dibaeinia and Saurabh Sinha. Sergio: a single-cell expression simulator guided by gene regulatory networks. Cell systems , 11(3):252–271, 2020. [25] Marvin Sextro, Weronika Kłos, and Gabriel Dernbach. Mappfn: Learning causal perturbation maps in context. arXiv preprint arXiv:2601.21092 , 2026. [26] Anish Dhir, Matthew Ashman, James Requeima, and Mark van der Wilk. A meta-learning approach to bayesian causal discovery. In The Thirteenth International Conference on Learning Representations , 2025. [27] Xun Zheng, Bryon Aragam, Pradeep K Ravikumar, and Eric P Xing. Dags with no tears: Continuous optimization for structure learning. Advances in neural information processing systems , 31, 2018. [28] Mohammad Lotfollahi, F Alexander Wolf, and Fabian J Theis. scgen predicts single-cell perturbation responses. Nature methods , 16(8):715–721, 2019. [29] Zoe Piran, Niv Cohen, Yedid Hoshen, and Mor Nitzan. Disentanglement of single-cell data with biolord. Nature Biotechnology , 42(11):1678–1683, 2024. [30] Michael Bereket and Theofanis Karaletsos. Modelling cellular perturbations with the sparse additive mechanism shift variational autoencoder. Advances in Neural Information Processing Systems , 36:1–12, 2023. [31] Charlotte Bunne, Andreas Krause, and Marco Cuturi. Supervised training of conditional monge maps. Advances in Neural Information Processing Systems , 35:6859–6872, 2022. [32] Chandler Squires, Yuhao Wang, and Caroline Uhler. Permutation-based causal structure learning with unknown intervention targets. In Conference on Uncertainty in Artificial Intelligence ,pages 1039–1048. PMLR, 2020. [33] Alexander Hägele, Jonas Rothfuss, Lars Lorch, Vignesh Ram Somnath, Bernhard Schölkopf, and Andreas Krause. Bacadi: Bayesian causal discovery with unknown interventions. In 
+
+International Conference on Artificial Intelligence and Statistics , pages 1411–1436. PMLR, 2023. 11 [34] Emily Liu, Jiaqi Zhang, and Caroline Uhler. Learning genetic perturbation effects with varia-tional causal inference. PLOS Computational Biology , 22(2):e1013194, 2026. [35] Jingang Qu, David Holzmüller, Gaël Varoquaux, and Marine Le Morvan. Tabiclv2: A better, faster, scalable, and open tabular foundation model. arXiv preprint arXiv:2602.11139 , 2026. [36] Vahid Balazadeh, Hamidreza Kamkari, Valentin Thomas, Benson Li, Junwei Ma, Jesse C Cresswell, and Rahul G Krishnan. Causalpfn: Amortized causal effect estimation via in-context learning. arXiv preprint arXiv:2506.07918 , 2025. [37] Anish Dhir, Cristiana Diaconu, Valentinian Mihai Lungu, James Requeima, Richard E. Turner, and Mark van der Wilk. Estimating interventional distributions with uncertain causal graphs through meta-learning. In The Thirty-ninth Annual Conference on Neural Information Process-ing Systems , 2026. [38] Yuchen Ma, Dennis Frauen, Emil Javurek, and Stefan Feuerriegel. Foundation models for causal inference via prior-data fitted networks. arXiv preprint arXiv:2506.10914 , 2025. [39] Christina V Theodoris, Ling Xiao, Anant Chopra, Mark D Chaffin, Zeina R Al Sayed, Matthew C Hill, Helene Mantineo, Elizabeth M Brydon, Zexian Zeng, X Shirley Liu, et al. Transfer learning enables predictions in network biology. Nature , 618(7965):616–624, 2023. [40] Mingze Dong, Abhinav Adduri, Dhruv Gautam, Christopher Carpenter, Rohan Shah, Chiara Ricci-Tam, Yuval Kluger, Dave P Burke, and Yusuf H Roohani. Stack: In-context learning of single-cell biology. bioRxiv , 2026. [41] Sören R Künzel, Jasjeet S Sekhon, Peter J Bickel, and Bin Yu. Metalearners for estimating heterogeneous treatment effects using machine learning. Proceedings of the national academy of sciences , 116(10):4156–4165, 2019. [42] Seongho Kim. ppcor: an r package for a fast calculation to semi-partial correlation coefficients. 
+
+Communications for statistical applications and methods , 22(6):665, 2015. [43] Thomas Moerman, Sara Aibar Santos, Carmen Bravo González-Blas, Jaak Simm, Yves Moreau, Jan Aerts, and Stein Aerts. Grnboost2 and arboreto: efficient and scalable inference of gene regulatory networks. Bioinformatics , 35(12):2159–2161, 2019. [44] Antoine Passemiers, Yves Moreau, and Daniele Raimondi. Fast and accurate inference of gene regulatory networks through robust precision matrix estimation. Bioinformatics , 38(10): 2802–2809, 2022. [45] Sara Aibar, Carmen Bravo González-Blas, Thomas Moerman, Vân Anh Huynh-Thu, Hana Imrichova, Gert Hulselmans, Florian Rambow, Jean-Christophe Marine, Pierre Geurts, Jan Aerts, et al. Scenic: single-cell regulatory network inference and clustering. Nature methods ,14(11):1083–1086, 2017. [46] Siyuan Guo, Viktor Tóth, Bernhard Schölkopf, and Ferenc Huszár. Causal de finetti: On the identification of invariant causal structure in exchangeable data. Advances in Neural Information Processing Systems , 36:36463–36475, 2023. [47] Peter Spirtes, Clark N Glymour, and Richard Scheines. Causation, prediction, and search . MIT press, 2000. [48] Albert-László Barabási and Réka Albert. Emergence of scaling in random networks. science ,286(5439):509–512, 1999. [49] Samuel Müller, Arik Reuter, Noah Hollmann, David Rügamer, and Frank Hutter. Position: The future of bayesian prediction is prior-fitted. In International Conference on Machine Learning ,pages 81861–81875. PMLR, 2025. 12 Table 4: Main hyperparameters of the synthetic graph prior. 
+
+Symbol Description Range / value 
+
+p Number of genes [40 , 60] 
+
+K Number of gene modules [4 , 8] 
+
+α0 Base edge logit −2.5
+
+σs Source-scale log-normal scale 0.9
+
+αt Target-scale Gamma shape 2.0
+
+μB , σ B Module-pair logit parameters −0.2, 0.35 
+
+βwithin Within-module logit boost 1.35 
+
+λdist Topological-distance penalty 1.5
+
+μw , σ w Edge-weight log-normal parameters −0.2, 0.45 
+
+p+ Positive-edge probability 0.7
+
+Table 5: Main perturbation and observation settings used for the final checkpoint. 
+
+Symbol Description Range / value 
+
+F Number of drug families [3 , 6] 
+
+D Number of synthetic drugs [12 , 24] 
+
+demb Drug embedding dimension 8
+
+Mmax Preferred modules per family 1–2
+
+pstop Target-count stop probability 1/3
+
+E[|I|] Expected target count ≈ 3
+
+amin , a max Dose range [0 .02 , 10 .0] 
+
+L Held-out-drug dose levels 4
+
+nmin , n max Family-level Hill range [2 .0, 5.0] 
+
+μE , σ E Emax log-normal parameters 0.2, 0.1
+
+C Simulated cells per condition 128 
+
+nctx /n q Context / query entries 20 /4
+
+σobs Observation log-noise scale 0.001 
+
+p0,max Maximum zero probability 0.001 
+
+## A Details on Synthetic Data Generation 
+
+PerturbPFN is pretrained on episodes sampled from a hierarchical synthetic SCM prior. Each episode contains a task-level regulatory system, a collection of drug- and dose-dependent interventions, and context and query responses generated from the same latent system. The graph, targets, strengths, latent states, and observed responses are retained as synthetic supervision, but the model receives only regime descriptors and response observations as inputs. 
+
+Episode-level graph and mechanisms. The graph prior is designed to produce sparse, directed, degree-heterogeneous, and modular GRN-like systems [ 22 , 23 ]. For each episode, genes are assigned to balanced modules and placed in a random topological order. Only forward edges u → v, with 
+
+u < v , are allowed. Their probabilities are 
+
+Auv ∼ Bernoulli( σ(ℓuv )) , ℓuv = α0 + log su + 0 .35 log tv + Bcu,c v − λdist 
+
+v − up − 1 ,
+
+where su and tv are source- and target-specific activity factors, cu denotes the module of gene u, and 
+
+B is a sampled module-pair affinity matrix with an additional within-module boost. Existing edges receive signed log-normal weights. This construction guarantees acyclicity while inducing modular and heterogeneous connectivity. Each node is assigned an independently sampled two-layer nonlinear mechanism, a basal expression level, and an exogenous-noise scale. In contrast to the dose-response model below, graph propagation is implemented by a tanh MLP rather than by Hill functions. 
+
+Perturbation descriptors, targets, and strengths. Synthetic drugs are organized into latent families. Each family has high affinity for one or two gene modules and lower affinity for the remaining modules. Drugs inherit a normalized family embedding with drug-specific noise, making 13 nearby descriptors statistically more likely to induce related interventions. The descriptor for drug d
+
+at dose a is 
+
+γd,a =
+
+ a
+
+1 + a , log(1 + a), I{control }, ed
+
+
+
+,
+
+where ed ∈ R8 is the drug embedding; controls use a zero embedding and zero dose. For drug d, the target propensity of gene i is 
+
+πd,i ∝ Afd,c i qi exp( σdrug ξd,i ) , ξd,i ∼ N (0 , 1) ,
+
+where Afd,c i is the family–module affinity and qi is a weak gene-specific targetability factor derived from graph degree and module frequency. The target count follows a truncated geometric distribution beginning at one with pstop = 1 /3, giving approximately three targets per intervention. Targets are sampled without replacement according to πd,i .For target i, the signed dose-dependent strength is 
+
+ψd,a,i = sd,i Emax 
+
+> d,i
+
+and,i 
+
+(EC 50 d,i )nd,i + and,i ,
+
+where sd,i ∈ {− 1, 1}. The Emax , EC 50 , Hill coefficient, and sign distributions share family–module parameters with drug- and gene-specific variation. Non-target genes and control conditions have zero strength. 
+
+Latent rollout and observation model. For each cell, genes are generated in topological order. Let w:v denote incoming edge weights for gene v. Its latent log-state is 
+
+hv = tanh  W ⊤
+
+> 1,v
+
+ z ⊙ A:v ⊙ w:v
+
+ + b1,v 
+
+ ,zv = bv + w⊤ 
+
+> 2,v
+
+hv + b2,v + Iv ψv + σv ϵv .
+
+Thus, the intervention enters once as an additive shift to the targeted local mechanism and propagates to descendants through the graph. The simulator maps latent states to expression using a zero-inflated log-normal observation model inspired by single-cell simulators such as SERGIO [ 24 ]. The implementation supports expression-dependent zero inflation and heteroscedastic log-normal noise. For the final checkpoint, however, we use a low-corruption configuration with log-noise scale 0.001 and zero probability at most 0.001 .This preserves latent intervention and graph signals while retaining the same observation-model parameterization as the decoder. Each condition contains 128 simulated cells, and their mean expression is supplied as the condition-level response. 
+
+Highest-dose episodic protocol. Training episodes follow the highest-dose holdout structure used in the real-data evaluation. One synthetic drug is selected as the held-out drug and evaluated on a four-level geometric dose ladder. The context contains a control, its observed lower-dose conditions, and conditions from other drugs; the query corresponds to its held-out highest dose. All conditions within an episode reuse the same exogenous base-noise matrix for latent rollout, producing paired responses whose differences primarily reflect interventions rather than independent cell noise [ 25 ]. The model does not observe target propensities or target identities as inputs; these quantities, together with the graph and strengths, are used only as synthetic supervision. 
+
+## B Model Architecture and Training 
+
+Sections 2.4 and 2.5 describe the model computation and training objective. Here, we report the exact architecture dimensions, optimization settings, and checkpoint-selection procedure used in the experiments. The structure encoder uses pairwise context representations with mean–max aggregation. Its edge scorer combines a biaffine node-pair score with learned context-pair and intervention–response features. Context intervention memory uses predicted context targets and strengths during joint training and inference; synthetic intervention labels are used only for supervision and structure pretraining. The strength estimate is the expectation of the predicted bar distribution. The decoder uses separate parent slots and propagates latent log-states in topological order. 14 Table 6: Architecture settings of the final PerturbPFN model. 
+
+Component Setting Value Input Maximum nodes / metadata dim. 60 /11 
+
+Shared encoder Hidden dim. / heads / blocks 192 /6/5
+
+Shared encoder Feedforward dimension 640 
+
+Context memory Token dim. / attention heads 192 /4
+
+Structure encoder Hidden dim. / heads / blocks 256 /8/4
+
+Structure encoder Feedforward dimension 1024 
+
+Structure evidence Pooling / hidden dimension mean–max / 64 
+
+Structure head Edge scorer biaffine + contextual evidence Intervention heads MLP hidden dimension 320 
+
+Target head Straight-through top-k 3
+
+Strength head Number of bins / support 81 /[−2, 2] 
+
+SCM decoder Hidden dim. / layers 64 /2
+
+SCM decoder Activation / log-variance range tanh /[−6, 3] 
+
+Parameters Total parameter count 14 .98 M
+
+Table 7: Training settings and checkpoint-selection procedure. 
+
+Category Setting Value Reproducibility Random seed 17 
+
+Synthetic protocol Dose levels 4
+
+Synthetic batch Batch size 8
+
+Synthetic batch Context / query regimes 20 /4
+
+Optimizer Optimizer AdamW Optimizer Learning rate / weight decay 3 × 10 −4/10 −4
+
+Optimizer Gradient clipping 1.0
+
+Loss weights Graph / target / strength 1/2/2
+
+Context supervision Target / strength weights 1/1
+
+Target loss Positive weight / focal exponent 10 /1
+
+Strength loss Non-target penalty 0.05 
+
+Graph loss Density regularizer 1.0
+
+Acyclicity Initial / maximum penalty 1/100 
+
+Curriculum Structure pretraining 2500 steps Curriculum Graph-GT joint training 500 steps Continuation Soft-graph training 500 steps Training run Total executed steps 3500 
+
+Model selection Selected checkpoint step 3100 
+
+During structure pretraining, only the structure encoder and structure head are optimized. The subsequent graph-GT stage jointly optimizes the complete model while using the ground-truth synthetic graph for decoder rollout. The run was continued for 500 soft-graph steps to compare later checkpoints, and development-set selection chose step 3100 . All reported downstream results use this checkpoint without parameter updates. 
+
+Compute resources. The selected model was trained on a single NVIDIA RTX 4090 GPU with 
+
+24 GB of memory. The complete 3500 -step checkpoint-selection run took approximately 1.44 GPU-hours with batch size 8. The selected step-3100 checkpoint contains 14 .98 M parameters and is shared across all reported evaluation tasks. 
+
+## C Details on In-Prior Evaluation 
+
+Graph recovery. Graph AUROC and AUPRC are computed from the predicted probabilities of all non-diagonal directed edges. For projected F1, we retain the highest-scoring edges up to the ground-truth edge count, skipping edges that would create a directed cycle, and compare the resulting DAG with the ground-truth graph. 15 Target recovery. Target AUROC and AUPRC are computed from the node-wise target probabilities. The reported target F1 thresholds these probabilities at 0.5; it does not use the straight-through top-k
+
+gate employed during SCM rollout. 
+
+Strength recovery. Strength calibration is measured on ground-truth target nodes using 
+
+Rψ =
+
+EIj,v =1 
+
+h
+
+| ˆψj,v |
+
+i
+
+EIj,v =1 [|ψj,v |] .
+
+A value near 1 indicates that the predicted intervention strengths recover the correct overall scale. 
+
+Response recovery. Delta cosine is the cosine similarity between the predicted and true mean response shifts relative to control, after centering both shifts across genes. Observation NLL is the average negative log-likelihood of the query responses under the predicted zero-inflated log-normal distribution. 
+
+## D Details on Effect Prediction 
+
+This section provides additional details on the real-data effect-prediction benchmark, including the dataset preprocessing, highest-dosage holdout protocol, evaluation metrics, and baseline implementa-tions. 
+
+D.1 Dataset 
+
+We evaluate on the Sci-Plex single-cell drug perturbation dataset of Srivatsan et al. [20] , following the preprocessed epigenetic-regulation benchmark used by Schneider et al. [4] . The benchmark contains three cell lines, A549, K562, and MCF7, and four small-molecule perturbations, belinostat, dacinostat, givinostat, and quisinostat 2HCl, giving 3 × 4 = 12 held-out protocols. Each protocol is defined by one cell line–drug pair. We use the same preprocessing convention as the GIM benchmark. Cells are normalized to the median count of control cells, filtered, log-transformed, and restricted to a protocol-specific set of 
+
+50 marker genes selected using only the training conditions. Perturbation descriptors encode drug identity and dose information. Control cells are included as the observational regime. 
+
+D.2 Highest-Dosage Holdout Protocol 
+
+For each cell line–drug protocol, the highest dose of the held-out drug is removed from the context and used as the query condition. The context set contains control cells, lower doses of the held-out drug, and all available doses of the remaining drugs in the same cell line. The model must predict the distribution of expression vectors under the held-out highest dose. This protocol tests dose extrapolation under unknown perturbation targets. The held-out drug is not completely unseen, since lower-dose responses are available, but the target and mechanism at the highest dose are not provided to the model. All methods are evaluated on the same held-out cells and with the same metric implementation. 
+
+D.3 Metrics 
+
+Let Xctrl , Xint , and ˆXint denote control cells, true held-out perturbed cells, and predicted perturbed cells, respectively. We evaluate three complementary metrics. 
+
+Mean distance. We measure mean-response error using 
+
+MD = E[ ˆXint ] − E[Xint ] 2
+
+,
+
+where lower values indicate more accurate prediction of the average response. 16 Pearson correlation. We compute 
+
+r = corr 
+
+
+
+E[ ˆXint ], E[Xint ]
+
+
+
+,
+
+which measures gene-wise agreement between the predicted and true mean-response patterns. Higher values are better. 
+
+Wasserstein distance. We approximate the 2-Wasserstein distance using the square root of a debiased entropic Sinkhorn transport cost with squared-Euclidean ground cost: 
+
+cW2(X, Y ) = 
+
+
+
+Cϵ(X, Y ) − 12 Cϵ(X, X ) − 12 Cϵ(Y, Y )
+
+1/2+
+
+,
+
+where Cϵ is the transport cost under the entropically regularized Sinkhorn coupling. We use ϵ = 0 .1,at most 200 iterations, and tolerance 10 −6. Predicted and true distributions are evaluated using equally sized, deterministically sampled cell sets. Lower values are better. 
+
+Normalized multi-metric score. For Table 2, each metric is oriented so that higher is better and min–max normalized within each protocol: 
+
+sm,t,k = zm,t,k − zmin 
+
+> t,k
+
+zmax  
+
+> t,k
+
+− zmin 
+
+> t,k
+
+,
+
+where z = −MD , z = r, or z = −cW2. We first average each normalized metric across the 12 
+
+protocols and then average the three metric scores to obtain the overall score and rank. These normalized scores depend on the included comparison set. 
+
+D.4 Baselines 
+
+We compare against structured causal, distributional, supervised, and heuristic baselines. All baselines are evaluated on the same held-out protocols, and all reported metrics are recomputed using the same metric code as PerturbPFN whenever prediction arrays are available. 
+
+GIM. GIM [ 4 ] is the closest structured causal baseline. We use the authors’ implementation and Sci-Plex preprocessing. GIM is fit separately for each held-out protocol by instance-specific optimization. We use the Sci-Plex configuration from the GIM codebase: a nonlinear zero-inflated log-normal inference model, unknown intervention targets, Adam optimization with step size 10 −3,graph prior and intervention sparsity penalties, and augmented-Lagrangian acyclicity optimization. The main GIM runs use 100 ,000 optimization steps following the original setting. 
+
+CondOT. CondOT [ 31 ] is a conditional optimal-transport baseline that learns a perturbation-conditioned map from control cells to treated-cell distributions. We use the PICNN-based implemen-tation from the GIM benchmark, with perturbation descriptors encoding drug identity and dose. The two transport potentials each contain four hidden layers with 128 units and are optimized for 100 ,000 
+
+alternating steps using Adam with learning rate 10 −4 and coefficients (β1, β 2) = (0 .5, 0.9) . Con-dOT is fitted separately for each held-out protocol using only the corresponding training conditions. Predictions are generated by transporting sampled control cells under the descriptor of the held-out highest-dose condition. 
+
+MLP. The MLP baseline follows the shift-regression baseline from the GIM codebase. It learns a mapping from perturbation descriptors to mean expression shifts relative to the control distribution. At prediction time, the estimated shift for the held-out descriptor is added to sampled control cells to form predicted perturbed cells. We use a two-layer MLP regressor with hidden size 100 , learning rate 
+
+10 −3, and maximum 20 ,000 iterations. 
+
+RF X-Learner. RF X-Learner is a supervised treatment-effect baseline based on the X-learner meta-learning strategy [ 41 ]. The model first fits a global response model μ(γ), then constructs imputed treatment effects for treated and control samples and fits two effect models τ1(γ) and 
+
+τ0(γ). At prediction time, the final effect is a global constant-weight mixture of τ0 and τ1, added 17 Table 8: PerturbPFN inference settings for GeneRNIB 300BCG.            
+
+> Setting Value Input expression layer Log-normalized Input profiles 380
+> Maximum nodes per panel 60
+> High-variance TF seeds 100
+> Candidate target genes 1,500
+> TF / target genes per panel 20 /40
+> Number of panels 190
+> Episodes per panel 32
+> Context / query profiles 64 /16
+> Maximum output links 50 ,000
+
+to sampled control cells to generate the predicted perturbed distribution. The backbone is a multi-output RandomForestRegressor with 100 trees, no maximum depth, full training data, and no downsampling; targets are z-scored during fitting and transformed back to the original expression scale for evaluation. 
+
+Naive and Observational. The Naive baseline predicts the held-out highest-dose response using the nearest observed lower dose of the same drug in the same cell line. The Observational baseline ignores the perturbation and predicts the control distribution. These training-free methods serve as simple reference baselines for dose extrapolation and perturbation-response prediction. 
+
+## E Details on Regulatory Structure Discovery 
+
+E.1 GeneRNIB 300BCG Protocol 
+
+We evaluate regulatory-structure transfer using the official GeneRNIB 300BCG benchmark [ 21 ]. PerturbPFN receives only the benchmark inference matrix, which contains 380 log-normalized expression profiles. The held-out evaluation data and biological reference networks are not provided to the model. Numerical metadata are standardized, categorical metadata are encoded into the model’s 
+
+11 -dimensional regime descriptor, and episode sampling is balanced across the available cell-type labels. The same pretrained checkpoint used in the other experiments is applied without gradient updates. Because PerturbPFN predicts an episode-level graph, we construct stochastic episodes from the inference profiles and average its directed edge probabilities across episodes. GeneRNIB requires a weighted TF–gene network with at most 50 ,000 directed links. 
+
+E.2 Panel Construction and Network Aggregation 
+
+PerturbPFN supports at most 60 nodes per forward pass, whereas the GeneRNIB expression matrix contains substantially more genes. We therefore apply the model to overlapping TF–target panels and aggregate their edge scores. Candidate regulators are restricted to the official GeneRNIB TF list. We select the 100 overlapping TFs with the highest expression variance as panel seeds and select 1,500 
+
+candidate target genes, prioritizing genes marked as highly variable and then ranking by expression variance. The TF seeds are divided into groups of 20 , and the target genes into groups of 40 . Each pair of TF and target groups forms a panel containing at most 60 genes, resulting in 190 panels. TFs that also occur in a target group remain eligible as regulators. Table 8 summarizes the inference settings. For each panel, we sample 32 episodes, each containing 64 context and 16 query profiles. The graph head is episode-level and is inferred from the context data; its edge probabilities are averaged across episodes. For every ordered TF–gene pair u → v, u̸ = v, the resulting score is 
+
+suv = 132 
+
+> 32
+
+X
+
+> e=1
+
+P (e) 
+
+> uv
+
+.
+
+18 When an edge occurs in multiple overlapping panels, we retain its maximum score. All aggregated edges are then sorted by score, and the highest-scoring 50 ,000 links are exported in the official GeneRNIB format. Although PerturbPFN projects its graph to a DAG for SCM rollout, the GeneRNIB submission uses the continuous, unthresholded edge probabilities rather than the projected adjacency. This preserves the edge ranking required by GeneRNIB and does not impose acyclicity on the exported GRN, which may contain regulatory cycles. 
+
+E.3 Official Evaluation and Baselines 
+
+We evaluate the exported network using the official GeneRNIB all_metrics pipeline with ridge regression for the regression-based metrics. The scorer uses the held-out 300BCG expression data, the benchmark regulator consensus, and TF-binding references from UniBind, ChIP-Atlas, and ReMap. None of these evaluation resources are accessed during PerturbPFN inference. Gene-set F1 (GS-F1) measures agreement between pathways enriched among predicted TF targets and pathways supported by the held-out expression data. TF-binding F1 (TFB-F1) evaluates agreement with the external TF-binding references. Regression precision and recall (R-Precision and R-Recall) assess whether regulators selected from the inferred network predict held-out target-gene expression under conservative and broader regulator budgets. The virtual-cell score (VC) evaluates perturbation prediction using a model constrained by the inferred network. The official pipeline additionally reports replicate consistency, which is omitted from the main table for space. Higher values are better for all metrics. We compare against Pearson correlation, partial Pearson correlation (PPCOR), GRNBoost2, PORTIA, and SCENIC. Baseline results are taken from the official GeneRNIB score archive for the same 300BCG dataset and 50 ,000 -link budget. Thus, every method is compared using the same held-out evaluation data, reference resources, and metric implementations. 19
