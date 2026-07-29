@@ -6,29 +6,30 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-28
-- 运行时间：2026-07-28 21:36:24 UTC
+- 最新运行日期：2026-07-29
+- 运行时间：2026-07-29 21:30:54 UTC
 - 运行状态：成功
-- 本次总论文数：3
-- 精读区：2
+- 本次总论文数：2
+- 精读区：1
 - 速读区：1
 
 ### 今日简报（AI）
-今日精读两篇高分论文，覆盖药物扰动建模与因果发现前沿。PerturbPFN（10分）探明合成先验在药物扰动建模中的极限，Amortized Bayesian（9分）实现扩展因子图的高效因果推断。建议优先精读PerturbPFN，其方法对药物研发有直接启发。
-- 详情：[/202607/28/README](/202607/28/README)
+今日精读一篇零样本药物表示学习论文（9.0分），速读一篇黑色素瘤表观遗传易感性研究。
+
+最值得关注：多模态零样本药物表示学习从细胞响应跨越至药理域，以及Set1C/COMPASS作为黑色素瘤表观遗传脆弱性靶点。
+
+建议关注多模态AI在药物发现的应用，及表观遗传靶点在黑色素瘤治疗中的转化潜力。
+- 详情：[/202607/29/README](/202607/29/README)
 
 ### 精读区论文标签
-1. [PerturbPFN: Probing the Limits of Synthetic Priors in Drug Perturbation Modelling](/202607/28/2607.23447v1-perturbpfn-probing-the-limits-of-synthetic-priors-in-drug-perturbation-modelling)  
-   标签：评分：10.0/10、query:virtual-cell
-   evidence：直接针对药物扰动响应预测
-2. [Amortized Bayesian Causal Discovery of Extended Factor Graphs](/202607/28/2607.22934v1-amortized-bayesian-causal-discovery-of-extended-factor-graphs)  
+1. [From Cellular Responses to Pharmacological Domains: Multimodal Zero-Shot Drug Representation Learning](/202607/29/2607.25322v1-from-cellular-responses-to-pharmacological-domains-multimodal-zero-shot-drug-representation-learning)  
    标签：评分：9.0/10、query:virtual-cell
-   evidence：直接针对扰动数据中的因果基因网络发现，是扰动响应预测的核心
+   evidence：利用细胞响应进行零样本药物性质预测，直接针对扰动响应预测
 
 ### 速读区论文标签
-1. [From Hodgkin-Huxley to Pretrained Neural Inference AI](/202607/28/biorxiv-10-64898-2026-07-13-738120-v1-from-hodgkin-huxley-to-pretrained-neural-inference-ai)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：利用生物物理模拟预训练神经网络进行神经元活动推断，方法论上与虚拟细胞模型的扰动模拟类似
+1. [Systematic multivariate analysis of chromatin complex dependencies reveals Set1C/COMPASS as a melanoma-enriched epigenetic vulnerability](/202607/29/biorxiv-10-64898-2026-02-13-705694-v2-systematic-multivariate-analysis-of-chromatin-complex-dependencies-reveals-set1ccompass-as-a-melanoma-enriched-epigenetic-vulnerability)  
+   标签：评分：7.0/10、query:virtual-cell
+   evidence：整合大规模遗传扰动筛选的依赖性图谱以识别表观遗传脆弱性
 
 
 <div class="dpr-home-promo-card">
