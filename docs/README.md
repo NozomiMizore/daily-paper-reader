@@ -6,30 +6,27 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-29
-- 运行时间：2026-07-29 21:30:54 UTC
+- 最新运行日期：2026-07-30
+- 运行时间：2026-07-30 21:51:27 UTC
 - 运行状态：成功
 - 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-今日精读一篇零样本药物表示学习论文（9.0分），速读一篇黑色素瘤表观遗传易感性研究。
-
-最值得关注：多模态零样本药物表示学习从细胞响应跨越至药理域，以及Set1C/COMPASS作为黑色素瘤表观遗传脆弱性靶点。
-
-建议关注多模态AI在药物发现的应用，及表观遗传靶点在黑色素瘤治疗中的转化潜力。
-- 详情：[/202607/29/README](/202607/29/README)
+今天解读了两篇7分速读论文，分别聚焦生物系统不确定性量化与肝靶向mRNA递送技术。肝细胞靶向递送平台结合CRISPR模型可高效评估纳米颗粒功效，不确定性量化框架则优化动态系统校准。建议普通读者关注脂质纳米颗粒在基因编辑中的递送创新，或有助于肝脏疾病治疗突破。
+- 详情：[/202607/30/README](/202607/30/README)
 
 ### 精读区论文标签
-1. [From Cellular Responses to Pharmacological Domains: Multimodal Zero-Shot Drug Representation Learning](/202607/29/2607.25322v1-from-cellular-responses-to-pharmacological-domains-multimodal-zero-shot-drug-representation-learning)  
-   标签：评分：9.0/10、query:virtual-cell
-   evidence：利用细胞响应进行零样本药物性质预测，直接针对扰动响应预测
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Systematic multivariate analysis of chromatin complex dependencies reveals Set1C/COMPASS as a melanoma-enriched epigenetic vulnerability](/202607/29/biorxiv-10-64898-2026-02-13-705694-v2-systematic-multivariate-analysis-of-chromatin-complex-dependencies-reveals-set1ccompass-as-a-melanoma-enriched-epigenetic-vulnerability)  
+1. [A Hybrid Framework for Uncertainty Quantification in Partially Observed Dynamic Biological Systems](/202607/30/2607.20044v1-a-hybrid-framework-for-uncertainty-quantification-in-partially-observed-dynamic-biological-systems)  
    标签：评分：7.0/10、query:virtual-cell
-   evidence：整合大规模遗传扰动筛选的依赖性图谱以识别表观遗传脆弱性
+   evidence：面向部分观测动态生物系统的不确定性量化框架，支持扰动建模
+2. [A TLS11a-decorated ionizable lipid nanoparticle platform and a multilevel-validated CRISPR LDLR-knockout HepG2 model for hepatocyte-preferential mRNA delivery](/202607/30/biorxiv-10-64898-2026-07-21-739738-v1-a-tls11a-decorated-ionizable-lipid-nanoparticle-platform-and-a-multilevel-validated-crispr-ldlr-knockout-hepg2-model-for-hepatocyte-preferential-mrna-delivery)  
+   标签：评分：7.0/10、query:virtual-cell
+   evidence：CRISPR敲除扰动模型用于mRNA递送
 
 
 <div class="dpr-home-promo-card">

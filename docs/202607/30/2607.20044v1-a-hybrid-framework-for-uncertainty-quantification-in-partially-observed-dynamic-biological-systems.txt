@@ -1,0 +1,1441 @@
+Title: A Hybrid Framework for Uncertainty Quantification in Partially Observed Dynamic Biological Systems
+
+URL Source: https://arxiv.org/pdf/2607.20044v1
+
+Published Time: Thu, 23 Jul 2026 00:47:02 GMT
+
+Number of Pages: 36
+
+Markdown Content:
+# A Hybrid Framework for Uncertainty Quantification in Partially Observed Dynamic Biological Systems 
+
+Alberto Portela 1 and Julio R. Banga 1* 
+
+1* Computational Biology Lab, MBG-CSIC (Spanish National Research Council), Pontevedra, Spain. *Corresponding author(s). E-mail(s): j.r.banga@csic.es; 
+
+Abstract Background. Mechanistic ordinary differential equation (ODE) models are widely used in systems biology, but uncertainty quantification (UQ) remains dif-ficult when only a subset of state variables is experimentally observed. Existing Bayesian and likelihood-based approaches can be computationally demanding for nonlinear, weakly identifiable, or high-dimensional systems. 
+
+Results. We present a framework, and its corresponding software CUQDyn1 Plus ,for UQ in partially observed ODE systems. Our method combines leave-one-out jackknife +-style empirical calibration for observed states with sensitivity-based Gaussian uncertainty propagation for hidden states. The software supports global parameter estimation, covariance propagation, bootstrap trajectory uncertainty and simulation-based calibration. It also facilitates comparison with Bayesian workflows, automated reporting, and reproducibility diagnostics. Validation on six benchmark systems shows accurate behavior in well-conditioned cases and model-dependent degradation under nonlinearity, weak identifiability, or global branch-switching non-identifiability. 
+
+Conclusions. CUQDyn1 Plus provides a practical and computationally efficient UQ workflow for systems biology models with observed and latent states. Its diagnostic outputs help identify when local Gaussian propagation is reliable and when uncertainty bands should be interpreted cautiously, making it a useful complement to fully Bayesian workflows. 
+
+Keywords: uncertainty quantification, conformal prediction, ordinary differential equations, systems biology, partially observed systems, MATLAB toolbox 
+
+1arXiv:2607.20044v1 [q-bio.QM] 22 Jul 2026 1 Introduction 
+
+Mechanistic dynamic models formulated as systems of ordinary differential equations are central tools in systems biology, biotechnology, and biomedical engineering. These models provide quantitative descriptions of nonlinear biological processes and enable predictive analysis, hypothesis generation, model-based experimental design, and treatment optimization [1–5]. Despite their utility, uncertainty quantification (UQ) remains one of the major unresolved challenges in the practical use of mechanistic models [6–10]. Biological systems are typically only partially observed: measurements are noisy and sparse, model parameters are often poorly identifiable, and many biologically important state variables cannot be measured directly. Uncertainty in parameter esti-mates therefore propagates into model predictions for both observed and latent states, and reliable characterization of this uncertainty is required before model predictions can be used for decision-making [4, 11–14]. A wide range of approaches has been proposed for UQ in dynamic systems. Bayesian Markov Chain Monte Carlo (MCMC) methods naturally provide full pos-terior uncertainty distributions, but can become computationally prohibitive for high-dimensional nonlinear systems and may suffer from convergence failures in the presence of non-identifiability or multimodal likelihood surfaces [15–17]. Profile like-lihood methods provide strong inferential foundations but can scale poorly when trajectory-level uncertainty must be computed repeatedly across many prediction points [8, 18]. Fisher Information Matrix (FIM)-based local approximations offer computational efficiency but rely on quadratic likelihood approximations that may be unreliable for nonlinear or poorly identifiable models [8]. Ensemble methods can improve scalability at the cost of weaker theoretical justification [19]. In a recent study, we introduced conformal prediction algorithms for uncertainty quantification in fully observed dynamical systems [20]. Those methods leveraged leave-one-out (LOO) conformal prediction to provide finite-sample predictive guaran-tees for observed state trajectories without requiring strong parametric assumptions. Across several benchmark systems of increasing complexity the conformal algorithms proved substantially faster than Bayesian MCMC approaches while achieving compa-rable or better calibration. For large-scale systems where Bayesian tools encountered convergence failures, the conformal methods produced valid prediction regions within minutes on a standard workstation. However, the original conformal framework was restricted to observed variables. In many practical systems biology applications, only a subset of the model states are experimentally measurable. Hidden states may nonetheless be biologically important quantities: the predator population in an ecosystem, latent infection compartments in an epidemiological model, unmeasured nuclear signaling species, or unobservable intermediate metabolites. Extending conformal prediction directly to hidden states is fundamentally limited because no direct calibration residuals are available for variables that are never observed. To address this limitation, in this study we develop a hybrid conformal–Gaussian framework for partially observed ODE systems and introduce the MATLAB tool-box CUQDyn1 Plus . The key organizing principle is to treat observed and unobserved 2states asymmetrically, because they admit fundamentally different statistical treat-ments. For observed states, the toolbox uses a leave-one-out jackknife+-style empirical calibration based on held-out residuals [20, 21]. We describe this as conformal-style calibration because it follows the jackknife+ construction, while noting that exact finite-sample guarantees depend on exchangeability and order-statistic details. For unobserved states, no direct calibration is possible, and uncertainty must be propa-gated analytically through the ODE system using parameter covariance estimates and trajectory sensitivity matrices. The toolbox further supports automated problem definition, synthetic data gen-eration, LOO diagnostics, covariance condition number assessment, and near-bound parameter diagnostics. We also provide Bayesian comparison workflows through a com-panion PyMC [22] implementation using approximate Bayesian computation sequential Monte Carlo (ABC-SMC). PyMC provides a modern probabilistic programming frame-work in Python [22–24]. Our workflow further extends its usability by offering seamless integration with CUQDyn1 Plus , facilitating comparative analyses and model evaluation across both environments. The main contributions of this work are: 1. A hybrid conformal–Gaussian framework for UQ in partially observed ODE systems, combining jackknife+-style empirical conformal bands for observed states with delta-method Gaussian propagation for latent states. 2. A hybrid covariance strategy (HybridCov ) that pairs FIM marginal variance scales with empirical leave-one-out parameter correlations, providing an alternative latent-state covariance construction whose benefit is assessed empirically against FIM-only and naive LOO-only covariance approaches. 3. The CUQDyn1 Plus MATLAB toolbox , implementing all three UQ work-flows with global parameter estimation, parallelized LOO ensemble construction, complex-step sensitivity analysis, automated diagnostics, and standardized output reporting. 4. Simulation-based calibration experiments across benchmark systems that pro-vide direct empirical evidence on coverage properties and reveal system-dependent limitations of the local Gaussian approximation. 5. A systematic comparison with Bayesian inference via a companion PyMC 
+
+ABC-SMC implementation, demonstrating conditions under which each approach is preferable. The remainder of this manuscript is organized as follows. Section 2 introduces the mathematical framework and uncertainty quantification methodology. Section 3 presents representative benchmark examples. Section 4 compares our results with Bayesian inference. Section 5 discusses the strengths, limitations, and future direc-tions of the proposed framework. Additional file 1 provides supplementary run settings, generated result tables, SBC summaries, identifiability diagnostics, software implementation details, and CUQDyn1 Plus–PyMC comparison results. 32 Methods 
+
+2.1 Modeling framework and notation 
+
+We consider deterministic nonlinear ODE systems of the form ˙x(t) = f (x(t), θ, t ), (1) 
+
+x(t0) = x0, (2) 
+
+y(t) = g(x(t), θ, t ), (3) where x(t) ∈ Rnx denotes the vector of state variables, y(t) ∈ Rnout denotes the vector of model outputs, and θ ∈ Rnθ denotes the vector of unknown parameters. The vector field f : Rnx ×Rnθ ×R → Rnx and the observation mapping g : Rnx ×Rnθ ×R → Rnout 
+
+are generally nonlinear. For the benchmark examples, g is usually the identity or a state-selection map, but the toolbox stores explicit observed-state indices so that the number of model states, model outputs, and measured outputs need not be confused. A key feature of the setting considered here is that only a subset of the nx states is experimentally observed after the initial condition. Let O ⊂ { 1, . . . , n x} denote the directly observed state-index set, with cardinality nobs = |O| , and let H denote its complement. We write xO(t) for directly observed states and xH(t) for latent states. States in H are not directly measured after the initial time. The initial condition provides values for all states at t0.Observed measurements are modeled through an observation map gk(x(t), θ, t )with additive measurement noise, ˜yk,i = gk(x(ti, θ ), θ, t i) + ϵk,i , i = 1 , . . . , m ; k = 1 , . . . , n obs , (4) where ϵk,i denotes additive zero-mean measurement noise for the k-th observed out-put. In the benchmark systems considered here, the observation map corresponds to direct noisy measurements of selected state variables, so gk(x(t), θ, t ) = xok (t, θ ) for 
+
+ok ∈ O . For parameter estimation, we assume a Gaussian noise model ϵk,i ∼ N (0 , σ 2
+
+> k
+
+), where σk is the standard deviation for that observed output. The toolbox supports known measurement variances provided by the user, variances estimated from resid-uals, and state- or output-specific weighting for situations where observed quantities have substantially different physical scales or measurement accuracies. 
+
+2.2 Global parameter estimation 
+
+Parameter estimation is formulated as a weighted nonlinear least-squares optimization problem: ˆθ = arg min 
+
+> θ∈Θ
+> nobs
+
+X
+
+> k=1
+> m
+
+X
+
+> i=1
+
+ ˜yk,i − xok (ti, θ )
+
+σk
+
+2
+
+, (5) where Θ = [ θmin , θ max ] denotes the parameter feasible set defined by lower and upper bounds. The optimization is carried out using a global optimizer, enhanced scatter search (eSS), part of the MEIGO toolbox [25]. The eSS strategy combines stochastic 4global search with deterministic local improvement and has demonstrated robust per-formance on challenging nonlinear parameter estimation problems in systems biology [26]. Three residual weighting models are supported: unweighted residuals, known mea-surement standard deviations, and user-specified state weights. The residual model affects both the optimization objective and the subsequent FIM covariance estimation, and should be chosen consistently to reflect the assumed measurement error structure. The full-data parameter estimate ˆθ and the corresponding fitted trajectory ˆ x(t) = 
+
+x(t, ˆθ) form the starting point for all downstream uncertainty quantification steps (Algorithm 1). 
+
+Algorithm 1 Full-data parameter estimation 
+
+Require: times {ti}mi=0 , observations ˜ yk,i , initial state x0, bounds Θ, initial guess θ0,residual model 
+
+Ensure: full-data estimate ˆθ and fitted trajectory ˆ x(ti) 
+
+> 1:
+
+Define weighted residuals 
+
+Rk,i (θ) = 
+
+
+
+˜yk,i − xok (ti, θ ), none ,
+
+(˜ yk,i − xok (ti, θ )) /σ k, known sigma ,wk(˜ yk,i − xok (ti, θ )) , state weights . 
+
+> 2:
+
+Solve ˆθ = arg min 
+
+> θ∈Θ
+> m
+
+X
+
+> i=1
+> nobs
+
+X
+
+> k=1
+
+Rk,i (θ)2
+
+using MEIGO/eSS.  
+
+> 3:
+
+Integrate ˙ x = f (x, ˆθ, t ) from x0 to obtain ˆ x(ti).  
+
+> 4:
+
+return ˆθ, ˆ x(ti). 
+
+2.3 Leave-one-out ensemble 
+
+The conformal and hybrid uncertainty quantification methods are built on a leave-one-out (LOO) ensemble of model refits. Let {t1, . . . , t m} denote the m observed time points for the dataset (excluding the initial condition at t0). For each index 
+
+i ∈ { 1, . . . , m }, the model is refitted to all observations except the i-th time point: ˆθ(−i) = arg min 
+
+> θ∈Θ
+> nobs
+
+X
+
+> k=1
+
+X 
+
+> j̸=i
+
+ ˜yk,j − xok (tj , θ )
+
+σk
+
+2
+
+. (6) 5This produces m LOO parameter vectors {ˆθ(−i)}mi=1 , m corresponding ODE trajectory solutions {ˆx(t, ˆθ(−i))}mi=1 , and m held-out absolute prediction residuals: 
+
+rk,i = ˜yk,i − xok (ti, ˆθ(−i)) , k = 1 , . . . , n obs . (7) The LOO ensemble {ˆθ(−i)} and the held-out residuals {rk,i } are the two central objects used by the conformal calibration and hybrid covariance construction described in the following sections (Algorithm 2). LOO refits are parallelized over time points using MATLAB parfor loops, sub-stantially reducing wall-clock time on multi-core workstations. Each LOO refit can be performed with either global eSS optimization, which is the default and is robust but expensive, or a guarded local–after–global strategy that initializes from ˆθ and falls back to global search if the local fit is unsatisfactory. The local-after-global strategy is substantially faster and is used by selected fast-SBC workflows, with diagnostic checks stored to detect local failures. The bootstrap routine performs repeated MEIGO refits by default unless a custom fit handle is supplied. 
+
+Algorithm 2 Leave-one-out refit ensemble 
+
+Require: full dataset, full-data estimate ˆθ, bounds Θ, initial state x0
+
+Ensure: LOO parameters {ˆθ(−i)}mi=1 , LOO trajectories, held-out residuals  
+
+> 1:
+
+for i = 1 , . . . , m do  
+
+> 2:
+
+Remove post-initial observation time ti from the fitting data.  
+
+> 3:
+
+Refit the model: ˆθ(−i) = arg min 
+
+> θ∈Θ
+
+X 
+
+> j̸=inobs
+
+X
+
+> k=1
+
+Rk,j (θ)2. 
+
+> 4:
+
+Integrate ˙ x = f (x, ˆθ(−i), t ) at all times.  
+
+> 5:
+
+Store held-out residuals 
+
+rk,i = ˜yk,i − xok (ti, ˆθ(−i)) . 
+
+> 6:
+
+end for  
+
+> 7:
+
+return {ˆθ(−i)}, LOO trajectories, {rk,i }.
+
+2.4 Observed-state conformal prediction 
+
+For states that are directly observed, the toolbox computes prediction intervals using the LOO conformal framework introduced in Portela et al. [20], adapted to the par-tially observed setting. The approach is a variant of the jackknife+ method of Barber et al. [21]. For observed-state column k with state index ok ∈ O and time point i, let Ek,i =(xok (ti, ˆθ(−1) ), . . . , x ok (ti, ˆθ(−m))) denote the vector of LOO ensemble predictions at that state and time, and let rk = ( rk, 1, . . . , r k,m ) denote the corresponding vector of 6held-out absolute residuals across all time points for observed-state column k. The lower and upper conformal prediction bands are computed as 
+
+Lk,i = Qα(Ek,i − rk), (8) 
+
+Uk,i = Q1−α(Ek,i + rk), (9) where Qα(·) denotes the empirical α-quantile of the argument vector, and α ∈ (0 , 0.5) controls the nominal coverage level 1 − 2α. With α = 0 .025 the nominal two-sided coverage is 95%. The construction follows the jackknife+ principle: the prediction interval at each time point is formed by perturbing the LOO ensemble predictions by the LOO resid-uals and taking empirical quantiles. The current MATLAB implementation uses the empirical quantile operator, so the bands should be interpreted as jackknife+-style conformal empirical intervals. Exact finite-sample jackknife+ guarantees require the exchangeability assumptions of Barber et al. [21] and an order-statistic calibration rule rather than interpolated quantiles. Under those assumptions, the target marginal guarantee for a new exchangeable observation is (Algorithm 3): 
+
+P(˜ yk,n +1 ∈ [Lk,n +1 , U k,n +1 ]) ≥ 1 − 2α, (10) where the probability is over the joint distribution of training and test data [21]. The robustness property is therefore best described as conformal-style, distribution-light calibration rather than an unconditional guarantee for arbitrary ODE time series. It does not require Gaussian residuals or a correctly specified noise model, but it does require an exchangeability approximation; empirical coverage should be checked with diagnostics or SBC experiments. 7Algorithm 3 Observed-state jackknife+ conformal bands 
+
+Require: LOO trajectories, held-out residuals rk,i , tail probability α
+
+Ensure: conformal lower and upper bands Lk,i and Uk,i for observed states  
+
+> 1:
+
+for each observed-state column k = 1 , . . . , n obs , with state index ok do  
+
+> 2:
+
+Form residual vector rk = ( rk, 1, . . . , r k,m ).  
+
+> 3:
+
+for each post-initial time ti do  
+
+> 4:
+
+Form LOO prediction vector 
+
+Ek,i =
+
+
+
+xok (ti, ˆθ(−1) ), . . . , x ok (ti, ˆθ(−m))
+
+
+
+. 
+
+> 5:
+
+Compute 
+
+Lk,i = Qα(Ek,i − rk), Uk,i = Q1−α(Ek,i + rk). 
+
+> 6:
+
+end for  
+
+> 7:
+
+end for  
+
+> 8:
+
+Set the initial-time band equal to the known initial condition.  
+
+> 9:
+
+return Lk,i , Uk,i .
+
+2.5 FIM-based latent-state uncertainty propagation 
+
+For state variables that are never directly observed, no calibration residuals are available, and the conformal construction of Section 2.4 cannot be directly applied. Uncertainty for these latent states must instead be propagated analytically from the estimated parameter uncertainty to the ODE trajectory. The parameter covariance is estimated through the Gauss-Newton approximation to the Fisher Information Matrix [8, 27]. In the current toolbox this computation is performed by a shared helper which uses log-parameter coordinates by default. Let 
+
+ϕ = log θ and let Jϕ be the Jacobian of the weighted residual vector with respect to ϕ,evaluated at ˆϕ = log ˆθ. The log-space covariance is regularized in a scale-relative way, Cov ϕ = ˆ σ2  JTϕ Jϕ + λrel max( μmax , 1) I−1 , μmax = λmax (JTϕ Jϕ), (11) where λrel can be controlled by the user; the max( μmax , 1) factor matches the scale-relative ridge used in the implementation. The covariance returned to the rest of the toolbox is transformed back to natural parameter coordinates, Cov θ = diag( ˆθ) Cov ϕ diag( ˆθ). (12) The helper also computes an SVD of Jϕ to estimate numerical rank and condition number, identifies hard rank-deficient directions under the configured tolerance, and records the fraction of each state sensitivity lying in those weak directions. All entries of the residual Jacobian are computed using complex-step differentiation [28], which 8provides near-machine-precision derivative estimates and avoids the step-size sensitiv-ity and cancellation errors associated with real-valued finite differences. When known measurement standard deviations are supplied, the residual variance scale is set to one; otherwise it is estimated from the fitted residuals using the post-initial observation rows. Trajectory prediction uncertainty is propagated from parameter space to state space using the delta method (first-order linearization): Var( xk(t)) ≈ Sk(t) Cov θ Sk(t)T , (13) where 
+
+Sk(t) = ∂x k(t, θ )
+
+∂θ θ=ˆθ
+
+∈ R1×nθ (14) is the trajectory sensitivity vector for state k at time t, computed by complex-step ODE solves. The prediction interval for an unobserved state is then ˆxk(t) ± z1−α
+
+pVar( xk(t)) , (15) where z1−α is the (1 − α) quantile of the standard normal distribution. Note that 
+
+z1−α is the standard-normal quantile, with α again interpreted as the one-sided tail probability. The complete procedure is given in Algorithm 4. The FIM delta-method approach is fast and interpretable but relies on local linear-ity of the ODE trajectories with respect to parameters near ˆθ, approximate Gaussianity of parameter uncertainty, and reasonably accurate covariance estimation from the Gauss-Newton approximation. These assumptions are most reliable when the model is locally identifiable, the number of parameters is not too large relative to the data, and the ODE trajectories vary smoothly with parameters. For weakly identifiable sys-tems, the numerical covariance is necessarily regularization-dependent. The current implementation therefore treats the SVD rank and weak-direction sensitivity frac-tions as first-class diagnostics rather than hiding conditioning problems inside a single covariance matrix. 9Algorithm 4 FIM delta-method bands for latent states 
+
+Require: full-data estimate ˆθ, fitted trajectory ˆ x(ti), weighted residual function R(θ), tail probability α
+
+Ensure: Gaussian delta-method bands for unobserved states  
+
+> 1:
+
+Compute the natural-parameter residual Jacobian by complex-step differentiation; the shared helper rescales it to the selected FIM parameterization, log space by default: 
+
+Jθ = ∂R (θ)
+
+∂θ θ=ˆθ
+
+, Jϕ = Jθ diag( ˆθ). 
+
+> 2:
+
+Estimate the residual variance scale ˆ σ2; set ˆ σ2 = 1 when known measurement standard deviations are supplied.  
+
+> 3:
+
+Compute the singular values of Jϕ and store rank/conditioning diagnostics. Form Cov ϕ = ˆ σ2  JTϕ Jϕ + λrel max( μmax , 1) I−1 . 
+
+> 4:
+
+Transform to natural parameter coordinates: Cov θ = diag( ˆθ)Cov ϕ diag( ˆθ).  
+
+> 5:
+
+Compute natural-parameter trajectory sensitivities by complex-step ODE solves; internally, the FIM helper rescales these sensitivities consistently when log-parameter diagnostics are used: 
+
+Sk(ti) = ∂x k(ti, θ )
+
+∂θ θ=ˆθ
+
+. 
+
+> 6:
+
+for each unobserved state k and time ti do  
+
+> 7:
+
+Compute 
+
+vk,i = Sk(ti)Cov θSk(ti)T . 
+
+> 8:
+
+Record the state-level reliability diagnostic: whether the maximum weak-direction sensitivity fraction exceeds the configured threshold.  
+
+> 9:
+
+Set 
+
+Lk,i = ˆ xk(ti) − z1−α
+
+√vk,i , Uk,i = ˆ xk(ti) + z1−α
+
+√vk,i . 
+
+> 10:
+
+end for  
+
+> 11:
+
+return Lk,i , Uk,i for unobserved states. 
+
+2.6 Hybrid covariance strategy 
+
+Although the FIM approach often provides a reasonable estimate of the marginal parameter variances, it may produce unreliable parameter correlation structures in weakly identifiable or high-dimensional systems. The correlation structure encoded in Cov FIM is derived from a quadratic approximation to the likelihood surface, which can be inaccurate when the surface is curved, ridged, or multi-modal. 10 To improve the correlation estimate while preserving the FIM’s well-calibrated marginal scales, we introduce a hybrid covariance estimator: Cov hyb = DFIM RLOO DFIM , (16) where DFIM = diag( pCov θ, 11 , . . . , pCov θ,n θ nθ ) is the diagonal matrix of FIM marginal standard deviations in natural parameter coordinates, and RLOO is the empirical parameter correlation matrix estimated from the LOO parameter ensemble: 
+
+RLOO = corr( ˆΘLOO ), ˆΘLOO = [ ˆθ(−1) , . . . , ˆθ(−m)]T ∈ Rm×nθ . (17) The implementation symmetrizes Cov hyb and numerically projects it to a positive semi-definite matrix if small negative eigenvalues arise. Intuitively, each LOO refit removes one time point from the data and refits the model, thereby inducing a small but meaningful shift in the parameter estimates. The correlation structure of these shifts reflects the effective parameter interdependencies in the ODE model as constrained by the data, providing an empirical alternative to the quadratic FIM correlation, subject to the stability and informativeness of the LOO refits. It is important to note that using the LOO covariance ˆΣLOO = Cov( ˆΘLOO ) directly as the parameter covariance matrix would severely underestimate the true estimation variance: since removing one of m time points barely shifts the parameter optimum, the spread of ˆΘLOO is smaller than the true sampling variability of ˆθ by a factor of order O(m). Simulation-based calibration experiments confirm this: the naive LOO-only covariance strategy is strongly under-dispersed. The hybrid strategy in Eq. (16) addresses this by anchoring the marginal scales to the FIM estimate while retaining the empirical correlation structure from the LOO ensemble. Its performance should be reported as model-dependent: it can improve latent-state calibration when the empirical LOO correlation is informative, but shared-fit comparisons show that it is not uniformly superior to the FIM-only variant. After assembling Cov hyb , the same delta-method propagation described in Section 2.5 is applied to obtain prediction bands for unobserved states (Algorithm 5). The observed-state conformal bands remain identical in both the FIM and HybridCov workflows. 11 Algorithm 5 HybridCov latent-state bands 
+
+Require: FIM covariance Cov FIM , LOO parameter matrix ˆΘLOO , fitted trajectory ˆx(ti), tail probability α
+
+Ensure: HybridCov delta-method bands for unobserved states  
+
+> 1:
+
+Extract FIM marginal scales from the natural-space FIM covariance Cov θ:
+
+DFIM = diag 
+
+pCov θ, 11 , . . . , pCov θ,n θ nθ
+
+
+
+. 
+
+> 2:
+
+Estimate the LOO covariance and correlation: ˆΣLOO = Cov( ˆΘLOO ), RLOO = corr( ˆΘLOO ). 
+
+> 3:
+
+Assemble Cov hyb = DFIM RLOO DFIM . 
+
+> 4:
+
+Symmetrize Cov hyb and project small negative eigenvalues to zero if necessary.  
+
+> 5:
+
+Propagate Cov hyb through the same trajectory sensitivities as in Algorithm 4.  
+
+> 6:
+
+Use observed-state conformal bands unchanged.  
+
+> 7:
+
+return full-state bands combining conformal observed-state bands and HybridCov latent-state bands. 
+
+2.7 Parametric bootstrap trajectory uncertainty 
+
+As an optional post-fit robustness check, the toolbox implements parametric boot-strap trajectory uncertainty analysis. The bootstrap workflow starts from an existing 
+
+CUQDyn1 Plus or CUQDyn1 Plus HybridCov result and proceeds in five steps (Algo-rithm 6). First, the residual noise standard deviation is estimated from the post-initial observed-state residuals of the full-data fit. Second, B synthetic observed datasets are generated by adding independent Gaussian draws, using the corresponding estimated standard deviation for each observed state, to the fitted observed-state trajectory while keeping the initial observed row fixed. Third, for each synthetic dataset b = 1 , . . . , B ,the model is refitted to obtain a bootstrap parameter estimate ˆθ(b). Fourth, the ODE is solved for each ˆθ(b) to obtain a bootstrap trajectory ensemble. Fifth, empirical lower and upper quantile bands are computed across the B bootstrap trajectories at each time point. The resulting bootstrap bands are latent ODE trajectory bands, not noisy-observation prediction intervals. They characterize uncertainty in the deterministic ODE trajectory itself induced by parameter estimation uncertainty and the assumed bootstrap noise model. As such, they should not be compared directly with the spread of noisy observations when assessing coverage. The distinction between observed-data prediction intervals and latent trajectory bands is critical for correct interpretation, and the toolbox documentation and generated reports record this distinction explicitly. Compared with the delta-method approaches, the bootstrap workflow requires con-siderably more computation because it performs B complete model refits. However, it is less dependent on the local linearity and Gaussianity assumptions underlying the 12 delta method, and can capture some nonlinear and asymmetric trajectory uncertainty. For publication-quality bootstrap summaries, a minimum of B = 100 replicates is recommended, with B = 50 used for tutorial purposes. 
+
+Algorithm 6 Parametric bootstrap trajectory bands 
+
+Require: fitted result ( ˆθ, ˆx(ti)), observed data, bounds Θ, number of replicates B,tail probability α
+
+Ensure: bootstrap trajectory bands for all states  
+
+> 1:
+
+Estimate one noise scale per observed state: ˆσk =
+
+vuut 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+(˜ yk,i − ˆxok (ti)) 2. 
+
+> 2:
+
+for b = 1 , . . . , B do  
+
+> 3:
+
+Generate bootstrap observations for post-initial times: ˜y(b) 
+
+> k,i
+
+= ˆ xok (ti) + η(b) 
+
+> k,i
+
+, η(b) 
+
+> k,i
+
+∼ N (0 , ˆσ2
+
+> k
+
+). 
+
+> 4:
+
+Keep the initial observed row fixed.  
+
+> 5:
+
+Refit the model to obtain ˆθ(b). 
+
+> 6:
+
+Integrate ˙ x = f (x, ˆθ(b), t ) and store x(b)(ti).  
+
+> 7:
+
+end for  
+
+> 8:
+
+for each state k and time ti do  
+
+> 9:
+
+Compute empirical quantiles: 
+
+Lk,i = Qα
+
+
+
+{x(b) 
+
+> k
+
+(ti)}Bb=1 
+
+
+
+, Uk,i = Q1−α
+
+
+
+{x(b) 
+
+> k
+
+(ti)}Bb=1 
+
+
+
+. 
+
+> 10:
+
+end for  
+
+> 11:
+
+return bootstrap trajectory bands Lk,i and Uk,i .
+
+2.8 Computational complexity 
+
+The dominant computational cost of the conformal workflow arises from the m LOO refits. For a model with m measurement time points, nθ parameters, and per-refit optimization cost proportional to k · m · nθ (where k denotes the number of optimizer iterations), the overall LOO ensemble cost scales approximately as 
+
+O(m2 · nθ · k). (18) This quadratic scaling in m is the main limitation of the LOO conformal approach for large datasets. However, for the sparse time series typical of systems biology exper-iments (often n < 100 observations), this scaling is manageable. Parallelization over 13 LOO refits reduces wall-clock time approximately linearly with the number of available cores. FIM and sensitivity computations require repeated complex-step ODE solves: roughly one set for the residual Jacobian and one set for trajectory sensitivities, scaling approximately linearly with nθ, the number of time points, and the ODE solve cost. In our original benchmark study [20], the conformal algorithms were up to two orders of magnitude faster than Bayesian MCMC (Stan) for equivalent problems. The Bayesian cost scales as O(S · k · m · nθ) where S may be 10 4–10 5 posterior samples and 
+
+k is the number of leapfrog steps per HMC iteration, making MCMC considerably more expensive even for moderate-sized systems. The bootstrap workflow has cost 
+
+O(B · m · nθ · k) and is therefore intermediate between the LOO conformal workflow and full Bayesian sampling. 
+
+2.9 Availability and Implementation 
+
+CUQDyn1 Plus is implemented in MATLAB and released under the GPLv3 license. The software, including instructions for running all experiments, is available at Zen-odo: https://doi.org/10.5281/zenodo.21470609. This distribution includes source code, maintained benchmark examples, simulation-based calibration workflows, Bayesian comparison workflows and detailed documentation. 
+
+## 3 Benchmark Examples 
+
+We validate the toolbox on six dynamical systems of increasing complexity, sum-marized in Table 1. Two linear cascade systems serve as analytic verification cases with known closed-form solutions; the remaining four are nonlinear biological bench-marks. Each system is treated as a partially observed problem: the initial condition is fully specified, but after t0 only a designated subset of states is observed. Synthetic benchmark datasets are generated with additive Gaussian noise at 10% of the mean trajectory amplitude, except for AP, where the comparison uses the experimental y1–
+
+y4 measurement dataset, and for NF-κB, whose maintained synthetic dataset uses 5% noise over 36 sampling times with the specified ten observed-state subset. In all examples, nx denotes the dimension of the ODE state vector and nobs denotes the number of state variables directly measured after the initial condition. Several anal-yses also report uncertainty bands for unobserved state variables. Thus, the number of states displayed in figures or exported in summary tables may be larger than nobs ,because latent-state uncertainty is propagated from the fitted parameter uncertainty even when those states are not directly measured. The diagnostic cascade examples observe only the terminal species. The Lotka– Volterra and SIR examples use one observed state to assess recovery of the remaining latent state variables. The α-Pinene example observes four of the five chemical species, leaving one latent state. The NF-κB benchmark uses ten directly observed state variables and propagates uncertainty to the remaining latent components. 14 Table 1 : Summary of benchmark case studies. The table reports the number of unknown parameters ( nθ), state vari-ables ( nx), and state variables directly observed ( nobs ).                      
+
+> System nθnxnobs
+> Linear cascade (2-state) 221Linear cascade (3-state) 331Lotka–Volterra 421SIR 231
+> α-Pinene 554NF-κB29 15 10
+
+3.1 Linear cascade diagnostic examples 
+
+Two linear cascade systems serve as analytic verification cases for the numerical consistency of the weighted least-squares fitting, FIM covariance estimation, and hidden-state delta-method uncertainty propagation. Because these models admit closed-form trajectory solutions, they allow the toolbox output to be compared against independent analytic references without the confound of numerical ODE integration error. 
+
+Two-state cascade (LinearCascade) 
+
+The two-state diagnostic uses the irreversible linear cascade ˙x1 = −k1x1, (19) ˙x2 = k1x1 − k2x2, (20) with initial condition x(0) = (10 , 0) ⊤. The synthetic benchmark uses ( k1, k 2) =(0 .35 , 0.12). Only the downstream state x2 is observed, while x1 is latent. An independent analytic covariance reference was constructed from the closed-form trajectory solution and compared with the FIM covariance and hidden-state standard deviations produced by the toolbox. This checks the Jacobian calculation, residual weighting, and delta-method propagation on a case where the ground truth is known exactly. 
+
+Three-state cascade (LinearCascade3) 
+
+The three-state diagnostic extends this construction to ˙x1 = −k1x1, (21) ˙x2 = k1x1 − k2x2, (22) ˙x3 = k2x2 − k3x3, (23) 15 with initial condition x(0) = (10 , 0, 0) ⊤. The synthetic benchmark uses ( k1, k 2, k 3) = (0 .45 , 0.16 , 0.055). Only the terminal state x3 is observed, while x1 and x2 are latent. This gives a more demanding configuration: three unknown parameters, only the most downstream state observed, and two latent upstream states. Observing only the terminal species while the upstream dynamics remain hidden tests whether the FIM and HybridCov machinery behaves sensibly when the measured signal is only indirectly related to the hidden states. The toolbox output was compared against a matrix-exponential reference solution. Simulation-based calibration was also performed using a shared-fit design, so that FIM and HybridCov received identical parameter estimates, LOO ensembles, residual variance estimates, and sensitivity matrices in each replicate. This ensures that FIM and HybridCov are evaluated from the same fitted branch in each replicate, so method differences are not caused by different optimizer outcomes. Detailed reproduction instructions are provided in Additional file 1. Table 2 reports the agreement between the analytic reference and the toolbox output for both cascade configurations. All errors are at or below 10 −6 in relative norm, confirming the numerical consistency of the Jacobian computation, residual weighting, and delta-method propagation on cases where the exact ground truth is known. Figure 1 shows the FIM prediction bands for the three-state cascade, overlaid on the analytic reference trajectories. 
+
+Table 2 : Known-truth numerical reference checks for the linear cascade diagnos-tic examples. Errors are reported as the Frobenius relative error of the estimated covariance matrix, the relative error of the hidden-state standard deviation, and the maximum relative trajectory error, all computed against the analytic reference.                      
+
+> Example Cov. rel. Fro. error Hidden std rel. error Max traj. rel. error LinearCascade (2-state) 6.2×10 −81.3×10 −83.0×10 −8
+> LinearCascade3 (3-state) 1.4×10 −61.4×10 −68.9×10 −7
+
+Table 3 summarizes the SBC hidden-state coverage for LinearCascade3. The ana-lytic single-run reference confirms local numerical consistency, but the full SBC experiment exposes a separate global failure mode: because the observed terminal state depends on symmetric functions of the cascade poles, the inverse problem has a k1 ↔ k2 branch symmetry. Fits on the swapped branch reproduce the observed x3
+
+trajectory nearly exactly while centering the hidden x1 and x2 bands on the wrong upstream trajectories (Fig. 2). Consequently, the mean pointwise coverage is only about 74% at nominal 95%, despite a well-conditioned local FIM at either branch. 16 Table 3: SBC hidden-state coverage for LinearCascade3 (nominal 95%, 50 replicates, shared-fit design). The full SBC run reveals global branch-switching non-identifiability that is not detected by the local FIM condition-ing diagnostics. 
+
+Method State Mean ptwise cov. (%) Simult. cov. (%) Mean width FIM x1 (hidden) 73.8 68 0.670 FIM x2 (hidden) 74.6 68 0.762 HybridCov x1 (hidden) 73.8 68 0.670 HybridCov x2 (hidden) 73.2 68 0.751 Time                
+
+> 010 20 30 40
+> Value
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10 State 1 (unobserved) - 95% PI
+> 95% PI
+> best fit
+> Time
+> 010 20 30 40
+> Value
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8State 2 (unobserved) - 95% PI
+> 95% PI
+> best fit
+> Time
+> 010 20 30 40
+> Value
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7State 3 (observed) - 95% PI
+> 95% PI
+> best fit
+> data
+> CUQDyn1_Plus - prediction bands
+
+Fig. 1 : FIM prediction bands for the three-state linear cascade (LinearCascade3) diagnostic example. The observed terminal state x3 is shown with data points and conformal bands; the two hidden upstream states x1 and x2 are shown with delta-method bands overlaid on the analytic reference trajectory (dashed). The near-zero relative errors in Table 2 confirm local numerical agreement with the analytic reference for this single known-truth check. time              
+
+> 010 20 30 40
+> value
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> Hidden x 1
+> time
+> 010 20 30 40
+> value
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> Hidden x 2
+> time
+> 010 20 30 40
+> value
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> Observed x 3
+> true parameters
+> wrong-branch fit
+> noisy data
+> LinearCascade3 non-identifiability: wrong-branch fit reproduces observed x 3(RMSE 0.027) but misses hidden x 1, x 2
+
+Fig. 2 : LinearCascade3 upstream non-identifiability. A swapped-branch fit reproduces the observed terminal state x3 but gives different hidden x1 and x2 trajectories, causing hidden-state bands to be centered on the wrong branch. 17 3.2 Lotka–Volterra predator–prey system 
+
+The Lotka–Volterra system [29] is the main introductory benchmark and provides the most direct illustration of the partial observation setting. The two-species predator– prey model is governed by ˙x1 = x1(α − βx 2), (24) ˙x2 = −x2(γ − δx 1), (25) where x1 and x2 represent prey and predator populations, respectively. The param-eters α, β, γ, δ are positive interaction constants. Synthetic datasets are generated with initial conditions ( x1(0) , x 2(0)) = (10 , 5) and true parameters α = γ = 0 .5, 
+
+β = δ = 0 .02. In the partially observed setting, only the prey population x1 is observed after 
+
+t0, while the predator x2 is treated as a latent state for which prediction bands are required. This setup is representative of practical ecological and biological systems where only certain populations can be easily counted or measured. The LV benchmark directly contrasts the three UQ workflows: conformal observed-state bands for x1, and FIM delta-method, HybridCov delta-method, and bootstrap trajectory bands for x2. A representative run with B = 50 bootstrap replicates pro-duced the coverage and band-width results shown in Table 4. All methods achieved full coverage for the corresponding known trajectories in this run. For the latent predator state x2, the FIM and HybridCov delta-method bands were slightly narrower than the bootstrap trajectory band. For the observed prey state x1, however, the bootstrap tra-jectory band was much sharper than the conformal observed-state band, because the two bands target different quantities: the conformal band includes noisy-observation prediction spread, whereas the bootstrap band shown here reflects uncertainty in the latent ODE trajectory. Thus, the width comparisons should be interpreted state by state and according to the target of each band. 
+
+Table 4 : Representative LV benchmark results. Coverage is assessed against the known true trajectory of each state (observed prey and latent predator). Bootstrap bands are latent ODE trajectory bands, not noisy-observation prediction intervals, and should not be compared against the spread of the noisy measurements.                             
+
+> Method State Latent coverage (%) Mean interval width Norm. mean width FIM Prey 100 14.97 0.194 FIM Predator 100 13.35 0.179 HybridCov Prey 100 14.97 0.194 HybridCov Predator 100 13.40 0.179 Bootstrap Prey 100 2.44 0.032 Bootstrap Predator 100 14.22 0.190
+
+We also compared FIM and HybridCov from the same optimizer solution for this LV example. In this stricter comparison, both methods achieved similar predator 18 coverage (approximately 93% at nominal 95%), confirming that for well-conditioned systems the two approaches can give comparable results. Table 5 provides the detailed SBC summary. 
+
+Table 5 : SBC predator-state coverage for Lotka–Volterra (nom-inal 95%, 50 replicates, shared-fit design).          
+
+> Method Mean ptwise cov. (%) Simult. cov. (%) Mean width FIM 93.7 74 16.12 HybridCov 93.8 72 16.58
+
+Figure 3 contrasts the three latent-state workflows for the predator ( x2): the FIM and HybridCov delta-method bands are nearly identical in width (13.35 vs 13.40) and both enclose the known true trajectory (Table 4), while the parametric bootstrap band is comparable but slightly wider. The conformal band for the observed prey ( x1)covers the noisy measurements at the nominal level (Fig. 7). Time        
+
+> 0510 15 20 25 30
+> Predator
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> 120 LV predator: FIM vs HybridCov vs bootstrap bands
+> Bootstrap band
+> Best fit
+> FIM lower/upper
+> Hybrid lower/upper
+
+Fig. 3 : Lotka–Volterra three-method uncertainty comparison for the latent predator (x2). Shown are the parametric bootstrap band (shaded) and the FIM and HybridCov delta-method band edges (red and green dashed) around the fitted predator trajectory (solid). The FIM and HybridCov envelopes are nearly identical (mean widths 13.35 and 13.40) and overlap almost exactly, so the red FIM lines are largely hidden beneath the green HybridCov lines. 
+
+3.3 SIR epidemiological model 
+
+The SIR model [30] describes disease spread through a population divided into sus-ceptible ( S), infected ( I), and recovered ( R) compartments. The implementation used 19 in this benchmark adopts the mass-action incidence form ˙S = −βSI, (26) ˙I = βSI − γI, (27) ˙R = γI, (28) where N = S + I + R is the fixed total population, β is the mass-action transmission-rate parameter, and γ is the recovery rate. For this parameterization, the initial reproductive number is R0 = βS 0/γ , or approximately R0 = βN/γ when S0 ≈ N . In the partially observed setting, only the infected compartment I(t) is observed after 
+
+t0, while S and R are latent. This example illustrates the practical situation in epidemiology where only reported infections are available, yet predictions for susceptible and recovered compart-ments are important for intervention planning. The benchmark highlights parameter correlation effects ( β and γ are strongly correlated through the basic reproduction number R0) and the impact of that correlation on latent-state uncertainty propaga-tion. The HybridCov method is expected to benefit from the empirical LOO correlation in this setting. Table 6 summarizes the single-run trajectory UQ results. The conformal band for observed I(t) achieves 100% coverage with a normalized mean width of 0.10. The delta-method bands for the latent compartments S and R also fully cover the known true trajectories, with mean widths of 9.85 and 9.05 (FIM) and 8.64 and 9.17 (HybridCov). This is much narrower than the infected-state band on an absolute scale, as expected given that S and R are tightly constrained by the conservation law S + I + R = N
+
+once I(t) is observed. The SBC calibration (Table 7, nominal 90%) reveals that empirical pointwise cov-erage for the latent states remains below nominal. HybridCov modestly improves mean pointwise coverage relative to FIM, from 85.0% to 87.5% for S and from 86.6% to 87.2% for R. However, this improvement is small, and simultaneous coverage is mixed: it decreases for S but increases for R. Thus, HybridCov does not remove the main limitation of the local Gaussian approximation for this nonlinear system; rather, it provides a limited correction to the FIM covariance structure. Two features of the SIR system make it particularly challenging for the delta-method. First, β and γ are strongly correlated through the basic reproduction number 
+
+R0 = βN/γ : the observed infected trajectory I(t) constrains R0 tightly but leaves 
+
+β and γ individually poorly determined. The FIM captures this correlation approx-imately, but the iso-R0 manifold in parameter space is curved, so the Gaussian approximation underestimates the range of trajectories consistent with the data. Sec-ond, the latent compartments S(t) and R(t) respond to the long-run integral of I(t), amplifying any underestimation of parameter uncertainty into larger prediction errors than are visible in the observed-state bands alone. This interpretation is supported by the PyMC ABC-SMC comparison (details below): PyMC gives a mean hidden-state band width of 17.6, compared with 9.45 for CUQDyn FIM and 8.90 for CUQDyn HybridCov, reflecting the broader posterior spread along the R0 manifold captured by global sampling. The HybridCov strategy 20 replaces the FIM correlation structure with an empirical LOO estimate, but since removing a single time point shifts β and γ only slightly, the LOO ensemble still undersamples the curved iso-R0 manifold; consequently HybridCov gives only modest coverage improvement over FIM for this system. For users who require reliable latent-state coverage in SIR-type systems, the tool-box provides two practical remedies. The parametric bootstrap (Section 2.7) relaxes the linearity assumption by refitting the model to synthetic datasets and can cap-ture some of the nonlinear parameter correlation, at the cost of B additional model refits. Alternatively, the companion PyMC workflow provides a global posterior refer-ence; where the bootstrap and PyMC bands agree and are substantially wider than the delta-method bands, this is strong evidence that delta-method bands should be used with caution for those latent states. Figure 4 shows the FIM prediction bands; Figure 5 shows the HybridCov diagnostic comparison for the recovered state. 
+
+Table 6 : SIR single-run trajectory UQ summary (90% nominal level). I is the conformal observed-state band; S and R are delta-method bands for latent states. Coverage is assessed against the known true trajectory. Normalized widths use the conserved total population N ≈ 418 as the reference scale, consistent across all three compartments.                                   
+
+> Method State Coverage (%) Mean width Norm. width FIM S(latent) 100 9.85 0.024 FIM I(observed) 100 43.48 0.104 FIM R(latent) 100 9.05 0.022 HybridCov S(latent) 100 8.64 0.021 HybridCov I(observed) 100 43.48 0.104 HybridCov R(latent) 100 9.17 0.022
+
+Table 7 : SBC latent-state coverage for SIR (nominal 90%, 50 replicates). Both FIM and HybridCov fall short of the nominal level, suggesting limitations of the local Gaussian approximation for this nonlinear system.                         
+
+> Method State Mean ptwise cov. (%) Simult. cov. (%) Mean width FIM S(Susceptible) 85.0 80 10.098 FIM R(Recovered) 86.6 72 9.287 HybridCov S(Susceptible) 87.5 78 9.991 HybridCov R(Recovered) 87.2 78 9.252
+
+21 Time             
+
+> 0510 15
+> Value
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> 800
+> 900
+> 1000 State 1 (unobserved) - 90% PI
+> 90% PI
+> best fit
+> Time
+> 0510 15
+> Value
+> 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> 300
+> 350
+> 400
+> 450 State 2 (observed) - 90% PI
+> 90% PI
+> best fit
+> data
+> Time
+> 0510 15
+> Value
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> 600
+> 700
+> 800
+> 900
+> 1000 State 3 (unobserved) - 90% PI
+> 90% PI
+> best fit
+
+CUQDyn1_Plus - prediction bands Fig. 4 : SIR FIM prediction bands (90% nominal). Shaded regions are prediction bands; solid lines are the fitted trajectories; dashed curves are the known true tra-jectories. The conformal band is applied to the observed infected compartment I(t); FIM delta-method bands are applied to the latent susceptible S(t) and recovered R(t)compartments. Time (days)     
+
+> 0510 15
+> Population
+> 0
+> 200
+> 400
+> 600
+> 800
+> 1000
+
+FIM 90% CI — Recovered (mean width = 9.35) 
+
+> FIM band
+> Best fit
+> True
+
+Time (days)     
+
+> 0510 15
+> Population
+> 0
+> 200
+> 400
+> 600
+> 800
+> 1000
+
+Hybrid 90% CI — Recovered (mean width = 9.47) 
+
+> Hybrid band
+> Best fit
+> True
+
+Time (days)     
+
+> 0510 15
+> Band width
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+
+Band width over time 
+
+> FIM
+> Hybrid
+
+Time (days)    
+
+> 0510 15
+> Width ratio Hybrid / FIM
+> 0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1
+> 1.2
+
+Hybrid / FIM width ratio 
+
+>1: Hybrid wider | <1: Hybrid narrower 
+
+State 3 (Recovered): FIM vs Hybrid band comparison 
+
+Fig. 5 : SIR HybridCov diagnostic band comparison for the recovered state R(t). The narrow delta-method band relative to the known true trajectory illustrates the under-coverage documented in Table 7, arising from underestimation of parameter uncertainty along the curved R0 = βN/γ manifold in parameter space. 
+
+3.4 α-Pinene isomerization 
+
+The α-pinene isomerization model [31] describes the thermal rearrangement of α-pinene into several isomeric products through a network of five coupled reactions: ˙x1 = −(p1 + p2)x1, (29) 22 ˙x2 = p1x1, (30) ˙x3 = p2x1 − (p3 + p4)x3 + p5x5, (31) ˙x4 = p3x3, (32) ˙x5 = p4x3 − p5x5. (33) The example observes only x1–x4 after the initial time and treats x5 as hidden. Following the original α-pinene data of Box et al. [31], the four measured isomer time series are labelled y1–y4 (the notation also used in Additional file 1); under the identity observation map used here, yk is the noisy measurement of state xk for k = 1 , . . . , 4(Eq. 4), so the observed-state set is O = {1, 2, 3, 4}. Thus x1–x4 receive observed-state jackknife+-style empirical bands, while x5 receives FIM or HybridCov delta-method latent-state bands. Table 8 summarizes the AP trajectory comparison for the CUQDyn1 Plus workflows. The observed states achieve 100% empirical coverage in this run, and the hidden x5
+
+mean band width is approximately 9.93 under FIM and 10.0 under HybridCov. SBC calibration (Table 9) at nominal 90% gives near-nominal but slightly under-covering hidden-state bands: 88.5% for FIM and 87.2% for HybridCov. Figure 6 shows the HybridCov UQ bands, with conformal bands on x1–x4 and a latent delta-method band on x5.
+
+Table 8 : α-Pinene single-run trajectory UQ summary for the maintained partially observed configuration (90% nominal level). States x1–x4 are observed and use empir-ical conformal bands; x5 is hidden and uses delta-method latent-state bands. Coverage and RMSE are reported only for observed states.                               
+
+> State Type FIM mean width HybridCov mean width Obs. cov. (%) Obs. RMSE
+> x1observed 37.8 37.8 100 8.17
+> x2observed 20.5 20.5 100 3.54
+> x3observed 3.20 3.20 100 0.569
+> x4observed 2.95 2.95 100 0.403
+> x5hidden 9.93 10.0 ——
+
+Table 9 : SBC coverage for α-pinene state x5 (nominal 90%, 50 replicates).          
+
+> Method Mean ptwise cov. (%) Simult. cov. (%) Mean width FIM 88.5 78 4.015 HybridCov 87.2 80 3.958
+
+23 0 1 2 3 4                          
+
+> Time #10 4
+> Value
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> 120 State 1 (observed) — 90% CI
+> 90% PI
+> best fit
+> data
+> 01234
+> Time #10 4
+> Value
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80 State 2 (observed) — 90% CI
+> 90% PI
+> best fit
+> data
+> 01234
+> Time #10 4
+> Value
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9State 3 (observed) — 90% CI
+> 90% PI
+> best fit
+> data
+> 01234
+> Time #10 4
+> Value
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6State 4 (observed) — 90% CI
+> 90% PI
+> best fit
+> data
+> 01234
+> Time #10 4
+> Value
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> 35
+> 40 State 5 (unobserved) — 90% CI
+> 90% PI
+> best fit
+> CUQDyn1_Plus — hybrid UQ prediction bands
+
+Fig. 6 : α-Pinene isomerization HybridCov prediction bands (90% nominal) for the maintained partially observed configuration. States x1–x4 use observed-state empirical conformal bands; hidden state x5 uses a HybridCov delta-method latent-state band. Open circles are observations; dashed curves show the reference trajectories where available. 
+
+3.5 NF-κB signaling pathway 
+
+The NF-κB signaling pathway [32] is the most computationally challenging bench-mark, with 15 state variables and 29 unknown parameters (ODEs are not given here for the sake of brevity). The system describes the regulatory dynamics of the Nuclear Factor Kappa B transcription factor in response to inflammatory stimuli. Using the conventional NF-κB state notation yi, ten selected state variables are directly observed and the remaining five state variables are treated as latent. This model-specific nota-tion follows the original NF-κB formulation; elsewhere in the article, state variables are denoted generically by xi.This example represents a typical large-scale systems biology problem where high dimensionality, partial observability, and potential parameter non-identifiability make Bayesian MCMC approaches impractical. In our original study [20], Stan failed to converge to adequate posterior predictive regions for the NF-κB system even after many hours of computation. The CUQDyn1 and CUQDyn2 conformal algorithms computed prediction regions for all ten observables within minutes. In the CUQDyn1 Plus setting, the NF-κB example demonstrates the scalability of the LOO conformal workflow to high-dimensional nonlinear systems and the util-ity of FIM and HybridCov delta-method propagation for the five unobserved latent states. The toolbox diagnostic functions allow inspection of covariance conditioning and parameter identifiability. Table 10 summarizes the aggregate CUQDyn1 Plus trajectory UQ results. Confor-mal bands for the ten observed states achieve mean coverage of 96.2% with FIM and 96.8% with HybridCov, at a nominal 90% level. The mean observed-state RMSE is 24 2.15 (FIM) and 2.16 (HybridCov), dominated by y11 whose large absolute scale inflates the mean. For the five hidden states, the mean delta-method band width is very large, especially under HybridCov, reflecting ill-conditioned sensitivity–covariance products in this high-dimensional system. These entries should be interpreted together with the FIM weak-direction reliability diagnostics rather than as precise quantitative uncer-tainty intervals; per-state details and the PyMC comparison are provided in Additional file 1 and Section 4. 
+
+Table 10 : NF-κB aggregate CUQDyn1 Plus trajectory UQ summary (90% nominal for observed-state bands). Hidden-state widths are local delta-method quantities and should be interpreted with the FIM reliability diagnostics.                 
+
+> Method Obs. coverage (%) Obs. RMSE Obs. width Hidden width CUQDyn FIM 96.2 2.15 8.68 4.993 ×10 4
+> CUQDyn HybridCov 96.8 2.16 10.1 7.151 ×10 4
+
+The toolbox completes the full LOO ensemble and UQ computation within min-utes on a standard workstation, in contrast to the convergence failures encountered by Stan on this system in our earlier study [20]. Supplementary CUQDyn1 Plus–PyMC comparison results and implementation details are provided in Additional file 1. The two workflows produce visually similar bands for the well-identified observables; slight differences appear for the more poorly constrained outputs, consistent with the expec-tation that the HybridCov empirical correlation provides a modest correction over the pure FIM approximation in weakly identifiable directions. 
+
+## 4 Comparison with Bayesian Inference 
+
+We compare CUQDyn1 Plus with a Bayesian reference implemented via approximate Bayesian computation with sequential Monte Carlo (ABC-SMC) in PyMC [22]. The comparison uses the same benchmark datasets for both approaches in the benchmark systems. The PyMC analyses set explicit random seeds for reproducibility. For LV, the comparison run uses 4000 ABC-SMC draws per chain across 4 chains; SIR, α-pinene, and the tabulated NF-κB comparison use 1000 draws per chain across 4 chains. All PyMC trajectory summaries are computed from 500 posterior trajectory draws. For observed states, PyMC bands include an additive observation-noise term estimated from the posterior-mean RMSE; hidden-state PyMC bands remain latent parameter-uncertainty bands. CUQDyn1 Plus hidden-state bands are local FIM or HybridCov delta-method bands. Sampler convergence is assessed with the rank-normalized potential scale reduction factor ˆR [33, 34] and the bulk effective sample size (ESS) [34]; we regard a run as converged when ˆR ≤ 1.01 for all parameters and the bulk-ESS is at least 100 per chain, and flag it otherwise. The NF-κB PyMC workflow uses a broad uniform prior over the same parameter support used by CUQDyn, [0 .1 θnom , 4 θnom ], rather than a log-normal 25 prior centred on nominal values. This change removes the previous concern that the Bayesian prior encoded the answer, but it also exposes the weak identifiability of the 29-parameter NF-κB problem: the posterior remains close to the broad-prior mean for many parameters. The tabulated NF-κB comparison uses 1000 draws per chain and does not meet the convergence criterion ( ˆR ≤ 1.01 and effective sample size ≥ 100 per chain); an independent 4000-draw sensitivity run improved the diagnostics to a marginal pass ( ˆR ≈ 1.01, minimum bulk ESS ≈ 503) but did not remove the prior-dominated parameter-recovery pattern. The NF-κB PyMC entries are therefore reported as a not-fully-converged, prior-dominated reference rather than a trusted posterior, and convergence and identifiability must be interpreted separately. Table 11 summarizes the latest parameter-recovery comparison. LV and SIR are well-identified synthetic examples: CUQDyn1 Plus and PyMC both recover all parame-ters to within 20% relative error and agree closely in point estimates. In AP, which is based on experimental data rather than synthetic truth, CUQDyn1 Plus remains closer to the nominal reference values, while PyMC drifts more strongly for p4 and p5
+
+under the broader prior support. The trajectory-level comparison is nevertheless much closer than the raw parameter errors suggest, consistent with parameter compensation under partial observation. NF-κB is the stress test: CUQDyn1 Plus recovers a subset of parameters accurately but reports very large covariance scales in weak directions, whereas PyMC remains prior-dominated. NF-κB rate constants should therefore not be presented as reliably recovered by either method. 
+
+Table 11 : Parameter recovery summary for the CUQDyn1 Plus–PyMC com-parison. Relative errors are computed against synthetic truth for LV, SIR, and NF-κB, and against nominal/reference values for α-pinene.                                           
+
+> Model Method nθMean relative error (%) Parameters ≤20% LV CUQDyn FIM 44.8 4/4 CUQDyn HybridCov 44.8 4/4 PyMC ABC-SMC 46.2 4/4 SIR CUQDyn FIM 20.7 2/2 CUQDyn HybridCov 20.7 2/2 PyMC ABC-SMC 20.6 2/2
+> α-Pinene CUQDyn FIM 523.0 3/5 CUQDyn HybridCov 523.0 3/5 PyMC ABC-SMC 597.0 2/5 NF-κBCUQDyn FIM 29 45.2 14/29 CUQDyn HybridCov 29 54.7 10/29 PyMC ABC-SMC 29 107.4 0/29
+
+For LV, CUQDyn1 Plus and PyMC recover α, β, δ, and γ with nearly identical estimates. For example, CUQDyn FIM gives α = 0.507 ± 0.023 and PyMC gives 0.511 ± 0.028; for γ,CUQDyn1 Plus gives 0 .483 ± 0.035 and PyMC gives 0 .482 ± 0.042. 26 SIR is even more tightly aligned: CUQDyn1 Plus and PyMC both estimate β ≈ 0.001981 and γ ≈ 0.499. For AP, the strongest discrepancies are p4 and p5. CUQDyn1 Plus estimates p4 =3.67 × 10 −4 ± 2.94 × 10 −4 and p5 = 5.93 × 10 −5 ± 9.01 × 10 −5, whereas PyMC 
+
+gives p4 = 7 .80 × 10 −4 ± 2.98 × 10 −4 and p5 = 1 .33 × 10 −4 ± 4.00 × 10 −5. The large CUQDyn1 Plus standard deviations and PyMC posterior drift both point to weak practical identifiability rather than a simple numerical disagreement. Table 12 compares trajectory-band behavior. LV and SIR again show close agree-ment in observed-state coverage and RMSE. For AP, PyMC and CUQDyn1 Plus give similar observed-state RMSE and high coverage, despite larger parameter disagree-ment. NF-κB differs qualitatively: CUQDyn1 Plus gives much lower observed-state RMSE in the tabulated run, while PyMC obtains high coverage through much wider observed-state bands after noise augmentation. Hidden-state NF-κB bands must be interpreted together with FIM conditioning and weak-direction diagnostics. 
+
+Table 12 : Trajectory-band comparison for the CUQDyn1 Plus–PyMC com-parison. Observed-state PyMC bands include estimated observation noise; hidden-state PyMC bands are posterior trajectory quantiles. The NF-kB PyMC 
+
+row derives from a 1000-draw run that does not meet the ˆR/ESS convergence criterion and should be read as a prior-dominated reference.                                                        
+
+> Model Method Obs. cov. (%) Obs. RMSE Obs. width Hidden width LV CUQDyn FIM 100.0 2.33 15.0 13.3 CUQDyn HybCov 100.0 2.33 15.0 13.4 PyMC ABC-SMC 96.8 2.58 10.9 15.7 SIR CUQDyn FIM 100.0 10.0 43.5 9.45 CUQDyn HybCov 100.0 10.0 43.5 8.90 PyMC ABC-SMC 100.0 10.0 43.6 17.6
+> α-Pinene CUQDyn FIM 100.0 3.17 16.1 9.93 CUQDyn HybCov 100.0 3.17 16.1 10.0 PyMC ABC-SMC 97.2 3.62 18.7 20.4 NF-κBCUQDyn FIM 96.2 2.15 8.68 4.993 ×10 4
+> CUQDyn HybCov 96.8 2.16 10.1 7.151 ×10 4
+> PyMC ABC-SMC 98.1 19.0 88.4 442
+
+Figures 7–9 show side-by-side panels for PyMC ABC-SMC, CUQDyn FIM, and CUQDyn HybridCov. Within each state row, the y-axis limits are identical across methods. For the NF-κB case study, the full state-by-state CUQDyn1Plus-PyMC pre-dictive comparison is provided in Additional file 1. We omit these panels from the main text because the 15-state comparison is visually too dense, and because the main conclusion is better conveyed by the aggregate trajectory and parameter sum-maries in Tables 11 and 12: NF-κB remains weakly identifiable for both workflows, with PyMC posterior predictive bands reflecting broad uncertainty and CUQDyn1 Plus 
+
+FIM-based bands requiring reliability-diagnostic interpretation for weakly informed latent directions. 27 For LV and SIR, the visual agreement is close for both observed and hidden states. For AP, the observed states are tracked comparably by all methods, while the hidden 
+
+y5 band is wider under PyMC, consistent with posterior spread in weakly constrained parameters. For NF-κB, the broad-prior PyMC posterior remains prior-dominated and gives very wide observed bands for some states, particularly around y11 dynamics. 
+
+CUQDyn1 Plus identifies a good data-fitting region and produces tighter observed-state bands, but the extremely large hidden-state delta-method bands for y8 and y10 
+
+demonstrate why FIM reliability diagnostics are required before interpreting latent-state uncertainty in this high-dimensional, partially observed model. LV: CUQDyn vs PyMC predictive bands, states 1-2                                     
+
+> time
+> 0510 15 20 25 30
+> state value
+> 0
+> 20
+> 40
+> 60
+> 80
+> prey | PyMC ABC-SMC
+> mean
+> observed
+> time
+> 0510 15 20 25 30
+> state value
+> 0
+> 20
+> 40
+> 60
+> 80
+> prey | CUQDyn1_Plus FIM
+> time
+> 0510 15 20 25 30
+> state value
+> 0
+> 20
+> 40
+> 60
+> 80
+> prey | CUQDyn1_Plus HybridCov
+> time
+> 0510 15 20 25 30
+> state value
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> predator | PyMC ABC-SMC
+> time
+> 0510 15 20 25 30
+> state value
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> predator | CUQDyn1_Plus FIM
+> time
+> 0510 15 20 25 30
+> state value
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> predator | CUQDyn1_Plus HybridCov
+
+Fig. 7 : Lotka–Volterra side-by-side comparison: PyMC ABC-SMC (left), CUQDyn FIM (centre), and CUQDyn HybridCov (right). Top row: observed prey ( x1); bottom row: latent predator ( x2). 28 SIR: CUQDyn vs PyMC predictive bands, states 1-3 
+
+time 
+
+0 5 10 15 
+
+> state value
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 
+
+susceptible | PyMC ABC-SMC 
+
+mean 
+
+time 
+
+0 5 10 15 
+
+> state value
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 
+
+susceptible | CUQDyn1_Plus FIM 
+
+time 
+
+0 5 10 15 
+
+> state value
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 
+
+susceptible | CUQDyn1_Plus HybridCov 
+
+time 
+
+0 5 10 15 
+
+> state value
+
+0
+
+100 
+
+200 
+
+300 
+
+400 
+
+infected | PyMC ABC-SMC 
+
+time 
+
+0 5 10 15 
+
+> state value
+
+0
+
+100 
+
+200 
+
+300 
+
+400 
+
+infected | CUQDyn1_Plus FIM 
+
+time 
+
+0 5 10 15 
+
+> state value
+
+0
+
+100 
+
+200 
+
+300 
+
+400 
+
+infected | CUQDyn1_Plus HybridCov 
+
+time 
+
+0 5 10 15 
+
+> state value
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 recovered | PyMC ABC-SMC 
+
+time 
+
+0 5 10 15 
+
+> state value
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 recovered | CUQDyn1_Plus FIM 
+
+time 
+
+0 5 10 15 
+
+> state value
+
+0
+
+200 
+
+400 
+
+600 
+
+800 
+
+1000 recovered | CUQDyn1_Plus HybridCov Fig. 8 : SIR side-by-side comparison: PyMC ABC-SMC (left), CUQDyn FIM (centre), and CUQDyn HybridCov (right). Rows correspond to susceptible, infected, and recov-ered states. AP: CUQDyn vs PyMC predictive bands, states 1-5 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+0
+
+50 
+
+100 
+
+x1 | PyMC ABC-SMC 
+
+mean 
+
+observed 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+0
+
+50 
+
+100 
+
+x1 | CUQDyn1_Plus FIM 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+0
+
+50 
+
+100 
+
+x1 | CUQDyn1_Plus HybridCov 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+x2 | PyMC ABC-SMC 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+x2 | CUQDyn1_Plus FIM 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+x2 | CUQDyn1_Plus HybridCov 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+-2 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+x3 | PyMC ABC-SMC 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+-2 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+x3 | CUQDyn1_Plus FIM 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+-2 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+x3 | CUQDyn1_Plus HybridCov 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+0
+
+2
+
+4
+
+x4 | PyMC ABC-SMC 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+0
+
+2
+
+4
+
+x4 | CUQDyn1_Plus FIM 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+0
+
+2
+
+4
+
+x4 | CUQDyn1_Plus HybridCov 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+0
+
+20 
+
+40 
+
+x5 | PyMC ABC-SMC 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+0
+
+20 
+
+40 
+
+x5 | CUQDyn1_Plus FIM 
+
+0 0.5 1 1.5 2 2.5 3 3.5 4
+
+time #10 4
+
+> state value
+
+0
+
+20 
+
+40 
+
+x5 | CUQDyn1_Plus HybridCov 
+
+Fig. 9 : α-Pinene side-by-side comparison: PyMC ABC-SMC (left), CUQDyn FIM (cen-tre), and CUQDyn HybridCov (right). State x5 is hidden after the initial condition. 29 The comparison supports a nuanced conclusion. CUQDyn1 Plus and PyMC agree well on LV and SIR, where the inverse problems are well posed. AP shows that predictive agreement can be stronger than parameter agreement when partially observed dynam-ics allow compensation among weakly identified parameters. NF-κB shows that neither broad-prior ABC-SMC nor local Gaussian covariance propagation should be inter-preted as full rate-constant recovery in a high-dimensional, weakly identifiable model. In this regime, the most reliable comparison is based on observed trajectory fit, predic-tive coverage, convergence diagnostics, FIM conditioning, and per-state latent-band reliability diagnostics rather than on raw parameter intervals alone. 
+
+## 5 Discussion 
+
+We have presented an uncertainty quantification framework, and its software imple-mentation ( CUQDyn1 Plus ), which can handle partially observed dynamic (ODE-based) models of biological systems. This framework extends the conformal prediction algorithms of Portela et al. [20] to the practically important setting where only a subset of model states are experimentally observable. This method combines leave-one-out jackknife+-style empirical calibration for observed states with local Gaussian uncertainty propagation for latent states. The key design principle is the asymmetric treatment of observed and unobserved states, which reflects the fundamentally different statistical information available for each type of variable. For observed states, the leave-one-out conformal construction calibrates prediction bands directly from held-out residuals, providing conformal-style empirical calibration without imposing Gaussian residuals. For unobserved states, no calibration data exist, and uncertainty must be propagated analytically through the ODE sensitivity structure. The FIM delta-method approach now uses a shared log-space, rank-aware covariance helper and stores reliability diagnostics for weak directions; the HybridCov strategy modifies this baseline by incorporating empirical parameter correlation information from the LOO ensemble. The simulation-based calibration experiments reported here are an important val-idation step that goes beyond point coverage checks on single datasets. By repeatedly generating synthetic data, fitting, and evaluating coverage, SBC provides direct evi-dence about whether the nominal coverage level is achieved in the model and data regime of interest. The results should be described as model-dependent rather than as a uniform HybridCov win: naive LOO-only covariance is under-dispersed, while FIM-only and HybridCov performance depends on conditioning, nonlinearity, and the informativeness of the LOO correlation estimate. The proposed framework provides several practical advantages relative to existing approaches. Its cost scales as O(m2nθk) for the LOO ensemble (Section 2.8), avoiding the 10 4–10 5 posterior samples per chain typical of MCMC. In our earlier study this amounted to up to two orders of magnitude less computation than Stan for equivalent problems [20], and in the present work the full estimation-and-UQ workflow returns usable prediction bands in minutes on every benchmark, including the NF-κB model on which the PyMC samplers did not converge. We deliberately do not report a controlled wall-clock comparison here: CUQDyn1 Plus is a MATLAB research prototype, whereas 30 the PyMC/ABC-SMC backend compiles its most expensive operations, so raw run times would reflect implementation maturity and language as much as algorithmic cost. The efficiency argument therefore rests on algorithmic scaling and on the ability to obtain a usable result without certifying sampler convergence, rather than on a like-for-like timing benchmark. An optimized implementation and a matched runtime study are natural future work. Another advantage of our approach is that its observed-state bands provide jackknife+-style calibration that is less dependent on a correctly specified parametric noise model, a meaningful robustness property when the exact measurement error dis-tribution is unknown. Its compatibility with arbitrary nonlinear ODE models through user-defined dynamics and cost functions enables straightforward extension to new bio-logical systems. Because it relies on optimization and analytic propagation rather than posterior sampling, our workflow also avoids the convergence and mixing failures that MCMC and SMC samplers commonly encounter on high-dimensional, weakly identi-fiable models, illustrated here by the non-converged ABC-SMC run on NF-κB and, previously, by Stan on the same system [20]. Our approach delivers reproducible results in minutes, while its diagnostics make the remaining identifiability limits explicit rather than hiding them in an unconverged posterior. Several limitations of the current framework should be acknowledged. Most fun-damentally, uncertainty quantification for hidden states still relies on local Gaussian approximations. The delta method assumes that ODE trajectories vary approximately linearly with parameters near ˆθ and that parameter uncertainty is approximately Gaussian. These assumptions are likely to fail for strongly nonlinear systems, mul-timodal likelihood surfaces, weakly identifiable parameter combinations, and models with chaotic or discontinuous dynamics. The bootstrap workflow provides a partial remedy by relaxing the linearity assumption, but it is more computationally expen-sive and introduces its own assumptions about the bootstrap noise model. The SIR benchmark illustrates this mode in the present study: empirical coverage of latent states is below nominal 90%, and the delta-method bands are approximately half the width of the PyMC posterior predictive bands, pointing to underestimation of uncer-tainty along the curved R0 = βN/γ manifold in parameter space. The LinearCascade3 SBC experiment reveals a complementary failure mode: a global k1 ↔ k2 branch symmetry can produce well-conditioned local FIM covariances around the wrong parameter branch, so local diagnostics alone are insufficient to guarantee hidden-state coverage. A related and practically important failure mode is weak identifiability in high-dimensional systems such as NF-κB. The current log-space FIM implementa-tion improves conditioning and reports SVD rank diagnostics, but it cannot remove structural non-identifiability. Hidden states whose sensitivities project onto weak FIM directions are therefore flagged as unreliable, and their bands should be interpreted as regularization-dependent local approximations rather than definitive uncertainty statements. Second, the leave-one-out conformal calibration can become computationally expensive for datasets with many time points or expensive ODE models. The quadratic scaling in the number of time points ( O(m2) in the worst case) limits the approach for dense time series, though parallelization and the local-after-global LOO refit strategy 31 substantially mitigate this in practice. Third, conformal coverage guarantees apply directly only to observed states at observed time points. Extending distribution-free guarantees to hidden-state trajectories or to future unobserved time points remains an important open research problem. Approaches based on conformal risk control [35] or trajectory-level conformal sets may offer pathways toward distribution-free guarantees for latent states, though their application to ODE systems with partial observation would require substantial methodological development. Looking ahead, several extensions would broaden the applicability of the frame-work. Scalable approximate LOO methods based on influence functions or approximate leave-one-out cross-validation [36] could reduce the O(m2) computational bottleneck. Integration with optimal experimental design frameworks could use the sensitivity and covariance information computed by the toolbox to guide measurement selection for reducing latent-state uncertainty. Hybrid Bayesian–conformal frameworks that use the conformal calibration as a posterior predictive correction could combine the strengths of both approaches. The CUQDyn1 Plus codebase, examples, and SBC workflows are publicly avail-able and are designed to be extended by users developing new ODE models. The high-level problem definition interface, automated code generation, and standardized output reporting are intended to make the toolbox accessible to systems biologists who are not specialists in conformal prediction or optimization, while the modular source organization supports methodological extensions by advanced users. 
+
+Acknowledgements. The authors thank the developers and maintainers of the external scientific software used in the benchmark workflows. 
+
+## Declarations 
+
+Funding. JRB acknowledges support from grant PID2023-146275NB-C22 (DYNAMO-bio) funded by MICIU/AEI/10.13039/501100011033 and ERDF/EU, and from grant CSIC PIE 202470E108 (LARGO). 
+
+Competing interests. The authors declare that they have no competing interests. 
+
+Ethics approval and consent to participate. Not applicable. 
+
+Availability of data and materials. The datasets used in the benchmark exam-ples are included with the toolbox repository or generated by the scripts described in the manuscript. 
+
+Code availability. CUQDyn1 Plus is implemented in MATLAB and released under the GPLv3 license. The software, including instructions for running all experiments, is available at Zenodo: https://doi.org/10.5281/zenodo.21470609. 
+
+Additional files. Additional file 1. File format: PDF. Title: Supplementary infor-mation for CUQDyn1 Plus . Description: Detailed computational evaluation, including problem-definition and tutorial material, empirical benchmark summaries, simulation-based calibration results, CUQDyn1 Plus-PyMC ABC-SMC comparison tables and figures, identifiability and HybridCov diagnostics, Bayesian convergence diagnostics, per-run settings, method notes, and scope limitations. 32 Authors’ contributions. AP and JRB contributed to conceptualization, method-ology, software, validation, formal analysis, and writing–review and editing. JRB wrote the original draft, supervised the work, and acquired funding. Both authors read and approved the final manuscript. 
+
+## References 
+
+[1] Braniff N, Ingalls B. New opportunities for optimal design of dynamic exper-iments in systems and synthetic biology. Current Opinion in Systems Biology. 2018;9:42–48. https://doi.org/10.1016/j.coisb.2018.02.005. [2] Fr¨ ohlich F, Kessler T, Weindl D, Shadrin A, Schmiester L, Hache H, et al. Efficient Parameter Estimation Enables the Prediction of Drug Response Using a Mech-anistic Pan-Cancer Pathway Model. Cell Systems. 2018 Dec;7(6):567–579.e6. https://doi.org/10.1016/j.cels.2018.10.013. [3] McDonald TO, Cheng YC, Graser C, Nicol PB, Temko D, Michor F. Computational approaches to modelling and optimizing cancer treatment. Nature Reviews Bioengineering. 2023;1(10):695–711. https://doi.org/10.1038/ s44222-023-00089-7. [4] Banga JR, Villaverde AF. Mechanistic dynamic modelling of biological systems: The road ahead. Current Opinion in Systems Biology. 2025 Dec;42:100553. https: //doi.org/10.1016/j.coisb.2025.100553. [5] Goldring CE, Russomanno G, Pin C, Trairatphisan P, Beattie KA, Fisher CP, et al. Quantitative systems toxicology: modelling to mechanistically understand and predict drug safety. Nature Reviews Drug Discovery. 2025 Oct;25(2):138–153. https://doi.org/10.1038/s41573-025-01308-z. [6] Mitra ED, Hlavacek WS. Parameter estimation and uncertainty quantification for systems biology models. Current Opinion in Systems Biology. 2019;18:9–18. https://doi.org/10.1016/j.coisb.2019.10.006. [7] Sharp JA, Browning AP, Burrage K, Simpson MJ. Parameter estimation and uncertainty quantification using information geometry. Journal of The Royal Society Interface. 2022 Apr;19(189). https://doi.org/10.1098/rsif.2021.0940. [8] Villaverde AF, Raimundez E, Hasenauer J, Banga JR. Assessment of prediction uncertainty quantification methods in systems biology. IEEE/ACM Transactions on Computational Biology and Bioinformatics. 2023;20(3):1725–1736. https:// doi.org/10.1109/TCBB.2022.3213914. [9] Qiao L, Khalilimeybodi A, Linden-Santangeli NJ, Rangamani P. The Evolu-tion of Systems Biology and Systems Medicine: From Mechanistic Models to Uncertainty Quantification. Annual Review of Biomedical Engineering. 2025 May;27(1):425–447. https://doi.org/10.1146/annurev-bioeng-102723-065309. 33 [10] Balsa-Canto E, Campo-Manzanares N, Moimenta AR, Roudaut G, Troiti˜ no-Jordedo D. Quantifying and managing uncertainty in systems biology: Mech-anistic and data-driven models. Current Opinion in Systems Biology. 2025 Dec;42:100557. https://doi.org/10.1016/j.coisb.2025.100557. [11] Miˇ skovi´ c L, Hatzimanikatis V. Modeling of uncertainties in biochemical reactions. Biotechnology and Bioengineering. 2010 Oct;108(2):413–423. https://doi.org/10. 1002/bit.22932. [12] Kaltenbach HM, Dimopoulos S, Stelling J. Systems analysis of cellular networks under uncertainty. FEBS Letters. 2009 Oct;583(24):3923–3930. https://doi.org/ 10.1016/j.febslet.2009.10.074. [13] Kirk PDW, Babtie AC, Stumpf MPH. Systems biology (un)certainties. Science. 2015;350(6259):386–388. https://doi.org/10.1126/science.aac9505. [14] Cedersund G. Prediction uncertainty estimation despite unidentifiability: an overview of recent developments. In: Geris L, Gomez-Cabrero D, editors. Uncertainty in Biology. Cham: Springer; 2016. p. 449–466. [15] Raue A, Kreutz C, Theis FJ, Timmer J. Joining forces of Bayesian and fre-quentist methodology: a study for inference in the presence of non-identifiability. Philosophical Transactions of the Royal Society A. 2013;371(1984):20110544. https://doi.org/10.1098/rsta.2011.0544. [16] Liepe J, Kirk P, Filippi S, Toni T, Barnes CP, Stumpf MPH. A framework for parameter estimation and model selection from experimental data in sys-tems biology using approximate Bayesian computation. Nature Protocols. 2014 Jan;9(2):439–456. https://doi.org/10.1038/nprot.2014.025. [17] Hines KE, Middendorf TR, Aldrich RW. Determination of parameter identifia-bility in nonlinear biophysical models: a Bayesian approach. Journal of General Physiology. 2014;143(3):401–416. https://doi.org/10.1085/jgp.201311116. [18] Kreutz C, Raue A, Kaschek D, Timmer J. Profile likelihood in systems biology. FEBS Journal. 2013;280(11):2564–2571. https://doi.org/10.1111/febs.12276. [19] Massonis G, Villaverde AF, Banga JR. Improving dynamic predictions with ensembles of observable models. Bioinformatics. 2023;39(1):btac755. https://doi. org/10.1093/bioinformatics/btac755. [20] Portela A, Banga JR, Matabuena M. Conformal prediction for uncertainty quantification in dynamic biological systems. PLoS Computational Biology. 2025;21(5):e1013098. https://doi.org/10.1371/journal.pcbi.1013098. [21] Barber RF, Cand` es EJ, Ramdas A, Tibshirani RJ. Predictive inference with the jackknife+. Annals of Statistics. 2021;49(1):486–507. https://doi.org/10.1214/ 34 20-AOS1965. [22] Abril-Pla O, Andreani V, Carroll C, Dong L, Fonnesbeck CJ, Kochurov M, et al. PyMC: A Modern and Comprehensive Probabilistic Programming Framework in Python. PeerJ Computer Science. 2023;9(e1516). https://doi.org/10.7717/ peerj-cs.1516. [23] Helleckes LM, Osthege M, Wiechert W, von Lieres E, Oldiges M. Bayesian cali-bration, process modeling and uncertainty quantification in biotechnology. PLoS computational biology. 2022;18(3):e1009223. https://doi.org/10.1371/journal. pcbi.1009223. [24] Castro M. Approximate Bayesian Computation Made Easy: A Practical Guide to ABC-SMC for Dynamical Systems with PyMC. arXiv preprint. 2025;arXiv:2511.21587. https://doi.org/10.48550/arXiv.2511.21587. [25] Egea JA, Henriques D, Cokelaer T, Villaverde AF, MacNamara A, Danciu DP, et al. MEIGO: an open-source software suite based on metaheuristics for global optimization in systems biology and bioinformatics. BMC Bioinformatics. 2014;15:136. https://doi.org/10.1186/1471-2105-15-136. [26] Villaverde AF, Fr¨ ohlich F, Weindl D, Hasenauer J, Banga JR. Benchmarking optimization methods for parameter estimation in large kinetic models. Bioinfor-matics. 2019;35(5):830–838. https://doi.org/10.1093/bioinformatics/bty736. [27] Bard Y. Nonlinear Parameter Estimation. New York: Academic Press; 1974. [28] Martins JRRA, Sturdza P, Alonso JJ. The complex-step derivative approx-imation. ACM Transactions on Mathematical Software. 2003;29(3):245–262. https://doi.org/10.1145/838250.838251. [29] Wangersky PJ. Lotka-Volterra population models. Annual Review of Ecology and Systematics. 1978;9(1):189–218. https://doi.org/10.1146/annurev.es.09.110178. 001201. [30] Kermack WO, McKendrick AG. A contribution to the mathematical theory of epidemics. Proceedings of the Royal Society A. 1927;115(772):700–721. https: //doi.org/10.1098/rspa.1927.0118. [31] Box GEP, Hunter WG, Macgregor JF, Erjavec J. Some problems associated with the analysis of multiresponse data. Technometrics. 1973;15(1):33–51. https: //doi.org/10.1080/00401706.1973.10489009. [32] Lipniacki T, Paszek P, Brasier AR, Luxon B, Kimmel M. Mathematical model of NF-κB regulatory module. Journal of Theoretical Biology. 2004;228(2):195–215. https://doi.org/10.1016/j.jtbi.2004.01.001. 35 [33] Gelman A, Rubin DB. Inference from iterative simulation using multiple sequences. Statistical Science. 1992;7(4):457–472. https://doi.org/10.1214/ss/ 1177011136. [34] Vehtari A, Gelman A, Simpson D, Carpenter B, B¨ urkner PC. Rank-normalization, folding, and localization: An improved bR for assessing convergence of MCMC. Bayesian Analysis. 2021;16(2):667–718. https://doi.org/10.1214/ 20-BA1221. [35] Angelopoulos AN, Bates S. Conformal prediction: a gentle introduction. Foun-dations and Trends in Machine Learning. 2023;16(4):494–591. https://doi.org/ 10.1561/2200000101. [36] Luo Y, Ren Z, Barber RF. Iterative approximate cross-validation. In: Proceedings of the 40th International Conference on Machine Learning. vol. 202 of Proceedings of Machine Learning Research. PMLR; 2023. p. 23083–23102. 36
