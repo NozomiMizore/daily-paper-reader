@@ -1,0 +1,548 @@
+Title: A Bayesian-optimization framework coupling a multiphase PDE tumor model to efficiently design combination therapy schedules
+
+URL Source: https://arxiv.org/pdf/2607.20782v1
+
+Published Time: Fri, 24 Jul 2026 00:20:05 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# Highlights 
+
+A Bayesian-optimization framework coupling a multiphase PDE tumor model to efficiently design combination therapy schedules 
+
+Ioannis Lampropoulos, Yorgos M. Psarellis, Michail Kavousanakis 
+
+• Automated COMSOL-Python framework for tumor therapy optimization. 
+
+• Bayesian optimization cuts PDE evaluations by an order of magnitude. 
+
+• Quantifies docetaxel-induced radiosensitization in triple therapy. 
+
+• Identifies schedules balancing tumor control and healthy-tissue toxicity. arXiv:2607.20782v1 [q-bio.TO] 22 Jul 2026 A Bayesian-optimization framework coupling a multiphase PDE tumor model to efficiently design combination therapy schedules ⋆
+
+Ioannis Lampropoulos a, Yorgos M. Psarellis b,1 and Michail Kavousanakis a,∗
+
+> a
+
+School of Chemical Engineering, National Technical University of Athens, Zografou, Athens, 15772, Greece 
+
+> b
+
+Department of Chemical and Biomolecular Engineering, Johns Hopkins University, Baltimore, , MD, USA 
+
+A R T I C L E I N F O 
+
+Keywords :Bayesian optimization Gaussian processes PDE-constrained design multiphase tumor model combination chemotherapy digital twin 
+
+Abstract 
+
+Designing combination cancer therapies requires choosing not only which agents to combine but also their relative doses and timing – decisions that critically shape the trade-off between efficacy and toxicity. High-fidelity mechanistic models of tumor growth, formulated as systems of coupled partial differential equations (PDEs), can in principle resolve how these scheduling choices interact with the tumor microenvironment, but each evaluation is computationally expensive, rendering brute-force exploration of the design space intractable. We present a Bayesian Optimization (BO) framework that treats a multiphase, vascularized, two-dimensional PDE tumor simulator as a black box and uses a Gaussian-process surrogate together with a Lower Confidence Bound acquisition policy to find schedules that maximize therapeutic outcomes within a small budget of expensive simulations. We orchestrate the COMSOL Multiphysics ®
+
+solver from Python using the MPh library and GPyOpt , producing a fully automated optimization loop in which a single simulation of ∼650 days of tumor evolution requires roughly 80 hours of wall time. The framework is applied to three clinically relevant scenarios: (i) a two-agent regimen (docetaxel + bevacizumab), (ii) a three-agent regimen (docetaxel + bevacizumab + external radiation) under reduced and full intensity, and (iii) a single-agent dose-fractionation problem in which efficacy is balanced against healthy-tissue toxicity through a weighted multi-objective formulation. The BO loop converges to clinically plausible optima with one to two orders of magnitude fewer simulations than an equivalent grid search, identifies docetaxel-induced radiosensitization as a decisive factor in the triple-therapy optimum, and recovers a fractionation regime consistent with clinical protocols when both efficacy and toxicity are considered. The framework is agnostic to the specifics of the underlying PDE model and provides a transferable methodology for design optimization of expensive engineered or biological simulators. 
+
+1. Introduction 
+
+Cancer remains one of the most challenging diseases to treat, in part because its biological mechanisms involve multiple interacting pathways, redundancy, and the rapid emergence of resistance The Institute of Cancer Research. To counter this complexity, combination therapies that pair agents with distinct mechanisms of action have become a cornerstone of modern oncology, with documented efficacy across breast gen (a), lung gen (d), gynecological gen (b) and head-and-neck cancers gen (c). A representative example, and the focus of the present study, is the combination of anti-VEGF (anti-angiogenic) agents with cytotoxic chemotherapy: bevacizumab paired with paclitaxel or docetaxel has been shown to improve outcomes relative to monotherapy in several cancers Sandler, Gray, Perry, Brahmer, Schiller, Dowlati, Lilenbaum and Johnson (2006); Dhillon (2012); Wright, Viviano, Powell, Gibb, Mutch, Grigsby and Rader (2006); Ishikura, Yorozu, Kurasawa, Yanagisawa, Sugimoto and Yamamoto (2019) and is an established element of standard treatment protocols National Health Service (a,b); che. The design space expands further when different therapeutic modalities, such as chemotherapy and radiotherapy, are combined Ansari, Bokov, Alexander, Jalil, Shalaby, Suksatan, Chupradit, Al-Ghamdi, Shomali, Zamani, Mo-hammadi and Dadashpour (2022); Hainsworth, Spigel, Greco, Shipley, Peyton, Rubin, Stipanov and Meluch (2011); Wozniak, Moon, Thomas, Kelly, Mack, Gaspar, Raben, Fitzgerald, Pandya and Gandara (2015). Such multimodal regimens are already employed clinically; for example, taxane-based chemotherapy combined with radiotherapy is 
+
+> ∗
+
+Corresponding author 
+
+mihkavus@chemeng.ntua.gr (M. Kavousanakis) 
+
+> ORCID
+
+(s): 0009-0002-3092-8750 (I. Lampropoulos); 0000-0003-2540-0505 (Y.M. Psarellis); 0000-0001-6621-9249 (M. Kavousanakis) 
+
+> 1
+
+Currently at Sanofi US 
+
+Lampropoulos et al.: Preprint submitted to Elsevier Page 1 of 13 part of established protocols for non-small-cell lung cancer rad (a,b). Multimodality, however, introduces a new layer of design choices: in addition to selecting the agents themselves, one must specify their relative doses, sequence, and timing. These choices critically determine the balance between efficacy and toxicity. Mechanistic models that resolve tumor dynamics in space and time – in particular partial differential equation (PDE) models – offer a principled way to explore how scheduling choices interact with the tumor microenvironment to shape outcomes such as tumor shrinkage and recurrence Mi, Petitjean, Dubray, Vera and Ruan (2014); Liu, Luo, Tan, Pang and Chen (2023); Li (2024). PDE-based formulations are well suited to capture spatially structured processes such as angiogenesis Jiang, Wang, Deng, Xiong, Zhang, Gong, Li, Cao, Deng, He, Liao, Xiang, Zhou, Guo, Zeng, Li, Li and Xiong (2020); Fan, Schimming, Jaeger and Podar (2012) and metastatic seeding Lorusso and Rüegg (2008); Neophytou, Panagi, Stylianopoulos and Papageorgis (2021). The fidelity of these simulators, however, comes at a computational cost that places systematic optimization out of reach for brute-force approaches Lampropoulos and Kavousanakis (2023). This bottleneck has limited the practical utility of high-fidelity in-silico models for treatment design, personalized digital twins, and other downstream translational applications Harrer, Shah, Antony and Hu (2019); Pappalardo, Russo, Tshinanu and Viceconti (2018); Viceconti, Henney and Morley-Fletcher (2016); Moingeon, Chenel, Rousseau, Voisin and Guedj (2023); Kleeberger (2025); Santa-Ana-Tellez, Lagerwaard, de Jong, Gardarsdottir, Grobbee, Hawkins, Heath and Zuidgeest (2023); Kaul, Ossai, Forkan, Jayaraman, Zelcer, Vaughan and Wickramasinghe (2022); Cellina, Cè, Alì, Irmici, Ibba, Caloro, Fazzini, Oliva and Papa (2023). To overcome this bottleneck, we couple a mechanistic PDE-based tumor simulator with a data-efficient probabilistic surrogate, and use Bayesian Optimization (BO) to navigate the treatment-design space. In our workflow the PDE model is treated as a black box: the BO loop iteratively proposes dosing schedules, evaluates them with the high-fidelity simulator, and uses the observed outcomes to update a Gaussian-process (GP) surrogate that guides further search. BO is particularly well suited to this setting because it is non-parametric, uncertainty-aware, and explicitly designed to minimize the number of expensive evaluations Shahriari, Swersky, Wang, Adams and de Freitas (2016); Frazier (2018); Rasmussen and Williams (2005). It has a strong track record for the optimization of costly black-box systems in chemistry and biology Psarellis, Kavousanakis, Dauenhauer and Kevrekidis (2023); Psarellis, Sapsis and Kevrekidis (2025); Manoj, Psarellis, Wittreich, Kavousanakis, Dauenhauer and Kevrekidis (2025); Merzbacher, Mac Aodha and Oyarzún (2023); Shields, Stevens, Li, Parasram, Damani, Alvarado, Janey, Adams and Doyle (2021); Thompson, MacKinnon, Venturelli and Zavala (2024), and an emerging body of work has begun to apply it to therapeutic dose and schedule design Takahashi and Suzuki (2020); Willard, Golchi, Moodie, Boulanger and Carlin (2024); Krishnamoorthy and Doyle (2022); Takahashi and Suzuki (2021). A further feature of our approach is its natural extension to multi-objective optimization. Combination therapies present competing objectives – most prominently, maximizing efficacy while minimizing toxicity Thall and Cook (2004); Braun and Seymour (2010). BO supports principled exploration of these trade-offs through weighted scalarization or Pareto-front construction, accounting for interactions between mechanisms of action rather than assuming independent dose-response curves Vander Heiden (2011); Chargari, Magne, Guy, Rancoule, Levy, Goodman and Deutsch (2016); Lee, Kong, Ayers and Lotan (2007). The principal contributions of this work are as follows. 
+
+• We integrate a spatially resolved, vascularized, multiphase PDE tumor model with an uncertainty-aware BO loop, enabling efficient treatment-schedule design when each PDE evaluation is computationally expensive (here, ∼80 h per simulation). 
+
+• We apply a bi-objective extension of the BO loop to expose efficacy–toxicity trade-offs for combinations of anti-angiogenic, cytotoxic, and radiotherapeutic modalities, producing interpretable, Pareto-optimal treatment regimes. 
+
+• We show that BO-guided exploration uncovers biologically meaningful trade-offs and regimen features – such as the dominant role of docetaxel-induced radiosensitization – that align with mechanistic insight and motivate testable hypotheses for experimental validation. The remainder of the manuscript is organized as follows. Section 2 describes the PDE-based tumor simulator that produces the high-fidelity evaluations. Section 3 presents the Bayesian optimization methodology and the coupling between Python and the PDE solver. Section 4 reports three case studies (double, triple and single-agent regimens). Section 5 discusses the implications and limitations of the framework. 2. Multiphase PDE tumor model 
+
+Before introducing the optimization methodology, we summarize the mechanistic PDE-based tumor model that produces the high-fidelity (and computationally expensive) evaluations used by the optimizer. The model is a multi-phase continuum formulation in two spatial dimensions and is described in full detail in previous work Lampropoulos and Kavousanakis (2023); Lampropoulos, Koutsi and Kavousanakis (2025); we restrict the present description to the elements required to interpret the results. A complete specification of the kinetic source terms is provided in the Supplementary Information (Sec. I). The model represents five non-mixable volumetric phases, each with its own volume fraction, velocity field ⃗𝑢 𝑖 = ( 𝑢 𝑖 , 𝑣 𝑖 ) and pressure 𝑝 𝑖 :
+
+• Healthy cells ( 𝑖 = ℎ). 
+
+• Cancer cells ( 𝑖 = 𝑐 ). 
+
+• Young vessels ( 𝑖 = 𝑦𝑣 ). 
+
+• Mature vessels ( 𝑖 = 𝑚𝑣 ). 
+
+• Interstitial fluid ( 𝑖 = 𝑖𝑛𝑡 ). Coupled to these, the model includes four molecular species that mediate biological processes and deliver the therapies: oxygen, vascular endothelial growth factor (VEGF), bevacizumab and docetaxel. The molecular species do not contribute to the volumetric composition. The governing system consists of mass and momentum balances for the phases, reaction–diffusion equations for the molecular species and algebraic equations of state. A graphical illustration of all processes captured by our model is depicted in Fig. 1. 
+
+2.1. Mass balance equations for the cellular phases 
+
+Assuming macroscopically uniform tissue density Liu, Oh and Kirschner (2022), the mass balance for each phase 
+
+𝑖 ∈ { ℎ, 𝑐, 𝑦𝑣, 𝑚𝑣, 𝑖𝑛𝑡 } reads 𝜕𝜃 𝑖 
+
+𝜕𝑡 + ∇ ⋅ (⃗𝑢 𝑖 𝜃 𝑖 
+
+) + 𝜒 𝐽 ∇ ⋅ (𝜃 𝑖 ∇𝐽 ) = 𝑞 𝑖 , (1) where 𝜃 𝑖 is the volume fraction of phase 𝑖 . The first term on the left represents local accumulation, the second advection by the phase velocity, and the third directed motion (chemotaxis) driven by a chemokine 𝐽 . The right-hand side 
+
+𝑞 𝑖 collects all interphase mass exchange and kinetic source/sink terms (proliferation, death, vessel formation, drug uptake). On the inflow portion of the boundary 𝜕 Ω (where ⃗𝑢 𝑖 ⋅⃗𝑛 < 0), we prescribe Dirichlet values equal to the initial volume fractions: 
+
+𝜃 𝑖 = 𝜃 𝑖 (𝑡 = 0) , 𝑖 ∈ { ℎ, 𝑐, 𝑦𝑣, 𝑚𝑣, 𝑖𝑛𝑡 }. (2) 
+
+2.2. Momentum balance 
+
+Tissue-scale flows operate in the creeping-flow regime ( 𝑅𝑒 < 1); inertial terms are neglected and the momentum balance for each phase reduces to 
+
+∇ ⋅ (𝜃 𝑖 𝝈 𝑖 
+
+) +⃗ 𝐹 𝑖 =⃗ 0, 𝑖 ∈ { ℎ, 𝑐, 𝑦𝑣, 𝑚𝑣, 𝑖𝑛𝑡 }. (3) Treating each volumetric phase as a Newtonian viscous fluid with dynamic viscosity 𝜇 𝑖 , the stress tensor is 
+
+𝝈 𝑖 = − 𝑝 𝑖 𝑰 + 𝜇 𝑖 
+
+(∇⃗𝑢 𝑖 + (∇ ⃗𝑢 𝑖 )𝑇 ) − 23 𝜇 𝑖 
+
+(∇ ⋅⃗𝑢 𝑖 
+
+) 𝑰 . (4) The interphase force ⃗ 𝐹 𝑖 collects pressure-driven surface forces and inter-phase drag, ⃗𝐹 𝑖 = 𝑝 𝑖 𝑰 ∇𝜃 𝑖 + ∑
+
+> 𝑗 ≠𝑖
+
+𝑑 𝑖,𝑗 𝜃 𝑖 𝜃 𝑗 
+
+(⃗𝑢 𝑗 −⃗𝑢 𝑖 
+
+) , (5) with 𝑑 𝑖,𝑗 a drag coefficient. Boundary conditions are traction-free on the external boundary for the cellular and vessel phases, 
+
+𝝈 𝑖 ⋅⃗𝑛 =⃗ 0, 𝑖 ∈ { ℎ, 𝑐, 𝑦𝑣, 𝑚𝑣 }, (6) together with a no-flow condition for the interstitial fluid, ⃗𝑢 𝑖𝑛𝑡 =⃗ 0. (7) Summing the mass balances over all phases yields the continuity relation used to recover the pressure field, 
+
+∑
+
+> 𝑖
+
+[
+
+∇ ⋅ (𝜃 𝑖 ⃗𝑢 𝑖 
+
+) + ∑
+
+> 𝐽
+
+𝜒 𝐽 ∇ ⋅ (𝜃 𝑖 ∇𝐽 )]
+
+= 0 . (8) Once the interstitial pressure 𝑝 𝑖𝑛𝑡 is recovered, algebraic equations of state close the remaining phase pressures Hubbard and Byrne (2013). 
+
+2.3. Molecular species transport 
+
+The four molecular species (oxygen, VEGF, bevacizumab, docetaxel) are governed by reaction–diffusion equations, 
+
+𝐷 𝐽 ∇2𝐽 + 𝑠 𝐽 = 0 , 𝐽 ∈ { 𝑐, 𝑔, 𝑎, 𝑤 }, (9) with diffusion coefficient 𝐷 𝐽 and net source term 𝑠 𝐽 , and Neumann (zero-flux) boundary conditions on 𝜕 Ω:
+
+∇𝐽 ⋅⃗𝑛 = 0 . (10) Explicit expressions for the production, consumption, binding and pharmacokinetic terms in 𝑠 𝐽 are given in the Supplementary Information (Sec. I.C). 
+
+3. Bayesian Optimization framework 
+
+Each evaluation of the PDE model in Sec. 2 is computationally expensive: a single simulation of one combination-therapy schedule resolves ∼ 1 .9 × 10 6 degrees of freedom for 650 non-dimensional time units (one unit corresponds to one day) and requires approximately 80 hours of wall-clock time on a 12-core AMD Ryzen 9 3900X workstation. A naive grid search over a single scheduling parameter at coarse resolution would already consume thousands of CPU-hours; the cost grows combinatorially in higher dimensions. Bayesian Optimization (BO) is well suited to this regime because it explicitly aims to identify the global optimum of an expensive, possibly noisy black-box objective using as few evaluations as possible Shahriari et al. (2016); Frazier (2018). We treat the PDE simulator as a black box. The BO loop iteratively proposes candidate schedules, evaluates them with the simulator, updates a probabilistic surrogate over the design space, and selects the next evaluation by maximizing an acquisition function that balances exploration and exploitation. The generic problem is ⃗𝑥 ∗ = argmax ⃗𝑥 ∈
+
+𝐹 (⃗𝑥 ), (11) with ⃗𝑥 the vector of scheduling decision variables, 𝐹 the objective computed by the simulator, and  a bounded search domain. The optimization framework outlined above is encapsulated in the flowchart shown in Fig. 2. Its components are examined in greater detail in the following paragraphs. 
+
+3.1. Surrogate and acquisition 
+
+We adopt a Gaussian process (GP) surrogate with a squared-exponential (radial basis function, RBF) kernel for its smoothness and good empirical performance on tumor-growth landscapes. Length-scale hyperparameters are re-estimated by maximum marginal likelihood after each new observation. The acquisition function is the Lower Confidence Bound (LCB), 
+
+LCB( ⃗𝑥 ) = 𝜇 (⃗𝑥 ) − 𝜅 𝜎 (⃗𝑥 ), (12) with 𝜇 (⃗𝑥 ) and 𝜎 (⃗𝑥 ) the GP posterior mean and standard deviation, and 𝜅 controlling the exploration–exploitation trade-off (small 𝜅 favours exploitation, large 𝜅 favours exploration). Throughout this work we use 𝜅 = 0 .1, an exploitation-leaning choice motivated by the high per-evaluation cost. To maximize 𝐹 in Eq. (11) using the LCB, we equivalently minimize −𝐹 .BO proceeds in batches of size one: after each completed simulation, the new observation (⃗𝑥 next , 𝐹 (⃗𝑥 next )) updates the surrogate, and the acquisition function is then maximized over  to propose the next ⃗𝑥 . The loop terminates when either a pre-set evaluation budget is reached or the incumbent best ceases to improve. The best observed schedule is returned as the recommendation. BO is implemented through GPyOpt Dai (2016); COMSOL Multiphysics ® (Finite Element Method) is orchestrated from Python through the MPh library Hennig, Elfner, Feder and Maeder (2021). The implementation details are provided in the Supplementary Information (Sec. V). 
+
+3.2. Decision variables and objectives 
+
+We consider three families of optimization problems. 
+
+Double therapy (docetaxel + bevacizumab). The decision variable is the offset between the first administration of the two agents, ⃗𝑥 = Δ 𝑡 = 𝑡 doc inj ,1 − 𝑡 bev inj ,1, (13) with Δ𝑡 ∈ [−106 , 106] d .
+
+Triple therapy (docetaxel + bevacizumab + external radiation). The decision vector contains two relative offsets, 
+
+Δ𝑡 1 = 𝑡 doc inj ,1 − 𝑡 bev inj ,1, (14) 
+
+Δ𝑡 2 = 𝑡 rad ,1 − 𝑡 bev inj ,1, (15) with (Δ 𝑡 1, Δ𝑡 2) ∈ [−84 , 84] 2 d.For the combined regimens, the objective is the Surface Coverage Mitigation ( 𝑆𝐶𝑀 ), measuring the relative reduction in cancer-cell coverage with respect to an untreated reference at time 𝑡 :
+
+𝑆𝐶𝑀 (𝑡 ) = 
+
+(
+
+1 − ∬𝑆 𝜃 tr  
+
+> 𝑐
+
+(𝑥, 𝑦, 𝑡 ) d 𝑥 d𝑦 
+
+∬𝑆 𝜃 un  
+
+> 𝑐
+
+(𝑥, 𝑦, 𝑡 ) d 𝑥 d𝑦 
+
+)
+
+⋅ 100% . (16) 
+
+𝑆𝐶𝑀 is evaluated 360 days after the last therapeutic injection, ⃗
+
+Δ𝑡 ∗ = argmax ⃗
+
+> Δ𝑡
+
+𝑆𝐶𝑀 (⃗Δ𝑡 ). (17) 
+
+Single therapy (docetaxel only). We optimize the splitting of a fixed total dose 𝑤 total over 𝑁 doc sessions of equal dose 𝑤 inj = 𝑤 total ∕𝑁 doc ,
+
+𝑁 ∗doc = argmax 
+
+> 𝑁 doc
+
+⃗𝐹 (𝑁 doc ). (18) Two metrics enter the vector-valued objective ⃗ 𝐹 . The first is the tumor surface coverage, 
+
+𝑆𝐶 =
+
+( 1
+
+𝑆 ∬𝑆 
+
+𝜃 𝑐 d𝑥 d𝑦 
+
+)
+
+⋅ 100% , (19) and the second is healthy-tissue recession, used as a proxy for toxicity, 
+
+𝐻𝑇 𝑅 =
+
+(
+
+1 − ∬𝑆 𝜃 ℎ d𝑥 d𝑦 
+
+∬𝑆 𝜃 ℎ(𝑡 = 0) d 𝑥 d𝑦 
+
+)
+
+⋅ 100% . (20) Bi-objective optimization combines the two through a weighted scalarization (Section 4.3.2). 3.3. Computational setup 
+
+The PDE system is solved on a two-dimensional circular domain of non-dimensional radius 30, meshed with an unstructured Delaunay triangulation. All simulations start from a single cancerous lesion embedded in healthy tissue. A typical combination-therapy simulation comprises ∼ 1 .9 × 10 6 degrees of freedom and ∼ 80 h of wall time on a 12-core AMD Ryzen 9 3900X workstation. The optimization loop runs entirely in Python; GPyOpt GPy Authors (2020) hosts the GP surrogate and acquisition optimizer, and the MPh library Dressler (2024) drives the COMSOL solver and retrieves results. Representative implementation snippets are provided in the Supplementary Information (Sec. V). 
+
+4. Results 
+
+4.1. Double therapy: optimizing the relative start time 
+
+Docetaxel is administered in six sessions every three weeks at 175 mg∕m 2 per session National Health Service (a,b), spanning 106 days. Bevacizumab follows the same calendar at 15 mg∕kg per session National Health Service (a,b), also spanning 106 days. The decision variable is the relative offset between the first administrations of the two agents, Δ𝑡 = 𝑡 doc inj ,1 − 𝑡 bev inj ,1 ∈ [−106 , 106] d ; Δ𝑡 = −106 corresponds to a fully serial schedule with docetaxel first, 
+
+Δ𝑡 = +106 to the reverse order, and Δ𝑡 = 0 to concomitant administration. The optimization objective is 𝑆𝐶𝑀 evaluated 360 days after the final injection. With 𝑡 start = 80 and 21-day cycles, the sampling time is 𝑡 sample = 545+ |Δ𝑡 |. The BO loop was seeded with the two boundary observations: 𝑆𝐶𝑀 = 74 .1% 
+
+at Δ𝑡 = −106 and 𝑆𝐶𝑀 = 82 .6% at Δ𝑡 = +106 . The acquisition function then drove the search toward the interior, refining around Δ𝑡 ≈ 0 . The best observed schedule was Δ𝑡 ≈ 0 with 𝑆𝐶𝑀 ≈ 89% (Fig. 3), in agreement with the grid-based result of Lampropoulos and Kavousanakis (2023) but obtained at a small fraction of the computational cost. With the exploitation-leaning acquisition ( 𝜅 = 0 .1), the proposal step size |Δ𝑡 𝑘 +1 − Δ 𝑡 𝑘 | decreases monotonically as the algorithm focuses on the incumbent best (Fig. 4). The result is consistent with clinical practice, where concomitant initiation of cytotoxic and anti-angiogenic agents is the recommended schedule for several indications. Spatial snapshots of the cancer-cell volume fraction at representative offsets Δ𝑡 ∈ {−32 , 0, 37 , 106} (Fig. 5) illustrate the qualitative consequence of the schedule. Near-concomitant schedules suppress the tumor uniformly throughout the domain; strongly offset schedules yield larger total burden and rougher tumor boundaries. The mild non-monotonicity visible in the surrogate near Δ𝑡 ≈ −30 is consistent with discretization-level noise in the PDE simulator; the GP noise term absorbs this variance and produces well-calibrated uncertainty estimates in this region. 
+
+4.2. Triple therapy: docetaxel + bevacizumab + external radiation 
+
+We next consider the three-agent regimen. The decision variables are the two relative offsets defined in Eqs. (14)– (15); 𝑆𝐶𝑀 remains the objective. Determining the sampling time 𝑡 sample is more involved than in the double-therapy case because both the sign and the relative magnitude of Δ𝑡 1 and Δ𝑡 2 enter the calendar. Five sign and ordering regimes arise: 1. Δ𝑡 1 ≥ 0, Δ𝑡 2 ≥ 0,2. Δ𝑡 1 ≥ 0, Δ𝑡 2 < 0,3. Δ𝑡 1 < 0, Δ𝑡 2 ≥ 0,4. Δ𝑡 1 < 0, Δ𝑡 2 < 0 with Δ𝑡 1 ≥ Δ𝑡 2,5. Δ𝑡 1 < 0, Δ𝑡 2 < 0 with Δ𝑡 1 < Δ𝑡 2.The corresponding expressions for 𝑡 sample = 𝑡 start + 𝑡 elapsed + 𝐿 are summarized in Table 1. We define the search box by enumerating all serial-ordering combinations of the three agents and taking the smallest box that contains them; the resulting bounds are Δ𝑡 1, Δ𝑡 2 ∈ [−84 , 84] d . The corresponding extreme schedules are listed in Table 2. When multiple therapeutic agents are present simultaneously in the tissue, their interactions must be modeled explicitly. Taxanes such as docetaxel are known to sensitize cells to radiation Golden, Formenti and Schiff (2014); in addition, tissue oxygen concentration modulates the response of cancer cells to radiation Oronsky, Knox and Scicinski (2011). We therefore consider two variants of the triple-therapy model: a radiosensitization-positive variant that retains both docetaxel- and oxygen-induced radiosensitization, and a radiosensitization-negative variant that neglects the docetaxel contribution. Radiosensitization is modeled according to Lampropoulos et al. (2025); a detailed description is provided in the Supplementary Information (Sec. I.D). Table 1                                                                       
+
+> Expressions for the 𝑆𝐶𝑀 -sampling time 𝐿 as a function of the sign and ordering of (Δ 𝑡 1,Δ𝑡 2).
+> sgn(Δ 𝑡 1)sgn(Δ 𝑡 2)𝐿
+> ++max(Δ 𝑡 1+ 42 ,Δ𝑡 2+ 18) +−Δ𝑡 1+|Δ𝑡 2|+ 42 −+max( |Δ𝑡 1|+ 42 ,|Δ𝑡 1|+ Δ 𝑡 2+ 18) −−,Δ𝑡 1≥Δ𝑡 2|Δ𝑡 1|+ 42 −−,Δ𝑡 1<Δ𝑡 2|Δ𝑡 2|+ 42
+> Table 2
+> First-administration times 𝑡 bev inj ,1,𝑡 doc inj ,1and 𝑡 rad ,1(days) for the six serial orderings of the three agents, together with the corresponding (Δ 𝑡 1,Δ𝑡 2).
+> 𝑡 bev inj ,1𝑡 doc inj ,1𝑡 rad ,1Δ𝑡 1Δ𝑡 2
+> 80 122 164 42 84 80 140 122 60 42 122 80 164 −42 42 140 80 122 −60 −18 98 140 80 42 −18 140 98 80 −42 −60
+
+4.2.1. Reduced-intensity regimen 
+
+We first consider a reduced-intensity protocol with three docetaxel and bevacizumab sessions and 15 radiation fractions, designed to prevent ties at full elimination of the tumor (under the full protocol, several schedules drive 
+
+𝜃 𝑐 → 0 within the simulation horizon and produce identical 𝑆𝐶𝑀 , making them indistinguishable through Eq. (17)). The full-intensity scenario, in which we replace 𝑆𝐶𝑀 by the time to elimination, is treated separately in Section 4.2.2. 
+
+Radiosensitization-positive run. The BO loop was initialized with no prior observations. After three iterations the loop converged to a local optimum at (⃗Δ𝑡 opt , 𝑆𝐶𝑀 opt ) = ((−18 , −27) , 69 .12%) . To rule out a local maximum, the loop was restarted with five additional seed points, after which the global incumbent moved to (⃗ Δ𝑡 opt , 𝑆𝐶𝑀 opt ) = ((21 , 57) , 75 .52%) . The corresponding optimization script is provided in the Supplementary Information (Sec. V.B); we report only the summary statistics here. The corresponding GP posterior is shown in Fig. 6. Two regions of high efficacy emerge. The first, around (Δ 𝑡 1, Δ𝑡 2) ≈ (21 , 57) , corresponds to a schedule in which radiation is administered last; here the tumor has already been suppressed by chemotherapy, and docetaxel-induced radiosensitization further amplifies the effect of radiation on the residual tumor mass. The second is a broader region around Δ𝑡 1 ∈ [−20 , 40] and Δ𝑡 2 ∈ [−40 , 10] , where the three agents are applied closer in time, with radiation either preceding or co-administered with chemotherapy. In this region the best observed schedule is (Δ 𝑡 1, Δ𝑡 2) = (12 , −18) ,in which radiation hits the tumor early and chemotherapy maintains long-term suppression. 
+
+Radiosensitization-negative run. A second optimization, in which only oxygen-induced radiosensitization is retained, converges after five seedless iterations and a subsequent restart to (⃗Δ𝑡 opt , 𝑆𝐶𝑀 opt ) = ((21 , 57) , 69 .83%) 
+
+(Fig. 7). The corresponding setup follows the same implementation pattern reported in the Supplementary Information (Sec. V.B). Comparing the two GP posteriors, the topology of the surrogate is preserved between the two variants – the same two regions are favored – but the attained 𝑆𝐶𝑀 at the global optimum drops from 75 .5% to 69 .8% when docetaxel-induced radiosensitization is suppressed. We interpret this gap as a quantitative measure of the contribution of docetaxel-induced radiosensitization to long-term tumor control in the present scenario. 4.2.2. Full-intensity regimen: time to elimination 
+
+Under the full protocol, several schedules drive the tumor to extinction within the simulation horizon. We therefore replace 𝑆𝐶𝑀 by the elimination time 𝑡 end , defined as the first instant at which 
+
+∬𝑆 
+
+𝜃 𝑐 d𝑥 d𝑦 < 10 −10 .
+
+The objective becomes ⃗
+
+Δ𝑡 ∗ = argmin ⃗
+
+> Δ𝑡
+
+𝑡 end (⃗Δ𝑡 ). (21) To prevent schedules that fail to eliminate the tumor from contaminating the surrogate, an additive penalty is applied: 
+
+𝑡 end ← 𝑡 end + 300 if the elimination criterion is not met. The optimization identifies the optimum (⃗ Δ𝑡 opt , 𝑡 opt end ) = ((−47 , 6) , 153 .83 d) , consistent with the chemotherapy-first / radiation-second pattern observed in the reduced-intensity case. The separation between docetaxel and radiation is larger here, an expected consequence of the higher cumulative docetaxel concentration achieved under the full protocol. The negative Δ𝑡 2 indicates that radiation precedes bevacizumab; this allows radiation to act before anti-VEGF-driven vascular pruning limits oxygen delivery, exploiting oxygen-induced radiosensitization. The GP posterior (Fig. 8) reveals a high-efficacy zone bounded by Δ𝑡 1 ≲ 20 and Δ𝑡 2 ≳ −20 . The sharp contrast between this zone and its neighborhood reflects the binary nature of the penalized objective: schedules below the (−84 , −84) –(84 , 84) diagonal generally fail to eliminate the tumor and incur the penalty. The spatial dynamics underlying the optimum are illustrated in Fig. 9: pre-treatment with docetaxel sensitizes the tumor, and the subsequent radiation fraction eliminates the residual cancer cells. In contrast, when bevacizumab precedes the other agents, radiation does not fully eliminate the lesion and docetaxel only contains it. 
+
+4.3. Single therapy: dose fractionation and the efficacy–toxicity trade-off 
+
+We finally consider a single-agent regimen in which the decision variable is the number of docetaxel sessions 𝑁 doc 
+
+at constant total dose 𝑤 total , so that 
+
+𝑤 inj = 𝑤 total 
+
+𝑁 doc 
+
+.
+
+This single-agent setting allows us to dissect the role of fractionation independently of inter-agent interactions, and to introduce a toxicity-aware bi-objective formulation. 
+
+4.3.1. Efficacy-only optimization 
+
+In the first sub-experiment, 𝑆𝐶 is the sole objective. The BO loop was run without seed points; the implementation is summarized in the Supplementary Information (Sec. V.E) and evaluates 𝑁 doc ∈ {1 , 3, 4, 6, 7, 11 , 18} . The GP surrogate (Fig. 10) identifies the optimum at (𝑁 doc , 𝑆𝐶 ) = (3 , 9.08%) , with the neighbouring 𝑁 doc = 4 nearly as good. Efficacy degrades monotonically beyond 𝑁 doc ≈ 6 , consistent with the intuition that excessive fractionation dilutes each session below the threshold at which it can outpace tumor regrowth. Standard clinical protocols National Health Service (a,b) sit close to this optimum. A complementary observable, the tumor radius, is reported in Fig. 11. The optimum 𝑁 doc = 3 minimizes the total cancer-cell content over the simulation horizon, but 𝑁 doc = 1 minimizes the radius – consistent with a regimen that aggressively suppresses outward expansion but produces a higher residual cell density. This distinction motivates the bi-objective formulation that follows. The above is further illustrated in Fig. 12, which presents the spatial profile of the mean cancer cell concentration for 𝑟 ∈ [0 , 30] . Time point 𝑡 = 85 was selected to characterize cancer cell behaviour immediately following the initial irradiation event. The subsequent time points, 𝑡 = 105 and 𝑡 = 125 , provide insight into tumour dynamics as additional irradiation fractions are administered, whereas 𝑡 = 250 depicts the radial distributions long after the completion of the therapeutic protocol. A lesser degree of dose fractionation in radiotherapy appears to be associated with reduced tumor radius based on the simulations performed. Conversely, higher per-fraction radiation doses are generally associated with decreased tolerability in patients. As mentioned above, these observations motivate the bi-objective approach described in the next paragraph. Table 3                          
+
+> Optimal fractionation 𝑁 ∗doc and corresponding scalarized objective 𝐹 ∗for five values of the weight 𝑤 in Eq. (23) .
+> 𝑤 00.30.50.71
+> 𝑁 ∗doc 14 6663
+> 𝐹 ∗(%) 28 .55 22 .96 19 .16 15 .35 8.89
+
+4.3.2. Bi-objective formulation: efficacy versus toxicity 
+
+To account for chemotherapy-induced toxicity to healthy tissue, an additional kinetic term is introduced in the healthy-phase source: 
+
+𝑞 cyto  
+
+> ℎ
+
+= 𝑞 ℎ − 𝜙 tox 𝑘 ap ,𝑐 𝜃 ℎ
+
+𝑤 𝑤 𝑚 + 𝑤 
+
+(
+
+𝜃 int 
+
+𝑐 𝑐 𝑝 + 𝑐 − 𝑙 cr ,ℎ , ℎ 𝑑 
+
+)
+
+, (22) with 𝑘 ap ,𝑐 the docetaxel-induced apoptosis rate for cancer cells, 𝜙 tox a dimensionless coefficient capturing the increased resilience of healthy cells (which proliferate more slowly than cancer cells and have stronger DNA-repair machinery Mitchison (2012); Branham, Nadin, Vargas-Roig and Ciocca (2004); Xu and Smith (2025)), 𝑤 the local docetaxel concentration, (𝑚, 𝑛 ) = 12 [1+tanh( 𝑚 ∕𝑛 )] a smooth Heaviside approximation, 𝑐 𝑝 the half-maximum oxygen concentration for mitosis, 𝑙 cr ,ℎ the critical proliferation rate above which a cell is treated as highly proliferative, and 
+
+ℎ𝑑 the Heaviside smoothing parameter. With this term, healthy cells are assumed to die from docetaxel at a rate 
+
+𝑘 ap ,ℎ = 𝜙 tox 𝑘 ap ,𝑐 .We combine 𝑆𝐶 and 𝐻𝑇 𝑅 through a weighted scalarization, 
+
+𝐹 (𝑁 doc ; 𝑤 ) = 𝑤 ⋅ 𝑆𝐶 (𝑁 doc ) + (1 − 𝑤 ) ⋅ 𝐻𝑇 𝑅 (𝑁 doc ), (23) and run a separate BO loop for each of five weights 𝑤 ∈ {0 , 0.3, 0.5, 0.7, 1} . The optima are summarized in Table 3. At 𝑤 = 0 (toxicity-only), the optimizer settles on 𝑁 ∗doc = 14 , indicating that micro-dosing is preferable from the toxicity standpoint – but only up to a point, beyond which further fractionation dilutes each session enough that the tumor escapes containment and the toxic insult of the unchecked tumor on the healthy tissue dominates. At 𝑤 = 1 
+
+(efficacy-only) the optimum reverts to 𝑁 ∗doc = 3 , as in Section 4.3.1. The interesting observation is that for the entire intermediate range 𝑤 ∈ {0 .3, 0.5, 0.7} the optimizer agrees on 𝑁 ∗doc = 6 , the value used in clinical practice National Health Service (a,b). The Pareto front obtained from the same set of evaluations is shown in Fig. 13: solutions in the 
+
+𝑁 doc ∈ [3 , 6] range are Pareto-optimal for tumor containment, while 𝑁 doc ∈ [11 , 14] defines the toxicity-optimal end of the front. 
+
+4.4. Computational efficiency analysis 
+
+Assessing the computational efficiency of Bayesian Optimization is crucial for confirming its practicality in costly, high-dimensional engineering problems. In scenarios where a single evaluation of the objective function can take several days of computation, conventional hyperparameter tuning strategies such as grid or random search become infeasible. Grid search grows exponentially with the dimensionality of the problem, locking development into a weeks-long cycle of exhaustive trial-and-error. In contrast, Bayesian Optimization (BO) formulates optimization as a sequential decision-making task, relying on a probabilistic surrogate model to explore the search space in a targeted manner. This study shows how the implemented application exploits BO to sharply reduce overall wall-clock time, obtaining near-optimal system configurations in far fewer iterations than those required by unguided search techniques. To quantitatively assess the efficiency of the proposed method, Table 4 is reported. In this table, the number of function evaluations required for BO to converge to an optimum (second column) is compared with the number of evaluations required to exhaustively explore the entire search space using a step size of Δ( 𝛿𝑡 ) = 15 (third column) and, for a finer discretization, a step size of Δ( 𝛿𝑡 ) = 10 (fourth column). As indicated by the results, Bayesian Optimization demonstrates a monumental reduction in computational cost, particularly as the complexity of the optimization problem scales. For the two-therapy configuration, BO requires a comparable number of evaluations to the coarser grid search. However, when moving to the three-therapy configurations, the "curse of dimensionality" severely penalizes the exhaustive search approaches. While the grid search combinations explode exponentially from 14 to 121 iterations (for Δ( 𝛿𝑡 ) = 15 ) and from 21 to 289 iterations (for 
+
+Δ( 𝛿𝑡 ) = 10 ), the computational footprint of BO remains remarkably flat, requiring at most 23 total evaluations. Given Table 4                      
+
+> Comparison of the total number of objective function evaluations required for convergence between Bayesian Optimization and exhaustive Grid Search across different therapeutic configurations. The numbers after "+" indicate the number of initial points provider to the algorithm Therapy Type Bayesian Optimization Grid Search (step = 15 )Grid Search (step = 10 )Two therapies 14 + 2 ≈ 14 ≈ 21
+> Three therapies (half - sensitization pos.) 18 + 5 ≈ 11 2= 121 ≈ 17 2= 289
+> Three therapies (half - sensitization neg.) 11 + 5 ≈ 11 2= 121 ≈ 17 2= 289
+> Three therapies (full) 13 ≈ 11 2= 121 ≈ 17 2= 289
+
+that a single function evaluation in this application translates to days of wall-clock processing time, the exponential growth of grid search renders finer discretizations entirely unfeasible in practice, requiring nearly a year of continuous compute. Conversely, by intelligently navigating the search space, the proposed BO framework secures the optimal therapeutic strategy within a highly predictable, manageable timeframe of just a few weeks. Complementarily to the above analysis, Fig. 14 presents side-by-side comparisons between the bayesian optimiza-tion method, the latin hypercube sampling and, the mechanistic grid search (with a Δ( 𝛿𝑡 ) = 15 step). Thus, for the scenarios of double therapy (top left), triple therapy - sensitization negative (top right), triple therapy - sensitization positive (bottom left), and triple therapy with the full regimen, the corresponding optimal objective function values are compared, while maintaining the same number of iterations as those employed by BO. It is observed that, although Bayesian Optimization exhibits limited efficiency in constrained, one-dimensional search spaces such as those employed in double-therapy configurations, it attains superior efficiency when applied to two-dimensional search spaces. 
+
+5. Conclusions 
+
+We have presented a Bayesian-optimization framework that couples a multiphase, vascularized PDE tumor model – implemented as a finite-element solver in COMSOL Multiphysics ® and orchestrated through Python – with a Gaussian-process surrogate and a Lower Confidence Bound acquisition policy. The framework treats the PDE simulator as a black box and identifies optimal scheduling strategies for combination and single-agent cancer therapies using (10) 
+
+expensive evaluations rather than the (10 2) that a comparably resolved grid search would require. For the docetaxel–bevacizumab schedule, the framework recovers concomitant administration ( Δ𝑡 ≈ 0 ) as the long-term optimum, in agreement with previous grid-based evaluations Lampropoulos and Kavousanakis (2023) and clinical practice. For the triple combination with radiation under reduced intensity, the framework identifies docetaxel-induced radiosensitization as a decisive factor: switching this mechanism off in the model shifts the attained 𝑆𝐶𝑀 at the global optimum from 75 .5% to 69 .8% without altering the topology of the optimal region. For the full-intensity triple combination, switching to an elimination-time objective with a penalty for failure reveals a clearly bounded regime ( Δ𝑡 1 ≲ 20 , Δ𝑡 2 ≳ −20 ) in which the tumor is consistently driven to extinction. For the single-agent regimen, the bi-objective formulation recovers the clinically prescribed 𝑁 doc = 6 across a wide range of efficacy–toxicity weightings, providing a quantitative justification of standard practice within the model. The principal limitation of the present study is the simplified model of healthy-tissue response to cytotoxic agents; a more careful calibration of this response would likely shift the bi-objective optimum toward more fractionated, lower-dose regimens. Other limitations include the use of a single GP kernel family (RBF) and a single acquisition function (LCB), and the deterministic treatment of model parameters; uncertainty quantification through ensemble GPs or Bayesian PDE solvers, integration of patient-specific parameters and dose–volume histogram-based toxicity models, and extension of the framework to true bi-objective acquisition policies (expected hypervolume improvement, ParEGO) are natural directions for future work. The framework itself is agnostic to the choice of PDE model and to the dimensionality of the design space, and we expect it to transfer to other expensive engineering and biological design problems where the cost of a single evaluation precludes brute-force search. CRediT authorship contribution statement 
+
+Ioannis Lampropoulos : Writing original draft, Visualization, Validation, Software, Methodology. Yorgos M. Psarrelis : Methodology, Investigation, Writing & editing original draft. Michail Kavousanakis : Writing original draft, Supervision, Methodology, Conceptualization. 
+
+Use of Generative AI statement 
+
+Figure 1, which provides a schematic illustration of the processes captured by the multiphase tumor model, was created with the assistance of Claude. ChatGPT was used solely for language refinement. No AI tools were used to generate, analyze, or interpret the scientific results or conclusions presented in this work. 
+
+Declaration of competing interest 
+
+The authors declare that they have no competing financial interests or personal relationships that could have appeared to influence the work reported in this paper. 
+
+Acknowledgements 
+
+M. Kavousanakis would like to thank Professor Y. Kevrekidis (Johns Hopkins University) for insightful discussions on the implementation of the Bayesian Optimization algorithm. 
+
+Funding sources 
+
+This research did not receive any specific grant from funding agencies in the public, commercial, or not-for-profit sectors. 
+
+References 
+
+, a. British Columbia Cancer, Breast cancer treatment protocols. http://www.bccancer.bc.ca/health-professionals/clinical-resources/chemotherap y-protocols/breast. Accessed: 2022-11-14. , b. British Columbia Cancer, Gynecology cancer treatment protocols. http://www.bccancer.bc.ca/health-professionals/clinical-resources/chemoth erapy-protocols/gynecology. Accessed: 2022-11-14. , c. British Columbia Cancer, Head and neck cancer treatment protocols. http://www.bccancer.bc.ca/health-professionals/clinical-resources/chemo therapy-protocols/head-neck. Accessed: 2022-11-14. , d. British Columbia Cancer, Lung cancer treatment protocols. http://www.bccancer.bc.ca/health-professionals/clinical-resources/chemotherap y-protocols/lung. Accessed: 2022-11-14. , . British Columbia Cancer, Protocol summary for invasive epithelial ovarian, fallopian tube or primary peritoneal cancer with high risk of relapse using bevacizumab, carboplatin and paclitaxel. http://www.bccancer.bc.ca/chemotherapy-protocols-site/Documents/Gynecology/GOOVCAT B_Protocol.pdf. Accessed: 2022-11-14. , a. British Columbia Cancer, Protocol Summary for Treatment of Locally Advanced Non-Small Cell Lung Cancer using CARBOplatin and PACLitaxel with Radiation Therapy. http://www.bccancer.bc.ca/chemotherapy-protocols-site/Documents/Lung/LULACATRT_Protocol.pdf. Accessed: 2024-01-16. , b. British Columbia Cancer, Protocol Summary for Treatment of Newly Diagnosed Nasal, Extranodal Natural Killer (NK) or T-cell lymphoma, using Concurrent Radiation and weekly CISplatin followed by Etoposide, Ifosfamide, CISplatin and Dexamethasone . http://www.bccancer.bc. ca/chemotherapy-protocols-site/Documents/Lymphoma-Myeloma/LYVIPDRT_Protocol.pdf. Accessed: 2023-11-30. Ansari, M., Bokov, D., Alexander, M., Jalil, A.T., Shalaby, M., Suksatan, W., Chupradit, S., Al-Ghamdi, H., Shomali, N., Zamani, A., Mohammadi, A., Dadashpour, M., 2022. Cancer combination therapies by angiogenesis inhibitors; a comprehensive review. Cell Communication and Signaling .Branham, M.T., Nadin, S.B., Vargas-Roig, L.M., Ciocca, D.R., 2004. Dna damage induced by paclitaxel and dna repair capability of peripheral blood lymphocytes as evaluated by the alkaline comet assay. Mutation Research/Genetic Toxicology and Environmental Mutagenesis 560, 11–17. Braun, M.S., Seymour, M.T., 2010. Balancing the efficacy and toxicity of chemotherapy in colorectal cancer. Therapeutic Advances in Medical Oncology 3, 43–52. URL: http://dx.doi.org/10.1177/1758834010388342, doi: 10.1177/1758834010388342 .Cellina, M., Cè, M., Alì, M., Irmici, G., Ibba, S., Caloro, E., Fazzini, D., Oliva, G., Papa, S., 2023. Digital twins: The new frontier for personalized medicine? Applied Sciences 13, 7940. URL: http://dx.doi.org/10.3390/app13137940, doi: 10.3390/app13137940 .Chargari, C., Magne, N., Guy, J.B., Rancoule, C., Levy, A., Goodman, K.A., Deutsch, E., 2016. Optimize and refine therapeutic index in radiation therapy: Overview of a century. Cancer Treatment Reviews 45, 58–67. URL: http://dx.doi.org/10.1016/j.ctrv.2016.03.001, doi: 10.1016/j.ctrv.2016.03.001 .Dai, Z.e.a., 2016. Gpyopt: A bayesian optimization framework in python. http://github.com/SheffieldML/GPyOpt. Dhillon, S., 2012. Bevacizumab combination therapy. Drugs 72, 917–930. Dressler, O., 2024. Mph: A python interface for comsol multiphysics. https://pypi.org/project/MPh/. Accessed: 2024-05-22. Fan, F., Schimming, A., Jaeger, D., Podar, K., 2012. Targeting the tumor microenvironment: Focus on angiogenesis. Journal of Oncology 2012, 1–16. URL: http://dx.doi.org/10.1155/2012/281261, doi: 10.1155/2012/281261 .Frazier, P.I., 2018. Bayesian Optimization. INFORMS. p. 255–278. URL: http://dx.doi.org/10.1287/educ.2018.0188, doi: 10.1287/educ.2018. 0188 .Golden, E.B., Formenti, S.C., Schiff, P.B., 2014. Taxanes as radiosensitizers. Anti-cancer drugs 25, 502–511. GPy Authors, 2020. Gpy: A gaussian process (gp) framework in python. https://gpy.readthedocs.io/en/deploy/. Accessed: 2026-04-11. Hainsworth, J.D., Spigel, D.R., Greco, F.A., Shipley, D.L., Peyton, J., Rubin, M., Stipanov, M., Meluch, A., 2011. Combined modality treatment with chemotherapy, radiation therapy, bevacizumab, and erlotinib in patients with locally advanced squamous carcinoma of the head and neck. The Cancer Journal 17, 267–272. doi: 10.1097/ppo.0b013e3182329791 .Harrer, S., Shah, P., Antony, B., Hu, J., 2019. Artificial intelligence for clinical trial design. Trends in Pharmacological Sciences 40, 577–591. URL: http://dx.doi.org/10.1016/j.tips.2019.05.005, doi: 10.1016/j.tips.2019.05.005 .Hennig, J., Elfner, M., Feder, J., Maeder, A., 2021. Pythonic scripting interface for comsol multiphysics. https://github.com/MPh-py/MPh. Hubbard, M., Byrne, H., 2013. Multiphase modelling of vascular tumour growth in two spatial dimensions. Journal of Theoretical Biology 316, 70–89. Ishikura, N., Yorozu, K., Kurasawa, M., Yanagisawa, M., Sugimoto, M., Yamamoto, K., 2019. Sustained effect of continuous treatment with bevacizumab following bevacizumab in combination with chemotherapy in a human ovarian clear cell carcinoma xenograft model. Oncology Reports 42, 1057–1065. Jiang, X., Wang, J., Deng, X., Xiong, F., Zhang, S., Gong, Z., Li, X., Cao, K., Deng, H., He, Y., Liao, Q., Xiang, B., Zhou, M., Guo, C., Zeng, Z., Li, G., Li, X., Xiong, W., 2020. The role of microenvironment in tumor angiogenesis. Journal of Experimental & Clinical Cancer Research 39. URL: http://dx.doi.org/10.1186/s13046-020-01709-5, doi: 10.1186/s13046-020-01709-5 .Kaul, R., Ossai, C., Forkan, A.R.M., Jayaraman, P.P., Zelcer, J., Vaughan, S., Wickramasinghe, N., 2022. The role of<scp>ai</scp>for developing digital twins in healthcare: The case of cancer care. WIREs Data Mining and Knowledge Discovery 13. URL: http://dx.doi.org/10.1002/widm. 1480, doi: 10.1002/widm.1480 .Kleeberger, J.A., 2025. Virtual patients in clinical trials for drug development: A narrative review. Cureus URL: http://dx.doi.org/10.7759/cureus. 85380, doi: 10.7759/cureus.85380 .Krishnamoorthy, D., Doyle, F.J., 2022. Safe bayesian optimization using interior-point methods—applied to personalized insulin dose guidance. IEEE Control Systems Letters 6, 2834–2839. URL: http://dx.doi.org/10.1109/LCSYS.2022.3179330, doi: 10.1109/lcsys.2022.3179330 .Lampropoulos, I., Kavousanakis, M., 2023. Application of combination chemotherapy in two dimensional tumor growth model with heterogeneous vasculature. Chemical Engineering Science 280, 118965. URL: http://dx.doi.org/10.1016/j.ces.2023.118965, doi: 10.1016/j.ces.2023.118 965 .Lampropoulos, I., Koutsi, M., Kavousanakis, M.E., 2025. Modeling of chemo-radiotherapy targeting growing vascular tumors: A continuum-level approach. Plos one 20, e0301657. Lee, J.J., Kong, M., Ayers, G.D., Lotan, R., 2007. Interaction index and different methods for determining drug interaction in combination therapy. Journal of Biopharmaceutical Statistics 17, 461–480. URL: http://dx.doi.org/10.1080/10543400701199593, doi: 10.1080/10543400701199 593 .Li, H., 2024. Mathematical model of cancer with radiotherapy and chemotherapy treatments. Applicable Analysis , 1–13. Liu, X., Oh, S., Kirschner, M.W., 2022. The uniformity and stability of cellular mass density in mammalian cell culture. Frontiers in Cell and Developmental Biology 10, 1017499. Liu, Z., Luo, Z., Tan, Y., Pang, J., Chen, J., 2023. Mathematical models and dynamic behaviors of cancer treatment by continuous and pulsed radiotherapy. Journal of Applied Mathematics and Computing 69, 1819–1843. Lorusso, G., Rüegg, C., 2008. The tumor microenvironment and its contribution to tumor evolution toward metastasis. Histochemistry and Cell Biology 130, 1091–1103. URL: http://dx.doi.org/10.1007/s00418-008-0530-8, doi: 10.1007/s00418-008-0530-8 .Manoj, A., Psarellis, Y., Wittreich, G., Kavousanakis, M., Dauenhauer, P., Kevrekidis, I., 2025. Designing the protocols for programmable ammonia catalysis URL: http://dx.doi.org/10.26434/chemrxiv-2025-cjsq6, doi: 10.26434/chemrxiv-2025-cjsq6 .Merzbacher, C., Mac Aodha, O., Oyarzún, D.A., 2023. Bayesian optimization for design of multiscale biological circuits. ACS Synthetic Biology 12, 2073–2082. URL: http://dx.doi.org/10.1021/acssynbio.3c00120, doi: 10.1021/acssynbio.3c00120 .Mi, H., Petitjean, C., Dubray, B., Vera, P., Ruan, S., 2014. Prediction of lung tumor evolution during radiotherapy in individual patients with pet. IEEE transactions on medical imaging 33, 995–1003. Mitchison, T.J., 2012. The proliferation rate paradox in antimitotic chemotherapy. Molecular biology of the cell 23, 1–6. Moingeon, P., Chenel, M., Rousseau, C., Voisin, E., Guedj, M., 2023. Virtual patients, digital twins and causal disease models: Paving the ground for in silico clinical trials. Drug Discovery Today 28, 103605. URL: http://dx.doi.org/10.1016/j.dr udis.2023.103605, doi: 10.1016/j.drudis.2023.103605 .National Health Service, a. National Health Service, Chemotherapy protocol for advanced (stage IIIc/IV) ovarian, peritoneal or fallopian tube cancer, sub-optimally debulked either at primary or delayed primary (interval) surgery. https://www.uhs.nhs.uk/Media/UHS-website-2019/Do cs/Chemotherapy-SOPs1/Ovarian-cancer/Bevacizumab7.5mgkgCarboplatinandPaclitaxel21day.pdf. Accessed: 2022-11-14. National Health Service, b. National Health Service, Chemotherapy protocol for the first line treatment of recurrent or metastatic stage IVB cervical cancer not amenable to curative treatment with surgery and / or radiotherapy and where there has been no prior treatment with bevacizumab or other anti-VEGF therapy. https://www.uhs.nhs.uk/Media/UHS-website-2019/Docs/Chemotherapy-SOPs1/Cervical-cancer/Bevacizumab-15-C arboplatin-Paclitaxel-21-day.pdf. Accessed: 2022-11-14. Neophytou, C.M., Panagi, M., Stylianopoulos, T., Papageorgis, P., 2021. The role of tumor microenvironment in cancer metastasis: Molecular mechanisms and therapeutic opportunities. Cancers 13, 2053. URL: http://dx.doi.org/10.3390/cancers13092053, doi: 10.3390/cancers130 92053 .Oronsky, B.T., Knox, S.J., Scicinski, J., 2011. Six degrees of separation: the oxygen effect in the development of radiosensitizers. Translational oncology 4, 189–198. Pappalardo, F., Russo, G., Tshinanu, F.M., Viceconti, M., 2018. In silico clinical trials: concepts and early adoptions. Briefings in Bioinformatics 20, 1699–1708. URL: http://dx.doi.org/10.1093/bib/bby043, doi: 10.1093/bib/bby043 .Psarellis, Y.M., Kavousanakis, M.E., Dauenhauer, P.J., Kevrekidis, I.G., 2023. Writing the programs of programmable catalysis. ACS Catalysis 13, 7457–7471. URL: http://dx.doi.org/10.1021/acscatal.3c00864, doi: 10.1021/acscatal.3c00864 .Psarellis, Y.M., Sapsis, T.P., Kevrekidis, I.G., 2025. Active search for bifurcations. Chaos: An Interdisciplinary Journal of Nonlinear Science 35. URL: http://dx.doi.org/10.1063/5.0226625, doi: 10.1063/5.0226625 .Rasmussen, C.E., Williams, C.K.I., 2005. Gaussian processes for machine learning. Adaptive Computation and Machine Learning series, MIT Press, London, England. Sandler, A., Gray, R., Perry, M.C., Brahmer, J., Schiller, J.H., Dowlati, A., Lilenbaum, R., Johnson, D.H., 2006. Paclitaxel–carboplatin alone or with bevacizumab for non–small-cell lung cancer. New England Journal of Medicine 355, 2542–2550. Santa-Ana-Tellez, Y., Lagerwaard, B., de Jong, A.J., Gardarsdottir, H., Grobbee, D.E., Hawkins, K., Heath, M., Zuidgeest, M.G., 2023. Decentralised, patient-centric, site-less, virtual, and digital clinical trials? from confusion to consensus. Drug Discovery Today 28, 103520. URL: http: //dx.doi.org/10.1016/j.drudis.2023.103520, doi: 10.1016/j.drudis.2023.103520 .Shahriari, B., Swersky, K., Wang, Z., Adams, R.P., de Freitas, N., 2016. Taking the human out of the loop: A review of bayesian optimization. Proceedings of the IEEE 104, 148–175. URL: http://dx.doi.org/10.1109/JPROC.2015.2494218, doi: 10.1109/jproc.2015.2494218 .Shields, B.J., Stevens, J., Li, J., Parasram, M., Damani, F., Alvarado, J.I.M., Janey, J.M., Adams, R.P., Doyle, A.G., 2021. Bayesian reaction optimization as a tool for chemical synthesis. Nature 590, 89–96. URL: http://dx.doi.org/10.1038/s41586-021-03213-y, doi: 10.1038/s41586 -021-03213-y .Takahashi, A., Suzuki, T., 2020. Bayesian optimization design for dose-finding based on toxicity and efficacy outcomes in phase i/<scp>ii</scp> clinical trials. Pharmaceutical Statistics 20, 422–439. URL: http://dx.doi.org/10.1002/pst.2085, doi: 10.1002/pst.2085 .Takahashi, A., Suzuki, T., 2021. Bayesian optimization design for finding a maximum tolerated dose combination in phase i clinical trials. The International Journal of Biostatistics 18, 39–56. URL: http://dx.doi.org/10.1515/ijb-2020-0147, doi: 10.1515/ijb-2020-0147 .Thall, P.F., Cook, J.D., 2004. Dose-finding based on efficacy–toxicity trade-offs. Biometrics 60, 684–693. URL: http://dx.doi.org/10.1111/j.000 6-341X.2004.00218.x, doi: 10.1111/j.0006-341x.2004.00218.x .The Institute of Cancer Research, . Combination therapies to outsmart cancer. https://www.icr.ac.uk/support-us/appeals-campaigns/combination-t herapies-to-outsmart-cancer. Accessed: 2022-11-14. Thompson, J., MacKinnon, L., Venturelli, O.S., Zavala, V.M., 2024. A parametric bayesian optimization framework for batch dynamical systems, in: 2024 American Control Conference (ACC), IEEE. p. 4333–4338. URL: http://dx.doi.org/10.23919/ACC60939.2024.10644178, doi: 10.23919/acc60939.2024.10644178 .Vander Heiden, M.G., 2011. Targeting cancer metabolism: a therapeutic window opens. Nature Reviews Drug Discovery 10, 671–684. URL: http://dx.doi.org/10.1038/nrd3504, doi: 10.1038/nrd3504 .Viceconti, M., Henney, A., Morley-Fletcher, E., 2016. In silico clinical trials: how computer simulation will transform the biomedical industry. International Journal of Clinical Trials 3, 37. URL: http://dx.doi.org/10.18203/2349-3259.ijct20161408, doi: 10.18203/2349-3259.ijct20 161408 .Willard, J., Golchi, S., Moodie, E.E.M., Boulanger, B., Carlin, B.P., 2024. Bayesian optimization for personalized dose-finding trials with combination therapies. Journal of the Royal Statistical Society Series C: Applied Statistics 74, 373–390. URL: http://dx.doi.org/10.1093/j rsssc/qlae058, doi: 10.1093/jrsssc/qlae058 .Wozniak, A., Moon, J., Thomas, C., Kelly, K., Mack, P., Gaspar, L., Raben, D., Fitzgerald, T., Pandya, K., Gandara, D., 2015. A pilot trial of cisplatin/etoposide/radiotherapy followed by consolidation docetaxel and the combination of bevacizumab (nsc-704865) in patients with inoperable locally advanced stage iii non-small-cell lung cancer: Swog s0533. Clinical Lung Cancer 16, 340–347. doi: 10.1016/j.cllc.201 4.12.014 .Wright, J.D., Viviano, D., Powell, M.A., Gibb, R.K., Mutch, D.G., Grigsby, P.W., Rader, J.S., 2006. Bevacizumab combination therapy in heavily pretreated, recurrent cervical cancer. Gynecologic Oncology 103, 489–493. Xu, X.X., Smith, E.R., 2025. The second selectivity of taxanes to malignant cells—nuclear envelope malleability. Journal of Cancer 16, 1051. Processes captured by the multiphase tumor model       
+
+> Cellular phase Vascular phase Interstitial fluid Molecular species Therapeutic agent Radiation
+> Cancer cells Healthy cells Young vessels Mature vessels Interstitial fluid
+> VEGF
+> O2
+> Docetaxel Bevacizumab
+> Radiation
+> VEGF production Chemotaxis
+> Maturation Angiogenesis
+> Replenishment
+> Mitosis
+> Mitosis
+> Cellular death
+> Cellular death
+> Apoptosis induction
+> VEGF binding
+> DNA damage
+
+Figure 1: Schematic of the processes captured by the multiphase tumor model. Boxes denote the five volumetric phases (cancer, healthy, young and mature vessels, interstitial fluid); circles denote the molecular species (VEGF, O 2). Dark arrows mark the biological processes that couple the phases and species. The three therapeutic interventions considered in this work are overlaid: docetaxel (cytotoxic, induces apoptosis of cancer cells), bevacizumab (anti-angiogenic, binds and neutralizes VEGF) and external radiation (induces DNA damage in cancer cells). P73'.-P7/3 !)$"3(5$%4-"3(.- 5( P' 
+
+14-./3(,(8 3(.- (-3$1- ++../ 
+
+"1(/3(-(3( +(2 3(.-
+
+I #"%'& #'&"!&'(# 
+
+$%(-$2$ 1"'#., (-
+
+&%'"(!#% '%&# 
+
+-(3( +(2$ 7$2( -./3(,(2 3(.-
+
+$(&'"!"#'"!&' 
+
+$%(3 2411.& 3$  "0 
+
+'' &'!*'!' 
+
+! ++.!)$"3(5$%4-"3(.-
+
+"$"$(5$1$341-5 +4$ 
+
+##!!'%&(''"'&' 
+
+#3.//(-&"1(3$1( "'$"* 
+
+'%'"!"(!'#&' '"%! 
+
+$ #./3(, +2.+43(.-
+
+&'!'&'"'))( 
+
+ 5$,.#$+2 1$/.13 /+.32 
+
+%& "!)%!&'"%+ 
+
+ /1$#("3(.-.-$5 +&1(# 
+
+&μ  *#"%'% &('& 
+
+-/ "* " 23(-/432 
+
+*'%'&%" #"!!'&%" !#(')'"% 
+
+.,/43$2(,4+ 3(.-$-#3(,$ 
+
+%!!"!&!"!#(' 
+
+3 13 "+($-3 +. #,.#$+ 
+
+!'&&&&"!% " 
+
+ 22(&-,.#$+/ 1 ,$3$12 
+
+ !#% &%" %!!%&(' 
+
+4(+# .+5$ 
+
+ &!%'"! &") 
+
+631 "32" + 11$24+3 
+
+##+#!'+&")%!" #' 
+
+.&1$24+3 2 5$,.#$+%(+$ 
+
+##!'""&%&&"('"! 
+
+$341-.!)$"3(5$5 +4$ 
+
+> n  n   
+
+n   
+
+> 
+>  n
+
+Figure 2: Optimization algorithm flow chart. Purple indicates the GPyOpt/BO logic, coral boxes represent the COMSOL/MPh interface, amber shading marks the calculations carried out within the objective function, and teal denotes the post-processing steps. Figure 3: Gaussian-process surrogate learned by the BO loop for the docetaxel–bevacizumab schedule. The curve is the posterior mean of −𝑆𝐶𝑀 as a function of Δ𝑡 ; red markers denote evaluated points (including the two boundary seeds); the shaded band is the posterior ±1 𝜎 predictive uncertainty. 2 4 6 8 10 12 14        
+
+> 010 20 30 40 50 60 0246810 12 14
+> -90 -89 -88 -87 -86 -85 -84 -83 -82
+
+(a) (b) 
+
+Figure 4: BO iteration diagnostics for the double-therapy case. (a) Distance between consecutive proposals, |Δ𝑡 𝑘 +1 − Δ 𝑡 𝑘 |,vs. iteration. (b) Best observed 𝑆𝐶𝑀 vs. iteration. The decreasing step size and rapidly saturating incumbent reflect the exploitation-focused acquisition. Figure 5: Cancer-cell volume fraction snapshots at Δ𝑡 ∈ {−32 , 0, 37 , 106} and at 𝑡 = 200 (top row) and 𝑡 = 400 (bottom row) days. Near-concomitant schedules yield substantially smaller tumor coverage at long horizons than strongly offset schedules. 
+
+Figure 6: Posterior mean of −𝑆𝐶𝑀 over (Δ 𝑡 1, Δ𝑡 2) for the radiosensitization-positive triple-therapy variant. Red markers denote BO iterates. A primary optimum lies near (Δ 𝑡 1, Δ𝑡 2) ≈ (21 , 57) and a secondary, broader region of high efficacy spans Δ𝑡 1 ∈ [−20 , 40] , Δ𝑡 2 ∈ [−40 , 10] .Figure 7: Posterior mean of −𝑆𝐶𝑀 over (Δ 𝑡 1, Δ𝑡 2) for the radiosensitization-negative triple-therapy variant. The optimum is identified at (Δ 𝑡 1, Δ𝑡 2) ≈ (21 , 57) , the same scheduling regime as in Fig. 6, but with a lower attained 𝑆𝐶𝑀 .
+
+Figure 8: Posterior mean of 𝑡 end over (Δ 𝑡 1, Δ𝑡 2) for the full triple-therapy protocol with elimination-time objective. The sharp transition along the (−84 , −84) –(84 , 84) diagonal corresponds to the penalty applied to schedules that fail to eliminate the tumor. 100 150 200 250     
+
+> 050 100 150 200 250 100 150 200 250 300
+> 020 40 60 80 100 120 140
+
+(a) (b) 
+
+Figure 9: Cancer-cell surface coverage (%) for the optimal schedule (Δ 𝑡 1, Δ𝑡 2) = (−47 , 6) (right) and the sub-optimal schedule (55 , 46) (left). Color bars: bevacizumab (red), docetaxel (green), radiation (purple). Pre-treatment with docetaxel boosts the effect of radiation and accelerates tumor extinction; when bevacizumab leads, the residual cancer cells are contained but not fully eliminated. 
+
+Figure 10: GP surrogate for the single-therapy efficacy-only problem. Posterior mean of 𝑆𝐶 versus 𝑁 doc ; markers denote BO iterates. The optimum is identified at 𝑁 doc = 3 .100 150 200 250 300 350  
+
+> 5678910 11 12 13 14 15 3 sessions
+> 4 sessions
+> 6 sessions
+> 7 sessions
+> 1 session
+
+Figure 11: Dimensionless tumor radius 𝑟 (defined as the largest distance from the domain center at which 𝜃 𝑐 = 0 .01 ) for 
+
+𝑁 doc ∈ {1 , 3, 4, 6, 7} . Although 𝑁 doc = 3 minimizes the cancer-cell volume fraction, 𝑁 doc = 1 minimizes the tumor radius – the cells are fewer in count but more diffusely distributed at 𝑁 doc = 3 .Non-dimensionalised radius, r Cancer Cells Concentration, θc
+
+0 10 20 30 
+
+00.2 0.4 0.6 0.8 Number of sessions: 1 Number of sessions: 3 Number of sessions: 4 Number of sessions: 6 Number of sessions: 7 Number of sessions: 11 
+
+0 10 20 30 
+
+00.2 0.4 0.6 0.8 
+
+0 10 20 30 
+
+00.2 0.4 0.6 0.8 
+
+0 10 20 30 
+
+00.2 0.4 0.6 0.8 
+
+Figure 12: Cancer cell concentration, 𝜃 𝑐 , averaged over the tumor’s non-dimensionalised radius, 𝑟 , for 𝑡 = 85 (top left), 
+
+𝑡 = 105 (top right), 𝑡 = 125 (bottom left) and, 𝑡 = 250 (bottom right). Figure 13: Pareto front for the single-therapy bi-objective problem. Points belonging to the Pareto-optimal set are highlighted in red; the dashed line traces the empirical front. Fractionation regimes 𝑁 doc ∈ [3 , 6] are optimal for tumor containment ( 𝑆𝐶 ); 𝑁 doc ∈ [11 , 14] are optimal for toxicity minimization ( 𝐻𝑇 𝑅 ). The clinically prescribed 𝑁 doc = 6 lies on the front. Number of iterations         
+
+> 0246810 12 14
+> Best -SCM (%)
+> -90 -85 -80 -75 Latin Hypercube Sampling Bayesian Optimization Grid Search (step=15)
+
+Number of iterations       
+
+> 0246810 12
+> Best -SCM (%)
+> -70 -69 -68 -67 -66
+
+Number of iterations    
+
+> 0510 15
+> Best -SCM (%)
+> -76 -74 -72 -70 -68
+
+Number of iterations       
+
+> 0246810 12
+> Best elimination time, t
+> 200 300 400 500 600
+
+Figure 14: Method efficiency comparison between bayesian optimisation (blue), latin hypercube sampling (red) and, grid search (green) for i. double therapy (top left), ii. triple therapy - sensitization negative (top right), iii. triple therapy -sensitization positive (bottom left), and iv. triple therapy - full regimen. For each method, the minimum value obtained is reported under the same iteration budget as that used for BO.
