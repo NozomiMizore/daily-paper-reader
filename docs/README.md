@@ -6,35 +6,31 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-31
-- 运行时间：2026-07-31 21:54:17 UTC
+- 最新运行日期：2026-08-01
+- 运行时间：2026-08-01 21:20:06 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：2
-- 速读区：3
+- 本次总论文数：2
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-今日共读5篇论文，精读2篇、速读3篇，聚焦单细胞扰动响应与量子计算生物学建模。最值得关注的是《PerturbMap》提出的跨情境单细胞扰动响应迁移方法（9.0分），以及量子计算用于细胞时空建模的探索（8.0分）。建议普通读者优先了解单细胞扰动预测的临床应用潜力，量子计算方向可作为前沿拓展。
-- 详情：[/202607/31/README](/202607/31/README)
+今日速读两篇因果推断论文，均聚焦于提升治疗效果估计的稳健性与准确性。
+
+最值得关注的方向：利用大语言模型语义增强处理异质效应，以及双稳健函数式表示应对纵向不规则历史数据。
+
+建议：若追求应用简便，可优先尝试第一个方法；若处理临床随访等复杂时序数据，则第二个更具潜力。
+- 详情：[/202608/01/README](/202608/01/README)
 
 ### 精读区论文标签
-1. [PerturbMap: Cross-Context Transfer of Single-Cell Perturbation Responses](/202607/31/2607.28090v1-perturbmap-cross-context-transfer-of-single-cell-perturbation-responses)  
-   标签：评分：9.0/10、query:virtual-cell
-   evidence：预测目标情境中缺失的单细胞扰动响应
-2. [Exploring the use of quantum computing for facilitating spatially and temporally resolved models of a biological cell](/202607/31/2607.27571v1-exploring-the-use-of-quantum-computing-for-facilitating-spatially-and-temporally-resolved-models-of-a-biological-cell)  
-   标签：评分：8.0/10、query:virtual-cell
-   evidence：聚焦全细胞模拟与时空分辨的生物细胞模型构建
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [A Bayesian-optimization framework coupling a multiphase PDE tumor model to efficiently design combination therapy schedules](/202607/31/2607.20782v1-a-bayesian-optimization-framework-coupling-a-multiphase-pde-tumor-model-to-efficiently-design-combination-therapy-schedules)  
-   标签：评分：7.0/10、query:virtual-cell
-   evidence：基于PDE肿瘤模型的贝叶斯优化框架用于设计联合用药方案
-2. [Continuous surrogates versus threshold Boolean networks for modeling Arabidopsis ISR gene regulation](/202607/31/2607.23289v1-continuous-surrogates-versus-threshold-boolean-networks-for-modeling-arabidopsis-isr-gene-regulation)  
-   标签：评分：7.0/10、query:virtual-cell
-   evidence：直接研究基因调控网络预测与迭代推演，是细胞动态扰动建模的核心内容。
-3. [Quantifying antiproliferative effects of quinolinic acid on melanoma, macrophage and keratinocyte cells using a parametric cell-viability model](/202607/31/2607.23730v1-quantifying-antiproliferative-effects-of-quinolinic-acid-on-melanoma-macrophage-and-keratinocyte-cells-using-a-parametric-cell-viability-model)  
+1. [Uncertainty-Guided LLM Semantic Augmentation for Heterogeneous Treatment Effect Estimation](/202608/01/2607.26599v1-uncertainty-guided-llm-semantic-augmentation-for-heterogeneous-treatment-effect-estimation)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：用参数模型量化药物诱导的细胞活力变化
+   evidence：面向异质性处理效应估计的深度学习方法，与扰动响应预测密切相关
+2. [Doubly Robust Functional Representation Learning for Longitudinal Causal Inference with Irregular Histories](/202608/01/2607.28567v1-doubly-robust-functional-representation-learning-for-longitudinal-causal-inference-with-irregular-histories)  
+   标签：评分：6.0/10、query:virtual-cell
+   evidence：用于纵向处理效应的双稳健因果推断，可迁移至扰动建模
 
 
 <div class="dpr-home-promo-card">

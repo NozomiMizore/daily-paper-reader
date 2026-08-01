@@ -1,0 +1,1896 @@
+Title: Uncertainty-Guided LLM Semantic Augmentation for Heterogeneous Treatment Effect Estimation
+
+URL Source: https://arxiv.org/pdf/2607.26599v1
+
+Published Time: Thu, 30 Jul 2026 00:35:29 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Uncertainty-Guided LLM Semantic Augmentation for Heterogeneous Treatment Effect Estimation 
+
+## Jialu Xu ∗
+
+MIIT Key Laboratory of Data and Decision Intelligence, Beihang University Beijing, China xujialu08@buaa.edu.cn 
+
+## Mengkun Liang ∗
+
+MIIT Key Laboratory of Data and Decision Intelligence, Beihang University Beijing, China mengkun@buaa.edu.cn 
+
+## Guannan Liu †
+
+MIIT Key Laboratory of Data and Decision Intelligence, Beihang University Beijing, China liugn@buaa.edu.cn 
+
+## Xiaojie Mao 
+
+School of Economics and Management, Tsinghua University Beijing, China maoxj@sem.tsinghua.edu.cn 
+
+## Junjie Wu 
+
+MIIT Key Laboratory of Data and Decision Intelligence, Beihang University Beijing, China wujj@buaa.edu.cn 
+
+Abstract 
+
+Estimating heterogeneous treatment effects is central to targeted interventions, such as personalized promotions and precision medicine. We focus on the conditional average treatment effect (CATE), a standard estimand for characterizing such heterogeneity. Even under standard identification conditions, finite-sample CATE estimation requires learning the nuisance structure for covariate adjustment and treatment-effect heterogeneity, often together with an effective representation of 𝑋 . Raw numerical and cate-gorical encodings can leave semantic relations and higher-order interactions implicit, making this joint task locally unstable. A motivating study further shows that this instability appears through partially separable assignment- and heterogeneity-side channels. Building on this observation, we propose CURL (Causal Uncertainty-guided Representation Learning), a plug-in adapter that uses estimator uncertainty to allocate pretrained semantic capacity to locally unstable units. CURL queries a frozen LLM through two role-conditioned prompts, constructs assignment-and heterogeneity-oriented representations from the observed covariates, and routes them through separated pathways. On four benchmarks, CURL improves ten host learners in most settings, while ablation, refinement-dynamics, route-reassignment, and probe analyses support the intended design and roles of the two channels. 
+
+Keywords 
+
+Heterogeneous Treatment Effects, Causal Machine Learning, Large Language Models, Representation Learning 
+
+1 Introduction 
+
+Estimating heterogeneous treatment effects is central to individual-ized interventions in precision medicine, targeted marketing, and policy evaluation; we focus on the conditional average treatment effect (CATE), which characterizes how expected effects vary with observed covariates [ 19 , 27 , 30 ]. Reliable CATE estimation requires 
+
+> ∗Jialu Xu and Mengkun Liang contributed equally to this work.
+> †Corresponding author.
+
+the covariates 𝑋 to support confounding adjustment and to reveal systematic variation in treatment response [ 14 ]. Estimation can fail for two reasons: relevant individual-level causal information may be absent from 𝑋 , threatening identification, or, despite identification, the raw encoding of 𝑋 may make adjustment and heterogeneity structure difficult for finite-sample learners to exploit. In this paper, we focus on the second and less-examined fail-ure mode. We term the gap between the raw covariate encoding and a task-effective representation for finite-sample CATE learning 
+
+representational lossiness . The notion is relative to the encoding, learner, and sample size, rather than an intrinsic information loss in 𝑋 or a failure of identification. For example, diagnosis codes may omit semantic proximity, while customer categories may ob-scure behavioral patterns that jointly shape targeting and response. Meta-learning, balanced-representation, and latent-variable meth-ods provide flexible tools for CATE estimation [ 19 , 24 , 30 , 31 ], but learn representations and associated functions mainly from the observed sample. When semantic relations and higher-order inter-actions remain implicit, limited data cannot effectively share statis-tical strength across related observations, leaving local estimates unstable. This motivates an external inductive bias that reorganizes observed information without adding new individual-level facts. Large language models (LLMs) offer such an inductive bias be-cause pretraining captures broad semantic regularities that may be difficult to learn from a single finite observational sample, includ-ing in structured tabular prediction [ 37 ]. Prior work has examined LLMs for causal reasoning and discovery [ 10 , 20 ], and recent es-timators have used LLM predictions with textual confounders or unstructured records [ 7 , 9, 33 ]. However, how pretrained semantic knowledge should be incorporated into CATE estimators for struc-tured covariates remains open. Applying a common embedding to every sample is costly and can introduce irrelevant variation, while an undifferentiated representation may mix information needed for assignment modeling with information needed for heteroge-neous response. A useful design must therefore determine where semantic capacity is needed, construct representations for distinct             
+
+> 1arXiv:2607.26599v1 [cs.LG] 29 Jul 2026 Jialu Xu, Mengkun Liang, Guannan Liu, Xiaojie Mao, and Junjie Wu 0.02 0.04 0.06
+> Propensity std
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> 0.40
+> 0.45
+> CATE std
+> Q1
+> Q2
+> Q3
+> Q4
+> middle
+> T-Brier Y-RMSE CATE-PEHE
+> Q1
+> Q2
+> Q3
+> Q4
+> 0.00 0.00 0.00
+> 1.00 0.13 0.03
+> 0.04 0.19 0.56
+> 0.94 1.00 1.00
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+
+Figure 1: Motivating study on IHDP using an S-Learner with an auxiliary propensity head. The left panel places samples on the propensity–CATE uncertainty plane. Q1–Q4 are the four corner groups, and the rest form the middle group. The right panel reports column-normalized T-Brier, Y-RMSE, and CATE-PEHE. Q2 is dominated by assignment error, Q3 by effect-estimation error, and Q4 by both. 
+
+statistical roles, and route them into the appropriate components of the estimator. Figure 1 provides empirical support for a selective and role-conditioned design. We fit an S-Learner with an auxiliary propen-sity head on IHDP, derive CATE from its treatment-conditioned outcome predictions, and estimate both uncertainties via Monte Carlo (MC) dropout [ 11 ]. Q2 has the largest normalized treatment Brier error but low CATE error, whereas Q3 shows the opposite pat-tern; Q4 is difficult on both dimensions. These results indicate that local unreliability varies across samples and cannot be captured by a single score. Propensity uncertainty reflects instability in treatment-selection modeling relevant to covariate adjustment, whereas CATE uncertainty reflects instability in treatment-response heterogeneity. We therefore use both as operational allocation signals rather than evidence of missing causal variables, consistent with prior work on uncertainty-based identification of unreliable treatment-effect estimates [15]. Motivated by these empirical patterns, we propose CURL, an uncertainty-guided representation adapter for CATE estimation under representational lossiness . CURL uses propensity and CATE uncertainty to prioritize a fixed proportion of locally unstable sam-ples for LLM-based semantic augmentation, then constructs inde-pendent assignment-oriented and heterogeneity-oriented represen-tations from their observed profiles. The former refines the shared covariate representation, while the latter enters the effect compo-nent as a separate feature block and is excluded from propensity estimation. The augmented set is updated as the host estimator evolves. In this way, CURL expands the effective hypothesis class without changing the observed information set, target estimand, or identifying assumptions. Our contributions are summarized as follows. 
+
+• We distinguish representational lossiness from causal in-formation insufficiency, characterizing it as a finite-sample bottleneck in exploiting semantic relations left implicit by raw covariate encodings. 
+
+• We develop CURL, a plug-in adapter that uses uncertainty to allocate assignment- and heterogeneity-oriented semantic representations and integrates them through asymmetric routing, progressive refinement, and training-calibrated test-time inference. 
+
+• We evaluate CURL across four benchmarks and ten CATE estimators, with analyses of predictive performance, robust-ness, refinement dynamics, and semantic-channel roles. 
+
+2 Related Work 2.1 Representation Learning for CATE Estimation 
+
+CATE estimation has developed along three major paradigms. Meta-learning methods reduce effect estimation to supervised prediction, including the S-, T-, and X-learner [ 19 ] and the R-learner [ 27 ]. 
+
+Balanced-representation methods learn treatment-invariant repre-sentations, as in TARNet, CFRNet [ 30 ], and DragonNet [ 31 ]. Deep latent-variable methods infer hidden factors from proxies in 𝑋 ,including CEVAE [ 24 ], TEDVAE [ 43 ], 𝛽 -Intact-VAE [ 39 ], CFDi-VAE [ 42 ], and iVAE [ 18 ], with further extensions to structure un-certainty, adjustment-feature selection, and disentangled or robust representations [ 22 , 32 , 34 , 35 , 45 ]. Despite these advances, most representations are learned primarily from the study sample and may remain unreliable when the encoding of 𝑋 is poorly aligned with the estimator’s effective hypothesis class. Sensitivity to model misspecification and proxy construction further motivates using pretrained semantic structure to help finite-sample estimators ex-ploit information already contained in 𝑋 [28, 47]. 
+
+2.2 LLMs for Causal Augmentation 
+
+Recent work has explored LLMs for causal analysis along two lines. On the qualitative-structure side, LLMs have been used for causal discovery and reasoning from text [ 20 , 23 ], causal graph construc-tion [ 5 , 10 ], and formal causal-query benchmarks [ 16 ], although current models may still rely on shallow Rung-1 associations [ 8 ]. On the quantitative-estimation side, DoubleLingo uses LLM-based nuisance models with text confounders [ 33 ]; NATURAL leverages LLM-derived conditional information from text [ 9]; proximal text-based inference extracts proxies for proximal identification [ 7 ]; and GATE generates counterfactual outcomes for small-sample struc-tured data [ 13 ]. These studies primarily use LLMs to process textual inputs, construct auxiliary variables, or directly predict causal quan-tities. Less attention has been paid to using pretrained semantic structure as an inductive bias that helps CATE estimators better exploit structured covariates under limited data. 
+
+2.3 Uncertainty Estimation in Causal Inference 
+
+Epistemic uncertainty has long been studied in Bayesian machine learning, from the Laplace approximation [ 25 ] to MC dropout [ 11 ], deep ensembles [ 21 ], and variational inference [ 6 ], with Kendall and Gal [17] distinguishing aleatoric and epistemic uncertainty. In decision-making, uncertainty supports exploration through UCB-style bandits and Thompson sampling [ 1, 41 , 46 ], or conservatism in offline settings [ 3 , 4, 40 ]. Closer to causal estimation, Zhang et al. 
+
+> 2Uncertainty-Guided LLM Semantic Augmentation for Heterogeneous Treatment Effect Estimation
+
+[44] account for logging-policy uncertainty in MSE-optimal impor-tance weighting, whereas CATE methods mainly use uncertainty for confidence quantification, failure detection, or budgeted sam-ple acquisition [ 2, 15 , 36 ]. In contrast, CURL uses uncertainty to allocate semantic augmentation to locally unstable samples. 
+
+3 Problem Formulation 
+
+Let D𝑛 = {( 𝑋 𝑖 ,𝑇 𝑖 , 𝑌 𝑖 )} 𝑛 𝑖 =1 ∼ 𝑃 𝑛 be an i.i.d. observational sample, where 𝑋 𝑖 ∈ X ⊆ R𝑑 contains pretreatment covariates, 𝑇 𝑖 ∈ { 0, 1} is a binary treatment, and 𝑌 𝑖 = 𝑇 𝑖 𝑌 𝑖 (1) + ( 1 − 𝑇 𝑖 )𝑌 𝑖 (0). We study the CATE, i.e. , 𝜏 (𝑥 ) = E[𝑌 (1) − 𝑌 (0) | 𝑋 = 𝑥 ].We assume conditional unconfoundedness {𝑌 (0), 𝑌 (1)} ⊥ 𝑇 | 𝑋 
+
+and overlap 𝜖 ≤ 𝑒 (𝑥 ) ≤ 1 − 𝜖 , where 𝑒 (𝑥 ) = Pr (𝑇 = 1 | 𝑋 = 𝑥 ) [ 14 ]. Because treatment assignment may depend on 𝑋 in observational data, 𝑒 (𝑥 ) summarizes systematic treatment-selection differences across the covariate space and, depending on the estimator, sup-ports weighting, balancing, or residualization for covariate adjust-ment [ 27 , 29 ]. Together with consistency, these assumptions iden-tify 𝜏 (𝑥 ) = 𝜇 1 (𝑥 ) − 𝜇 0 (𝑥 ), where 𝜇 𝑡 (𝑥 ) = E[𝑌 | 𝑇 = 𝑡, 𝑋 = 𝑥 ]. Thus, 
+
+𝑋 is sufficient for causal adjustment, and unmeasured confounding is outside our scope. Let H be the function class of a host estimator. Its best available CATE approximation under the raw encoding of 𝑋 is 
+
+𝜏 ∗H ∈ arg min   
+
+> 𝑓 ∈ H
+
+E𝑋 ∼𝑃 𝑋 
+
+{𝑓 (𝑋 ) − 𝜏 (𝑋 )} 2  . (1) Identification alone does not ensure that 𝜏 ∗H is easy to express or learn from finite data. A learner must estimate the assignment and outcome structure needed for adjustment and how treatment effects vary with 𝑋 , often while learning an effective representation from the same sample. When the raw numerical and categorical encoding of 𝑋 leaves semantic relations and higher-order interac-tions implicit, these functions may become unnecessarily complex within the host class, limiting statistical sharing across related ob-servations and destabilizing local estimates. This is precisely the 
+
+representational lossiness introduced in Section 1. Concretely, al-though 𝑋 identifies 𝜏 (𝑥 ), relevant adjustment and heterogeneity structure remains difficult to recover from its raw encoding. The gap is thus relative to the encoding, learner, and sample size, rather than an intrinsic information loss in 𝑋 or a failure of identification. 
+
+4 Methodology 4.1 Framework Overview 
+
+To address the representational lossiness , CURL ( C ausal U ncertainty-guided Representation L earning) augments a host estimator 𝐹 𝜃 
+
+with a plug-in representation adapter that makes adjustment- and heterogeneity-related structure in 𝑋 easier to exploit under finite data. CURL preserves the host-specific prediction structure and main objective, while introducing adapter parameters 𝜂 for the semantic projectors, gates, routing components, and any auxiliary propensity head. We write Θ = (𝜃, 𝜂 ) for the joint trainable state and 𝐹 Θ for the wrapped estimator. Host-specific instantiations are provided in Appendix E. As illustrated in Figure 2, CURL operates through four coupled mechanisms. Uncertainty-Guided Semantic Allocation (Section 4.2) uses two epistemic-uncertainty scores, one for the propensity com-ponent and one for the CATE component, to prioritize units with high local predictive instability. Role-Conditioned Semantic Aug-mentation and Routing (Section 4.3) queries a frozen LLM indepen-dently for each selected unit to build an assignment-oriented and a heterogeneity-oriented representation from its observed covari-ates. Role-Aware Prediction Routing (Section 4.3.3) injects the two representations into the host through separated pathways, so that heterogeneity-oriented information never reaches the propensity component. Progressive Refinement and Test-Time Inference (Sec-tion 4.4) repeats this diagnosis as Θ evolves, and a calibrated proce-dure extends the same allocation and routing rules to unseen units at test time. We index training rounds by 𝑟 ∈ { 0, . . . , 𝑅 − 1} and write Θ(𝑟 )
+
+and 𝐹 (𝑟 ) := 𝐹 Θ(𝑟 ) for the parameter state and wrapped estimator at the start of round 𝑟 ; this superscript is used consistently in what follows. Because 𝜂 only augments, and never replaces, the host’s own computation, 𝐹 (0) with no cached semantic input reduces exactly to the unaugmented host 𝐹 𝜃 . Next, we describe the four modules in detail. 
+
+4.2 Uncertainty-Guided Semantic Allocation 
+
+To diagnose the current estimator 𝐹 (𝑟 ) , we keep its normalization layers in evaluation mode and dropout layers active, and perform 
+
+𝑀 stochastic forward passes using MC dropout [ 11 ]. Writing b𝑒 (𝑟,𝑚 )
+
+> 𝑖
+
+and b𝜏 (𝑟,𝑚 ) 
+
+> 𝑖
+
+for the propensity and CATE predictions obtained in the 𝑚 -th pass for unit 𝑖 , we take the standard deviation of each prediction across the 𝑀 passes as the corresponding uncertainty score, 
+
+𝑠 (𝑟 ) 
+
+> 𝑒,𝑖
+
+= Std 𝑀 𝑚 =1
+
+hb𝑒 (𝑟,𝑚 )
+
+> 𝑖
+
+i
+
+, 𝑠 (𝑟 ) 
+
+> 𝜏,𝑖
+
+= Std 𝑀 𝑚 =1
+
+hb𝜏 (𝑟,𝑚 )
+
+> 𝑖
+
+i
+
+. (2) These two scores capture local predictive instability separately for the assignment component and the treatment effect component. At the initial allocation round, some host estimators do not pro-vide a native propensity output. To apply the same allocation rule across all hosts and rounds, we set 𝑠 (0) 
+
+> 𝑒,𝑖
+
+= 0 for all units in this case. After wrapping, CURL introduces and trains a propensity head for every host. Consequently, from the first refinement round onward, both 𝑠 (𝑟 ) 
+
+> 𝑒,𝑖
+
+and 𝑠 (𝑟 ) 
+
+> 𝜏,𝑖
+
+are available and jointly determine semantic allocation. CURL converts the two scores into a single ranking through their empirical percentile ranks. Let PRank (𝑎 𝑖 ) denote the percentile rank of 𝑎 𝑖 among {𝑎 𝑗 }𝑁 𝑗 =1, and let 𝜌 ∈ ( 0, 1] be the per-round selection ratio. The units prioritized for semantic allocation in round 𝑟 are 
+
+S (𝑟 ) = Top ⌊𝜌𝑁 ⌋
+
+n
+
+PRank 
+
+
+
+𝑠 (𝑟 )
+
+> 𝑒,𝑖
+
+
+
++ PRank 
+
+
+
+𝑠 (𝑟 )
+
+> 𝜏,𝑖
+
+
+
+: 𝑖 = 1, . . . , 𝑁 
+
+o
+
+, (3) with ties broken deterministically so that the selection budget stays fixed. Taking percentile ranks places the two signals on a common scale despite their different units and magnitudes, while their sum provides a unified ranking over both uncertainty sources. When 
+
+𝑠 (𝑟 ) 
+
+> 𝑒,𝑖
+
+is set to zero for all units under the exception above, the ranking reduces to CATE-side uncertainty alone. Because selections may overlap across rounds, previously queried units reuse their cached semantic embeddings. Let S (𝑟 )
+
+denote the units selected in round 𝑟 , C (𝑟 ) those cached by the end of that round, and Q (𝑟 ) the selected but uncached units. With 
+
+C (− 1) = ∅,
+
+> 3Jialu Xu, Mengkun Liang, Guannan Liu, Xiaojie Mao, and Junjie Wu Projector
+> & LN
+> Projector
+> & LN
+> A. Semantic
+> Construction
+> B. Uncertainty-Gated
+> Asymmetric Fusion
+> C. Role-Aware Prediction
+> Routing
+
+Uncertainty-Guided Semantic 
+
+Allocation 
+
+Role-Conditioned Dual-Channel 
+
+Semantic Construction 
+
+Uncertainty-Gated Asymmetric Fusion 
+
+Progressive Training Inputs 
+
+> Observational
+> Data
+
+X
+
+T
+
+Y 
+
+> Host
+> estimator
+> Frozen
+> LLM
+> X
+> Text
+> Orthogonal
+> Loss( ⊥)
+> MC
+> Dropout
+> (M passes)
+> ��
+> ��
+> Rank &
+> Select
+> Fixed-
+> ratio
+> Selection
+> �
+> ��
+> �
+> Dropout
+> XHint
+> ��
+> ��
+> Shared
+> Encoder
+> ��
+> X
+> ��
+> �·��
+> u
+
+# ＋ �� 
+
+> Add
+> �·��
+
+## ‖   
+
+> Concat
+> ��
+> Propensity
+> Head �
+> Baseline
+> Head �0
+> CATE
+> Head �
+> Baseline Branch
+> CATE Branch
+
+Σ    
+
+> Illustrative
+> Host
+> Prediction
+> �0+�×�
+> Dropout
+
+＋
+
+> Re-Optimize &
+> Re-Diagnose
+
+＋  
+
+> Rank-Based
+> Reallocation
+> Semantic Cache
+> Update
+> Loss
+> Calculation
+> �풐풓� 풐
+> �풑풓풐풑 �풎풂  
+> Profile
+> Constructor
+> ��
+> ��
+> ��
+> ��
+> �(�)��
+> (�)
+> ��
+> (�)
+> �(�)
+
+Figure 2: Overall architecture of CURL. Uncertainty-guided diagnosis identifies samples that receive semantic augmentation; dual-channel LLM encoding constructs assignment- and heterogeneity-oriented representations; and role-aware integration routes them into the corresponding components of the host estimator. The procedure progressively refreshes the uncertainty diagnosis as the wrapped estimator evolves. 
+
+C (𝑟 ) = C (𝑟 −1) ∪ S (𝑟 ) , Q (𝑟 ) = S (𝑟 ) \ C (𝑟 −1) . (4) Thus, the LLM is queried only for Q (𝑟 ) , so each training unit is queried at most once. 
+
+4.3 Role-Conditioned Semantic Augmentation and Routing 
+
+After determining which units require additional semantic capacity in Section 4.2, the next question is what semantic information these units should receive and where it should act within the estimator. To answer this, we introduce the notion of a role , i.e. , the function a semantic channel serves in CATE estimation: assignment modeling or treatment-effect heterogeneity. Accordingly, this section specifies what role-conditioned information the selected units should receive, how strongly it is integrated, and which prediction pathways it may influence. 
+
+4.3.1 Role-Conditioned Dual-Channel Semantic Construction. The units in Q (𝑟 ) identified in the previous step are the ones for which CURL queries the LLM. Each such unit is first rendered into a natural-language profile 𝑝 𝑖 = 𝜓 (𝑥 𝑖 ) by a deterministic, dataset-specific constructor 𝜓 . A dataset-level hint ℎins is generated once from aggregate covariate differences between the initially selected and full training populations, and is then held fixed for the remain-der of training. Neither 𝑝 𝑖 nor ℎins contains unit-level treatment, outcome, counterfactual, ground-truth effect, or test statistics; full field mappings, aggregation rules, and templates are deferred to Appendix C.3. From this profile, two role-specific constructors produce an assignment-oriented prompt 𝑃 𝐴,𝑖 = 𝑃 𝐴 (𝑝 𝑖 , ℎ ins ), eliciting pre-treatment context for assignment and outcomes, and a heterogeneity-oriented prompt 𝑃 𝐻,𝑖 = 𝑃 𝐻 (𝑝 𝑖 , ℎ ins ), eliciting stable attributes for treatment sensitivity. These functional roles target distinct estimator pathways rather than alternative descriptions of the unit. The prompts use independent LLM calls and caches, preventing either from becoming an autoregressive continuation of the other. For either prompt 𝑃 ∈ {𝑃 𝐴,𝑖 , 𝑃 𝐻,𝑖 } described in Appendix C.2, CURL extracts the final-layer contextual hidden state at the last valid response token, before the output head. The resulting channel embeddings are 
+
+𝑧 LLM  
+
+> 𝐴,𝑖
+
+= Emb Φ (𝑃 𝐴,𝑖 ), 𝑧 LLM  
+
+> 𝐻,𝑖
+
+= Emb Φ (𝑃 𝐻,𝑖 ), (5) and are cached permanently once computed. For either channel 
+
+𝑞 ∈ { 𝐴, 𝐻 }, the sparse input supplied to the adapter in round 𝑟 
+
+zeroes out the cached embedding for any unit not yet in C (𝑟 ) ,
+
+𝑧 (𝑟 ) 
+
+> 𝑞,𝑖
+
+= I𝑖 ∈ C (𝑟 ) 𝑧 LLM  
+
+> 𝑞,𝑖
+
+. (6) Units outside C (𝑟 ) therefore receive zero semantic input and follow the unaugmented host pathway. 
+
+4.3.2 Uncertainty-Gated Asymmetric Fusion. The host encoder pro-duces a base representation for each unit, 𝑢 (𝑟 ) 
+
+> 𝑖
+
+= 𝑓 𝜃 (𝑟 ) (𝑥 𝑖 ) ∈ R𝑑 ℎ ,using only the host parameters 𝜃 (𝑟 ) and evolving across rounds as 𝜃 (𝑟 ) is updated. Two trainable projectors 𝑔 𝐴 and 𝑔 𝐻 adapt the sparse semantic inputs into 𝑑 ℎ -dimensional features used by the wrapped estimator, 
+
+𝑣 (𝑟 ) 
+
+> 𝐴,𝑖
+
+= 𝑔 𝐴 (𝑧 (𝑟 ) 
+
+> 𝐴,𝑖
+
+), 𝑣 (𝑟 ) 
+
+> 𝐻,𝑖
+
+= 𝑔 𝐻 (𝑧 (𝑟 ) 
+
+> 𝐻,𝑖
+
+). (7) The strength with which each channel is injected is controlled by a scalar gate. Each gate combines the matching uncertainty score, passed through a small network and the sigmoid function 
+
+𝜎 (𝑎 ) = (1 + 𝑒 −𝑎 )−1, with an indicator restricting injection to units 
+
+> 4Uncertainty-Guided LLM Semantic Augmentation for Heterogeneous Treatment Effect Estimation
+
+that have actually been queried, 
+
+𝛼 (𝑟 ) 
+
+> 𝑖
+
+= I𝑖 ∈ C (𝑟 ) 𝜎 
+
+
+
+MLP 𝐴 (𝑠 (𝑟 ) 
+
+> 𝑒,𝑖
+
+)
+
+
+
+,𝛽 (𝑟 ) 
+
+> 𝑖
+
+= I𝑖 ∈ C (𝑟 ) 𝜎 
+
+
+
+MLP 𝐻 (𝑠 (𝑟 ) 
+
+> 𝜏,𝑖
+
+)
+
+
+
+.
+
+(8) The cache indicator blocks unqueried units, while each gate aligns a role with its matching uncertainty: 𝑠 𝑒 modulates assignment seman-tics and 𝑠 𝜏 modulates heterogeneity semantics. Writing Concat (𝑎, 𝑏 )
+
+for feature-wise concatenation, CURL forms assignment-adjusted shared and effect-sensitive representations as 
+
+𝑢 (𝑟 ) 
+
+> 𝐴,𝑖
+
+= 𝑢 (𝑟 ) 
+
+> 𝑖
+
++ 𝛼 (𝑟 ) 
+
+> 𝑖
+
+𝑣 (𝑟 ) 
+
+> 𝐴,𝑖
+
+, (9) 
+
+𝑢 (𝑟 ) 
+
+> 𝐻,𝑖
+
+= Concat 
+
+
+
+𝑢 (𝑟 ) 
+
+> 𝐴,𝑖
+
+, 𝛽 (𝑟 ) 
+
+> 𝑖
+
+𝑣 (𝑟 )
+
+> 𝐻,𝑖
+
+
+
+. (10) The fusion rules serve distinct roles. Residual addition treats as-signment semantics as a correction to the shared state, preserving its dimension and recovering the host representation when inac-tive. Concatenation retains heterogeneity semantics as a separate block that the CATE operator can parameterize independently. This asymmetry is a role-specific routing bias, not a claim that the embed-dings form an identifiable causal decomposition; their redundancy is further discouraged by the orthogonality penalty in Section 4.4. 
+
+4.3.3 Role-Aware Prediction Routing. The propensity head 𝑔 𝑒, Θ(𝑟 )
+
+of the current wrapped estimator consumes only the assignment-adjusted shared representation, while its host-specific CATE opera-tor TΘ(𝑟 ) consumes 𝑢 (𝑟 ) 
+
+> 𝐻,𝑖
+
+, which already contains 𝑢 (𝑟 ) 
+
+> 𝐴,𝑖
+
+through the concatenation in Eq. (10), 
+
+b𝑒 Θ(𝑟 ) (𝑥 𝑖 ) = 𝑔 𝑒, Θ(𝑟 )
+
+
+
+𝑢 (𝑟 )
+
+> 𝐴,𝑖
+
+
+
+, b𝜏 Θ(𝑟 ) (𝑥 𝑖 ) = TΘ(𝑟 )
+
+
+
+𝑢 (𝑟 )
+
+> 𝐻,𝑖
+
+
+
+. (11) The two roles are thus enforced structurally: heterogeneity seman-tics cannot reach assignment prediction, whereas the CATE opera-tor accesses both the assignment-adjusted shared state and effect-specific representation. This interface covers treatment-conditioned single-head, two-potential-outcome-head, direct-CATE, and latent-variable hosts; their insertion points and native objectives appear in Appendix E. 
+
+4.4 Progressive Refinement and Test-Time Inference 
+
+4.4.1 Progressive Training. Training begins by fitting the unaug-mented host with its native objective, which we write as 
+
+FitHost (D) , giving 𝐹 (0) = FitHost (D) and an empty cache 
+
+C (− 1) = ∅. Each subsequent round 𝑟 = 0, . . . , 𝑅 − 1 repeats the diagnosis and allocation steps of Eqs. (2) – (4) , queries the frozen LLM only on the newly surfaced set Q (𝑟 ) , and resumes optimization from the current parameters to obtain 𝐹 (𝑟 +1) , without reinitializing either the estimator or its optimizer. Within such an optimization block, the cached embeddings and the frozen LLM Φ are held fixed, while the host, the projectors, the gates, and the prediction heads are trained jointly; the uncertainty scores produced at the end of a block then serve as the gate inputs for the next one, so that training advances through the same cycle of diagnosis, allocation, and integration introduced in Section 4.1. All trainable parameters within a block are updated by minimiz-ing a single objective that adds two auxiliary terms to the host-side prediction loss Lmain , which already includes any host-specific bal-ancing, latent-variable, or reconstruction term. Writing BCE (𝑝, 𝑡 )
+
+for binary cross-entropy and cos (𝑎, 𝑏 ) = ⟨𝑎, 𝑏 ⟩/(∥ 𝑎 ∥2 ∥𝑏 ∥2 + 𝜖 ) for cosine similarity with numerical stabilizer 𝜖 > 0, the two auxiliary terms supervise the propensity head and discourage redundancy between the two semantic channels, 
+
+L( Θ) = Lmain + 𝜆 prop Lprop + 𝜆 ortho Lortho , (12) 
+
+Lprop = 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+BCE  b𝑒 Θ(𝑟 ) (𝑥 𝑖 ), 𝑡 𝑖 
+
+ , (13) 
+
+Lortho = 1
+
+|C (𝑟 ) |∑︁ 𝑖 ∈ C (𝑟 )
+
+cos 2 
+
+𝑣 (𝑟 ) 
+
+> 𝐴,𝑖
+
+, 𝑣 (𝑟 )
+
+> 𝐻,𝑖
+
+
+
+, (14) with 𝜆 prop , 𝜆 ortho ≥ 0 and Lortho = 0 when C (𝑟 ) is empty. The auxil-iary propensity head is present in every evaluated CURL adapter, so setting 𝜆 prop = 0 recovers the same objective form for a host that lacks this interface natively. Algorithmic details are given in Appendix D. 
+
+4.4.2 Test-time Inference. Test-time inference follows a calibration-and-refinement principle. CURL converts the relative ranking used during training into a fixed pointwise rule for deciding whether an unseen unit should receive semantic augmentation, then recom-putes uncertainty after augmentation to control semantic fusion. This conversion is necessary because Eq. (3) relies on relative rank-ings over the full training set, whereas test-time decisions must be made pointwise without assuming access to other test units or depending on the composition of an arbitrary test batch. Let 𝑠 (𝑅 ) 
+
+> 𝑒,𝑖
+
+and 𝑠 (𝑅 ) 
+
+> 𝜏,𝑖
+
+denote the two uncertainty scores computed at the final training state, following the same definition as Eq. (2) .Their empirical distribution functions, 
+
+b𝐺 tr  
+
+> 𝑒
+
+(𝑠 ) = 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+I(𝑠 (𝑅 ) 
+
+> 𝑒,𝑖
+
+≤ 𝑠 ), b𝐺 tr  
+
+> 𝜏
+
+(𝑠 ) = 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+I(𝑠 (𝑅 ) 
+
+> 𝜏,𝑖
+
+≤ 𝑠 ), (15) map the two scores, which may have different scales, to percentile positions within the final training uncertainty distributions. Sum-ming these percentiles gives 𝜔 tr  
+
+> 𝑖
+
+= b𝐺 tr  
+
+> 𝑒
+
+(𝑠 (𝑅 ) 
+
+> 𝑒,𝑖
+
+) + b𝐺 tr  
+
+> 𝜏
+
+(𝑠 (𝑅 ) 
+
+> 𝜏,𝑖
+
+), and CURL stores their empirical (1 − 𝜌 )-quantile, 𝜅 𝜌 = 𝑄 1−𝜌 (𝜔 tr 
+
+> 𝑖 𝑁 𝑖 =1
+
+), together with the two distributions above. Using the same 𝜌 calibrates this threshold to the training-time selection budget and gives a compa-rable augmentation rate when the test uncertainty distribution is similar. For an unseen covariate vector 𝑥 ∗, CURL first sets both semantic inputs to zero and computes pre-augmentation uncertainties 𝑠 pre 
+
+> 𝑒, ∗
+
+and 𝑠 pre  
+
+> 𝜏, ∗
+
+through the same Monte Carlo procedure as Eq. (2) . It queries the LLM if and only if 
+
+𝑎 ∗ = I
+
+ b𝐺 tr  
+
+> 𝑒
+
+(𝑠 pre  
+
+> 𝑒, ∗
+
+) + b𝐺 tr  
+
+> 𝜏
+
+(𝑠 pre  
+
+> 𝜏, ∗
+
+) ≥ 𝜅 𝜌 
+
+
+
+, (16) where 𝑎 ∗ ∈ { 0, 1} is the augmentation decision. A selected unit receives the two embeddings constructed in Section 4.3, whereas an unselected unit retains zero embeddings. CURL then recomputes un-certainty under the updated inputs and uses the post-augmentation scores as the gate inputs of Eq. (8) before applying Eq. (11) . Thus, the pre-augmentation scores determine whether the unit is suffi-ciently unstable relative to the final trained estimator to justify an LLM query, while the post-augmentation scores determine how 
+
+> 5
+
+Jialu Xu, Mengkun Liang, Guannan Liu, Xiaojie Mao, and Junjie Wu 
+
+strongly the resulting embeddings influence prediction. No test-time treatment, outcome, ground-truth effect, or comparison across other test units enters either step. 
+
+5 Experiments 
+
+We evaluate CURL on four benchmarks and ten CATE estimators, asking: (RQ1) whether its gains are consistent across estimators and robust to backbone and hyperparameter choices; (RQ2) which components drive these gains; and (RQ3) whether the two semantic channels exhibit their intended assignment- and heterogeneity-oriented roles. 
+
+5.1 Experimental Setup 
+
+Datasets and metrics. We use two semi-synthetic benchmarks with ground-truth individual effects, IHDP and Adult, evaluated by PEHE, 𝜖 ATE , and 𝜖 ATT (lower is better). Jobs and the randomized Hillstrom email experiment lack individual-level effect ground truth and are evaluated by AUUC, AUQC, and LIFT@30 (higher is better). Dataset and metric details are provided in Appendices A and B. 
+
+Baselines. We plug CURL into ten host learners spanning meta-learners, balanced-representation methods, and deep latent-variable methods (full list in Appendix A.2). We additionally compare with two LLM-only baselines, LLM and LLM+MLP , and with GATE [ 13 ], which directly imputes counterfactual outcomes. Feature-disentangled CATE baselines are reported in Appendix A.3. 
+
+Implementation. We select Qwen2.5-7B or Llama-3-8B per dataset by validation and compare four additional backbones in Section 5.4. We set 𝜌 = 0.25 , 𝑀 = 30 , 𝑅 = 3, 𝜆 prop = 1.0, and 
+
+𝜆 ortho = 0.1, and report means over five random seeds. Further details are provided in Appendices A.2 and C. 
+
+5.2 Main Results 
+
+Tables 1 and 2 report the main results on the four benchmarks, respectively. We summarize three observations. First, CURL improves its host learner across the vast majority of settings, with one degradation on Adult. The improvement appears on both benchmarks with ground truth and benchmarks evaluated by uplift metrics, indicating that it is not specific to a particular evaluation protocol. These patterns are consistent with CURL help-ing finite-sample estimators exploit semantic structure in 𝑋 that is difficult to learn from its raw encoding. Second, the improvement spans meta-learners, balanced-representation methods, and latent-variable methods, supporting the use of CURL as a plug-in adapter rather than an architecture-specific estimator. The gains for latent-variable baselines further suggest that pretrained semantic structure can complement repre-sentations learned primarily from the study sample, even when the host learner is highly flexible. Third, the gains cannot be explained by generic LLM features alone. Both LLM and LLM+MLP are substantially weaker than 
+
+CURL , and in many cases weaker than conventional CATE learn-ers, showing that directly using LLM outputs or embeddings is insufficient. Under the same LLM backbone, CURL also outper-forms GATE in most settings, indicating that its benefit comes from S-Learner T-Learner TarNet CFRNet                                                                         
+
+> IHDP PEHE ↓
+> (a)
+> (b)
+> (c)
+> (d)
+> (e)
+> (f)
+> (g)
+> (h)
+> (i)
+> (j)
+> 5.8 1.62 1.91 2.02
+> 4.1 1.66 1.62 1.49
+> 3.5 1.62 1.61 1.49
+> 3.6 1.65 1.61 1.56
+> 2.2 1.46 1.38 1.55
+> 4.2 1.68 1.59 1.52
+> 3.3 1.61 1.46 1.56
+> 4.0 1.73 1.72 1.55
+> 5.8 1.54 1.45 1.52
+> 2.1 1.44 1.36 1.46
+> S-Learner T-Learner TarNet CFRNet
+> Jobs AUQC ↑
+> 74 327 617 648
+> 39 422 644 664
+> 220 345 601 709
+> 125 348 548 710
+> 27 268 589 716
+> 15 321 614 693
+> 20 460 482 702
+> 53 513 600 705
+> 207 474 676 706
+> 540 791 690 718
+> Normalized within each host
+> Better Worse Normalized within each host
+> Worse Better
+> (a) Host
+> (f) Random
+> (b) w/o zLLM H
+> (g) w/o Refinement
+> (c) w/o zLLM A
+> (h) w/o L ortho
+> (d) Merged zM
+> (i) w/o Role Routing
+> (e) CATE-only sτ
+> (j) CURL
+
+Figure 3: Ablation results across four host learners on IHDP (PEHE, lower is better) and Jobs (AUQC, higher is better). Each cell reports the mean over five runs. Colors are normalized separately within each host-learner column, with greener cells indicating better performance. 
+
+uncertainty-guided allocation, role-conditioned semantic construc-tion, and separated routing rather than from raw LLM capacity. 
+
+5.3 Ablation Studies 
+
+Figure 3 compares the full CURL with its ablated variants across four representative host learners. The complete model achieves the best result in all eight host–dataset configurations, indicating that its gains do not depend on a particular estimator architecture. Semantic construction and routing. Removing either semantic channel ( w/o 𝑧 LLM  
+
+> 𝐻
+
+or w/o 𝑧 LLM  
+
+> 𝐴
+
+) consistently underperforms the full model, showing that the two role-conditioned representations provide complementary information. Replacing them with a shared representation ( Merged 𝑧 𝑀 ) also reduces performance. The declines caused by removing Lortho or role-aware routing further support channel separation and the asymmetric prediction pathways. Allocation and refinement. Using only CATE uncertainty ( CATE-only 𝑠 𝜏 ) remains competitive for several IHDP hosts but loses sub-stantial performance on Jobs, suggesting that assignment-side un-certainty provides an important complementary allocation sig-nal. Random allocation is less reliable and never matches the full uncertainty-guided strategy. Finally, w/o Refinement is consistently inferior to CURL , supporting iterative re-diagnosis and semantic reallocation as the host estimator evolves. 
+
+5.4 Sensitivity Analysis 
+
+We assess the robustness of CURL with respect to the LLM back-bone, the semantic-allocation ratio 𝜌 , and the number of refinement rounds 𝑅 .Figure 4 reports results under six backbones: Phi-3.8B, Qwen2.5-7B, Llama2-7B, Llama3-8B, Llama2-13B, and Qwen2.5-14B. Perfor-mance varies only modestly across backbones, and larger models are not uniformly better. This suggests that CURL is not strongly dependent on a particular backbone or model scale. Figure 5 examines the allocation ratio 𝜌 and the number of re-finement rounds 𝑅 on Jobs. Performance remains stable over broad ranges, with moderate settings generally performing best. Increas-ing 𝜌 beyond this range raises the LLM cost without consistent gains, while excessive refinement rounds yield diminishing returns. 
+
+6Uncertainty-Guided LLM Semantic Augmentation for Heterogeneous Treatment Effect Estimation 
+
+Table 1: Results on real-world uplift benchmarks (AUUC, AUQC, and LIFT@30; higher is better). Mean ± standard deviation over five runs is reported. For each host model and metric, the best result among base , GATE, and CURL is boldfaced. Δ is the relative gain of CURL over the host learner (%). 
+
+Dataset Base Model AUUC ↑ AUQC ↑ LIFT@30 ↑
+
+base GATE CURL Δ base GATE CURL Δ base GATE CURL Δ
+
+Jobs LLM 336.07 ± 152.90 – – – 51.52 ± 15.64 – – – 3.25 ± 1.20 – – –LLM+MLP 810.99 ± 130.44 – – – 69.11 ± 22.21 – – – 2.56 ± 1.23 – – –S-Learner 506.40 ± 210.85 461.15 ± 47.89 522.99 ± 233.41 +3.28% 262.09 ± 89.67 272.56 ± 28.26 352.08 ± 64.15 +34.34% 11.33 ± 6.78 2.88 ± 0.30 11.53 ± 4.21 +1.76% T-Learner 671.81 ± 254.99 522.02 ± 157.29 875.93 ± 299.94 +30.38% 351.35 ± 113.76 397.51 ± 86.95 487.50 ± 142.68 +38.75% 6.13 ± 1.15 7.27 ± 1.58 9.22 ± 3.93 +50.41% R-Learner 770.80 ± 332.56 630.93 ± 258.18 1007.40 ± 344.72 +30.70% 226.62 ± 44.71 168.09 ± 46.37 240.12 ± 88.37 +5.96% 6.60 ± 2.71 7.68 ± 0.17 8.14 ± 3.01 +23.32% TARNet 491.85 ± 70.27 489.47 ± 170.58 885.49 ± 223.55 +80.03% 218.54 ± 45.24 203.95 ± 29.86 266.82 ± 57.53 +22.09% 8.06 ± 2.80 8.47 ± 1.25 11.73 ± 2.20 +45.65% DragonNet 918.04 ± 318.45 655.31 ± 204.07 1185.06 ± 389.74 +29.09% 413.35 ± 122.60 376.23 ± 140.30 454.69 ± 64.98 +10.00% 11.51 ± 3.31 6.17 ± 2.27 12.24 ± 8.31 +6.36% CFRNet 816.48 ± 79.80 521.71 ± 197.32 819.61 ± 123.81 +0.38% 223.08 ± 63.98 237.80 ± 89.07 291.50 ± 58.45 +30.67% 7.32 ± 1.17 7.67 ± 1.89 8.65 ± 1.12 +18.18% CEVAE 970.01 ± 197.59 442.97 ± 125.07 975.08 ± 180.33 +0.52% 465.46 ± 56.80 472.25 ± 52.95 578.90 ± 185.02 +24.37% 9.10 ± 1.79 5.06 ± 0.33 10.63 ± 1.85 +16.80% TEDVAE 862.90 ± 436.75 696.57 ± 150.40 1087.30 ± 253.83 +26.01% 417.32 ± 95.35 372.78 ± 7.02 420.50 ± 81.05 +0.76% 4.61 ± 1.23 4.71 ± 0.16 6.16 ± 2.82 +33.48% SDD 574.98 ± 180.84 710.59 ± 208.96 743.96 ± 165.72 +29.39% 217.93 ± 63.15 208.53 ± 60.82 218.64 ± 75.71 +0.32% 7.85 ± 3.16 8.99 ± 2.07 9.47 ± 3.26 +20.70% CiVAE 717.18 ± 131.83 655.36 ± 177.13 1023.04 ± 278.45 +42.65% 236.21 ± 21.96 179.78 ± 112.48 238.78 ± 66.90 +1.09% 4.10 ± 2.19 4.85 ± 0.57 5.13 ± 1.77 +25.10% Hillstrom LLM 0.016 ± 0.009 – – – 0.011 ± 0.001 – – – 0.858 ± 0.153 – – –LLM+MLP 0.053 ± 0.032 – – – 0.014 ± 0.006 – – – 1.345 ± 0.526 – – –S-Learner 0.112 ± 0.044 0.115 ± 0.013 0.167 ± 0.053 +48.35% 0.044 ± 0.011 0.023 ± 0.004 0.045 ± 0.012 +2.49% 2.570 ± 0.405 2.853 ± 2.965 3.239 ± 0.977 +26.04% T-Learner 0.106 ± 0.035 0.131 ± 0.016 0.136 ± 0.038 +28.01% 0.020 ± 0.002 0.021 ± 0.008 0.023 ± 0.003 +12.25% 1.005 ± 0.221 0.973 ± 0.157 1.109 ± 0.239 +10.38% R-Learner 0.205 ± 0.049 0.132 ± 0.052 0.207 ± 0.049 +1.07% 0.046 ± 0.003 0.044 ± 0.042 0.049 ± 0.005 +6.75% 4.273 ± 0.963 2.841 ± 0.815 5.195 ± 1.563 +21.57% TARNet 0.063 ± 0.020 0.062 ± 0.016 0.065 ± 0.022 +2.22% 0.022 ± 0.002 0.020 ± 0.005 0.026 ± 0.005 +14.67% 0.991 ± 0.192 0.858 ± 0.100 1.014 ± 0.186 +2.36% DragonNet 0.109 ± 0.021 0.122 ± 0.058 0.124 ± 0.024 +13.98% 0.021 ± 0.001 0.024 ± 0.008 0.026 ± 0.004 +21.40% 0.995 ± 0.163 0.865 ± 0.394 1.099 ± 0.203 +10.49% CFRNet 0.130 ± 0.041 0.107 ± 0.012 0.162 ± 0.049 +24.27% 0.037 ± 0.005 0.032 ± 0.023 0.044 ± 0.007 +19.07% 2.674 ± 0.538 2.497 ± 2.546 3.734 ± 1.399 +39.61% CEVAE 0.063 ± 0.021 0.053 ± 0.016 0.068 ± 0.015 +6.97% 0.019 ± 0.002 0.014 ± 0.002 0.021 ± 0.002 +11.46% 0.973 ± 0.151 0.864 ± 0.371 1.168 ± 0.189 +20.03% TEDVAE 0.111 ± 0.035 0.113 ± 0.016 0.116 ± 0.037 +4.23% 0.021 ± 0.001 0.021 ± 0.005 0.022 ± 0.001 +2.83% 0.689 ± 0.299 0.875 ± 0.187 1.126 ± 0.034 +63.37% SDD 0.115 ± 0.018 0.120 ± 0.016 0.128 ± 0.019 +10.49% 0.021 ± 0.001 0.029 ± 0.015 0.023 ± 0.003 +9.35% 1.022 ± 0.111 1.709 ± 0.540 1.028 ± 0.116 +0.60% CiVAE 0.066 ± 0.022 0.062 ± 0.014 0.073 ± 0.027 +11.13% 0.030 ± 0.009 0.020 ± 0.003 0.033 ± 0.011 +11.04% 1.425 ± 0.364 1.407 ± 0.598 1.511 ± 0.367 +6.04% Phi-3.8B    
+
+> Qwen2.5-7B
+> Llama2-7B
+> Llama3-8B
+> Llama2-13B
+> Qwen2.5-14B
+> 0.024
+> 0.030
+> 0.036
+> 0.042
+> 0.048
+> AUQC
+> (a) Hillstrom
+> Phi-3.8B
+> Qwen2.5-7B
+> Llama2-7B
+> Llama3-8B
+> Llama2-13B
+> Qwen2.5-14B
+> 1.6
+> 1.8
+> 2.0
+> 2.2
+> 2.4
+> 2.6
+> PEHE
+> (b) IHDP
+> T-learner R-learner DragonNet CFRNet
+
+Figure 4: Sensitivity of CURL to different LLM backbones on Hillstrom (AUQC) and IHDP (PEHE) across multiple host learners. 
+
+Overall, CURL is not highly sensitive to either hyperparameter around the selected configuration. 
+
+5.5 Progressive Refinement Dynamics 
+
+We further examine how semantic allocation evolves across refine-ment rounds. Setting 𝑅 = 5, we track the cumulative semantic-cache ratio |C (𝑟 ) |/ 𝑁 and the mean uncertainty scores 𝑠 (𝑟 )
+
+𝑒 and 𝑠 (𝑟 )
+
+𝜏 
+
+on IHDP and Jobs across four representative host learners. Figure 6 summarizes the Jobs results in the main text, while the full results are provided in Appendix F. As shown in Figure 6, the semantic cache expands rapidly in the early rounds and then gradually stabilizes. Meanwhile, both uncertainty scores exhibit an overall downward trend across most 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 
+
+> Allocation Ratio
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> AUQC
+> S
+> T
+> TarNet
+> CFRNet
+
+(a) Effect of the allocation ratio. 1 2 3 4 5 6 7 8 9 10  
+
+> Refinement Round
+> 0
+> 100
+> 200
+> 300
+> 400
+> 500
+> AUQC
+> S
+> T
+> DragonNet
+> CFRNet
+
+(b) Effect of the refinement rounds. 
+
+Figure 5: Sensitivity of CURL on Jobs (AUQC) across multiple host learners: (a) semantic-allocation ratio 𝜌 and (b) number of refinement rounds 𝑅 .
+
+settings. This pattern is consistent with progressive refinement reducing local predictive instability while the set of units requiring semantic augmentation gradually stabilizes. 
+
+5.6 Role Validation of the Semantic Channels 
+
+We evaluate whether the two LLM-derived channels align with their intended roles through route reassignment and probing, and test whether their gains reflect representational content rather than additional inputs or parameters. Route reassignment. We freeze the trained model and evalu-ate eight reroutings of 𝑧 𝐴 and 𝑧 𝐻 (Figure 7). The original routing performs best: swapping the channels or removing 𝑧 𝐴 from the 
+
+7Jialu Xu, Mengkun Liang, Guannan Liu, Xiaojie Mao, and Junjie Wu 
+
+Table 2: Results on semi-synthetic datasets (PEHE, 𝜖 ATE , and 𝜖 ATT ; lower is better). Mean ± standard deviation over five runs is reported. For each host model and metric, the best result among base , GATE, and CURL is boldfaced. Δ is the relative error reduction of CURL over the host learner (%). 
+
+Dataset Base Model PEHE ↓ 𝜖 ATE ↓ 𝜖 ATT ↓
+
+base GATE CURL Δ base GATE CURL Δ base GATE CURL Δ
+
+IHDP LLM 44.117 ± 26.698 – – – 54.308 ± 41.443 – – – 53.266 ± 40.708 – – –LLM+MLP 2.487 ± 0.935 – – – 1.398 ± 0.389 – – – 1.231 ± 0.420 – – –S-Learner 4.616 ± 0.838 3.499 ± 1.106 2.926 ± 0.790 +36.62% 3.050 ± 0.290 2.492 ± 0.350 1.950 ± 0.221 +36.08% 2.771 ± 0.289 2.394 ± 0.391 1.437 ± 0.045 +48.15% T-Learner 1.643 ± 0.416 1.450 ± 0.547 1.438 ± 0.354 +12.45% 0.614 ± 0.159 0.595 ± 0.065 0.511 ± 0.089 +16.88% 0.406 ± 0.144 0.526 ± 0.136 0.275 ± 0.051 +32.21% R-Learner 2.629 ± 0.725 2.625 ± 0.890 2.297 ± 0.284 +12.64% 1.179 ± 0.323 1.184 ± 0.066 1.163 ± 0.270 +1.40% 0.956 ± 0.297 0.986 ± 0.315 0.936 ± 0.243 +2.04% TARNet 1.712 ± 0.509 1.370 ± 0.385 1.324 ± 0.254 +22.67% 0.609 ± 0.227 0.436 ± 0.121 0.200 ± 0.047 +67.26% 0.478 ± 0.200 0.664 ± 0.277 0.343 ± 0.097 +28.30% DragonNet 1.654 ± 0.473 1.531 ± 0.419 1.342 ± 0.217 +18.83% 0.513 ± 0.158 0.505 ± 0.077 0.315 ± 0.055 +38.60% 0.332 ± 0.120 0.550 ± 0.195 0.225 ± 0.072 +32.26% CFRNet 1.767 ± 0.632 1.797 ± 0.611 1.405 ± 0.342 +20.47% 0.412 ± 0.085 0.459 ± 0.034 0.179 ± 0.068 +56.64% 0.389 ± 0.201 0.617 ± 0.127 0.307 ± 0.056 +21.06% CEVAE 1.879 ± 0.730 1.548 ± 0.499 1.508 ± 0.402 +19.77% 0.953 ± 0.477 0.937 ± 0.185 0.328 ± 0.152 +65.61% 0.841 ± 0.429 0.910 ± 0.455 0.258 ± 0.122 +69.32% TEDVAE 2.150 ± 0.314 2.409 ± 0.705 1.990 ± 0.592 +7.46% 1.410 ± 0.547 1.955 ± 0.456 1.303 ± 1.032 +7.54% 0.531 ± 0.030 1.929 ± 0.706 0.455 ± 0.039 +14.36% SDD 1.875 ± 0.642 1.737 ± 0.337 1.571 ± 0.396 +16.20% 0.500 ± 0.184 0.543 ± 0.091 0.497 ± 0.085 +0.42% 0.369 ± 0.069 0.544 ± 0.424 0.336 ± 0.045 +8.89% CiVAE 3.099 ± 0.924 3.096 ± 1.001 3.011 ± 0.846 +2.85% 0.231 ± 0.024 0.412 ± 0.172 0.226 ± 0.058 +2.38% 0.690 ± 0.148 0.657 ± 0.166 0.598 ± 0.184 +13.42% Adult LLM 57.312 ± 20.847 – – – 1.569 ± 0.702 – – – 0.708 ± 0.295 – – –LLM+MLP 0.429 ± 0.063 – – – 0.191 ± 0.065 – – – 0.170 ± 0.060 – – –S-Learner 0.260 ± 0.036 0.471 ± 0.112 0.213 ± 0.041 +18.05% 0.158 ± 0.048 0.454 ± 0.115 0.095 ± 0.050 +39.91% 0.135 ± 0.061 0.454 ± 0.135 0.113 ± 0.031 +16.06% T-Learner 0.993 ± 0.207 1.067 ± 0.349 0.894 ± 0.270 +9.97% 0.354 ± 0.070 0.917 ± 0.293 0.161 ± 0.103 +54.55% 0.396 ± 0.037 0.877 ± 0.280 0.281 ± 0.075 +29.17% R-Learner 0.065 ± 0.012 0.153 ± 0.017 0.062 ± 0.021 +5.35% 0.005 ± 0.004 0.101 ± 0.013 0.004 ± 0.004 +20.75% 0.007 ± 0.004 0.098 ± 0.021 0.002 ± 0.001 +72.97% TARNet 0.658 ± 0.088 1.049 ± 0.314 0.649 ± 0.125 +1.32% 0.331 ± 0.069 0.889 ± 0.259 0.175 ± 0.096 +46.93% 0.355 ± 0.044 0.855 ± 0.248 0.275 ± 0.072 +22.76% DragonNet 0.607 ± 0.047 1.032 ± 0.334 0.596 ± 0.059 +1.73% 0.337 ± 0.049 0.867 ± 0.283 0.146 ± 0.088 +56.72% 0.346 ± 0.026 0.828 ± 0.278 0.240 ± 0.065 +30.62% CFRNet 0.947 ± 0.270 0.986 ± 0.334 0.941 ± 0.128 +0.67% 0.772 ± 0.286 0.837 ± 0.284 0.452 ± 0.260 +41.46% 0.780 ± 0.308 0.804 ± 0.277 0.491 ± 0.238 +36.98% CEVAE 0.408 ± 0.062 0.653 ± 0.286 0.386 ± 0.145 +5.41% 0.203 ± 0.101 0.537 ± 0.291 0.080 ± 0.064 +60.60% 0.177 ± 0.103 0.536 ± 0.315 0.113 ± 0.067 +36.51% TEDVAE 0.443 ± 0.192 0.621 ± 0.733 0.436 ± 0.085 +1.63% 0.212 ± 0.089 0.457 ± 0.679 0.211 ± 0.052 +0.61% 0.223 ± 0.123 0.435 ± 0.641 0.221 ± 0.083 +0.90% SDD 0.642 ± 0.119 1.034 ± 0.317 0.717 ± 0.216 -11.75% 0.345 ± 0.080 0.857 ± 0.269 0.334 ± 0.089 +3.16% 0.339 ± 0.095 0.813 ± 0.266 0.329 ± 0.082 +2.98% CiVAE 0.326 ± 0.260 0.302 ± 0.123 0.114 ± 0.053 +65.06% 0.195 ± 0.231 0.191 ± 0.132 0.037 ± 0.025 +81.12% 0.210 ± 0.218 0.194 ± 0.137 0.041 ± 0.021 +80.64% Initial 1 2 3 4 5      
+
+> Refinement round
+> 20
+> 40
+> 60
+> 80
+> 100
+> Cache ratio (%)
+> (a) Cumulative semantic cache ratio
+> S-Learner
+> T-Learner
+> TARNet
+> CFRNet
+> 12345
+> Refinement round
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> Normalized uncertainty
+> (b) Mean normalized uncertainty
+> se(mean across settings)
+> sτ(mean across settings)
+
+Figure 6: Progressive refinement dynamics on Jobs across four representative host learners. We report the cumula-tive semantic-cache ratio |C (𝑟 ) |/ 𝑁 and the mean uncertainty scores 𝑠 (𝑟 )
+
+𝑒 and 𝑠 (𝑟 )
+
+𝜏 over refinement rounds. 
+
+propensity pathway harms treatment prediction, while incorrect outcome-side routing degrades CATE estimation. This supports the intended assignment and heterogeneity roles. Probe analysis. Lightweight probes on frozen representations provide consistent evidence (Figure 8): 𝑧 𝐴 better predicts treatment assignment, whereas 𝑧 𝐻 better predicts treatment-dependent re-sponses when treatment–representation interactions are included. Combining both channels performs best, indicating complementary information. R1 R2 R3 R4 R5 R6 R7 R8                               
+
+> 0.64
+> 0.65
+> 0.66
+> 0.67
+> 0.68
+> 0.69
+> AUC
+> Treatment Prediction
+> R1 R2 R3 R4 R5 R6 R7 R8
+> 1.650
+> 1.675
+> 1.700
+> 1.725
+> 1.750
+> 1.775
+> 1.800
+> 1.825
+> 1.850
+> RMSE
+> Outcome Prediction
+> R1 R2 R3 R4 R5 R6 R7 R8
+> 1.80
+> 1.85
+> 1.90
+> 1.95
+> 2.00
+> 2.05
+> PEHE
+> CATE Estimation
+> R1: Full
+> R2: Swap roles
+> R3: zA→Tonly
+> R4: zH→Tonly
+> R5: Drop zAon Y
+> R6: Drop zHon Y
+> R7: Drop zAon T
+> R8: Swap on Y
+> R7: Drop zAon T
+> R8: Swap on Y
+
+Figure 7: Route-reassignment validation. The original rout-ing performs best overall, while swapping or incorrectly rout-ing the two semantic channels degrades assignment and ef-fect estimation. 
+
+Representational-lossiness checks. Semantic-corruption results on IHDP (Appendix G) show that CURL performs best: anonymiz-ing feature names and shuffling category labels both reduce its advantage, while random embeddings cause the largest degrada-tion. This ordering indicates that CURL’s improvement derives in part from semantic structure encoded by the LLM, rather than addi-tional adapter capacity alone; Appendix H illustrates the channels’ content. 
+
+8Uncertainty-Guided LLM Semantic Augmentation for Heterogeneous Treatment Effect Estimation P1 P2 P3 P4 P5 P6                                                                                                          
+
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> AUC
+> Probe for T
+> P1 P2 P3 P4
+> 2.70
+> 2.72
+> 2.74
+> 2.76
+> 2.78
+> RMSE
+> Probe for Y
+> P1 P2 P3
+> 2.50
+> 2.55
+> 2.60
+> 2.65
+> 2.70
+> RMSE
+> Probe for T×zq
+> Probe for T
+> P1: X
+> P2: zAonly
+> P3: zHonly
+> P4: X+zA
+> P5: X+zH
+> P6: X+zA+zH
+> Probe for Y
+> P1: X+T
+> P2: X+T+zA
+> P3: X+T+zH
+> P4: X+T+zA+zH
+> Probe for T×zq
+> P1: X+T+zA+T×zA
+> P2: X+T+zH+T×zH
+> P3: X+T+ [ zA,zH] + T× [ zA,zH]
+> Probe for T×zq
+> P1: X+T+zA+T×zA
+> P2: X+T+zH+T×zH
+> P3: X+T+ [ zA,zH] + T× [ zA,zH]
+
+Figure 8: Probe-based role validation. The assignment-oriented channel is more informative for treatment predic-tion, whereas the heterogeneity-oriented channel is more informative when modeling treatment-dependent responses. 
+
+6 Conclusion 
+
+We presented CURL, a plug-in framework for finite-sample CATE estimation under representational lossiness, where causally suffi-cient covariates remain difficult to exploit in their raw encoded form. Rather than using LLMs as unstructured feature generators or di-rect outcome imputers, CURL uses estimator uncertainty to identify locally unstable units, constructs assignment- and heterogeneity-oriented representations from their observed covariates, and inte-grates them through role-aware pathways. Across four benchmarks and ten host learners, CURL improves performance in most settings, while ablation, refinement, corruption, and role-validation analy-ses support uncertainty-guided allocation and channel separation. 
+
+CURL reorganizes observed covariates rather than introducing new unit-level information; its generated text is a semantic represen-tation and does not address unmeasured confounding or overlap violations. Future work should examine semantic reliability and uncertainty calibration under domain shift. Overall, CURL shows how a pretrained semantic prior can support more reliable finite-sample CATE estimation by making these relations easier to exploit, without changing the observed information set, target estimand, or identifying assumptions. 
+
+References 
+
+[1] Yasin Abbasi-Yadkori, Dávid Pál, and Csaba Szepesvári. Improved algorithms for linear stochastic bandits. In Advances in Neural Information Processing Systems ,volume 24, pages 2312–2320, 2011. [2] Ahmed M. Alaa and Mihaela van der Schaar. Bayesian inference of individualized treatment effects using multi-task Gaussian processes. In Advances in Neural Information Processing Systems , 2017. [3] Gaon An, Seungyong Moon, Jang-Hyun Kim, and Hyun Oh Song. Uncertainty-based offline reinforcement learning with diversified Q-ensemble. In Advances in Neural Information Processing Systems , volume 34, pages 7436–7447, 2021. [4] Chenjia Bai, Lingxiao Wang, Zhuoran Yang, Zhihong Deng, Animesh Garg, Peng Liu, and Zhaoran Wang. Pessimistic bootstrapping for uncertainty-driven offline reinforcement learning. arXiv preprint arXiv:2202.11566 , 2022. [5] Taiyu Ban, Lyuzhou Chen, Derui Lyu, Xiangyu Wang, Qinrui Zhu, and Huanhuan Chen. LLM-driven causal discovery via harmonized prior. IEEE Transactions on Knowledge and Data Engineering , 2025. [6] Charles Blundell, Julien Cornebise, Koray Kavukcuoglu, and Daan Wierstra. Weight uncertainty in neural networks. In International Conference on Machine Learning , pages 1613–1622. PMLR, 2015. [7] Jacob M. Chen, Rohit Bhattacharya, and Katherine A. Keith. Proximal causal inference with text data. In Advances in Neural Information Processing Systems ,volume 37, 2024. [8] Haoang Chi, He Li, Wenjing Yang, Feng Liu, Long Lan, Xiaoguang Ren, Tongliang Liu, and Bo Han. Unveiling causal reasoning in large language models: Reality or mirage? In Advances in Neural Information Processing Systems , volume 37, 2024. [9] Nikita Dhawan, Leonardo Cotta, Karen Ullrich, Rahul G. Krishnan, and Chris J. Maddison. End-to-end causal effect estimation from unstructured natural lan-guage data. In Advances in Neural Information Processing Systems , volume 37, 2024. [10] Huaming Du, Yujia Zheng, Baoyu Jing, Yu Zhao, Gang Kou, Guisong Liu, Tao Gu, Weimin Li, and Carl Yang. Causal discovery through synergizing large language model and data-driven reasoning. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining . ACM, 2025. [11] Yarin Gal and Zoubin Ghahramani. Dropout as a bayesian approximation: Representing model uncertainty in deep learning. In Maria Florina Balcan and Kilian Q. Weinberger, editors, Proceedings of The 33rd International Conference on Machine Learning , volume 48 of Proceedings of Machine Learning Research ,pages 1050–1059, New York, New York, USA, 20–22 Jun 2016. PMLR. URL https://proceedings.mlr.press/v48/gal16.html. [12] Negar Hassanpour and Russell Greiner. Learning disentangled representations for counterfactual regression. In International Conference on Learning Represen-tations , 2020. [13] Nicolas Huynh, Julianna Piskorz, Jeroen Berrevoets, Max Ruiz Luyten, and Mi-haela van der Schaar. Improving treatment effect estimation with llm-based data augmentation. In 1st ICML Workshop on Foundation Models for Structured Data ,2025. [14] Guido W. Imbens and Donald B. Rubin. Causal Inference for Statistics, Social, and Biomedical Sciences: An Introduction . Cambridge University Press, New York, NY, USA, 2015. ISBN 9780521885881. [15] Andrew Jesson, Sören Mindermann, Uri Shalit, and Yarin Gal. Identifying causal-effect inference failure with uncertainty-aware models. Advances in Neural Information Processing Systems , 33:11637–11649, 2020. [16] Zhijing Jin, Yuen Chen, Felix Leeb, Luigi Gresele, Ojasv Kamal, Zhiheng LYU, Kevin Blin, Fernando Gonzalez Adauto, Max Kleiman-Weiner, Mrinmaya Sachan, and Bernhard Schölkopf. Cladder: Assessing causal reasoning in language models. In A. Oh, T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine, editors, 
+
+Advances in Neural Information Processing Systems , volume 36, pages 31038–31065. Curran Associates, Inc., 2023. URL https://proceedings.neurips.cc/paper_files/p aper/2023/file/631bb9434d718ea309af82566347d607-Paper-Conference.pdf. [17] Alex Kendall and Yarin Gal. What uncertainties do we need in bayesian deep learning for computer vision? Advances in neural information processing systems ,30, 2017. [18] Ilyes Khemakhem, Diederik Kingma, Ricardo Monti, and Aapo Hyvarinen. Varia-tional autoencoders and nonlinear ica: A unifying framework. In Silvia Chiappa and Roberto Calandra, editors, Proceedings of the Twenty Third International Conference on Artificial Intelligence and Statistics , volume 108 of Proceedings of Machine Learning Research , pages 2207–2217. PMLR, 26–28 Aug 2020. URL https://proceedings.mlr.press/v108/khemakhem20a.html. [19] Sören R Künzel, Jasjeet S Sekhon, Peter J Bickel, and Bin Yu. Metalearners for estimating heterogeneous treatment effects using machine learning. Proceedings of the National Academy of Sciences , 116(10):4156–4165, 2019. [20] Emre Kıcıman, Robert Ness, Amit Sharma, and Chenhao Tan. Causal reasoning and large language models: Opening a new frontier for causality. 2024. URL https://arxiv.org/abs/2305.00050. [21] Balaji Lakshminarayanan, Alexander Pritzel, and Charles Blundell. Simple and scalable predictive uncertainty estimation using deep ensembles. Advances in neural information processing systems , 30, 2017. [22] Xinshu Li, Mingming Gong, and Lina Yao. Self-distilled disentangled learning for counterfactual prediction. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 1667–1678, 2024. [23] Xiaoyu Liu, Paiheng Xu, Junda Wu, Jiaxin Yuan, Yifan Yang, Yuhang Zhou, Fuxiao Liu, Tianrui Guan, Haoliang Wang, Tong Yu, Julian McAuley, Wei Ai, and Furong Huang. Large language models and causal inference in collaboration: A comprehensive survey. In Luis Chiruzzo, Alan Ritter, and Lu Wang, editors, 
+
+Findings of the Association for Computational Linguistics: NAACL 2025 , pages 7683–7699, Albuquerque, New Mexico, April 2025. Association for Computational Linguistics. ISBN 979-8-89176-195-7. doi: 10.18653/v1/2025.findings-naacl.427. URL https://aclanthology.org/2025.findings-naacl.427/. [24] Christos Louizos, Uri Shalit, Joris Mooij, David Sontag, Richard Zemel, and Max Welling. Causal effect inference with deep latent-variable models. In Proceedings of the 31st International Conference on Neural Information Processing Systems ,NIPS’17, page 6449–6459, Red Hook, NY, USA, 2017. Curran Associates Inc. ISBN 9781510860964. [25] David J.C. MacKay. A practical Bayesian framework for backpropagation net-works. Neural Computation , 4(3):448–472, 1992. [26] Hui Meng, Keping Yang, Xuyu Peng, and Bo Zheng. Deep disentangled represen-tation network for treatment effect estimation. arXiv preprint arXiv:2507.06650 ,2025. [27] Xinkun Nie and Stefan Wager. Quasi-oracle estimation of heterogeneous treat-ment effects. Biometrika , 108(2):299–319, 2021. doi: 10.1093/biomet/asaa076. [28] Severi Rissanen and Pekka Marttinen. A critical look at the consistency of causal estimation with deep latent variable models. In Advances in Neural Information Processing Systems , volume 34, 2021. 9Jialu Xu, Mengkun Liang, Guannan Liu, Xiaojie Mao, and Junjie Wu 
+
+[29] Paul R. Rosenbaum and Donald B. Rubin. The central role of the propensity score in observational studies for causal effects. Biometrika , 70(1):41–55, 1983. doi: 10.1093/biomet/70.1.41. [30] Uri Shalit, Fredrik D Johansson, and David Sontag. Estimating individual treat-ment effect: generalization bounds and algorithms. In Proceedings of the 34th International Conference on Machine Learning , pages 3076–3085. PMLR, 2017. [31] Claudia Shi, David Blei, and Victor Veitch. Adapting neural networks for the estimation of treatment effects. In Advances in Neural Information Processing Systems , volume 32, 2019. [32] Christopher Tran and Elena Zheleva. Improving data-driven heterogeneous treatment effect estimation under structure uncertainty. In Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 1787– 1797. Association for Computing Machinery, 2022. doi: 10.1145/3534678.3539444. [33] Marko Veljanovski and Zach Wood-Doughty. DoubleLingo: Causal estimation with large language models. In Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Lan-guage Technologies (Volume 2: Short Papers) , pages 799–807. ACL, 2024. [34] Fan Wang, Chaochao Chen, Weiming Liu, Tianhao Fan, Xinting Liao, Yanchao Tan, Lianyong Qi, and Xiaolin Zheng. CE-RCFR: Robust counterfactual regression for consensus-enabled treatment effect estimation. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 3013–3023. Association for Computing Machinery, 2024. doi: 10.1145/3637528.3672054. [35] Haotian Wang, Kun Kuang, Haoang Chi, Longqi Yang, Mingyang Geng, Wan-rong Huang, and Wenjing Yang. Treatment effect estimation with adjustment feature selection. In Proceedings of the 29th ACM SIGKDD Conference on Knowl-edge Discovery and Data Mining , pages 2290–2301. Association for Computing Machinery, 2023. doi: 10.1145/3580305.3599531. [36] Hechuan Wen, Tong Chen, Guanhua Ye, Li Kheng Chai, Shazia Sadiq, and Hongzhi Yin. Progressive generalization risk reduction for data-efficient causal effect estimation. In Proceedings of the 31st ACM SIGKDD Conference on Knowl-edge Discovery and Data Mining, Volume 1 , pages 1575–1586. Association for Computing Machinery, 2025. doi: 10.1145/3690624.3709305. [37] Xumeng Wen, Han Zhang, Shun Zheng, Wei Xu, and Jiang Bian. From supervised to generative: A novel paradigm for tabular deep learning with large language models. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discov-ery and Data Mining , pages 3323–3333. Association for Computing Machinery, 2024. doi: 10.1145/3637528.3671975. [38] Anpeng Wu, Junkun Yuan, Kun Kuang, Bo Li, Runze Wu, Qiang Zhu, Yueting Zhuang, and Fei Wu. Learning decomposed representations for treatment effect estimation. IEEE Transactions on Knowledge and Data Engineering , 35(5):4989– 5001, 2023. doi: 10.1109/TKDE.2022.3150807. [39] Pengzhou Abel Wu and Kenji Fukumizu. 𝛽 -intact-VAE: Identifying and estimat-ing causal effects under limited overlap. In International Conference on Learning Representations , 2022. [40] Yue Wu, Shuangfei Zhai, Nitish Srivastava, Joshua Susskind, Jian Zhang, Ruslan Salakhutdinov, and Hanlin Goh. Uncertainty weighted actor-critic for offline reinforcement learning. arXiv preprint arXiv:2105.08140 , 2021. [41] Pan Xu, Zheng Wen, Handong Zhao, and Quanquan Gu. Neural contextual bandits with deep representation and shallow exploration. In International Conference on Learning Representations , 2022. URL https://openreview.net/for um?id=xnYACQquaGV. [42] Ziqi Xu, Debo Cheng, Jiuyong Li, Jixue Liu, Lin Liu, and Kui Yu. Causal inference with conditional front-door adjustment and identifiable variational autoencoder. In B. Kim, Y. Yue, S. Chaudhuri, K. Fragkiadaki, M. Khan, and Y. Sun, editors, 
+
+International Conference on Learning Representations , volume 2024, pages 18692– 18713, 2024. URL https://proceedings.iclr.cc/paper_files/paper/2024/file/5186db 2bfac87765a744547e82ac8848-Paper-Conference.pdf. [43] Weijia Zhang, Lin Liu, and Jiuyong Li. Treatment effect estimation with dis-entangled latent factors. Proceedings of the AAAI Conference on Artificial Intel-ligence , 35(12):10923–10930, May 2021. doi: 10.1609/aaai.v35i12.17304. URL https://ojs.aaai.org/index.php/AAAI/article/view/17304. [44] Xiaoying Zhang, Junpu Chen, Hongning Wang, Hong Xie, Yang Liu, John C.S. Lui, and Hang Li. Uncertainty-aware instance reweighting for off-policy learning. In Advances in Neural Information Processing Systems , volume 36, 2023. [45] Kailiang Zhong, Fengtong Xiao, Yan Ren, Yaorong Liang, Wenqing Yao, Xiaofeng Yang, and Ling Cen. DESCN: Deep entire space cross networks for individual treatment effect estimation. In Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 4612–4620. Association for Computing Machinery, 2022. doi: 10.1145/3534678.3539198. [46] Dongruo Zhou, Lihong Li, and Quanquan Gu. Neural contextual bandits with UCB-based exploration. In International Conference on Machine Learning , pages 11492–11502. PMLR, 2020. [47] Yaochen Zhu, Jing Ma, Liang Wu, Qi Guo, Liangjie Hong, and Jundong Li. Causal effect estimation with mixed latent confounders and post-treatment variables. In 
+
+The Thirteenth International Conference on Learning Representations , 2025. URL https://openreview.net/forum?id=qe1CsfnN1W. 
+
+A Dataset and Implementation Details 
+
+This appendix provides additional benchmark, implementation, and reproducibility details omitted from Section 5.1. 
+
+A.1 Benchmark Details 
+
+IHDP. IHDP is a semi-synthetic benchmark based on covari-ates from the Infant Health and Development Program. Treat-ment assignment and potential outcomes follow the standard semi-synthetic construction, providing ground-truth individual treat-ment effect for evaluation. The covariates describe infant health, maternal background, pregnancy risk factors, and prenatal context. 
+
+Adult. Adult is constructed from the Adult income dataset with a semi-synthetic treatment and outcome mechanism. The treat-ment represents a career-opportunity exposure related to observed demographic and employment characteristics, while the outcome indicates high-income status. The simulator provides ground-truth individual effects. 
+
+Jobs. Jobs evaluates the effect of participation in a job-training program. The observed covariates include demographic charac-teristics, education, and pre-treatment earnings histories. Since individual-level counterfactual outcomes are unavailable, we eval-uate the quality of the estimated treatment-effect ranking using uplift metrics. 
+
+Hillstrom. Hillstrom is an original randomized email-marketing experiment. We compare the Men’s E-Mail treatment with the no-email control. Its covariates describe customer tenure, recency, historical spending, purchase preferences, transaction channel, and geographic segment. As individual-level effects are unavailable, evaluation uses uplift metrics. 
+
+A.2 Additional Implementation Details 
+
+Baselines. We plug CURL into ten host learners spanning three families: meta-learners (S-, T-, and R-Learner), balanced-representation methods (TARNet, CFRNet, and DragonNet), and deep latent-variable methods (CEVAE, TEDVAE, SDD, and CiVAE). We additionally include two LLM-only baselines. LLM prompts the LLM to directly predict CATE from the textualized profile, while LLM+MLP uses the frozen LLM as an encoder and trains an MLP prediction head. GATE [13 ] directly generates counterfactual outcomes from selected covariates. Additional comparisons with standalone feature-disentanglement methods are reported in Appendix A.3. 
+
+Semantic construction. For every unit in the newly surfaced query set Q (𝑟 ) , we issue two independent prompts, 𝑃 𝐴,𝑖 and 𝑃 𝐻,𝑖 . They construct assignment-oriented and heterogeneity-oriented repre-sentations, respectively, from the same observed profile. The two prompts use separate dialogue states and key-value caches. Com-plete prompt, profile, and insight_hint templates are given in Appendix C. 
+
+Hyperparameters. The main experiments use 𝑀 = 30 MC-dropout passes, semantic-allocation ratio 𝜌 = 0.25 , and progressive refinement with 𝑅 = 3, unless otherwise stated. The objective weights are 𝜆 prop = 1.0 and 𝜆 ortho = 0.1. Qwen2.5-7B or Llama3-8B 
+
+10 Uncertainty-Guided LLM Semantic Augmentation for Heterogeneous Treatment Effect Estimation 
+
+Table 3: Additional comparison with feature-disentanglement baselines on Jobs. Higher values are better. 
+
+Method AUUC ↑ AUQC ↑ LIFT@30 ↑
+
+LLM 336.07 51.52 3.25 LLM+MLP 810.99 69.11 2.56 DR-CFR 745.90 206.14 7.93 DeR-CFR 774.31 209.34 7.68 DDRN 734.14 228.01 7.63 
+
+CURL-R 1007.40 240.12 8.14 Table 4: Additional comparison with feature-disentanglement baselines on Adult. Lower values are better. 
+
+Method PEHE ↓ 𝜖 ATE ↓ 𝜖 ATT ↓
+
+LLM 57.312 1.569 0.708 LLM+MLP 0.429 0.191 0.170 DR-CFR 0.092 0.010 0.014 DeR-CFR 0.089 0.010 0.015 DDRN 0.094 0.022 0.012 
+
+CURL-R 0.062 0.004 0.002 
+
+is selected on the validation set for each benchmark; additional backbones are examined in Section 5.4. 
+
+Optimization and data splits. For each benchmark, 80% of the samples are allocated to the training partition, with a validation sub-set used for host-model selection, LLM-backbone selection, hyper-parameter selection, and early stopping. All methods use identical splits under each random seed. 
+
+Hardware and reproducibility. Experiments are run on two GPUs with 48 GB memory each. Main results are reported over five ran-dom seeds. 
+
+A.3 Additional Comparison with Feature-Disentanglement Baselines 
+
+We further compare against three standalone feature-disentanglement baselines: DR-CFR [ 12 ], DeR-CFR [ 38 ], and DDRN [ 26 ]. These methods learn decomposed representations from the observed sample and are trained as independent estimators rather than 
+
+CURL hosts. To keep the comparison compact and consistent across metrics, we report a fixed CURL -enhanced R-Learner, denoted by 
+
+CURL-R , on Jobs and Adult. Tables 3 and 4 show that CURL-R achieves the best result on all reported metrics. This suggests that pretrained semantic structure provides an inductive bias complementary to feature disentangle-ment learned solely from the study sample. 
+
+B Detailed Definitions of Evaluation Metrics 
+
+Uplift metrics (Jobs and Hillstrom). Individual-level counterfac-tual outcomes are unavailable on Jobs and Hillstrom, so pointwise treatment-effect errors cannot be computed. We instead evaluate the ranking induced by b𝜏 (𝑥 ). Let 𝑖 (1) , . . . , 𝑖 (𝑁 ) denote the units sorted in descending order of b𝜏 (𝑥 𝑖 ), and let 
+
+𝜋 (𝑘 ) = {𝑖 (1) , . . . , 𝑖 (𝑘 ) }
+
+be the top-𝑘 ranked units. For 𝑎 ∈ { 0, 1}, define the cumulative outcome and sample count within the top-𝑘 prefix as 
+
+𝑆 𝑎 (𝑘 ) =∑︁     
+
+> 𝑖 ∈𝜋 (𝑘 )
+> 𝑇 𝑖 =𝑎
+
+𝑌 𝑖 , 𝑁 𝑎 (𝑘 ) =∑︁    
+
+> 𝑖 ∈𝜋 (𝑘 )
+
+I(𝑇 𝑖 = 𝑎 ). (17) We use the convention 
+
+𝑌 𝑎 (𝑘 ) =
+
+(
+
+𝑆 𝑎 (𝑘 )/ 𝑁 𝑎 (𝑘 ), 𝑁 𝑎 (𝑘 ) > 0,
+
+0, 𝑁 𝑎 (𝑘 ) = 0. (18) The cumulative uplift-curve ordinate at cutoff 𝑘 is 
+
+𝑈 (𝑘 ) = 𝑘 
+
+
+
+𝑌 1 (𝑘 ) − 𝑌 0 (𝑘 )
+
+
+
+. (19) Let 𝑥 𝑘 = 𝑘 /𝑁 . We report the sample-size-normalized trapezoidal area under this curve: 
+
+AUUC = 1
+
+𝑁 Trapz 
+
+
+
+{( 𝑥 𝑘 , 𝑈 (𝑘 ))} 𝑁 𝑘 =1
+
+
+
+(20) 
+
+= 12𝑁 2 
+
+> 𝑁 −1
+
+∑︁ 
+
+> 𝑘 =1
+
+[𝑈 (𝑘 ) + 𝑈 (𝑘 + 1)] . (21) The additional factor 1/𝑁 reduces the dependence of the reported value on the evaluation-set size. For the Qini curve, let 
+
+𝑁 𝑇 = 𝑁 1 (𝑁 ), 𝑁 𝐶 = 𝑁 0 (𝑁 ), (22) and assume 𝑁 𝑇 > 0 and 𝑁 𝐶 > 0. The Qini ordinate uses the full-sample treated-to-control count ratio: 
+
+𝑄 (𝑘 ) = 𝑆 1 (𝑘 ) − 𝑁 𝑇 
+
+𝑁 𝐶 
+
+𝑆 0 (𝑘 ). (23) The reported normalized area under the Qini curve is 
+
+AUQC = 1
+
+𝑁 Trapz 
+
+
+
+{( 𝑥 𝑘 , 𝑄 (𝑘 ))} 𝑁 𝑘 =1
+
+
+
+(24) 
+
+= 12𝑁 2 
+
+> 𝑁 −1
+
+∑︁ 
+
+> 𝑘 =1
+
+[𝑄 (𝑘 ) + 𝑄 (𝑘 + 1)] . (25) If either treatment arm is absent from the evaluation set, AUQC is defined as zero. Finally, define the empirical uplift within a ranked prefix as 
+
+𝐿 (𝑘 ) =
+
+
+
+𝑆 1 (𝑘 )
+
+𝑁 1 (𝑘 ) − 𝑆 0 (𝑘 )
+
+𝑁 0 (𝑘 ) , 𝑁 1 (𝑘 ) > 0 and 𝑁 0 (𝑘 ) > 0,
+
+0, otherwise .
+
+(26) Let 
+
+𝐾 30 = ⌊0.3𝑁 ⌋ (27) and define the full-sample empirical uplift as 
+
+𝐿 all = 𝑆 1 (𝑁 )
+
+𝑁 𝑇 
+
+− 𝑆 0 (𝑁 )
+
+𝑁 𝐶 
+
+. (28) 
+
+> 11 Jialu Xu, Mengkun Liang, Guannan Liu, Xiaojie Mao, and Junjie Wu
+
+We report the relative top-30% lift 
+
+LIFT@30 = 𝐿 (𝐾 30 )
+
+𝐿 all + 𝜀 , 𝜀 = 10 −9. (29) Thus, LIFT@30 is dimensionless and measures the uplift in the highest-ranked 30% of units relative to the overall empirical up-lift. AUUC, AUQC, and LIFT@30 are higher-is-better under the evaluation protocol used in our experiments. 
+
+C Prompt Construction and Semantic Extraction 
+
+This appendix specifies the construction of the dataset-level 
+
+insight_hint , the two role-conditioned prompts 𝑃 𝐴 and 𝑃 𝐻 , the deterministic profile constructors, and the semantic-embedding extraction procedure. 
+
+C.1 Insight Hint 
+
+At initialization, we construct the dataset-level insight_hint once from the training set by comparing the initially selected units S (0)
+
+with the full training population using only observed covariates. For each numeric field, we compute the relative difference between the two means and retain at most ten fields whose absolute difference exceeds 20% , indicating whether each field is higher or lower in 
+
+S (0) . This aggregate summary is inserted into the template below, from which the LLM generates a one-sentence hint ℎins . The hint is then reused unchanged for that dataset throughout all refinement rounds and contains no unit-level treatment assignments, outcomes, counterfactuals, or test-set information. 
+
+Template for insight_hint 
+
+[System] You are a Causal Inference Researcher. [Context] The scenario is about marketing / medical / other. The statistical model fails to predict accurately for a specific subgroup. [Hard Subgroup Characteristics] {stat_summary} [Task] Provide a brief, high-level hypothesis about why the estimator failed. 
+
+C.2 Role-Conditioned Prompt Templates 
+
+For every queried unit 𝑖 , the deterministic profile 𝑝 𝑖 = 𝜓 (𝑥 𝑖 ) and fixed hint ℎins are inserted into two independent prompts. The assignment-oriented prompt 𝑃 𝐴,𝑖 focuses on pre-treatment baseline structure relevant to the shared and assignment-side components of the estimator. The heterogeneity-oriented prompt 𝑃 𝐻,𝑖 focuses on stable pre-treatment attributes relevant to treatment-response variation. Both prompts explicitly restrict the LLM to semantic relations supported by the observed profile. 
+
+Assignment-oriented prompt 𝑃 𝐴 .
+
+Prompt 𝐴 : Pre-treatment Assignment-Side Inference 
+
+[System] You are a Causal Analyst specializing in confounding bias. [Constraint] TEMPORAL FIREWALL ACTIVATED. You are strictly limited to the Pre-Treatment Timeline. You must IGNORE any events that happen after the intervention/contact. You must IGNORE the final outcome (Y). [Background Insight] {insight_hint} [Subject Profile] {Prof_i} [Task] Analyze the baseline characteristics that existed BEFORE any action was taken. Based only on the observed covariates X, identify semantic relations and interactions that may be relevant to modeling treatment assignment and baseline outcome patterns. Such as: 1. Socio-economic constraints rooted in the past. 2. Fundamental health/financial status established prior to this event. 3. Historical behavioral patterns. [Goal] Compress these pre-existing confounders into a single representation. [Trigger] Pre-treatment Confounding Context: 
+
+Heterogeneity-oriented prompt 𝑃 𝐻 for IHDP, Jobs, and Hillstrom. 
+
+Prompt 𝐻 : General Response-Side Heterogeneity Inference 
+
+[System] You are a Causal Analyst specializing in effect heterogeneity. [Constraint] ATTRIBUTE STABILITY CHECK. Focus ONLY on stable, inherent traits of the subject that determine their sensitivity. [Background Insight] {insight_hint} [Subject Profile] {Prof_i} [Task] Analyze the inherent modifiers that dictate how the subject responds to potential treatments. Such as: 1. Psychological resilience or sensitivity (Stable Personality). 
+
+> 12 Uncertainty-Guided LLM Semantic Augmentation for Heterogeneous Treatment Effect Estimation
+
+2. Biological or structural receptivity. 3. Risk tolerance levels. [Goal] Compress these heterogeneity modifiers into a single representation. [Trigger] Effect Modification Context: 
+
+Specialized 𝑃 𝐻 for Adult. Adult uses a domain-specific variant because its simulated heterogeneity is primarily associated with employment structure, education, and socio-economic mobility. 
+
+Prompt 𝐻 for Adult: Socio-Economic Modifier Inference 
+
+[System] You are a Sociological & Economic Analyst. [Constraint] ATTRIBUTE STABILITY CHECK. Focus ONLY on socio-economic traits. [Background Insight] {insight_hint} [Subject Profile] {Prof_i} [Task] Analyze the inherent modifiers that dictate how this individual responds to career or income interventions (e.g., job training). Such as: 1. Social mobility potential based on their current class and education. 2. Human capital accumulation potential. [Goal] Compress these heterogeneity modifiers into a single representation. [Trigger] Socio-economic Effect Modification Context 
+
+Semantic extraction. For each prompt, the frozen LLM first gen-erates a deterministic textual response. We then perform a second forward pass over the concatenated prompt and generated response and extract the final-layer hidden state of the last valid generated-response token. This yields 
+
+𝑧 LLM  
+
+> 𝐴,𝑖
+
+= Emb Φ (𝑃 𝐴,𝑖 ), 𝑧 LLM  
+
+> 𝐻,𝑖
+
+= Emb Φ (𝑃 𝐻,𝑖 ), (30) consistent with Eq. (5) . The generated text is used only for in-spection; the adapter consumes the corresponding hidden-state embedding. 
+
+C.3 Dataset-Specific Profile Templates 
+
+The profile constructor 𝜓 deterministically renders each structured covariate vector into natural language. No treatment assignment, factual outcome, counterfactual outcome, prediction error, or test statistic is included. A dataset-level treatment definition is included only to specify the meaning of the intervention. 
+
+IHDP profile. 
+
+IHDP profile template 
+
+Child Profile: A {sex} infant born {weeks_preterm} weeks preterm with a birth weight of { birth_weight} kg. Neonatal health index is recorded at {neonatal_health_index}. Maternal Background: The mother was {mother_age} years old and {marital_status} at the time of birth. Her education level is {education_level}. Pregnancy History: {pregnancy_risk_statement} Context: The mother {prenatal_care_status} prenatal care. She was {work_status} during the study period. Treatment Definition: Treatment means receiving the IHDP early-childhood intervention program; control means not receiving that program. 
+
+Here, the pregnancy-risk statement is formed deterministically from the observed smoking, alcohol-use, and drug-use indicators. 
+
+Adult profile. 
+
+Adult profile template 
+
+Demographics: A {age}-year-old {gender} ({race}) from {native_country}. Socio-economic: Works as a {occupation} in the { workclass} sector, with {education} education level. Works {hours_per_week} hours per week. Family Status: Currently {marital_status}, family role is {relationship}. Treatment Definition: Treatment is a semi-synthetic career-opportunity exposure. 
+
+Jobs profile. 
+
+Jobs profile template 
+
+Subject Profile: A {age}-year-old {race} { marital_status} individual, {degree_status}, with {years_of_education} years of education. Pre-treatment Financials: Real earnings in 1974 were ${earnings_1974}, and in 1975 were ${ earnings_1975}. 
+
+> 13 Jialu Xu, Mengkun Liang, Guannan Liu, Xiaojie Mao, and Junjie Wu
+
+Treatment Definition: Treatment means participating in the job-training program; control means not participating. 
+
+Hillstrom profile. 
+
+Hillstrom profile template 
+
+Customer Persona: This individual {customer_status}. Engagement History: They last interacted with the brand {recency} months ago. Shopping Preferences: They {mens_purchase_history} and {womens_purchase_history}. Financial Profile: Their total historical value is $ {history}, officially categorized in the '{history_segment} ' segment. Behavioral Context: They primarily use the '{channel }' channel for transactions and are located in a {zip_code_type} environment. Treatment Definition: Treatment means receiving the Men 's E-Mail campaign; control means receiving no e-mail campaign. 
+
+D Training Algorithm 
+
+Algorithm 1 summarizes training. We use 𝑅 to denote the total number of semantic-assisted progressive optimization rounds, in-cluding the first round initialized by the initial semantic allocation. Accordingly, the rounds are indexed by 𝑟 = 0, . . . , 𝑅 − 1, and the final wrapped estimator is 𝐹 (𝑅 ) .The initial allocation at 𝑟 = 0 uses the same joint ranking rule as the subsequent rounds, but 𝑠 (0) 
+
+> 𝑒,𝑖
+
+is uniformly set to zero. Hence, the initial ordering reduces to the ordering induced by 𝑠 (0) 
+
+> 𝜏,𝑖
+
+without introducing a separate allocation rule. After the first optimization round, every wrapped host contains a trained propensity head. Therefore, both 𝑠 (𝑟 ) 
+
+> 𝑒,𝑖
+
+and 𝑠 (𝑟 ) 
+
+> 𝜏,𝑖
+
+are used in the remaining refinement rounds 𝑟 = 1, . . . , 𝑅 − 1.The selected set S (𝑟 ) , cumulative semantic cache C (𝑟 ) , and newly surfaced query set Q (𝑟 ) follow Eq. (4) . The LLM is queried only for 
+
+Q (𝑟 ) , so every training unit is queried at most once. 
+
+E Adapter Instantiation Across Host Learners 
+
+For every host, the attached propensity head consumes the assignment-adjusted representation 𝑢 𝐴 , while the host-specific effect operator consumes 𝑢 𝐻 , which already contains 𝑢 𝐴 together with the heterogeneity-oriented feature block. The host’s native parameterization and main objective are otherwise retained. 
+
+Algorithm 1: CURL training with progressive refinement 
+
+Input: dataset D; host learner; frozen LLM Φ; 𝜌, 𝑀, 𝑅, 𝜆 prop , 𝜆 ortho 
+
+Output: trained wrapped estimator 𝐹 ★ 
+
+> 1
+
+Fit the unaugmented host using its native objective  
+
+> 2
+
+Initialize the wrapped estimator 𝐹 (0) with zero semantic inputs  
+
+> 3
+
+C (− 1) ← ∅  
+
+> 4
+
+for 𝑟 = 0, . . . , 𝑅 − 1 do  
+
+> 5
+
+if 𝑟 = 0 then 
+
+/* Initial semantic allocation */  
+
+> 6
+
+Run 𝑀 MC-dropout passes of 𝐹 (0) and compute 𝑠 (0) 
+
+> 𝜏,𝑖
+
+for all 
+
+𝑖  
+
+> 7
+
+Set 𝑠 (0) 
+
+> 𝑒,𝑖
+
+← 0 for all 𝑖  
+
+> 8
+
+else 
+
+/* Refinement allocation */  
+
+> 9
+
+Run 𝑀 MC-dropout passes of 𝐹 (𝑟 ) 
+
+> 10
+
+Compute 𝑠 (𝑟 ) 
+
+> 𝑒,𝑖
+
+and 𝑠 (𝑟 ) 
+
+> 𝜏,𝑖
+
+using Eq. (2)  
+
+> 11
+
+Form S (𝑟 ) using Eq. (3)  
+
+> 12
+
+C (𝑟 ) ← C (𝑟 −1) ∪ S (𝑟 ) 
+
+> 13
+
+Q (𝑟 ) ← S (𝑟 ) \ C (𝑟 −1) 
+
+> 14
+
+Query the LLM only for units in Q (𝑟 ) to obtain 𝑧 LLM  
+
+> 𝐴,𝑖
+
+and 𝑧 LLM  
+
+> 𝐻 ,𝑖
+> 15
+
+Construct 𝑧 (𝑟 ) 
+
+> 𝐴,𝑖
+
+and 𝑧 (𝑟 ) 
+
+> 𝐻 ,𝑖
+
+using Eq. (6)  
+
+> 16
+
+Optimize the host, projectors, gates, and propensity head from the current parameters using Eq. (12), obtaining 𝐹 (𝑟 +1) 
+
+> 17
+
+𝐹 ★ ← 𝐹 (𝑅 ) 
+
+> 18
+
+return 𝐹 ★
+
+Table 5 summarizes the common interface rather than claiming an identifiable causal decomposition of the host’s internal variables. The assignment-oriented representation contributes to the shared state used by the propensity component, while the heterogeneity-oriented representation is retained as a separate block available only to the effect operator. This interface accommodates treatment-conditioned predictors, separate potential-outcome heads, direct-CATE learners, and latent-variable estimators. 
+
+F Additional Analysis of Progressive Refinement 
+
+We perform an initial semantic allocation followed by five refine-ment rounds on IHDP and Jobs using S-Learner, T-Learner, TARNet, and CFRNet. For the cache analysis, define 
+
+𝜅 (𝑟 ) = |C (𝑟 ) |
+
+𝑁 . (31) For each refinement round, we also report the mean uncertainty scores 
+
+𝑠 (𝑟 ) 
+
+> 𝑒
+
+= 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑠 (𝑟 ) 
+
+> 𝑒,𝑖
+
+, 𝑠 (𝑟 ) 
+
+> 𝜏
+
+= 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑠 (𝑟 ) 
+
+> 𝜏,𝑖
+
+. (32) Figure 10 shows that the cache expands rapidly during the early rounds but exhibits progressively smaller marginal growth. The final cumulative cache ratio ranges from 68 .7% to 82 .5% on IHDP and from 51 .2% to 63 .2% on Jobs. Across all eight dataset–host combinations, the cache ratio is unchanged between the fourth and fifth refinement rounds, indicating that few or no previously unqueried units are surfaced at that stage. 
+
+> 14
+
+Uncertainty-Guided LLM Semantic Augmentation for Heterogeneous Treatment Effect Estimation 
+
+Table 5: Instantiation of CURL across the ten host learners. The propensity component consumes 𝑢 𝐴 , while the effect component consumes 𝑢 𝐻 . The complete objective is Lmain + 𝜆 prop Lprop + 𝜆 ortho Lortho .Pattern Host learner(s) Assignment/shared pathway Effect pathway Native main objective                                              
+
+> Treatment-conditioned outcome S-Learner b𝑒 ←𝑢 𝐴 b𝜇 (𝑢 𝐻 , 𝑡 )Factual outcome loss Separate potential-outcome heads T-Learner b𝑒 ←𝑢 𝐴 b𝜇 0(𝑢 𝐻 ),b𝜇 1(𝑢 𝐻 )Arm-specific factual losses Shared representation with outcome heads TARNet, CFRNet, DragonNet b𝑒 ←𝑢 𝐴 b𝜇 0(𝑢 𝐻 ),b𝜇 1(𝑢 𝐻 )Native factual, balancing, or targeted loss Direct CATE R-Learner b𝑒, b𝜇 ←𝑢 𝐴 b𝜏 ←𝑢 𝐻 Orthogonalized R-loss [27] Latent-variable CEVAE, TEDVAE, SDD, CiVAE Propensity and shared baseline components use 𝑢 𝐴 Outcome/CATE operator additionally conditions on 𝑢 𝐻 Native ELBO or disentanglement objective
+
+��
+
+��
+
+�
+
+�
+
+# ＋
+
+‖
+
+t = ? 
+
+[��; 0]
+
+�
+
+��
+
+��
+
+��
+
+��
+
+�
+
+�0
+
+����
+
+��
+
+��
+
+# ＋
+
+‖
+
+�
+
+��
+
+��
+
+��
+
+��
+
+(a) S-Learner (b) TarNet 
+
+(c) R-Learner (d) TEDVAE 
+
+�1
+
+�
+
+��
+
+��
+
+��
+
+��
+
+��
+
+�
+
+��
+
+��
+
+��
+
+��
+
+�
+
+�
+
+��
+
+��
+
+��
+
+# ＋
+
+‖ �
+
+> t=1
+> t=0
+
+�
+
+�0
+
+�1
+
+��,�
+
+��,�
+
+��,�
+
+��
+
+��
+
+# ＋
+
+# ＋
+
+�c
+
+zt
+
+zy
+
+Figure 9: Representative CURL instantiations for (a) S-Learner, (b) TARNet, (c) R-Learner, and (d) TEDVAE. Across hosts, the propensity pathway consumes 𝑢 𝐴 , whereas the host-specific effect operator consumes 𝑢 𝐻 . The insertion point varies with the host architecture, while the role-aware interface remains unchanged. 
+
+Meanwhile, both 𝑠 (𝑟 )
+
+𝑒 and 𝑠 (𝑟 )
+
+𝜏 exhibit an overall downward trend, with only minor intermediate fluctuations. The simultaneous re-duction in predictive uncertainty and saturation of the cache is consistent with the estimator becoming locally more stable while the allocation set approaches a fixed configuration. This dynamic evidence complements the performance-based sensitivity analysis of 𝑅 in Section 5.4. 
+
+G Analysis of Semantic Representation 
+
+We conduct two complementary studies on IHDP to examine whether CURL’s gains arise from pretrained representational struc-ture and whether they persist across training-set sizes. Figure 11 summarizes the results. 
+
+Semantic corruption. This experiment distinguishes gains from meaningful pretrained representations from those caused merely by additional vectors, parameters, or textual inputs. We use the ten IHDP realizations with T-Learner and CFRNet. Each realization is evaluated using seeds {42 , 52 , 62 , 72 , 82 }, giving 10 × 5 = 50 results per bar. The five settings are: 
+
+• Host : the original host learner without CURL; 
+
+• CURL : the complete method with the original field and category semantics; 
+
+• Anonymized : field and category names are replaced by fixed identifiers such as Feature F1 and Category C1 ,while values and category identities remain unchanged; 
+
+• Shuffled : category names are mapped to other names through a fixed within-field permutation while retaining the natural-language input format; 
+
+• Random : semantic embeddings are replaced by fixed ran-dom vectors of the same dimension, while the adapter, gates, and routing remain unchanged. All settings use identical train/test splits, model seeds, and queried units. The uncorrupted CURL run first records its query plan, which is then replayed for the other semantic variants. We report mean PEHE and define 
+
+Δ = PEHE Host − PEHE Setting . (33) Thus, Δ > 0 indicates improvement over the host. CURL achieves the lowest PEHE for both learners. Anonymized and Shuffled both degrade performance relative to CURL, while 
+
+15 Jialu Xu, Mengkun Liang, Guannan Liu, Xiaojie Mao, and Junjie Wu Initial 1 2 3 4 5                                                                                                   
+
+> 0%
+> 20%
+> 40%
+> 60%
+> 80%
+> 25.0%
+> 40.4%
+> 52.4%
+> 61.6%
+> 68.7% 68.7%
+> S
+> 12345
+> 0.034
+> 0.035
+> 0.036
+> 0.037
+> semean
+> sτmean
+> Initial 12345
+> 0%
+> 20%
+> 40%
+> 60%
+> 25.0%
+> 40.7%
+> 50.7% 56.1% 59.5% 59.5%
+> 12345
+> 0.030
+> 0.035
+> 0.040
+> semean
+> sτmean
+> Initial 12345
+> 0%
+> 25%
+> 50%
+> 75%
+> 100%
+> 25.0%
+> 45.6%
+> 61.9%
+> 73.8%
+> 82.5% 82.5%
+> T
+> 12345
+> 0.030
+> 0.035
+> 0.040
+> semean
+> sτmean
+> Initial 12345
+> 0%
+> 20%
+> 40%
+> 60%
+> 80%
+> 25.0%
+> 40.4%
+> 49.8%
+> 57.4%
+> 63.2% 63.2%
+> 12345
+> 0.030
+> 0.035
+> 0.040
+> semean
+> sτmean
+> Initial 12345
+> 0%
+> 20%
+> 40%
+> 60%
+> 80%
+> 25.0%
+> 42.7%
+> 56.3%
+> 66.2% 72.5% 72.5%
+> TarNet
+> 12345
+> 0.032
+> 0.034
+> 0.036
+> 0.038
+> 0.040 semean
+> sτmean
+> Initial 12345
+> 0%
+> 20%
+> 40%
+> 60%
+> 25.0%
+> 39.0%
+> 46.4%
+> 51.3%
+> 55.9% 55.9%
+> 12345
+> 0.0275
+> 0.0300
+> 0.0325
+> 0.0350
+> 0.0375 semean
+> sτmean
+> Initial 12345
+> refinement round
+> 0%
+> 25%
+> 50%
+> 75%
+> 100%
+> 25.0%
+> 42.5%
+> 57.5%
+> 69.0% 75.8% 75.8%
+> CFRNet
+> 12345
+> refinement round
+> 0.025
+> 0.030
+> 0.035
+> 0.040 semean
+> sτmean
+> Initial 12345
+> refinement round
+> 0%
+> 20%
+> 40%
+> 60%
+> 25.0%
+> 35.9%
+> 42.1%
+> 47.6%
+> 51.2% 51.2%
+> 12345
+> refinement round
+> 0.0370
+> 0.0375
+> 0.0380 semean
+> sτmean
+> 0.300
+> 0.325
+> 0.350
+> 0.375
+> 0.200
+> 0.225
+> 0.250
+> 0.275
+> 0.35
+> 0.40
+> 0.45
+> 0.50
+> 0.30
+> 0.35
+> 0.40
+> 0.40
+> 0.45
+> 0.50
+> 0.300
+> 0.325
+> 0.350
+> 0.375
+> 0.400
+> 0.35
+> 0.40
+> 0.45
+> 0.50
+> 0.25
+> 0.30
+> 0.35
+
+IHDP Jobs 
+
+Cumulative semantic cache ratio Uncertainty scores Cumulative semantic cache ratio Uncertainty scores 
+
+Figure 10: Progressive-refinement dynamics on IHDP and Jobs. For each host, the left panel reports the cumulative semantic-cache ratio from the initial allocation through five refinement rounds. The right panel reports the mean assignment-side uncertainty 𝑠 (𝑟 )
+
+𝑒 and CATE-side uncertainty 𝑠 (𝑟 )
+
+𝜏 . Error bars and shaded regions indicate variation across runs. Host CURL Anonymized Shuffled Random     
+
+> 1.4
+> 1.6
+> 1.8
+> 2.0
+> 2.2
+> PEHE (lower is better)
+> Δ=0.00
+> Δ=0.00
+> Δ=0.34
+> Δ=0.47
+> Δ=0.17
+> Δ=0.24
+> Δ=0.21
+> Δ=0.21
+> Δ=0.02
+> Δ=0.03
+> (a) Semantic Corruption
+> T-Learner CFRNet
+> 30 50 70 100
+> Training data (%)
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> PEHE (lower is better)
+> (b) Training-set Fraction
+> Δ=0.29
+> Δ=0.14
+> Δ=0.19
+> Δ=0.45
+> Δ=0.32
+> Δ=0.35
+> Δ=0.57
+> Δ=0.51
+> T - Host
+> T - CURL
+> TarNet - Host
+> TarNet - CURL
+
+Figure 11: Additional validation of representational lossi-ness on IHDP. (a) Semantic-corruption results averaged over ten IHDP realizations and five seeds. Here, Δ = PEHE Host −
+
+PEHE Setting , so positive values indicate improvement over the host. (b) PEHE under nested training-set fractions, averaged over ten realizations and three seeds. CURL improves both hosts at every fraction. 
+
+Random produces the largest deterioration. This ordered degra-dation indicates that CURL’s improvement derives in part from the semantic structure encoded by the LLM representations, rather than merely from additional vectors, adapter parameters, or routing components. 
+
+Training-set fraction. We next examine whether CURL’s advan-tage persists as the amount of training data changes. For each IHDP realization, we construct a fixed treatment-stratified split contain-ing an 80% training pool and a 20% test set. From the same training pool, we form deterministic nested subsets at 30%, 50%, 70%, and 100%, such that each smaller subset is contained in the next larger subset. The displayed comparison uses T-Learner and TARNet with model seeds {42 , 52 , 62 }. Host and CURL use identical subsets, test sets, and model seeds. The LLM configuration is the same as in the semantic-corruption experiment. CURL obtains lower PEHE than its paired host for both learners at every training fraction. Thus, CURL’s benefit is not restricted to a particular subsample size and remains visible even when all available IHDP training data are used. 
+
+H Case Study: Semantic Interpretation of the Two Channels 
+
+Figure 12 examines a representative Hillstrom customer selected by the uncertainty diagnostic. The observed profile describes a relatively new customer who last interacted with the brand nine months earlier, has $900.73 in historical spending concentrated on men’s items, primarily transacts by phone, and resides in a rural area. These fields are observed in 𝑋 , but their semantic relations are not explicit in the original numerical and categorical encoding. The assignment-oriented trace emphasizes pre-treatment base-line structure already supported by the profile, including the rela-tion between customer tenure, inactivity, accumulated value, trans-action channel, and geographic context. This trace should not be interpreted as recovering hidden confounders or as implying non-random treatment assignment in Hillstrom. Rather, it provides a 
+
+16 Uncertainty-Guided LLM Semantic Augmentation for Heterogeneous Treatment Effect Estimation User Profile 
+
+· Engagement History: He last interacted with the brand 9 months ago. He has purchased Men's 
+
+items and no Women's purchase history. 
+
+· Financial Profile: His total historical value is $900.73, officially categorized in the '6) $750 -
+
+$1,000' segment. 
+
+· Behavioral Context: He primarily use the 'Phone' channel for transactions and is located in a 
+
+Rural environment.         
+
+> Pre-treatment Confounding Context: To analyze ...
+> 1. Socio-Economic Constraints:
+> - Historical Value Segment: The customer is
+> categorized in the '6) $750 - $1,000' segment,
+> indicating a moderate level of historical value with
+> the brand. This suggests a certain socio-economic
+> standing but does not provide detailed information
+> about income, education, or employment status.
+> - Location: The customer is located in a Rural
+> environment, which may influence access to
+> services, technology, and other resources ...
+> ����
+> ��/text ��/text
+> Based on the background information and task ...
+> 1. Psychological resilience or sensitivity
+> - Psychological resilience: Since this customer ’s most
+> recent interaction with the brand occurred 9 months
+> ago, this may suggest that they have some capacity
+> to adapt to changes related to the brand. However, as
+> a new customer, they may still be relatively sensitive
+> to new brand strategies or product changes.
+> - Sensitivity: The customer ’s purchase preference
+> indicates that they primarily buy men ’s products and
+> have no history of purchasing women ’s products...
+
+Figure 12: Walkthrough of a representative locally unstable Hillstrom unit. The observed profile, aggregate covariate-shift hint, assignment-oriented and heterogeneity-oriented textual traces, and downstream estimates illustrate how CURL reorganizes information already contained in the structured covariates. 
+
+semantic organization of the observed baseline profile for the shared and assignment-side components of the estimator. The heterogeneity-oriented trace instead emphasizes relations that may be useful for modeling differential response to the Men’s E-Mail campaign. In particular, the combination of men’s-product purchase history, prolonged inactivity, historical value, and pre-ferred transaction channel provides a more explicit description of potential content match and engagement sensitivity. These are semantic interpretations of observed fields rather than newly ob-served individual characteristics. The textual traces are displayed only for interpretation. The actual adapter inputs are 𝑧 LLM 
+
+𝐴,𝑖 and 𝑧 LLM 
+
+𝐻,𝑖 , extracted from the corre-sponding generated responses. The case study therefore illustrates how pretrained semantic structure can reshape the effective rep-resentation of 𝑋 without changing the observed information set, treatment assignment, outcome, estimand, or identifying assump-tions. 
+
+17
