@@ -6,31 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-01
-- 运行时间：2026-08-01 21:20:06 UTC
+- 最新运行日期：2026-08-02
+- 运行时间：2026-08-02 21:08:39 UTC
 - 运行状态：成功
 - 本次总论文数：2
 - 精读区：0
 - 速读区：2
 
 ### 今日简报（AI）
-今日速读两篇因果推断论文，均聚焦于提升治疗效果估计的稳健性与准确性。
-
-最值得关注的方向：利用大语言模型语义增强处理异质效应，以及双稳健函数式表示应对纵向不规则历史数据。
-
-建议：若追求应用简便，可优先尝试第一个方法；若处理临床随访等复杂时序数据，则第二个更具潜力。
-- 详情：[/202608/01/README](/202608/01/README)
+今日速读2篇论文，聚焦钙成像迁移学习与神经算子发现。  
+最值得关注：《CAPT》实现钙活动跨数据集、跨物种迁移的连续自回归建模，另一篇则探索从异构轨迹中自动发现神经算子。  
+建议优先精读《CAPT》，理解其多任务迁移设计，对神经数据分析有直接参考价值。
+- 详情：[/202608/02/README](/202608/02/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Uncertainty-Guided LLM Semantic Augmentation for Heterogeneous Treatment Effect Estimation](/202608/01/2607.26599v1-uncertainty-guided-llm-semantic-augmentation-for-heterogeneous-treatment-effect-estimation)  
+1. [CAPT: A Multi-task Continuous Autoregressive Transformer enabling Cross-dataset and Cross-species Transfer for Calcium Population Dynamics](/202608/02/2607.23258v1-capt-a-multi-task-continuous-autoregressive-transformer-enabling-cross-dataset-and-cross-species-transfer-for-calcium-population-dynamics)  
+   标签：评分：7.0/10、query:virtual-cell
+   evidence：用于连续群体动态的深度学习Transformer，支持跨物种迁移，可应用于扰动响应预测
+2. [Neural operator discovery from heterogeneous trajectories](/202608/02/2607.23337v1-neural-operator-discovery-from-heterogeneous-trajectories)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：面向异质性处理效应估计的深度学习方法，与扰动响应预测密切相关
-2. [Doubly Robust Functional Representation Learning for Longitudinal Causal Inference with Irregular Histories](/202608/01/2607.28567v1-doubly-robust-functional-representation-learning-for-longitudinal-causal-inference-with-irregular-histories)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：用于纵向处理效应的双稳健因果推断，可迁移至扰动建模
+   evidence：神经算子学习用于动态响应预测
 
 
 <div class="dpr-home-promo-card">
