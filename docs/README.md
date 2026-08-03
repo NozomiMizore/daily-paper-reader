@@ -6,29 +6,28 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-02
-- 运行时间：2026-08-02 21:08:39 UTC
+- 最新运行日期：2026-08-03
+- 运行时间：2026-08-03 21:39:56 UTC
 - 运行状态：成功
-- 本次总论文数：2
+- 本次总论文数：1
 - 精读区：0
-- 速读区：2
+- 速读区：1
 
 ### 今日简报（AI）
-今日速读2篇论文，聚焦钙成像迁移学习与神经算子发现。  
-最值得关注：《CAPT》实现钙活动跨数据集、跨物种迁移的连续自回归建模，另一篇则探索从异构轨迹中自动发现神经算子。  
-建议优先精读《CAPT》，理解其多任务迁移设计，对神经数据分析有直接参考价值。
-- 详情：[/202608/02/README](/202608/02/README)
+今日共速读1篇论文，无精读；主题为随机仿真模型校准中的数据效率提升。
+
+最值得关注的方向是《Active Learning for Data-Efficient Calibration of Stochastic Simulation Models》，评分6.0/10，核心围绕主动学习以减少校准所需数据。
+
+建议普通读者若对仿真模型校准感兴趣，可先关注其主动学习策略的直观思路，不必深入数学细节。
+- 详情：[/202608/03/README](/202608/03/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [CAPT: A Multi-task Continuous Autoregressive Transformer enabling Cross-dataset and Cross-species Transfer for Calcium Population Dynamics](/202608/02/2607.23258v1-capt-a-multi-task-continuous-autoregressive-transformer-enabling-cross-dataset-and-cross-species-transfer-for-calcium-population-dynamics)  
-   标签：评分：7.0/10、query:virtual-cell
-   evidence：用于连续群体动态的深度学习Transformer，支持跨物种迁移，可应用于扰动响应预测
-2. [Neural operator discovery from heterogeneous trajectories](/202608/02/2607.23337v1-neural-operator-discovery-from-heterogeneous-trajectories)  
+1. [Active Learning for Data-Efficient Calibration of Stochastic Simulation Models](/202608/03/2607.28874v1-active-learning-for-data-efficient-calibration-of-stochastic-simulation-models)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：神经算子学习用于动态响应预测
+   evidence：面向随机仿真模型的主动学习标定方法，可应用于虚拟细胞模型的参数校准。
 
 
 <div class="dpr-home-promo-card">
