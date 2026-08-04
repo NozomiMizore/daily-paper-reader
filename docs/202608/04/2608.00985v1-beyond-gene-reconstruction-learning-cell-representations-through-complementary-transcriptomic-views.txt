@@ -1,0 +1,450 @@
+Title: Beyond Gene Reconstruction: Learning Cell Representations through Complementary Transcriptomic Views
+
+URL Source: https://arxiv.org/pdf/2608.00985v1
+
+Published Time: Tue, 04 Aug 2026 01:04:38 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Beyond Gene Reconstruction: Learning Cell Representations through Complementary Transcriptomic Views 
+
+## Jiaqi Xiong ∗2, Yuntao Hu ∗3, Yu Zheng 4, Yifei Shi 5,Xinyue Guo 2, Jiaxin Qi †1
+
+> 1
+
+Computer Network Information Center, Chinese Academy of Sciences, Beijing, China 
+
+> 2
+
+University of Oxford, Oxford, United Kingdom 
+
+> 3
+
+Tongji University, Shanghai, China 
+
+> 4
+
+Hunan University, Changsha, China 
+
+> 5
+
+University of Cambridge, Cambridge, United Kingdom jxqi@cnic.cn 
+
+Abstract 
+
+The rapid growth of single-cell transcriptomic data has en-abled the development of foundation models pretrained pri-marily by reconstructing masked expression values. This ob-jective encourages these models to learn gene dependencies but does not directly optimize whole-cell representations, which are essential for many downstream tasks. To bridge this gap, we propose a contrastive pretraining framework that learns cell representations through complementary transcrip-tomic views. Since standard contrastive learning is not read-ily applicable to single-cell pretraining, we introduce specific adaptations along three dimensions — co-expression-guided gene partitioning, expression-aware contrast-set construction, and competence-gated contrastive onset. Specifically, we first construct two complementary views of each cell by partition-ing its genes according to their co-expression structure. Then, to prevent the model from using gene-set identity as a shortcut, we construct hard negatives by permuting expression values while keeping gene identities unchanged. Finally, we intro-duce a competence-aware controller to determine how the contrastive objective is applied. Experiments on cell-type an-notation and gene regulatory network inference demonstrate competitive transfer under the evaluated protocols. In the six-network GRN evaluation, our method records the highest mean AUROC and AUPRC point estimates among the com-pared variants, while the highest-scoring variant differs across individual networks. These results establish complementary-view contrastive learning as an effective direction for single-cell pretraining beyond gene reconstruction. 
+
+## Introduction 
+
+Large-scale single-cell transcriptomic data have motivated the development of foundation models that are predominantly pretrained through masked expression-value prediction (Cui et al. 2024; Theodoris et al. 2023; Yang et al. 2022a; Hao et al. 2024). By reconstructing masked values, these models learn gene-level dependencies and capture latent co-expression structure. However, this objective provides direct supervi-sion only at individual genes, and a masked expression value can often be inferred from a limited neighborhood of corre-lated genes rather than from a representation of the complete cellular state (Xiong et al. 2025; Kotliar et al. 2019). As a re-
+
+> ∗
+
+These authors contributed equally. 
+
+> †
+
+Corresponding author. 𝑮𝑮 𝟏𝟏  𝑮𝑮 2 𝑮𝑮 3 𝑮𝑮 4 𝑮𝑮 5 𝑮𝑮 6
+
+[Mask]  [Mask] 
+
+Encoder 
+
+Decoder 
+
+Genes 
+
+Values 
+
+Gene Emb. 
+
+Value 
+
+Recon. 
+
+(a) Masked-expression pretraining (MLM) 
+
+(b) Problems of vanilla contrastive                          
+
+> Gene-wise Representation Cell Representation
+> 𝑮𝑮 𝟏𝟏 𝑮𝑮 2𝑮𝑮 3𝑮𝑮 4𝑮𝑮 5𝑮𝑮 6
+> Random Perturbation
+> Does the augmentation
+> preserve cell identity?
+> 1. Positive-pair challenge 2. Negative-pair shortcut
+> 𝑮𝑮 𝟏𝟏 𝑮𝑮 2𝑮𝑮 3𝑮𝑮 𝟕𝟕 𝑮𝑮 𝟖𝟖 𝑮𝑮 𝟗𝟗
+> anchor cell other cells (Neg.)
+> Contrastive Enc.
+> Use Gene Identity as shortcut, ignore gene value
+
+Figure 1: Motivation for CoCoS . (a) Masked expression-value prediction directly supervises reconstruction through gene-level features but does not impose a metric objective on the whole-cell representation. (b) Naively transferring contrastive learning raises two transcriptome-specific chal-lenges: unconstrained expression perturbations may alter the cellular state used to define a positive pair, while negatives with different retained genes may be separated by gene iden-tity rather than gene–value correspondence. sult, strong reconstruction performance does not necessarily translate into discriminative and transferable whole-cell rep-arXiv:2608.00985v1 [cs.LG] 2 Aug 2026 resentations, even though such representations are essential for downstream applications including cell-type annotation and gene regulatory network inference. This objective mismatch makes cell-level contrastive su-pervision a natural complement to masked reconstruction. However, conventional contrastive learning does not transfer straightforwardly to single-cell transcriptomes, where two domain-specific challenges arise, as illustrated in Figure 1. First, constructing biologically valid positive pairs is non-trivial. Unlike image augmentations such as cropping, resiz-ing, and color jitter, which can alter low-level appearance while preserving object identity (Chen et al. 2020), perturb-ing gene-expression values may change cell identity or dy-namic biological programs rather than preserve the same biological state (Kotliar et al. 2019). Second, negative-set construction is vulnerable to gene-identity shortcuts. Con-ventional contrastive learning typically treats other samples in the minibatch as negatives. In sparse transcriptomic in-puts, however, expression sparsity and sequence truncation may cause different cells to retain different subsets of gene identities. A model can therefore distinguish negative cells from the anchor using gene-set composition alone, without learning the correspondence between genes and their expres-sion values. To address these challenges, we introduce CoCoS , a con-trastive pretraining framework tailored to single-cell tran-scriptomes. To construct biologically meaningful positive pairs without altering cell identity, CoCoS keeps measured gene–value pairs unchanged and uses a co-expression-guided gene partition to define two complementary view templates. The resulting inputs remain anchored to the same measured cell, avoiding artificial expression shifts while exposing com-plementary biological evidence. To prevent the gene-identity shortcut during contrast-set construction, CoCoS combines expression-aware sampling with same-view negatives and identity-matched hard negatives generated by fixing gene identities and permuting their associated expression values. Because the original and permuted inputs contain the same genes, gene-set composition alone is insufficient, encourag-ing discrimination based on gene–value correspondence. We refer to these components as Co-expression-Guided Gene Partitioning and Expression-Aware Contrast-Set Construc-tion , respectively; their motivating challenges are summa-rized in Figure 1. While these two components determine what the model contrasts, effective pretraining also depends on when con-trastive supervision is introduced. Because the complemen-tary panels share no gene tokens, relating them requires the encoder to recognize that different sets of genes reflect the same underlying biological programs. Early in pretraining, however, these cross-gene dependencies have not yet been learned through masked expression reconstruction. Applying the contrastive objective immediately may therefore encour-age the model to align the panels using simpler technical cues, such as library size or expression sparsity, rather than their biological correspondence. To address this problem, CoCoS 
+
+introduces Competence-Gated Contrastive Onset . The model first learns gene-level dependencies through masked expres-sion modeling. Once label-free diagnostics on held-out cells indicate stable reconstruction competence and cross-view structure, the contrastive objective is introduced gradually. Together, the three components address the key challenges of positive-view construction, negative-set design, and con-trastive onset, enabling cell-level contrastive pretraining from complementary transcriptomic views. Experiments across downstream single-cell tasks demon-strate competitive transfer under the evaluated protocols. Two controlled analyses characterize view sampling and con-trastive scheduling, supporting the effectiveness of CoCoS 
+
+for whole-cell representation learning in single-cell tran-scriptomic pretraining. Our main contributions are: 
+
+• We identify the mismatch between masked expression-value reconstruction and whole-cell representation learn-ing, and characterize three requirements for applying cell-level contrast to single-cell pretraining: biologically valid positive views, gene-identity shortcuts in negative sam-ples, and the timing of contrastive supervision. 
+
+• We introduce CoCoS , which addresses these require-ments through co-expression-guided gene partition-ing, expression-aware contrast-set construction, and competence-gated contrastive onset. 
+
+• We conduct extensive experiments across cell-type an-notation and gene regulatory network inference to eval-uate the effectiveness of CoCoS . Results demonstrate that properly bounded whole-cell contrastive supervision yields more discriminative and transferable cell represen-tations than pure reconstruction-based methods. 
+
+## Related Work 
+
+Single-cell foundation models. Masked reconstruction is common across biological foundation models: DNABERT and the Nucleotide Transformer predict masked DNA k-mers, MutBERT models probabilistic genomic variation, and RNA-FM predicts masked RNA tokens (Ji et al. 2021; Dalla-Torre et al. 2025; Long et al. 2025; Chen et al. 2022). Their losses act at corrupted sequence positions, although the learned representations transfer to sequence-level tasks. Single-cell profiles instead pair gene identities with expres-sion measurements in sparse cellular states (Kotliar et al. 2019). Large expression corpora have enabled scBERT, Geneformer, scGPT, and scFoundation (Yang et al. 2022a; Theodoris et al. 2023; Cui et al. 2024; Hao et al. 2024), with recent benchmark work examining their transfer behavior (Qi et al. 2025). These models use masked gene or expression prediction and generative modeling to learn gene dependen-cies, but do not explicitly organize whole-cell embedding geometry. 
+
+Single-cell representation learning. In addition to foun-dation models, dedicated representation-learning methods optimize cell embeddings for clustering, integration, and atlas mapping. Contrastive clustering, CLEAR, and Con-certo learn from augmented profiles or paired encoder views without incorporating contrast into a masked-expression foundation-model objective (Ciortan and Defrance 2021; Han et al. 2022; Yang et al. 2022b). More recent large-scale approaches bring cell-level contrast into pretraining in different forms. LangCell combines masked-gene modeling with intra- and inter-modal contrastive objectives; TABULA jointly performs column-wise gene reconstruction and row-wise cell contrastive learning; and scConcept replaces recon-struction with contrastive pretraining over disjoint gene pan-els (Zhao et al. 2024; Ding et al. 2025; Bahrami et al. 2025). Cell-level contrast is therefore not itself new. CoCoS in-stead retains masked expression-value prediction and jointly designs co-expression-guided views, expression-aware con-trast sets with fixed-identity value derangements, and a data-dependent contrastive onset for this setting. 
+
+Adaptive training. Curricula order or filter examples by difficulty, with competence-based and adaptive variants changing exposure according to training progress or model state (Bengio et al. 2009; Platanios et al. 2019; Kong et al. 2021). GradNorm and Auto-λ instead continuously reweight active losses (Chen et al. 2018; Liu et al. 2022). CoCoS 
+
+controls a different variable: a fixed, held-out, label-free co-hort triggers a previously inactive contrastive objective while masked-value reconstruction remains active. This is data-dependent objective onset rather than sample curriculum or generic multitask loss balancing. 
+
+## Method 
+
+Masked-value reconstruction directly supervises individual gene values but not the geometry of the whole-cell represen-tation. CoCoS augments masked-value reconstruction with three coordinated operations. Co-expression-guided gene partitioning forms complementary views; expression-aware contrast-set construction combines weighted sampling with identity-matched hard negatives; and competence-gated con-trastive onset activates cell-level alignment only after the masked predictor satisfies a label-free readiness criterion. The resulting instantiation is CoCoS-GPC . Figure 2 summa-rizes the framework, and the following sections introduce the backbone and these operations in training order. 
+
+Backbone and Masked Pretraining 
+
+Let M = {(gi, xi)}Ni=1 denote the pretraining dataset of N
+
+cells. For cell i, gi = ( gi1, g i2, . . . , g in i ) is its gene-identity sequence, where gij ∈ G and G denotes the gene vocabulary. The aligned expression sequence xi = ( xi1, x i2, . . . , x in i )
+
+contains the corresponding continuous expression values. For masked-value prediction, we sample a set of masked positions Ωi ⊆ { 1, . . . , n i} and replace the expression values at these positions to obtain the masked sequence ˜xi. We use the Transformer backbone from scBenchmark (Qi et al. 2025) to encode the gene identities and masked expression values. The masked-value reconstruction loss in a minibatch B is 
+
+Lmlm = 1
+
+PBi=1 |Ωi|
+
+> B
+
+X
+
+> i=1
+
+X
+
+> j∈Ωi
+
+(fθ (gi, ˜xi)j − xij )2 , (1) where fθ denotes the Transformer encoder together with its masked-value prediction layer, and fθ (gi, ˜xi)j is the pre-dicted expression value at position j. However, because this reconstruction objective provides no explicit supervision for the whole-cell representation, it does not directly optimize the cell embedding for discriminative and transferable down-stream use. 
+
+Our Method: CoCoS 
+
+Co-expression-Guided Gene Partitioning . Constructing biologically valid positive pairs is nontrivial in single-cell pretraining, because perturbing expression values may al-ter the underlying cellular state. CoCoS instead partitions each cell into two complementary gene views and applies the same masking scheme to both, providing a positive pair while preserving the reconstruction objective. We construct an undirected weighted co-occurrence graph 
+
+(G, E, w ), where wgh counts how often genes g and h co-occur among the most highly expressed genes of a training cell. After retaining each gene’s strongest neighbors, we seek a bipartition that places strongly co-occurring genes in dif-ferent views: 
+
+max 
+
+> χ:G→{ 0,1}
+
+X
+
+> {g,h }∈ E
+
+wgh 1{χ(g)̸ = χ(h)}. (2) We construct the partition with weighted-degree ordering and count-based placement. Genes are visited in decreasing order of their summed incident co-occurrence weights; each gene is then assigned opposite the panel containing more of its already assigned neighbors, with every neighbor con-tributing one count irrespective of wgh . For each minibatch, we further reverse each gene’s assignment with a small prob-ability and share the resulting partition across all cells. For cell i, the partition defines two complementary sets of gene positions, Ωi and ¯Ωi. The first view masks the expression values at positions in Ωi, whereas the second masks those at positions in ¯Ωi. Therefore, each gene value is observed in one view and masked in the other, allowing the two views to provide complementary information while preserving the original gene identities and expression values. The masked-value reconstruction loss defined above can be applied to both views. 
+
+Expression-Aware Contrast-Set Construction. Although complementary masking provides positive pairs, standard in-batch contrast may exploit gene identities as a shortcut. Different cells in the same minibatch generally contain differ-ent subsets of genes, whereas the two views of the same cell preserve the same gene identities. The model may therefore distinguish positive and negative pairs from gene compo-sition alone, without learning the correspondence between genes and their expression values. To prevent this shortcut, we combine expression-aware sampling with identity-matched hard negatives. Specifically, let Ωi denote the positions kept unmasked in one view, and let xi = ( xij )j∈Ωi denote the corresponding visible expres-sion values. We construct an identity-matched hard negative by permuting the values in xi while keeping the gene identi-ties gi and the masking pattern unchanged. The original and permuted views therefore contain identical gene identities but different gene–value assignments, requiring the model to discriminate between them based on gene–value correspon-dence. The same construction is applied to the complemen-tary view. (𝒈 𝒊 𝒏 𝒊 , 𝒙 𝒊 𝒏 𝒊 )   
+
+> (𝒈 𝒊𝟐 ,𝒙 𝒊𝟐 )
+> (𝒈 𝒊𝟏 ,𝒙 𝒊𝟏 )
+> (𝒈 𝒊𝟎 ,𝒙 𝒊𝟎 )
+> ...
+> ...
+
+Gene 
+
+Partitioning 
+
+... 
+
+> View 1
+
+...      
+
+> View 2
+> Cell 𝒊
+> Transformer
+> Encoder
+> Transformer
+> Encoder
+> H
+> H
+> Mask
+> Mask
+> Shared
+> 𝓛 𝒎𝒍𝒎
+> 𝒆 𝒊
+> ത𝒆 𝒊
+> cell embedding
+> H
+> H
+> H
+> ...
+> Derangement
+> K
+> Shared Transformer Encoder
+> ഥ𝒆 𝒊 𝒉 𝒊𝟏
+> H
+> View 1 View 2
+> 𝒆 𝒊
+> 𝒉 𝒊 𝒌
+> ... ത𝒆 𝒋 𝒆 𝒋
+> ത𝒆 𝒌 𝒆 𝒌
+> HH
+> HH
+> 𝒊
+> j
+> k
+> 𝒊
+> j
+> k
+> 𝒊
+> 𝒊
+> Positive
+> Fixed -ID
+> Negative
+> Anchor
+> Same -view
+> Negative Cross -view
+> Negative
+> Short -cut Risk
+> Migration
+
+Contrastive Onset     
+
+> expression aware
+> Dataset
+> 𝓜
+> Gene
+> Partitioning
+> GPC
+> Reconstruction
+> Error
+> Repertoire
+> Traces
+> Shared
+> Transformer
+> Encoder
+> ~g
+> Smooth
+> 𝛃 (𝐭 )=𝟎
+> 𝒕 ∗
+> Contrast -Set
+> Construction
+> ത𝒆 𝒊 𝒉 𝒊 ത𝒆 𝒌 𝒆 𝒋
+> 𝓛 𝒄𝒕𝒓
+> ത𝒆 𝒊 ത𝒆 𝒌 𝒆 𝒋
+
+Contrast -Set Construction Figure 2: Overview of CoCoS-GPC . Co-expression-guided partitioning and expression-aware sampling form two disjoint views, which are masked and reconstructed by a shared Transformer. The paired same-cell views define the positive, while same-view and cross-view in-batch examples together with fixed-identity value derangements form the contrast set. A label-free sentinel tracks smoothed gene-program concordance, reconstruction error, and representation repertoire; once readiness persists, the controller activates the contrastive objective and ramps its weight, which remains zero beforehand. Let ei denote the embedding of an anchor view, ¯ei the embedding of its complementary view, and E− 
+
+> i
+
+the corre-sponding negative set. The negative set contains embeddings of other cells in the minibatch from both views, together with the identity-matched hard-negative embeddings constructed above. For either view chosen as the anchor, the contrastive loss is 
+
+Lctr = − 1
+
+B
+
+> B
+
+X
+
+> i=1
+
+log exp  e⊤ 
+
+> i
+
+¯ei
+
+
+
+exp  e⊤ 
+
+> i
+
+¯ei
+
+ + P
+
+> e−∈E −
+> i
+
+exp  e⊤ 
+
+> i
+
+e− .
+
+(3) The final objective averages this loss over the two comple-mentary choices of anchor. 
+
+Competence-Gated Contrastive Onset . Introducing cell-level contrast before masked reconstruction has learned sta-ble gene dependencies may encourage the model to align views through technical cues, such as library size or sparsity. We therefore keep the contrastive weight β(t) = 0 until a fixed, unlabeled sentinel cohort disjoint from training indi-cates readiness. The gate uses neither cell labels nor down-stream scores and is not tied to a predefined epoch. At probe p, let μ+ 
+
+> p
+
+denote the mean cosine similarity be-tween paired sentinel views, and let μ− 
+
+> p
+
+and σ− 
+
+> p
+
+denote the mean and standard deviation over mismatched cross-view pairs. We define gene-program concordance (GPC) and the repertoire score as 
+
+cp = μ+ 
+
+> p
+
+− μ−
+
+> p
+
+max( σ− 
+
+> p
+
+, ε c) , qp = ∥ std( Zp)∥2
+
+perank p, (4) where εc > 0 is a numerical stabilizer, Zp stacks the normal-ized sentinel embeddings, and erank p is the entropy effective rank of their centered covariance. GPC measures the separa-tion between paired and mismatched views relative to off-pair variation, while qp monitors embedding diversity. The same probe also records the pooled masked-value MSE across both views. Using early sentinel probes for cali-bration, we smooth the GPC, reconstruction-error, and reper-toire traces. The controller declares readiness when cross-view concordance is stable and embedding diversity is pre-served for a prescribed number of consecutive probes. The first optimizer update satisfying these conditions is denoted by t⋆, after which the controller triggers irreversibly. After the trigger, let R denote the ramp duration and define 
+
+u(t) = clip(( t − t⋆)/R, 0, 1) . The contrastive weight is 
+
+β(t) = βmax sin 2 π
+
+2 u(t)
+
+
+
+. (5) Thus, β(t) remains zero before t⋆ and increases smoothly to βmax afterward. Identity-matched hard negatives are con-structed only when β(t) > 0.
+
+Overall Objective . The complete training objective com-bines masked-value reconstruction on both complementary views with the gated contrastive objective: 
+
+Loverall = Lmlm + β(t)Lctr . (6) Before the readiness criterion is met, the model is opti-mized solely through masked-value reconstruction. After the trigger, contrastive supervision gradually shapes the whole-cell embedding while reconstruction remains active on both views. This design preserves gene-level dependency learn-ing throughout pretraining and introduces explicit cell-level supervision. Model MS Mye Panc Lup Den IrC Lep Mya Sca scF Avg scBenchmark (2025) 73.51 60.98 94.65 61.39 76.77 49.26 43.30 73.89 79.82 57.40 67.10 scGPT (Cui et al. 2024) 76.48 67.35 92.42 66.18 81.18 48.94 45.21 78.45 89.91 63.82 70.99 Geneformer V2-104M † (Theodoris et al. 2023) 71.60 64.29 89.97 71.75 79.42 51.00 48.86 78.89 87.39 60.64 70.38 Split-view reconstruction only 79.92 62.77 91.72 62.37 78.85 48.81 51.97 76.00 84.89 59.73 69.70 Contrastive only 76.15 58.90 82.50 67.13 83.08 52.47 51.47 77.91 86.76 58.67 69.50             
+
+> CoCoS-GPC (proposed) 82.19 66.34 92.29 72.47 83.08 52.79 60.29 81.03 90.73 66.95 74.82
+
+Table 1: Cell-type annotation under the unified ten-dataset cell-forward evaluation protocol: k-NN accuracy (%) from frozen whole-cell embeddings, one training seed and one downstream split. Unshaded rows are external references, light-gray rows are internal controls, and the darker row is proposed. Within each column, all entries attaining the highest value are bold and the next distinct value is underlined. †Geneformer is evaluated on the same cell rows and seed-42 split after a model-specific top-512 median/rank adaptation. Because this is neither native-input Geneformer nor numerically interchangeable with the legacy rows, it is shown for coverage but excluded from the bold/underline ranking. 
+
+## Experiments 
+
+Datasets 
+
+Pretraining corpus. The pretraining corpus contains 
+
+1,813 ,780 source rows and follows the data construction of Qi et al. (Qi et al. 2025) from the publicly available CELLx-GENE collection. Before training, we reserve three mutually disjoint held-out cohorts: 2,048 rows for readiness assess-ment, 2,048 rows for an independent non-controlling audit, and 10 ,000 rows for the partition audit. These cohorts are also disjoint from the training pool, leaving 1,799 ,684 rows for optimization. The partition-audit cohort evaluates the fixed gene partition and never affects the contrastive-onset deci-sion. 
+
+Downstream evaluation. We evaluate frozen whole-cell embeddings on the ten cell-type annotation datasets as-sembled by Qi et al. (2025) (Table 1). Geneformer V2-104M (Theodoris et al. 2023) is evaluated on the same ten cell sets, labels, cell rows, and fixed seed-42 splits; only its model-specific input encoding differs, as detailed in Section . Separately, we score gene-regulatory edges on six BEELINE Specific 1000-gene networks (hESC, hHep, mDC, mHSC-E, mHSC-GM, and mHSC-L) (Pratapa et al. 2020), treating all unlabeled candidate pairs as negatives. Annotation and GRN labels are used only for downstream evaluation; neither enters pretraining or the contrastive-onset decision. 
+
+Experimental Setup 
+
+Optimization and training budget. The reported CoCoS-GPC run trains from scratch for 10 epochs with batch size 
+
+128 while discarding incomplete final minibatches, yielding 
+
+14 ,060 updates per epoch and T = 140 ,600 updates in total. We use AdamW with zero weight decay, mixed precision, and training seed 42 . The learning rate warms linearly for 
+
+10 ,000 updates and then remains 2 × 10 −4. Training uses one RTX 4090. 
+
+Partitioning, contrast-set construction, and onset. The proposed configuration uses co-expression-guided gene par-titioning and expression-aware sampling. Each minibatch processes two disjoint gene-panel views with the same en-coder parameters and sums their masked-value MSE terms in one optimizer update. Thus, the epoch and update budgets are not doubled, although the separate view and hard-negative encodings are not FLOP-matched to the single-view recon-struction reference. For each minibatch, we also sample one shared perturbation mask that independently reassigns each gene to the opposite view with probability 5% . We use a 40% 
+
+mask ratio, require at least 50 observed genes per cell, and cap each view at 512 genes. The contrast set contains cross-view and same-view in-batch negatives together with K = 4 
+
+paired-view, fixed-identity value derangements. The label-free controller activates only after three consecutive probes show smoothed concordance above its calibrated threshold with a small recent slope, reconstruction error below its refer-ence level, and repertoire above its reference level. All onset hyperparameters and run-specific calibration values are re-ported in the supplementary material. 
+
+Frozen-embedding evaluation. Under the unified ten-dataset cell-forward protocol, we extract each frozen whole-cell embedding with maximum sequence length 512 and evaluate it using k-nearest neighbors ( k=10 ) and a learned linear probe on a fixed 0.7/0.3 train/test split. 
+
+Comparators. We report scGPT (Cui et al. 2024) under the same downstream protocol with an aligned gene vocab-ulary as an external reference. We additionally report the public Geneformer V2-104M checkpoint (Theodoris et al. 2023). After the common top-512 biological-gene selection, its frozen encoder receives the model-specific median/rank encoding and outputs a 768-dimensional cell embedding. This evaluation matches the fixed cell rows, labels, seed-42 split, L2 normalization, k-NN, and final-epoch Linear@50 probes, but not native full-transcriptome input, pretraining budget, or capacity. Its Linear@50 value is also not numeri-cally interchangeable with the archived legacy evaluator, so the row is excluded from the column rankings. The Trans-former implementation released with scBenchmark (Qi et al. 2025) is a full-cell reconstruction-only reference. A split-view reconstruction-only control and a contrastive-only con-trol provide additional context. The external references re-tain their respective pretraining architectures, batch sizes, and whole-cell readout configurations. Uniform sampling is the matched comparison for expression-aware sampling. Model MS Mye Panc Lup Den IrC Lep Mya Sca scF Avg scBenchmark (2025) 86.97 70.41 97.89 77.94 80.38 53.37 66.90 80.69 92.25 67.16 77.39 scGPT (Cui et al. 2024) 84.96 71.50 95.95 78.63 84.06 53.87 57.73 81.23 92.84 69.48 77.02 Geneformer V2-104M † (Theodoris et al. 2023) 64.15 51.85 82.82 73.85 74.48 48.33 65.52 77.12 81.90 42.19 66.22 Split-view reconstruction only 88.85 69.98 97.26 77.30 82.43 54.39 68.09 80.25 93.17 65.03 77.67 Contrastive only 81.01 64.14 87.52 72.46 82.77 52.34 61.30 79.41 89.63 65.34 73.59             
+
+> CoCoS-GPC (proposed) 88.04 69.68 97.37 79.11 84.60 54.77 69.93 82.35 92.86 69.83 78.85
+
+Table 2: Linear-probe test accuracy (%) on the same ten cell-type annotation datasets as Table 1. Evaluation settings and visual conventions follow Table 1; results use one training seed and one fixed downstream split. †Geneformer uses a model-specific top-512 median/rank adaptation and a frozen classifier evaluated only at epoch 50, whereas the archived legacy rows use their original evaluator. It is therefore reported for coverage but excluded from the bold/underline ranking. Table 3 additionally reports dedicated full-cell MLM, split-view MLM, balanced-random panel, and no-flip view con-trols. Three fixed-onset controls compare immediate contrast with one- and two-epoch reconstruction warmups within a shared training configuration. The proposed GPC row re-ports the selected system configuration. Historical runs that change multiple factors are reported separately as contextual evidence. 
+
+Does the Complete Method Learn Transferable Whole-Cell Embeddings? 
+
+Under the unified ten-dataset cell-forward protocol, CoCoS-GPC records mean accuracies of 74 .82% with k-NN (Ta-ble 1) and 78 .85% with a linear probe (Table 2), compared with 70 .99% and 77 .02% , respectively, for scGPT. Among the ranked legacy rows, under k-NN, CoCoS-GPC is strictly best on seven datasets and tied for best on dengue. Within the same ranked set, under linear evaluation, it has the highest mean accuracy, ranks first on six datasets, and ranks second on three; Myeloid is the only dataset on which it is out-side the top two. The margin over scGPT is larger for k-NN (+3 .83 points) than for the linear probe ( +1 .83 points), in-dicating that the measured gain is more pronounced in local neighborhood quality than in linear separability under these evaluators. All values use training seed 42 and downstream split seed 42. For additional external-model coverage, the daggered Geneformer V2-104M row (Theodoris et al. 2023) records 
+
+70 .38% mean k-NN accuracy (Table 1) and 66 .22% mean Linear@50 accuracy (Table 2). Under this post-selection adaptation, its mean k-NN score exceeds its mean final-epoch linear score by 7.76 points. We do not include the row in best/second-best counts or use it for a leaderboard claim: its median/rank encoding consumes an adapted top-512 view rather than native full-transcriptome input, and its fixed Linear@50 evaluator is not numerically interchange-able with the archived legacy linear results. 
+
+How Do View-Design Variants Compare? 
+
+Table 3 compares six configurations. The proposed expression-aware variant records the highest mean point es-timates ( 74 .82% k-NN and 78 .85% linear), while balanced-random panels remain close ( 74 .34% and 78 .44% ). Full-cell                
+
+> Variant Avg. k-NN Avg. linear Full-cell MLM control 66.01 75.19 Split-view MLM control 64.09 76.39 Balanced-random panel 74.34 78.44 No panel-assignment flip 63.04 75.39 Uniform sampling 73.94 78.60
+> Expression-aware (proposed) 74.82 78.85
+
+Table 3: Mean k-NN and linear-probe accuracies (%) for view-design variants under the ten-dataset cell-forward pro-tocol (one training seed and one fixed downstream split). and split-view reconstruction are weaker. The no-flip run is also lower but never activates GPC, so it does not isolate the effect of panel-assignment flips. The matched sampling pair changes only the within-view sampler. Expression-aware sampling improves over uniform sampling by 0.88 k-NN and 0.25 linear points. Its onset also shifts from 96 ,000 to 93 ,000 steps, so the comparison evaluates the sampler within the gated system rather than at a fixed onset. 
+
+Do Fixed-Identity Negatives Mitigate the Gene-Identity Shortcut? 
+
+Diagnostic. If ordinary in-batch negatives can be separated using gene-set composition, the model should be highly con-fident against other-cell candidates but less confident when a negative preserves the positive’s gene identities and changes only the gene–value correspondence. We measure this behav-ior with the ordinary–identity confidence gap: ordinary cross-view positive confidence minus confidence against four fixed-identity value derangements. A persistent positive gap indi-cates that identity-matched candidates remain harder than ordinary negatives. 
+
+Answer. Starting from the same training state at step 84 ,360 ,matched K = 0 and K = 4 branches run for 1,000 updates and differ only in the number of fixed-identity negatives. At the final probe, K = 0 is nearly certain against ordinary neg-atives ( 0.997 confidence) but is less confident against fixed-identity derangements ( 0.639 ), leaving a gap of 0.358 . With 
+
+K = 4 , fixed-identity confidence reaches 0.969 and the gap narrows to 0.028 (Figure 3). Within this controlled diagnos-0.2 
+
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Positive confidence
+> 0.639
+> 0.969
+
+A    
+
+> Fixed-identity positive confidence
+> 0250 500 750 1000
+> Updates after shared checkpoint
+> 0.0
+> 0.2
+> 0.4
+> Confidence gap
+> 0.358
+> 0.028
+
+B   
+
+> Ordinary–identity confidence gap
+> K= 0 K= 4
+
+Figure 3: Fixed-identity shortcut diagnostic. From a shared checkpoint at step 84 ,360 , matched K = 0 and K = 4 
+
+branches run for 1,000 updates and differ only in fixed-identity negatives. (A) Paired-positive confidence against four value derangements. (B) Confidence gap between or-dinary cross-view and fixed-identity pools. Both panels use fixed held-out five-way pools at τ = 0 .07 ; this short-fork diagnostic does not estimate downstream performance or training-seed uncertainty. tic, the collapsed gap indicates that fixed-identity negatives mitigate reliance on gene-set composition and promote sen-sitivity to gene–value correspondence. This short fork does not establish downstream gains or training-seed uncertainty. We also do not compare raw training InfoNCE across K,because K = 4 adds four denominator logits. 
+
+When Should Contrastive Learning Begin? 
+
+The CoCoS-GPC controller triggers at step 93 ,000 , after all readiness conditions hold for three consecutive probes. Before then, the contrastive weight is zero and neither con-trastive gradients nor value-derangement encodings are com-puted; afterward, the weight ramps up with the complete contrast set. Among the matched fixed-onset controls in Table 4, a two-epoch reconstruction warmup performs best, improving over immediate contrast by 1.50 k-NN and 1.04 linear points. The GPC row is a contextual reference rather than part of this matched comparison. Reevaluating the selected checkpoint over downstream split seeds 42, 43, and 44 gives 74 .87 ± 0.06% mean k-NN and 78 .77 ± 0.07% mean linear accuracy.                
+
+> Policy Onset k-NN Linear Immediate contrast 0k 72.63 77.32 1-epoch warmup 13.7k 73.99 77.63 2-epoch warmup 27.3k 74.13 78.36
+> GPC (proposed) 93k 74.82 78.85
+
+Table 4: Contrastive-onset comparison under the ten-dataset cell-forward protocol (training and downstream split seed 42). Onset is in thousands of optimizer steps. The fixed-onset controls differ only in onset; GPC is the proposed configuration shown as an unmatched reference.          
+
+> Pretraining variant AUROC AUPRC scBenchmark (2025) 0.8715 0.7090 scGPT 0.8640 0.6962
+> CoCoS-GPC (proposed) 0.8733 0.7120
+
+Table 5: Mean AUROC/AUPRC point estimates for GRN edge prediction on six BEELINE Specific 1000-gene net-works with full-candidate negatives, averaging logistic-regression and MLP probes. Bold marks the highest mean. 
+
+Do the Embeddings Support Gene-Regulatory Edge Prediction? 
+
+We evaluate frozen gene embeddings for gene-regulatory edge prediction. Each candidate TF–target pair is repre-sented by the two embeddings, their element-wise product, cosine similarity, and Euclidean distance, and classified us-ing logistic-regression and two-layer MLP probes. Because the task is class-imbalanced, we report both AUROC and AUPRC, with AUPRC more directly reflecting performance on the sparse positive-edge class. Table 5 reports results on six Specific 1000-gene networks under the full-candidate negative protocol. CoCoS-GPC 
+
+records the highest mean point estimates among the com-pared variants for AUROC (0.8733) and AUPRC (0.7120). Winners vary across networks, so these averages indicate competitive biological transfer rather than uniform or statis-tically significant superiority. 
+
+## Conclusion 
+
+CoCoS addresses the mismatch between gene-level recon-struction and whole-cell representation learning by jointly structuring complementary gene views, contrast sets with identity-matched value negatives, and data-dependent con-trastive onset. Under the unified ten-dataset cell-forward protocol, the resulting CoCoS-GPC embeddings attain the highest mean k-NN accuracy among the compared meth-ods, expression-aware sampling yields higher point estimates than its matched uniform counterpart, and the held-out con-troller activates contrastive learning without downstream la-bels. The model’s frozen gene embeddings yield the high-est mean AUROC and AUPRC point estimates among the compared variants in the six-network GRN evaluation, al-though the variant with the highest point estimate differs across individual networks. Together, these results support complementary-view contrastive learning as a useful exten-sion to masked expression reconstruction across cell-type annotation and gene-regulatory edge prediction, within the evaluated datasets and protocols. 
+
+## Acknowledgments 
+
+This work was supported by the Strategic Priority Research Program of the Chinese Academy of Sciences under Grant No. XDA0460205. 
+
+## References 
+
+Bahrami, M.; Tejada-Lapuerta, A.; Becker, S.; Hashemi G., F. S.; and Theis, F. J. 2025. scConcept: Contrastive pre-training for technology-agnostic single-cell representations beyond reconstruction. bioRxiv .Bengio, Y.; Louradour, J.; Collobert, R.; and Weston, J. 2009. Curriculum Learning. In Proceedings of the 26th Annual International Conference on Machine Learning , 41–48. As-sociation for Computing Machinery. Chen, J.; Hu, Z.; Sun, S.; Tan, Q.; Wang, Y.; Yu, Q.; Zong, L.; Hong, L.; Xiao, J.; Shen, T.; King, I.; and Li, Y. 2022. Inter-pretable RNA Foundation Model from Unannotated Data for Highly Accurate RNA Structure and Function Predictions. arXiv:2204.00300. Chen, T.; Kornblith, S.; Norouzi, M.; and Hinton, G. E. 2020. A Simple Framework for Contrastive Learning of Visual Representations. In Proceedings of the 37th International Conference on Machine Learning, ICML 2020 , volume 119 of Proceedings of Machine Learning Research , 1597–1607. PMLR. Chen, Z.; Badrinarayanan, V.; Lee, C.; and Rabinovich, A. 2018. GradNorm: Gradient Normalization for Adaptive Loss Balancing in Deep Multitask Networks. In Proceedings of the 35th International Conference on Machine Learning, ICML 2018 , volume 80 of Proceedings of Machine Learning Re-search , 794–803. PMLR. Ciortan, M.; and Defrance, M. 2021. Contrastive self-supervised clustering of scRNA-seq data. BMC Bioinfor-matics , 22(1): 280. Cui, H.; Wang, C.; Maan, H.; Pang, K.; Luo, F.; Duan, N.; and Wang, B. 2024. scGPT: toward building a foundation model for single-cell multi-omics using generative AI. Na-ture Methods , 21: 1470–1480. Dalla-Torre, H.; Gonzalez, L.; Mendoza-Revilla, J.; Lopez Carranza, N.; Grzywaczewski, A. H.; Oteri, F.; Dal-lago, C.; Trop, E.; de Almeida, B. P.; Sirelkhatim, H.; Richard, G.; Skwark, M.; Beguir, K.; Lopez, M.; and Pier-rot, T. 2025. Nucleotide Transformer: building and evaluat-ing robust foundation models for human genomics. Nature Methods , 22(2): 287–297. Ding, J.; Lin, J.; Jiang, S.; Wang, Y.; Miao, Z.; Fang, Z.; Tang, J.; Li, M.; and Qiu, X. 2025. Tabula: A Tabular Self-Supervised Foundation Model for Single-Cell Tran-scriptomics. In Advances in Neural Information Processing Systems , volume 38. Han, W.; Cheng, Y.; Chen, J.; Zhong, H.; Hu, Z.; Chen, S.; Zong, L.; Hong, L.; Chan, T.-F.; King, I.; Gao, X.; and Li, Y. 2022. Self-supervised contrastive learning for integrative single cell RNA-seq data analysis. Briefings in Bioinformat-ics , 23(5): bbac377. Hao, M.; Gong, J.; Zeng, X.; Liu, C.; Guo, Y.; Cheng, X.; Wang, T.; Ma, J.; Zhang, X.; and Song, L. 2024. Large-scale foundation model on single-cell transcriptomics. Na-ture Methods , 21: 1481–1491. Ji, Y.; Zhou, Z.; Liu, H.; and Davuluri, R. V. 2021. DNABERT: pre-trained Bidirectional Encoder Represen-tations from Transformers model for DNA-language in genome. Bioinformatics , 37(15): 2112–2120. Kong, Y.; Liu, L.; Wang, J.; and Tao, D. 2021. Adaptive Curriculum Learning. In Proceedings of the IEEE/CVF In-ternational Conference on Computer Vision , 5067–5076. Kotliar, D.; Veres, A.; Nagy, M. A.; Tabrizi, S.; Hodis, E.; Melton, D. A.; and Sabeti, P. C. 2019. Identifying gene expression programs of cell-type identity and cellular activity with single-cell RNA-Seq. eLife , 8: e43803. Liu, S.; James, S.; Davison, A. J.; and Johns, E. 2022. Auto-Lambda: Disentangling Dynamic Task Relationships. Trans-actions on Machine Learning Research .Long, W.; Su, H.; Xiong, J.; and Zhang, Y. 2025. Mut-BERT: probabilistic genome representation improves ge-nomics foundation models. Bioinformatics , 41(Supplement 1): i294–i303. Platanios, E. A.; Stretcu, O.; Neubig, G.; Poczos, B.; and Mitchell, T. 2019. Competence-based Curriculum Learning for Neural Machine Translation. In Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technolo-gies , 1162–1172. Association for Computational Linguistics. Pratapa, A.; Jalihal, A. P.; Law, J. N.; Bharadwaj, A.; and Mu-rali, T. M. 2020. Benchmarking algorithms for gene regula-tory network inference from single-cell transcriptomic data. 
+
+Nature Methods , 17(2): 147–154. Qi, J.; Cui, Y.; Guo, K.; Zhang, X.; Huang, J.; and Xie, G. 2025. A Simple and Comprehensive Benchmark for Single-Cell Transcriptomics. In Proceedings of the AAAI Confer-ence on Artificial Intelligence , volume 39, 676–684. Theodoris, C. V.; Xiao, L.; Chopra, A.; Chaffin, M. D.; Al Sayed, Z. R.; Hill, M. C.; Mantineo, H.; Brydon, E. M.; Zeng, Z.; Liu, X. S.; and Ellinor, P. T. 2023. Transfer learn-ing enables predictions in network biology. Nature , 618: 616–624. Xiong, J.; Yin, N.; Liang, S.; Li, H.; Wang, Y.; Ai, D.; and Wang, J. 2025. Cross-Attention Graph Neural Networks for Inferring Gene Regulatory Networks with Skewed Degree Distribution. BMC Bioinformatics , 26(1): 179. Yang, F.; Wang, W.; Wang, F.; Fang, Y.; Tang, D.; Huang, J.; Lu, H.; and Yao, J. 2022a. scBERT as a large-scale pretrained deep language model for cell type annotation of single-cell RNA-seq data. Nature Machine Intelligence , 4: 852–866. Yang, M.; Yang, Y.; Xie, C.; Ni, M.; Liu, J.; Yang, H.; Mu, F.; and Wang, J. 2022b. Contrastive learning enables rapid map-ping to multimodal single-cell atlas of multimillion scale. 
+
+Nature Machine Intelligence , 4: 696–709. Zhao, S.; Zhang, J.; Wu, Y.; Luo, Y.; and Nie, Z. 2024. LangCell: Language-Cell Pre-training for Cell Identity Un-derstanding. arXiv:2405.06708.
