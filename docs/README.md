@@ -6,40 +6,32 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-04
-- 运行时间：2026-08-04 22:02:40 UTC
+- 最新运行日期：2026-08-07
+- 运行时间：2026-08-07 02:14:44 UTC
 - 运行状态：成功
-- 本次总论文数：6
-- 精读区：4
-- 速读区：2
+- 本次总论文数：4
+- 精读区：3
+- 速读区：1
 
 ### 今日简报（AI）
-今日精读聚焦CRISPRi扰动预测与分子扰动响应检索，两篇均获满分评价。  
-最值得关注“响应幅度作为主导信号”与“LLM引导检索”两大方向，有效提升扰动效应预测。  
-建议普通读者优先精读满分论文，速读可稍后浏览细胞表示学习与动力学系统推断。
-- 详情：[/202608/04/README](/202608/04/README)
+今日精读3篇、速读1篇，聚焦AI驱动药物发现与细胞表型分析；最值得关注《CellPrism》的虚拟细胞可视分析系统与《Learning Molecular Representations》的表征学习方法，分别获9.0和8.0分；建议优先精读这两篇，理解如何用视觉交互与结构保持提升AI药物发现的可解释性。
+- 详情：[/202608/07/README](/202608/07/README)
 
 ### 精读区论文标签
-1. [Response Magnitude as a Dominant Signal for Held-Out CRISPRi Perturbation Effect Prediction](/202608/04/2608.00152v1-response-magnitude-as-a-dominant-signal-for-held-out-crispri-perturbation-effect-prediction)  
-   标签：评分：10.0/10、query:virtual-cell
-   evidence：在虚拟细胞挑战赛基准上预测CRISPRi扰动效应
-2. [LLM-Guided Retrieval for Prediction of Molecular Perturbation Responses](/202608/04/2608.01734v1-llm-guided-retrieval-for-prediction-of-molecular-perturbation-responses)  
-   标签：评分：10.0/10、query:virtual-cell
-   evidence：直接在单细胞图谱上预测分子扰动反应
-3. [CellPrism: A Visual Analytics System for Exploring AI-Driven Virtual Cells in Drug Discovery](/202608/04/2608.01669v1-cellprism-a-visual-analytics-system-for-exploring-ai-driven-virtual-cells-in-drug-discovery)  
+1. [CellPrism: A Visual Analytics System for Exploring AI-Driven Virtual Cells in Drug Discovery](/202608/07/2608.01669v2-cellprism-a-visual-analytics-system-for-exploring-ai-driven-virtual-cells-in-drug-discovery)  
    标签：评分：9.0/10、query:virtual-cell
-   evidence：AI驱动的虚拟细胞模型在药物发现中预测扰动下的基因表达结果
-4. [Improving scDiffusion with Sparsity-Biased Classifier-Free Guidance](/202608/04/2607.29043v1-improving-scdiffusion-with-sparsity-biased-classifier-free-guidance)  
+   evidence：AI驱动的虚拟细胞模型，基因扰动分析，药物发现中高维扰动空间的探索
+2. [Learning Molecular Representations from Cellular Phenotypes with Structure Preservation](/202608/07/2608.02688v1-learning-molecular-representations-from-cellular-phenotypes-with-structure-preservation)  
    标签：评分：8.0/10、query:virtual-cell
-   evidence：条件单细胞RNA测序生成与扩散模型，直接支持单细胞扰动响应预测
+   evidence：从细胞表型响应学习分子表征，直接支持药物扰动响应建模
+3. [HaploPerturb: Low-rank copula construction of haplotype perturbations improves sequence-to-function analysis of Alzheimer's disease loci](/202608/07/2608.05002v1-haploperturb-low-rank-copula-construction-of-haplotype-perturbations-improves-sequence-to-function-analysis-of-alzheimers-disease-loci)  
+   标签：评分：8.0/10、query:virtual-cell
+   evidence：构造单倍型扰动输入，改进序列-功能模型在阿尔茨海默病位点的分子表型预测
 
 ### 速读区论文标签
-1. [Beyond Gene Reconstruction: Learning Cell Representations through Complementary Transcriptomic Views](/202608/04/2608.00985v1-beyond-gene-reconstruction-learning-cell-representations-through-complementary-transcriptomic-views)  
-   标签：评分：7.0/10、query:virtual-cell
-   evidence：单细胞转录组表征学习；对细胞状态建模至关重要
-2. [HyperODE: Zero-Shot Surrogate for Simulation and Inference of Dynamical Systems](/202608/04/2608.00852v1-hyperode-zero-shot-surrogate-for-simulation-and-inference-of-dynamical-systems)  
+1. [Zero-Cost Virtual RNA: Approximating Immunotherapy Signatures via Cross-Modal WSI Retrieval](/202608/07/2608.00544v1-zero-cost-virtual-rna-approximating-immunotherapy-signatures-via-cross-modal-wsi-retrieval)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：动力学系统零样本代理模拟，可在模型扰动下快速预测响应
+   evidence：通过跨模态检索预测免疫治疗反应（药物扰动），与扰动响应预测相关。
 
 
 <div class="dpr-home-promo-card">
