@@ -7,31 +7,40 @@
 
 ## 每次日报
 - 最新运行日期：2026-08-07
-- 运行时间：2026-08-07 02:14:44 UTC
+- 运行时间：2026-08-07 21:22:21 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：3
-- 速读区：1
+- 本次总论文数：7
+- 精读区：4
+- 速读区：3
 
 ### 今日简报（AI）
-今日精读3篇、速读1篇，聚焦AI驱动药物发现与细胞表型分析；最值得关注《CellPrism》的虚拟细胞可视分析系统与《Learning Molecular Representations》的表征学习方法，分别获9.0和8.0分；建议优先精读这两篇，理解如何用视觉交互与结构保持提升AI药物发现的可解释性。
+今日精读聚焦AI虚拟细胞药物发现与阿尔茨海默位点功能分析，两篇均获9分高分。最值得关注CellPrism的可视化系统与HaploPerturb的低秩单倍型扰动方法。若想跟进前沿，可顺带浏览BioM-JEPA的单细胞图嵌入预测。
 - 详情：[/202608/07/README](/202608/07/README)
 
 ### 精读区论文标签
 1. [CellPrism: A Visual Analytics System for Exploring AI-Driven Virtual Cells in Drug Discovery](/202608/07/2608.01669v2-cellprism-a-visual-analytics-system-for-exploring-ai-driven-virtual-cells-in-drug-discovery)  
    标签：评分：9.0/10、query:virtual-cell
-   evidence：AI驱动的虚拟细胞模型，基因扰动分析，药物发现中高维扰动空间的探索
-2. [Learning Molecular Representations from Cellular Phenotypes with Structure Preservation](/202608/07/2608.02688v1-learning-molecular-representations-from-cellular-phenotypes-with-structure-preservation)  
+   evidence：直接介绍用于药物发现中AI驱动虚拟细胞模型的可视分析系统
+2. [HaploPerturb: Low-rank copula construction of haplotype perturbations improves sequence-to-function analysis of Alzheimer's disease loci](/202608/07/2608.05002v1-haploperturb-low-rank-copula-construction-of-haplotype-perturbations-improves-sequence-to-function-analysis-of-alzheimers-disease-loci)  
+   标签：评分：9.0/10、query:virtual-cell
+   evidence：构建单倍型扰动以改进分子表型的序列-功能预测
+3. [CASCADE: An Agentic Regulatory Network Framework for Patient-Data-Validated Downstream Perturbation Prediction](/202608/07/2608.05359v1-cascade-an-agentic-regulatory-network-framework-for-patient-data-validated-downstream-perturbation-prediction)  
+   标签：评分：9.0/10、query:virtual-cell
+   evidence：预测基因扰动的下游转录效应，并用患者数据验证方向
+4. [Scaling an Autoregressive Transformer for Single-Cell Generation](/202608/07/2608.02961v1-scaling-an-autoregressive-transformer-for-single-cell-generation)  
    标签：评分：8.0/10、query:virtual-cell
-   evidence：从细胞表型响应学习分子表征，直接支持药物扰动响应建模
-3. [HaploPerturb: Low-rank copula construction of haplotype perturbations improves sequence-to-function analysis of Alzheimer's disease loci](/202608/07/2608.05002v1-haploperturb-low-rank-copula-construction-of-haplotype-perturbations-improves-sequence-to-function-analysis-of-alzheimers-disease-loci)  
-   标签：评分：8.0/10、query:virtual-cell
-   evidence：构造单倍型扰动输入，改进序列-功能模型在阿尔茨海默病位点的分子表型预测
+   evidence：使用自回归Transformer生成单细胞基因表达，是虚拟细胞模型的核心构建模块
 
 ### 速读区论文标签
-1. [Zero-Cost Virtual RNA: Approximating Immunotherapy Signatures via Cross-Modal WSI Retrieval](/202608/07/2608.00544v1-zero-cost-virtual-rna-approximating-immunotherapy-signatures-via-cross-modal-wsi-retrieval)  
+1. [BioM-JEPA: joint-embedding prediction of graph-connected gene blocks in single cells](/202608/07/2608.05928v1-biom-jepa-joint-embedding-prediction-of-graph-connected-gene-blocks-in-single-cells)  
+   标签：评分：7.0/10、query:virtual-cell
+   evidence：单细胞自监督建模，支撑虚拟细胞模型
+2. [Beyond Predicting Responses: Conformal Inference for Latent Distributional Parameters](/202608/07/2608.03607v1-beyond-predicting-responses-conformal-inference-for-latent-distributional-parameters)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：通过跨模态检索预测免疫治疗反应（药物扰动），与扰动响应预测相关。
+   evidence：面向控制响应分布的潜在参数的共形推断
+3. [Reduced-rank Generalized Bilinear Models](/202608/07/2608.03832v1-reduced-rank-generalized-bilinear-models)  
+   标签：评分：6.0/10、query:virtual-cell
+   evidence：降秩双线性模型用于高维基因组效应估计
 
 
 <div class="dpr-home-promo-card">

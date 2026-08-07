@@ -1,0 +1,1875 @@
+Title: Beyond Predicting Responses: Conformal Inference for Latent Distributional Parameters
+
+URL Source: https://arxiv.org/pdf/2608.03607v1
+
+Published Time: Wed, 05 Aug 2026 01:03:18 GMT
+
+Number of Pages: 40
+
+Markdown Content:
+# Beyond Predicting Responses: Conformal Inference for Latent Distributional Parameters 
+
+## Minxing Zheng, Wenbin Zhou, and Shixiang Zhu Carnegie Mellon University 
+
+Abstract 
+
+Many prediction problems seek to infer an unobserved, instance-specific pa-rameter that governs the distribution of an observable response, even though the latent parameter is unavailable for both historical and future instances. We develop LatentCP , a prior-free conformal framework that constructs uncertainty sets for latent distributional parameters using only observed context–response pairs and a specified forward model. The method first constructs a conformal prediction set in the observable response space and then retains candidate latent parameters according to the probability their induced response distributions as-sign to that set. This inversion provides finite-sample marginal coverage without requiring latent calibration labels, a unique inverse mapping, or knowledge of the latent mixing distribution. Because latent-set efficiency depends nonmonotoni-cally on the response-space miscoverage rate, we further introduce a multilevel procedure that aggregates normalized incompatibility scores across several re-sponse sets and selects the aggregation distribution using an independent tuning sample. Across synthetic experiments, LatentCP maintains nominal latent cover-age under weak forward identification, observational nonidentifiability, and latent heterogeneity and multimodality, where empirical-Bayes, likelihood-based, and proxy-label conformal methods can substantially under-cover. On a California wildfire real dataset, it produces spatially adaptive uncertainty sets for latent fire intensity. Independent tuning improves efficiency, while multilevel aggregation provides additional gains when different response levels contain complementary information, without sacrificing validity. 
+
+# 1 Introduction 
+
+In many prediction problems, the observable outcome is not the ultimate object of in-terest. What we really want to understand is the hidden mechanism that makes the outcome likely. For example, a reading from an air-quality sensor informs the underly-ing pollutant concentration [Maag et al., 2018]; a user’s rating provides evidence about user preferences [Koren et al., 2009]; and an observed wildfire event reveals information about the underlying ignition risk in the future [Jain et al., 2020]. These problems share a common structure: we observe a random response given the context, but some latent mechanism governing the distribution of that response remains hidden. We refer to 1arXiv:2608.03607v1 [stat.ME] 4 Aug 2026 this hidden quantity as a latent distributional parameter [Efron, 2024]. Quantifying the uncertainty of latent parameters is important because it characterizes the mechanism that may continue to generate future outcomes. In wildfire risk prediction, for example, a prediction of next week’s fire count supports short-term preparedness, whereas uncer-tainty about the underlying ignition-risk regime can inform long-term strategies, such as proactive de-energization, vegetation management, resource allocation, and long-term infrastructure hardening [Chen et al., 2026]. Learning such a latent parameter is difficult for several practical reasons. First, its true value is typically unavailable not only for a new instance but also for the historical instances used to train and calibrate a model. A wildfire dataset may contain weather conditions and realized fire counts, but it does not provide ground-truth labels for the underlying risk regime at every location and time. Consequently, one cannot directly compare estimated latent parameters with their true values and calibrate their errors in the usual supervised manner. Second, an observed response provides only noisy and incomplete evidence about the mechanism that produced it. The absence of a wildfire does not necessarily imply low underlying risk: a high-risk location may simply expe-rience no ignition during a particular period. Similarly, the same user rating can arise from different preference profiles, and the same sensor reading can be consistent with different pollutant levels. Third, locations or individuals with similar recorded charac-teristics may still have different latent states because of unmeasured factors. Historical data can reveal population-level patterns, but it cannot eliminate the uncertainty sur-rounding the latent state of a particular new instance. These information limitations make a single latent estimate potentially misleading. A more honest inferential out-put is therefore a set containing all latent mechanisms that remain plausible given the observable evidence. Existing methods address parts of this problem but require information that may be unavailable or unreliable. Bayesian and empirical-Bayes approaches combine the response model with a specified or estimated population distribution for the latent pa-rameter. These methods can be effective when that distribution is accurately known, but their uncertainty estimates may be sensitive to misspecification, especially when latent states vary substantially across instances [Kleijn and van der Vaart, 2006]. An-other natural strategy is to infer a proxy latent value from each observed response and then treat these proxies as ordinary labels [Stuart, 2010]. This approach can create unwarranted certainty because a noisy response may be compatible with several latent values, and selecting one inverse solution discards the remaining possibilities before uncertainty is calibrated. Standard conformal prediction avoids strong distributional assumptions and provides finite-sample coverage guarantees, but it ordinarily requires the prediction target to be observed in the calibration data [Lei and Candès, 2021]. It therefore cannot be applied directly when the target is latent. The central question is whether conformal guarantees can nevertheless be used to quantify uncertainty about a latent parameter without observing latent calibration labels or specifying how latent parameters are distributed across the population. We answer this question through a simple change of perspective: rather than cal-ibrating uncertainty directly in the unobserved latent space, we first calibrate uncer-tainty in the observable response space and then transfer it back through the forward model. Our method, termed LatentCP , constructs a conformal prediction set for the observable response and treats it as a calibrated description of plausible behavior. Each 2candidate latent parameter induces a distribution over possible responses, and we re-tain the candidate when that distribution assigns sufficient probability to the conformal response set. This construction is intuitive because the observable response is the con-sequence through which a latent mechanism can be evaluated. A candidate mechanism should remain plausible when the outcomes it tends to generate agree with the response values supported by the data. A remaining question is how to choose the miscoverage rate of the conformal re-sponse set. Different levels emphasize different ranges of plausible responses and can therefore lead to substantially different latent uncertainty sets, with no single level uniformly best. Rather than committing to one level, we develop a randomized proce-dure that combines the evidence provided by several response sets and learns how much weight to place on each. This broader construction preserves finite-sample validity, con-tains the single-level method as a special case, and can produce more informative latent sets when different levels provide complementary evidence. Like the basic LatentCP 
+
+procedure, it requires neither observed latent calibration labels nor knowledge of how latent parameters are distributed across the population, and it retains multiple latent values when they imply observationally indistinguishable behavior. Our numerical results support these theoretical findings. Across synthetic exper-iments, LatentCP maintains nominal latent coverage, including under weak identi-fication, observational nonidentifiability, and latent heterogeneity, settings in which empirical-Bayes, likelihood-based, and proxy-label conformal methods can substantially under-cover. In a real-data application to California wildfires, LatentCP produces spa-tially adaptive uncertainty sets for latent fire intensity, identifies regions with greater intensity uncertainty, and yields substantially less conservative sets than those obtained by directly propagating response uncertainty. Independent tuning and multilevel ag-gregation improve efficiency while preserving validity, demonstrating the value of com-bining response-space evidence across multiple miscoverage levels. 
+
+Contributions. Our contributions are threefold: 1. We formulate the problem of conformal inference for latent distributional parame-ters when only contextual variables and responses are observed, without requiring latent calibration labels or knowledge of their population distribution. 2. We develop LatentCP , which constructs a conformal prediction set in the ob-servable response space and inverts it through the forward model to obtain a finite-sample valid uncertainty set for the latent parameter. 3. We introduce a multi-level weighting procedure that combines evidence across response-space miscoverage rates and selects data-adaptive weights to improve the efficiency of the resulting latent uncertainty sets while preserving validity. 
+
+Related work. This study lies at the intersection of conformal prediction [Shafer and Vovk, 2008, Lei et al., 2018, Angelopoulos and Bates, 2021] and latent-variable infer-ence [Bartholomew et al., 2011, Everett, 2013]. Conformal prediction constructs finite-sample, distribution-free prediction sets for observable responses under exchangeability. Its scope has expanded well beyond scalar regression. For example, conformal methods have been developed for functional responses and simultaneous prediction bands [Lei 3et al., 2015, Diquigiovanni et al., 2022], temporally dependent responses [Zaffran et al., 2022, Xu et al., 2024], and structured outputs arising from graphs, language models, stream networks, and operator models [Zargarbashi et al., 2023, Lekeufack et al., 2024, Cherian et al., 2024, Zhang et al., 2025, Harris and Liu, 2025]. Particularly relevant are probabilistic and generative conformal methods, which use samples from a conditional generative model to construct flexible, potentially disconnected prediction regions in the response space [Wang et al., 2023, Zheng and Zhu, 2024]. These developments provide a rich collection of procedures that can serve as the response-space component of LatentCP . Their inferential target, however, remains the observable response. In contrast, LatentCP treats the conformal response set as an intermediate object: it eval-uates the probability that each candidate forward distribution assigns to this set and uses that probability to construct an uncertainty set for the latent parameter governing the response distribution. A related literature extends conformal prediction to settings in which the desired target is not cleanly observed in the calibration data. Under label noise, Einbinder et al. [2024] characterize conditions under which conformal sets calibrated using cor-rupted labels remain valid for the underlying clean labels. Feldman et al. [2025] address noisy or missing labels through uncertain imputation and robust reweighting, while Ja-vanmardi et al. [2023] generalize conformal calibration to set-valued, partially observed labels. For intrinsically unobservable quantities, conformal meta-learners construct in-tervals for individual treatment effects using pseudo-outcomes and stochastic dominance conditions linking observable and oracle conformity scores [Alaa et al., 2023]. More re-cently, Shirakawa et al. [2025] infer unobservable variables by comparing independently trained latent-variable predictors under assumptions on their residual distributions. These approaches make an unobservable target accessible through a corruption model, a candidate-label set, a pseudo-outcome, or a discrepancy between latent predictors. 
+
+LatentCP takes a different route: it does not impute latent labels or require a proxy error whose distribution approximates the unobserved latent error. Instead, it evaluates every candidate latent parameter through its specified forward response distribution, thereby retaining all candidates that remain compatible with conformally calibrated response evidence. Our framework is also related to hierarchical conformal prediction, although the rel-evant notion of hierarchy is different. Dunn et al. [2023] study prediction with two-layer grouped data, where observations within a group arise from a shared distribution and are therefore not exchangeable at the individual-observation level. Their subsampling and pooling procedures restore distribution-free guarantees for future observable out-comes under this dependence structure. Zhou and Zhu [2026] construct probabilistic conformal prediction intervals that remain informative across multiple levels of a spatial hierarchy. By comparison, the hierarchy in LatentCP describes the generative relation-ship from context to an instance-specific latent parameter and then to an observed response. The context–response pairs remain the units of conformal calibration, and the target is the latent parameter of a new unit rather than an observable response at a new or aggregated hierarchical level. Hierarchical conformal calibration could therefore be combined with LatentCP when the observed responses themselves exhibit grouped or multilevel dependence, but it does not by itself solve the inverse latent-inference problem considered here. Classical latent-variable inference estimates latent states, structural parameters, 4or mixing distributions using likelihood-based procedures such as the EM algorithm [Dempster et al., 1977, Balakrishnan et al., 2017], Bayesian posterior computation and data augmentation [Tanner and Wong, 1987, Hoffman and Gelman, 2014], empirical-Bayes estimation [Efron and Morris, 1973, Soloff et al., 2025], variational inference [Blei et al., 2017], and simulation-based or likelihood-free inference [Beaumont et al., 2002, Lueckmann et al., 2021]. Bayesian methods combine a likelihood or simulator with a prior or mixing distribution over the latent parameter and target its posterior distribu-tion. Empirical-Bayes methods estimate this mixing distribution from the population and use it to regularize or shrink instance-level estimates, whereas variational and simulation-based methods provide computational approximations to the resulting pos-terior inference problem. LatentCP retains the forward family linking latent parameters to responses but neither specifies nor estimates the population mixing distribution. It instead constructs a frequentist prediction set for the random latent parameter of a new instance. Thus, the forward model supplies the structural information needed to trans-fer coverage, while conformal calibration accounts for the unknown population-level heterogeneity using only observed context–response pairs. The multilevel construction in LatentCP is connected to inference with e-values. An e-value is a nonnegative statistic whose expectation under the relevant null hy-pothesis is at most one [Vovk and Wang, 2021]. This property has motivated conformal 
+
+e-prediction, which supports, among other applications, anytime-valid prediction, data-dependent coverage selection, and prediction under ambiguous ground truth [Gauthier et al., 2025]. Related ideas appear in conformalized decision-risk assessment, where an 
+
+e-value-based conformal radius yields inverse certificates for the reliability of candidate decisions [Zhou et al., 2026]. In LatentCP , the normalized probability that a candi-date forward distribution assigns outside a conformal response set is an e-value-like incompatibility score: at the true latent parameter, its expectation is bounded by one. This score is not obtained by converting a conformal p-value into an e-value. Rather, its first-moment bound follows from combining response-space conformal coverage with the candidate forward law. The e-value perspective then explains why incompatibility evi-dence from multiple response-space miscoverage rates can be averaged and thresholded without sacrificing the target latent-space coverage guarantee. Finally, this aggregation is also related to methods for merging uncertainty sets. Gasparin and Ramdas [2024] combine arbitrarily dependent confidence or prediction sets through voting, weighting, and randomization, producing a single set with con-trolled coverage without requiring access to the internal construction of the input sets. Alami et al. [2026] instead introduce a set-preserving conversion from conformal p-values to e-values, enabling efficient e-value merging and randomization while retaining the prediction set induced by each original conformal procedure. LatentCP shares the motivation that a direct intersection of valid uncertainty sets need not remain valid. Its construction, however, is not a black-box merger of the fixed-level latent sets. It aggregates the underlying forward-incompatibility scores across the conformal path be-fore applying the latent-space inclusion threshold. This additional structure allows the method to use the magnitude of the incompatibility evidence, rather than only mem-bership votes, and to exploit the possibility that different response-space miscoverage rates distinguish different regions of the latent parameter space. 52 Problem Setup 
+
+Let X ∈ X denote the context variable, let θ ∈ Θ denote the latent parameter, and let Y ∈ Y denote the response variable. We consider the following hierarchical data-generating mechanism similar to “empirical Bayes” in Efron [2024]: 
+
+X ∼ PX , θ | X = x ∼ π(· | x), Y | (X = x, θ ) ∼ Pθ(· | x). (1) The mixing distribution π(· | x) captures latent heterogeneity among instances sharing the context x. In contrast, the forward family {Pθ(· | x) : θ ∈ Θ} specifies, for every candidate latent parameter θ, the distribution of the response under context x. The formulation accommodates both discrete and continuous cases. Suppose that we observe n context–response pairs, 
+
+Dn = {(Xi, Y i)}ni=1 ,
+
+but the corresponding latent parameters θ1, . . . , θ n are hidden. Consider a new instance with covariates Xn+1 , for which both the latent parameter θn+1 and the response Yn+1 
+
+are unobserved. Given a prescribed miscoverage rate α ∈ (0 , 1) , our goal is to construct a context-dependent uncertainty set Uα(Xn+1 ; Dn) ⊆ Θ for θn+1 such that 
+
+P {θn+1 ∈ U α(Xn+1 ; Dn)} ≥ 1 − α. (2) The probability in (2) is taken jointly over the calibration sample Dn and the new instance (Xn+1 , θ n+1 , Y n+1 ). Note that Uα is a prediction set for the random, instance-specific parameter θn+1 , rather than a confidence region for a fixed population parame-ter. See Appendix A for further discussion on their distinctions. For notation simplicity, we suppress the dependence on Dn and write Uα(Xn+1 ) when no ambiguity arises. In general, constructing a valid uncertainty set for an unobserved latent parameter is theoretically impossible without additional exploitable distributional structure. In this work, we consider the following conditions: 
+
+(i) The mixing distribution π(· | x) is unknown. 
+
+(ii ) The forward family {Pθ(· | x) : θ ∈ Θ} is known and can be evaluated from. Compared with standard Bayesian inference, above conditions impose strictly weaker requirements because we do not require the “prior distribution” to be known (Con-dition ( i)). Nevertheless, they suffice to address (2) because our objective is uncer-tainty quantification rather than full posterior estimation, with the former requiring substantially less distributional information. We provide more in-depth comparisons in Appendix B. In the next subsection, we demonstrate that these two conditions are common in many real-world settings. 
+
+## 2.1 Motivating Example: Wildfire Risk Prediction 
+
+Consider a wildfire risk prediction problem. Let X ∈ Rp collect observed weather, vegetation, and topographic features, let θ ∈ Rp denote a latent model parameter, and 6let Y ∈ N0 be the number of wildfires occurring over a future time interval of length 
+
+∆. Consider the following simple Poisson model [Xu et al., 2023, Chen et al., 2026]: 
+
+θ | X = x ∼ π(· | x), Y | (X = x, θ ) ∼ Poisson (∆ λθ(x)) , λθ(x) = exp( θ⊤x),
+
+where λθ(x) is the wildfire-occurrence intensity under context x and parameter θ. In this example, the mixing distribution π(· | x) is unknown, whereas the forward family 
+
+{Pθ(· | x) : θ ∈ Θ} is analytically induced by the Poisson process. These properties satisfy Conditions ( i) and ( ii ), respectively. This model captures two layers of uncertainty: (i) Randomness in θ induces uncer-tainty about the underlying occurrence intensity λθ(x). (ii ) Even for fixed (x, θ ), the realized wildfire count remains random because of the Poisson process. A conventional prediction method constructs a prediction set for Yn+1 using the marginal response law 
+
+P (· | x) = R 
+
+> Θ
+
+Pθ(· | x) π(d θ | x). Such a set describes which wildfire outcomes may occur, but it averages over latent risk regimes and does not reveal which underlying mechanisms remain plausible. This distinction matters because different regimes can produce overlapping observed outcomes while implying different probabilities of severe events [Zhou and Zhu, 2026]. Our objective is instead to construct a set Uα(x) of plausible latent parameters, which induces the risk interval, {λθ(x) : θ ∈ U α(x)}, that can inform the deployment of mitigation measures such as de-energization, vegetation management, or infrastructure hardening. 
+
+# 3 Conformal Inference for Latent Parameters 
+
+This section develops a new framework for constructing finite-sample valid uncertainty sets for latent distributional parameters, termed LatentCP , as illustrated in Figure 1. We first use conformal prediction to construct uncertainty set in the observable response space. We then evaluate how much probability each candidate forward distribution assigns to the conformal response set and retain the candidates that are sufficiently compatible with it. In this way, response-space conformal validity can be transferred to the latent parameter space without observing latent calibration labels. 
+
+## 3.1 Response-Space Conformal Prediction 
+
+Conformal prediction calibrates predictive errors on observed context–response pairs to construct a prediction set for the response at a new context, with finite-sample marginal coverage under exchangeability [Vovk et al., 2005, Angelopoulos and Bates, 2023]. In our hierarchical setting, each observed response is generated indirectly through a sample-specific latent parameter and its associated forward distribution. The ex-changeability assumption follows from a corresponding structure at the latent level: the context–latent pairs are exchangeable, and, conditional on these pairs, the responses are independently drawn from their respective forward distributions. We formalize this sampling structure below. 
+
+Assumption 1 (Exchangeable context-latent pairs and conditional response genera-tion) . The pairs {(Xi, θ i)}n+1  
+
+> i=1
+
+are exchangeable, with θi | Xi ∼ π(· | Xi). Conditional on {(Xi, θ i)}n+1  
+
+> i=1
+
+, the responses are independent, with 
+
+Yi ∼ Pθi (· | Xi), i = 1 , . . . , n + 1 .
+
+7Calibration          
+
+> Dataset
+> Single
+> level
+> Multi
+> level
+> 𝒴
+> 𝐶 ఊ
+> 𝐶 ఊభand 𝐶 ఊమ
+> Θ
+> 𝒴
+> Step 1 : Response-space
+> conformal prediction
+> Step 2 : Response-space
+> miscoverage rate selection
+> Step 3 : Latent space
+> uncertainty set construction
+> 𝒟 ௡𝒟 ௠
+> Optimization
+> Dataset
+> 𝛾 →𝛾 ⋆
+> 𝛾 ଵ→𝛾 ଵ
+> ⋆
+> 𝛾 ଶ→𝛾 ଶ
+> ⋆
+> Theorem 1
+> (Validity)
+> Theorem 2
+> (Validity)
+> Proposition 1
+> (Sandwich)
+
+Figure 1: Illustration of the high-level algorithmic workflow of the proposed LatentCP 
+
+method. Step 1 : Construct the response-space conformal prediction set using the calibration dataset. Step 2 : Using a separate optimization dataset, we optimize the miscoverage rate (distribution) to achieve the smallest set size in the latent space. 
+
+Step 3 : The latent space uncertainty set is constructed, associated with three derived theoretical guarantees. 
+
+Lemma 1 (Exchangeability of the observed samples) . Under Assumption 1, the ob-served pairs (X1, Y 1), . . . , (Xn+1 , Y n+1 ) are still exchangeable. The proof is deferred to Appendix C.1. 
+
+Let bs : X × Y → R be a fixed nonconformity score. For example, given a predictor 
+
+bf trained independently of the calibration data, one may use bs(x, y ) = ∥y − bf (x)∥. Fix a response-space miscoverage rate γ ∈ (0 , α ), chosen independently of the calibration data and the new sample. For each calibration observation, define Si = bs(Xi, Y i), i =1, . . . , n, and let S(1) ≤ · · · ≤ S(n) denote the corresponding order statistics. Setting 
+
+kγ = ⌈(n + 1)(1 − γ)⌉ , we define bq1−γ = S(kγ ) if kγ ≤ n, with bq1−γ = + ∞ otherwise. The resulting conformal prediction set for the observable response is 
+
+Cγ (x; Dn) = {y ∈ Y : bs(x, y ) ≤ bq1−γ } .
+
+This prediction set then satisfies the finite-sample marginal coverage guarantee 
+
+P {Yn+1 ∈ C γ (Xn+1 ; Dn)} ≥ 1 − γ. (3) 
+
+## 3.2 Conformal Forward Compatibility 
+
+Our core idea is to translate conformal validity in the response space into evidence about the latent parameter through the forward family. For a candidate θ ∈ Θ and context x, define its forward γ-compatibility as 
+
+pγ (θ, x ) := PY ∼Pθ (·| x) {Y ∈ C γ (x; Dn)} . (4) Thus, pγ (θ, x ) is the probability mass that the candidate forward distribution Pθ(· | x)
+
+assigns to the (1 −γ)-level conformal response set. A larger value indicates greater “com-patibility” between the response distribution induced by θ and the predictive evidence captured by Cγ (x; Dn).8−4 −3 −2 −1 0 1 2 3 4                           
+
+> Y
+> 0.000 0.025 0.050 0.075 0.100 0.125 0.150
+> pY
+> 91 .7%
+> pY
+> CY(X;D)
+> −4−3−2−101234
+> Y
+> 0.00.10.20.30.40.50.60.70.8
+> pY |θ
+> 90%
+> X
+> 100%
+> X6%
+> ×
+> θ=−2.2
+> θ= 0 .0
+> θ= 4 .0
+> CY(X;D)
+> −6−4−20246
+> θ
+> 0.00 0.05 0.10 0.15 0.20
+> pθ 100 .0%
+> pθ
+> Uα(X;γ)
+> α= 0.20, γ= 0.10
+
+Figure 2: A stylized example of Uα(x; γ) constructed according to (5) with α = 0 .2 and 
+
+γ = 0 .10 . The synthetic data is generated as θ ∼ Unif (−3, 3) and Y | θ ∼ N (θ, 1) and let x be an arbitrary constant. Left : The marginal density pY and the uncertainty set 
+
+Cγ (x; D) constructed from split conformal prediction; Middle : The likelihood densities 
+
+pY |θ under three different configurations of θ, which are marked “ ✓” if their coverage probability with Cγ (x; D) is no lower than 1 − γα , else “ ×”. Right : The prior density pθ
+
+and Uα(x; γ), which is empirically valid ( i.e. , coverage probability no lower than 1 − α). We then define the latent uncertainty set by retaining candidates with sufficiently high forward γ-compatibility: 
+
+Uα(x; γ) := 
+
+n
+
+θ ∈ Θ : pγ (θ, x ) ≥ 1 − γα
+
+o
+
+. (5) Equivalently, Uα(x; γ) retains every latent parameter whose forward distribution assigns at most γ/α probability to responses outside the conformal set. The threshold γ/α is chosen to transfer the response-space error bound γ into the target latent miscoverage rate α. Figure 2 presents a stylized example that illustrates the proposed procedure. The following theorem formalizes this transfer. 
+
+Theorem 1 (Finite-sample validity of LatentCP ). Under Assumptions 1, 
+
+P {θn+1 ∈ U α(Xn+1 ; γ)} ≥ 1 − α. 
+
+The proof is deferred to Appendix C.2. 
+
+Theorem 1 converts a conformal guarantee for the observable response into finite-sample coverage for the unobserved latent parameter, without requiring latent calibra-tion labels or knowledge of the mixing distribution π(· | x). Although this guarantee holds for every fixed γ ∈ (0 , α ), the choice of γ can substantially affect the efficiency (i.e. , size) of the resulting latent uncertainty set. Specifically, decreasing γ enlarges Cγ ,which tends to increase the forward compatibility pγ (θ, x ), but also raises the inclusion threshold 1 − γ/α , requiring a candidate parameter to achieve greater compatibility to be retained. Increasing γ reverses both effects. Because these effects work in opposite directions, the latent uncertainty set need not expand or contract monotonically with 
+
+γ, and neither the smallest nor the largest admissible level is necessarily optimal. Their relationship is further illustrated by the first row of Figure 3. Across the four synthetic settings, the average set size curve demonstrates a near-convex shape as a function of 
+
+γ. An optimal γ⋆ clearly exists, and the set size improvement is nontrivial. 9α = 0 .1 α = 0 .2 α = 0 .3 δγ min γ′ 12(δγ + δγ′ ) Optimal path γ′?(γ)0.0 0.1 0.2 0.3   
+
+> γ
+> 3
+> 4
+> 5
+> 6
+> Average set size
+> 0.05 0.10 0.15
+> Displayed level γ
+> 0.05 0.10 0.15
+> Mixture partner  γ′
+> 3.75 4.00 4.25 4.50 4.75 5.00 5.25 5.50
+> Average set size
+
+(a) Gaussian. 0.0 0.1 0.2 0.3    
+
+> γ
+> 5.0
+> 5.5
+> 6.0
+> Average set size
+> 0.05 0.10 0.15
+> Displayed level γ
+> 0.05 0.10 0.15
+> Mixture partner  γ′
+> 5.25.45.65.86.06.2
+> Average set size
+
+(b) Poisson. 0.0 0.1 0.2 0.3    
+
+> γ
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Average set size
+> 0.05 0.10 0.15
+> Displayed level γ
+> 0.05 0.10 0.15
+> Mixture partner  γ′
+> 0.40.50.60.70.80.91.0
+> Average set size
+
+(c) Bernoulli. 0.0 0.1 0.2 0.3    
+
+> γ
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Average set size
+> 0.05 0.10 0.15
+> Displayed level γ
+> 0.05 0.10 0.15
+> Mixture partner  γ′
+> 0.00.10.20.30.40.5
+> Average set size
+
+(d) Categorical. 
+
+Figure 3: Effect of the auxiliary miscoverage rate γ′ on the size of the LatentCP uncer-tainty set under four synthetic data-generating mechanisms. Top : comparison of the original point-mass construction δγ with the two-point e-value mixture νγ,γ ′ = 12 δγ + 12 δγ′ .The mixture-set size is minimized over γ′ for each γ. Curves report the average uncertainty-set size over 60 Monte Carlo repetitions with 3, 000 calibration samples for α ∈ { 0.1, 0.2, 0.3}, and solid dots mark the minimizing γ⋆. Bottom : Visualization of the corresponding two-dimensional mixture-set-size surfaces over (γ, γ ′) for α = 0 .2,with the curves indicating the minimizing γ′⋆(γ). Each column corresponds to a distinct data-generating distribution, whose configuration details are deferred to Appendix D.1. 
+
+# 4 Multilevel-Miscoverage Uncertainty Set 
+
+We next examine how to select the response-space miscoverage rate γ—and whether multiple miscoverage rates can be leveraged—to improve the efficiency ( i.e. , size) of the latent uncertainty set while preserving its coverage guarantee. Because different response miscoverage rates may extract complementary information about θ, a natural approach is to combine the uncertainty sets obtained along the conformal path. Adirect intersection, however, is not generally valid, since the marginal validity of the individual sets does not imply validity of their intersection. We therefore develop a randomized construction that aggregates normalized forward-incompatibility scores across response-space miscoverage rates before applying the latent-space inclusion threshold. The resulting procedure preserves finite-sample validity, con-tains every fixed-level method as a special case, and can exploit complementary evidence across levels. Its advantage is not uniform, however: aggregation may shrink the set when different levels distinguish different regions of the latent space, but may enlarge it by diluting a strong level-specific signal. We accordingly formulate the choice of miscoverage-level sampling as an optimization problem that minimizes the expected measure of the resulting latent uncertainty set. 10 4.1 Randomized Miscoverage Rate Selection 
+
+Recall that pγ (θ, x ) denotes the probability mass that the forward distribution indexed by θ assigns to the conformal response set Cγ (x; Dn). We define the corresponding forward-incompatibility probability as 1 − pγ (θ, x ). When evaluated at the true latent parameter of the future instance, this quantity satisfies 
+
+E [1 − pγ (θn+1 , X n+1 )] = P {Yn+1 /∈ C γ (Xn+1 ; Dn)} ≤ γ. 
+
+where the equality follows from the law of iterated expectation over the calibration sample and the future context–latent–response triple. The final inequality follows from the marginal conformal coverage guarantee. This observation motivates the normalized 
+
+γ-incompatibility score 
+
+eγ (θ, x ) := 1 − pγ (θ, x )
+
+γ .
+
+At the true latent parameter, E [eγ (θn+1 , X n+1 )] ≤ 1. Thus, eγ satisfies the first-moment property of an e-value-type statistic for assessing the compatibility of a candidate latent parameter with the response-space prediction set [Vovk and Wang, 2021]. Let Γ ⊂ (0 , α ) be a prespecified collection of admissible response-space miscoverage rates, and let P(Γ) denote the set of probability distributions supported on Γ. For any 
+
+ν ∈ P (Γ) , define the randomized incompatibility score 
+
+eν (θ, x ) := 
+
+Z
+
+> Γ
+
+eγ (θ, x ) d ν(γ) = 
+
+Z
+
+> Γ
+
+1 − pγ (θ, x )
+
+γ dν(γ).
+
+We then construct the e-value-based latent uncertainty set as follows: 
+
+Uα(x; ν) := 
+
+
+
+θ ∈ Θ : eν (θ, x ) ≤ 1
+
+α
+
+
+
+. (6) Unlike the procedure in (5) that selects a single level γ and returns Uα(x; γ), the con-struction in (6) produces a set that combines the scores eγ (θ, x ) across all levels in the support of ν before applying the inclusion threshold 1/α .
+
+Theorem 2 (Validity of the randomized construction) . Suppose that the conditions of Theorem 1 hold. Let ν ∈ P (Γ) be fixed independently of the calibration sample and the future instance. Then 
+
+P {θn+1 ∈ U α(Xn+1 ; ν)} ≥ 1 − α. 
+
+The proof is deferred to Appendix C.3. 
+
+Remark 1 (Recovery of the fixed-level construction) . The original fixed-level uncer-tainty set is recovered by taking ν = δγ , where δγ denotes the point mass at γ. In this case, eδγ (θ, x ) = eγ (θ, x ), and consequently, 
+
+Uα(x; δγ ) = Uα(x; γ).
+
+Thus, the randomized construction contains every fixed-level procedure as a special case and introduces no additional coverage penalty. 
+
+11 0.0 0.2 0.4 0.6 0.8 1.0        
+
+> θ1
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> θ2
+> (U1∪ U 2)\ U α(ν?)
+> Uα(ν?)\(U1∩ U 2)
+> U1∩ U 2
+> ∂Θ
+> ∂Uα(δγ?
+> 1)
+> ∂Uα(δγ?
+> 2)
+
+Figure 4: Visualization of the constructed latent uncertainty set with LatentCP with the categorical example used in Figure 3(d). Let Ui denote the single-level uncertainty constructed by using the point mass δγ⋆i according to (5), the e-value-based mixture set 
+
+Uα(ν⋆) strictly contains the intersection set U1 ∩ U 2, but is also contained within the union set U1 ∪ U 2, which directly illustrates Proposition 1. 
+
+## 4.2 Optimal Weighting for Set-Size Minimization 
+
+To understand the effect of the randomization in (6), consider a finite collection Γ = 
+
+{γ1, . . . , γ K } and a discrete distribution ν = PKk=1 wkδγk , w k > 0, PKk=1 wk = 1 . The randomized incompatibility score is then eν (θ, x ) = PKk=1 wkeγk (θ, x ). The correspond-ing aggregated set lies between the intersection and the union of the fixed-level sets. 
+
+Proposition 1 (Sandwich property) . For every x and every realization of Dn,
+
+> K
+
+\
+
+> k=1
+
+Uα(x; γk) ⊆ U α(x; ν) ⊆
+
+> K
+
+[
+
+> k=1
+
+Uα(x; γk).
+
+The proof is deferred to Appendix C.4. 
+
+Figure 4 illustrates how multilevel aggregation changes the geometry of the latent uncertainty set using a two-level categorical example with the same setup as Figure 3(d). Comparing the aggregated set with the two fixed-level sets U1 and U2 demonstrates the strict inclusions established in Proposition 1. One interpretation of the sandwich behavior is that multilevel aggregation balances two opposing effects. (i) Different response levels may provide complementary evidence against different regions of the latent parameter space. If one level assigns large incompatibility scores to one group of candidates and another level does so for a different group, their weighted average may exceed 1/α on both groups, making the aggregated set smaller than either fixed-level set. (ii ) Aggregation may also dilute a strong level-specific signal. A candidate that is strongly incompatible at one level may receive small scores at the remaining levels, causing its averaged score to fall below 1/α and the candidate to be retained despite its exclusion by the most informative level. As a result, Uα(x; ν) need not be contained in, or contain, any particular fixed-level set Uα(x; γk).To quantify the efficiency of an uncertainty set, let μ be a measure on Θ, e.g. ,Lebesgue measure for a continuous parameter space, counting measure for a discrete 12 parameter space, or a problem-specific weighted measure. Define the population ex-pected size of the aggregated procedure as 
+
+μ(ν) := E [μ (Uα(Xn+1 ; ν))] .
+
+We seek an optimal weighting distribution that solves 
+
+ν⋆ ∈ arg min  
+
+> ν∈P (Γ)
+
+μ(ν). (7) Because every point mass δγ belongs to P(Γ) ,
+
+inf  
+
+> ν∈P (Γ)
+
+μ(ν) ≤ inf  
+
+> γ∈Γ
+
+E [μ (Uα(Xn+1 ; γ))] .
+
+Thus, at the population-oracle level, optimization over the expanded multi-level class cannot yield a larger expected set than the best fixed-level procedure. A nondegenerate distribution ν may strictly improve upon all point masses when different response levels provide sufficiently complementary information. Conversely, when one level provides the strongest discrimination throughout the relevant latent parameter space, assigning positive weight to other levels may only dilute its signal, and an optimal distribution may concentrate on a single level. This distinction is illustrated by Figure 3. In the Gaussian, Poisson, and Bernoulli settings, the optimized multilevel and single-level constructions attain the same average set size, and the optimal pair (γ⋆, γ ′⋆) lies on the diagonal γ′ = γ. Thus, the optimized mixing distribution collapses to a point mass, and the multilevel construction reduces to its single-level counterpart. By contrast, in the final setting, the optimal pair satisfies 
+
+γ′⋆̸ = γ⋆, and the resulting nondegenerate mixing distribution yields a strictly smaller average set size than the best single-level construction. This example demonstrates that multilevel aggregation can provide either no or strict efficiency improvement under different distributional conditions. In practice, ν must be selected independently of the calibration sample used to construct the final conformal response sets. To achieve this independence, one may use an auxiliary tuning sample set to estimate μ(ν) and select a distribution bν. The selected distribution is then held fixed while the conformal response sets and the final latent uncertainty set are constructed using an independent calibration sample. Conditional on the tuning sample, bν is fixed and independent of the calibration sample and the future instance. Therefore, Theorem 2 applies conditionally on the tuning sample, and the resulting procedure retains its finite-sample marginal coverage guarantee. 
+
+## 4.3 Computational Implementation 
+
+Direct optimization over all probability distributions supported on the response-level space in (7) is generally difficult because the class is infinite-dimensional. Although one could, in principle, use a sampling-based procedure to search over candidate dis-tributions, such a procedure may still be computationally demanding. We restrict the weighting distribution to a simplex ∆K := 
+
+n
+
+w ∈ [0 , 1] K : PKk=1 wk = 1 
+
+o
+
+, and define 
+
+PK (Γ) := 
+
+(
+
+νγ,w =
+
+> K
+
+X
+
+> k=1
+
+wkδγk : γ = ( γ1, . . . , γ K ) ∈ ΓK , w ∈ ∆K
+
+)
+
+.
+
+13 The optimization in (7) therefore reduces to selecting the locations of the K response-space miscoverage rates and their aggregation weights. When K = 1 , this construction recovers the original fixed-level procedure by selecting a single point mass. When K > 1,the algorithm jointly optimizes multiple levels and aggregates their evidence through the weighted incompatibility score 
+
+eν (θ, x ) = 
+
+> K
+
+X
+
+> k=1
+
+wkeγk (θ, x ).
+
+This restriction converts the infinite-dimensional optimization over distributions into a finite-dimensional optimization over support locations and simplex weights. Once the weighting distribution has been selected and fixed, constructing the latent uncertainty set requires evaluating the forward probability in (4) at each of its support levels and aggregating the resulting incompatibility scores. Each forward probability can be computed analytically, by numerical integration, or using a Monte Carlo ap-proximation when the forward law is tractable. For a discrete latent parameter space, we evaluate this quantity at every parameter value. For a continuous latent parame-ter space, we evaluate it over a finite design ΘN = {θ1, . . . , θ N } and retain candidates according to the rule pγ (θ, x ) ≥ 1 − γ/α for a point mass, or eν (θ, x ) ≤ 1/α for the multilevel construction. Tensor grids are convenient in low dimensions, whereas space-filling designs and local refinement near the boundary eν (θ, x ) = 1 /α are more suitable in higher dimensions. The evaluations are independent across candidates and can there-fore be parallelized. The same forward draws can be reused across all support levels and candidate sup-port tuples. After computing their nonconformity scores once, changing a support level only changes the corresponding calibrated threshold bq1−γk . Moreover, the optimization over support locations need only consider the conformal breakpoints generated by the independent tuning sample set. The resulting finite search can be performed jointly for a small number of support points or through coordinate and local-search procedures when the number is larger. Appendix D gives the complete procedure, its computational complexity, and a conservative enlargement that accounts for parameter discretization and numerical integration or Monte Carlo error. 
+
+# 5 Experiments 
+
+This section evaluates the validity and efficiency of LatentCP across synthetic and real-data settings. We examine whether it maintains nominal latent coverage under weak identification, observational nonidentifiability, and model heterogeneity, and compare its set size with Bayesian, likelihood-based, noisy-label conformal, and oracle baselines. We also assess the benefits of miscoverage-rate tuning and multilevel aggregation. 
+
+Baseline Methods and Evaluation We evaluate three variants of our method: 
+
+LatentCP Base , which uses the prespecified response-space miscoverage rate γ = α/ 2;
+
+LatentCP Tuned , which selects γ by minimizing average latent-set size on an indepen-dent tuning sample; and LatentCP Multi-γ, which uses the same tuning sample to jointly select two levels γ1, γ 2 and a weight w, and aggregates them. After tuning, all 14 conformal thresholds are recalibrated on an independent calibration sample. We com-pare these variants with four representative baselines. EmpBayes posits a parametric family for the latent mixing distribution, estimates its parameters from the training data, and returns the smallest region with probability at least 1 − α [Efron and Morris, 1973, Ignatiadis and Wager, 2019]. NPMLE replaces the parametric mixing model with a discrete mixing distribution estimated by maximizing the marginal response likelihood over the common latent-parameter grid and returns the corresponding plug-in 1 − α
+
+latent region [Lindsay, 1995, Soloff et al., 2025]. Noisy CP computes a point-valued in-verse estimate of the latent parameter from each observed context–response pair, treats these estimates as noisy calibration labels, and applies standard split conformal pre-diction [Lei et al., 2018, Einbinder et al., 2024, Feldman et al., 2025]. Finally, Oracle CP applies split conformal prediction directly to the true calibration latent parameters; although unavailable in practice, it provides a reference for the efficiency attainable with fully observed latent labels [Lei et al., 2018]. All feasible methods use the same training, tuning, calibration, and test splits and receive only the context of each test instance; neither its response nor its latent parameter is observed. We use target cov-erage 1 − α = 0 .9 throughout and evaluate each method by empirical latent coverage and average uncertainty-set size, measured by cardinality for discrete parameter spaces and grid-weighted volume for continuous spaces. Figures report set size normalized by the mean Oracle CP size within each setting, and all tables and figures report averages and standard errors across independent simulation runs or real-data splits. Efficiency comparisons are made only among methods attaining the nominal coverage level. More details on the experimental setup are deferred to Appendix E. 
+
+## 5.1 Synthetic Results 
+
+We generate each synthetic dataset according to the hierarchical mechanism in Sec-tion 2. For each unit, we first sample a context Xi, then draw an instance-specific latent parameter θi from a model-specific conditional mixing distribution, and finally generate the observable response from the forward law Yi | (Xi, θ i) ∼ Pθi (· | Xi). The latent parameters are retained only for evaluating coverage and implementing Oracle CP; they are hidden from LatentCP and all other feasible methods. Each dataset is divided into independent training, tuning, calibration, and test samples. The tuning sample is used to select the response-space miscoverage rate or multilevel aggregation distribution, after which the conformal response sets are recalibrated on the calibra-tion sample. All methods are evaluated on the same test instances at target coverage 
+
+1−α = 0 .9. We report empirical latent coverage and average uncertainty-set size, using cardinality for discrete parameter spaces and volume for continuous spaces. Set sizes in Figures 6 are normalized by the mean Oracle CP size within each setting. The experiments cover both one- and two-dimensional latent parameters and are de-signed to isolate different forms of indirect-observation difficulty. The one-dimensional settings include a Gaussian mixture model with Y | (θ, X ) ∼ N (θ, 0.22), a sign-nonidentifiable model with Y | (θ, X ) ∼ N (θ2, 0.25 2), a three-regime Gaussian-mixture model with crossing response distributions, and an aliased point-mass mixture with uni-form contamination. These settings respectively represent latent heterogeneity, exact observational nonidentifiability, weak separation between latent regimes, and discrete aliasing. We also consider four two-dimensional forward models: Gaussian location– 15 LatentCP Multi- Oracle CP Oracle region EmpBayes NPMLE Noisy CP -1.7 1.7        
+
+> 1
+> -0.5
+> 0.9
+> 2(a) Gaussian. -0.3 0.7
+> 1
+> 1.2
+> 4.2
+> 2(b) Negative-binomial. 0.4 0.7
+> 1
+> 3.3
+> 6.0
+> 2(c) Beta-binomial. -0.5 0.8
+> 1
+> 1.5
+> 4.2
+> 2(d) Student t.
+
+Figure 5: Representative two-dimensional latent uncertainty sets for four forward-model families at a fixed test context. Gray shading represents the true conditional density of the latent parameter, while colored contours delineate the uncertainty sets produced by LatentCP and the competing methods at the target miscoverage level α = 0 .3. The panels illustrate how the methods differ in their treatment of latent dependence, weak identification, and multiple observationally compatible parameter regions. scale, negative-binomial, beta-binomial, and Student t, each with a context-dependent multimodal latent distribution. Each synthtic experiments are averaged over 50 inde-pendent runs 
+
+Geometry of the latent sets. Figure 5 visualizes representative two-dimensional uncertainty sets for Gaussian, negative-binomial, beta-binomial, and Student-t forward models at a fixed test context. The gray shading shows the true conditional latent density for evaluation only and is unavailable to LatentCP . The multilevel LatentCP sets reflect the geometry of forward compatibility. In contrast, empirical-Bayes, likelihood-based, and noisy-label procedures may concentrate on a single estimated mode or inverse branch, excluding other observationally compatible regions. Oracle CP applies split conformal prediction using the true latent calibration labels, whereas the Oracle region additionally assumes knowledge of the full conditional latent distribution and returns its smallest 1 − α probability region. 
+
+Coverage–efficiency analysis. Figures 6 show that all LatentCP variants attain the target latent coverage across both one- and two-dimensional settings. The competing empirical-Bayes, likelihood-based, and noisy-label conformal methods can be efficient when their prior or inverse assumptions are favorable, but frequently under-cover un-der sign nonidentifiability, regime crossing, discrete aliasing, and interactions among multiple latent components. In contrast, LatentCP retains all parameter values whose forward distributions remain compatible with the observable response evidence. Its sets are consequently larger than those of Oracle CP, particularly when distinct latent parameters induce similar responses; this gap reflects the information lost when latent calibration labels are unavailable. Independent tuning and multilevel aggregation gen-erally reduce set size relative to the fixed-level construction while preserving validity, with the largest gains occurring when different response-space miscoverage rates provide complementary information. 16 LatentCP Base LatentCP Tuned LatentCP Multi-γ EmpBayes NPMLE Noisy CP Oracle CP Valid coverage 0.4 0.7 1.0
+
+> Coverage
+> 0.7
+> 0.8
+> 0.9
+> 1.0
+> 1.1
+> Normalized Set Size
+
+(a) Gaussian mixture. 0.4 0.7 1.0 
+
+> Coverage
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> Normalized Set Size
+
+(b) Sign non-identify. 0.4 0.7 1.0 
+
+> Coverage
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> Normalized Set Size
+
+(c) Regime crossing. 0.4 0.7 1.0 
+
+> Coverage
+> 1
+> 3
+> 5
+> 7
+> 9
+> Normalized Set Size
+
+(d) Aliased spikes. 0.0 0.5 1.0
+
+> Coverage
+> 10 0
+> Normalized Set Size
+
+(e) Gaussian. 0.0 0.5 1.0 
+
+> Coverage
+> 10 −1
+> 10 0
+> Normalized Set Size
+
+(f) Negative-binomial. 0.0 0.5 1.0 
+
+> Coverage
+> 10 −1
+> 10 0
+> Normalized Set Size
+
+(g) Beta-binomial. 0.0 0.5 1.0 
+
+> Coverage
+> 10 −1
+> 10 0
+> Normalized Set Size
+
+(h) Student t.
+
+Figure 6: Coverage–efficiency comparison across one- and two-dimensional synthetic settings. The top row shows four one-dimensional stress tests, and the bottom row shows four two-dimensional latent-parameter models; exact forward distributions and parameter grids are provided in Appendix E. Each point reports mean latent coverage and set size normalized by the mean Oracle CP set size within the corresponding setting. The shaded region indicates coverage at or above the target level 1 − α = 0 .9, while the dashed lines mark nominal coverage and normalized Oracle CP size. The vertical axes are logarithmic in the two-dimensional settings. 
+
+## 5.2 Real Data Results 
+
+We use Monitoring Trends in Burn Severity (MTBS) records of mapped large California wildfires [Eidenshink et al., 2007, Finco et al., 2012], and focus on 1, 689 wildfire events recorded from 1984 –2023 . We consider two spatial resolutions: California’s 58 counties for visual illustration and 50 -km grid cells for the formal analysis. Let s index a spatial unit under the chosen resolution, and divide the 40 -year study period into ten nonover-lapping four-year windows indexed by t. For each spatial-unit–window pair (s, t ), Ys,t is the recorded wildfire count, while Xs,t ∈ R10 includes standardized spatial coordinates and time, log exposure, preceding-window count and historical rate through t − 1. We then model the observed count as 
+
+Ys,t | Xs,t , λ s,t ∼ Poisson(∆ s,t λs,t ),
+
+where ∆s,t is area–time exposure and λs,t is the latent fire-occurrence rate. We fit the response model on 1984 –2003 , tune γ on 2004 –2007 , calibrate on 2008 –2015 , and evaluate on 2016 –2023 , using α = 0 .10 .We first present an illustrative county-level analysis in Figure 7, where s indexes Cal-ifornia’s 58 counties. Panel (a) shows the observed counts for 2020–2023, panels (b)–(c) show the LatentCP lower and upper intensity endpoints, and panel (d) shows interval width. The results reveal substantial spatial heterogeneity: lower endpoints remain 17 0 4 8 11 15 19      
+
+> MTBS fires in 2020-2023 (a) Observed Y.(b) Lower bound. (c) Upper bound. (d) Set size. 0.00
+> 0.05
+> 0.20
+> 0.50
+> 1.00
+> Annual fire intensity
+> per 1,000 km 2
+
+Figure 7: County-level wildfire counts and latent-intensity uncertainty in California. Panel (a) shows MTBS counts for 2020 –2023 ; panels (b)–(d) show the LatentCP lower bound, upper bound, and interval width, respectively. near zero in many counties, whereas the upper endpoints and widths highlight regions with greater latent uncertainty. Figure 8 reports the formal analysis using 179 retained 
+
+50 -km grid cells, providing more spatial units than the county-level aggregation. Rela-tive to the fixed choice γ = α/ 2, tuning reduces mean latent-set size by 11 .1% across the test observations. The figure distinguishes the two inferential targets: Cγ represents uncertainty in the future fire event count, whereas Uα directly represents uncertainty in the underlying intensity after transfer through the Poisson forward model. The dashed Poisson MLE band is a standard model-based reference, obtained by substitut-ing the fitted intensity bλ into the Poisson variance. Unlike this plug-in approximation, LatentCP incorporates uncertainty calibrated from the observed population. Because counts and intensities have different units, their relative widths on the shared nonlinear axis are for illustrative purpose. Overall, LatentCP converts response-level uncertainty into spatially adaptive uncertainty sets for the unobserved fire intensity. 
+
+# 6 Conclusion and Discussion 
+
+This paper introduced LatentCP , a conformal framework for constructing finite-sample valid uncertainty sets for unobserved, instance-specific distributional parameters. By transferring a conformal response set through a specified forward model, LatentCP 
+
+avoids requiring latent calibration labels, a unique inverse mapping, or knowledge of the latent mixing distribution. Its multilevel extension aggregates e-value-like incom-patibility scores across response-space miscoverage rates to improve efficiency while preserving validity. Experiments demonstrate reliable coverage under weak identifi-cation, observational aliasing, and confounding, where methods relying on estimated latent labels or mixing distributions may under-cover. Several limitations suggest directions for future work. The framework provides marginal rather than conditional coverage and relies on an adequately specified for-ward model. Extending it to forward-model misspecification, context-dependent valid-ity, and high-dimensional or distribution-valued latent parameters constitutes impor-tant future work. Scalable compatibility evaluation, richer multilevel aggregation, and 18 Figure 8: Response and latent uncertainty for California wildfire data. The x-axis indexes grid cells ordered by their fitted intensities bλ, while the shared nonlinear y-axis displays fire counts and latent intensities. Shading area shows Cγ and Uα; points are observed counts, and dashed curves show a baseline Poisson Wald–type uncertainty band. applications involving repeated or dependent responses are also promising directions. Overall, LatentCP provides a principled bridge from conformal prediction of observable responses to uncertainty quantification for their latent generative mechanisms. 
+
+# References 
+
+Ahmed M Alaa, Zaid Ahmad, and Mark van der Laan. Conformal meta-learners for predictive inference of individual treatment effects. Advances in neural information processing systems , 36:47682–47703, 2023. Nabil Alami, Jad Zakharia, and Souhaib Ben Taieb. Set-preserving calibration from conformal p-values to e-values. arXiv preprint arXiv:2606.03600 , 2026. Anastasios N Angelopoulos and Stephen Bates. A gentle introduction to confor-mal prediction and distribution-free uncertainty quantification. arXiv preprint arXiv:2107.07511 , 2021. Anastasios N Angelopoulos and Stephen Bates. Conformal prediction: A gentle intro-duction. Foundations and Trends in Machine Learning , 16(4):494–591, 2023. Sivaraman Balakrishnan, Martin J. Wainwright, and Bin Yu. Statistical guarantees for the EM algorithm: From population to sample-based analysis. The Annals of Statistics , 45(1):77 – 120, 2017. doi: 10.1214/16-AOS1435. URL https://doi.org/ 10.1214/16-AOS1435 .19 David J Bartholomew, Martin Knott, and Irini Moustaki. Latent variable models and factor analysis: A unified approach . John Wiley & Sons, 2011. Mark A Beaumont, Wenyang Zhang, and David J Balding. Approximate bayesian computation in population genetics. Genetics , 162(4):2025–2035, 2002. David M Blei, Alp Kucukelbir, and Jon D McAuliffe. Variational inference: A review for statisticians. Journal of the American statistical Association , 112(518):859–877, 2017. Shuyi Chen, Shixiang Zhu, and Ramteen Sioshansi. Large-scale resilience planning for wildfire-prone electricity-system via adaptive robust optimization. arXiv preprint arXiv:2604.01232 , 2026. John Cherian, Isaac Gibbs, and Emmanuel Candes. Large language model validity via enhanced conformal prediction methods. Advances in Neural Information Processing Systems , 37:114812–114842, 2024. Arthur P Dempster, Nan M Laird, and Donald B Rubin. Maximum likelihood from incomplete data via the em algorithm. Journal of the royal statistical society: series B (methodological) , 39(1):1–22, 1977. Jacopo Diquigiovanni, Matteo Fontana, and Simone Vantini. Conformal prediction bands for multivariate functional data. Journal of Multivariate Analysis , 189:104879, 2022. Robin Dunn, Larry Wasserman, and Aaditya Ramdas. Distribution-free prediction sets for two-layer hierarchical models. Journal of the American Statistical Association ,118(544):2491–2502, 2023. Bradley Efron. Empirical bayes: Concepts and methods. In Handbook of Bayesian, Fiducial, and Frequentist Inference , pages 8–34. Chapman and Hall/CRC, 2024. Bradley Efron and Carl Morris. Stein’s estimation rule and its competitors—an em-pirical bayes approach. Journal of the American Statistical Association , 68(341): 117–130, 1973. Jeff Eidenshink, Brian Schwind, Ken Brewer, Zhi-Liang Zhu, Brad Quayle, and Stephen Howard. A project for monitoring trends in burn severity. Fire ecology , 3(1):3–21, 2007. Bat-Sheva Einbinder, Shai Feldman, Stephen Bates, Anastasios N Angelopoulos, Asaf Gendler, and Yaniv Romano. Label noise robustness of conformal prediction. Journal of Machine Learning Research , 25(328):1–66, 2024. B Everett. An introduction to latent variable models . Springer Science & Business Media, 2013. Shai Feldman, Stephen Bates, and Yaniv Romano. Conformal prediction with cor-rupted labels: Uncertain imputation and robust re-weighting. arXiv preprint arXiv:2505.04733 , 2025. 20 Mark Finco, Brad Quayle, Yuan Zhang, Jennifer Lecker, Kevin A Megown, and C Ken-neth Brewer. Monitoring trends and burn severity (mtbs): Monitoring wildfire ac-tivity for the past quarter century using landsat data. In In: Morin, Randall S.; Liknes, Greg C., comps. Moving from status to trends: Forest Inventory and Anal-ysis (FIA) symposium 2012; 2012 December 4-6; Baltimore, MD. Gen. Tech. Rep. NRS-P-105. Newtown Square, PA: US Department of Agriculture, Forest Service, Northern Research Station.[CD-ROM]: 222-228. , pages 222–228, 2012. Matteo Gasparin and Aaditya Ramdas. Merging uncertainty sets via majority vote. 
+
+arXiv preprint arXiv:2401.09379 , 2024. Etienne Gauthier, Francis Bach, and Michael I Jordan. E-values expand the scope of conformal prediction. arXiv preprint arXiv:2503.13050 , 2025. Trevor Harris and Yan Liu. Locally adaptive conformal inference for operator models. 
+
+arXiv preprint arXiv:2507.20975 , 2025. Matthew D. Hoffman and Andrew Gelman. The no-u-turn sampler: Adaptively setting path lengths in hamiltonian monte carlo. Journal of Machine Learning Research , 15 (47):1593–1623, 2014. URL http://jmlr.org/papers/v15/hoffman14a.html .Nikolaos Ignatiadis and Stefan Wager. Covariate-powered empirical bayes estimation. 
+
+Advances in Neural Information Processing Systems , 32, 2019. Piyush Jain, Sean CP Coogan, Sriram Ganapathi Subramanian, Mark Crowley, Steve Taylor, and Mike D Flannigan. A review of machine learning applications in wildfire science and management. Environmental Reviews , 28(4):478–505, 2020. Alireza Javanmardi, Yusuf Sale, Paul Hofman, and Eyke Hüllermeier. Conformal pre-diction with partially labeled data. In Conformal and Probabilistic Prediction with Applications , pages 251–266. PMLR, 2023. B. J. K. Kleijn and A. W. van der Vaart. Misspecification in infinite-dimensional Bayesian statistics. The Annals of Statistics , 34(2):837 – 877, 2006. doi: 10.1214/ 009053606000000029. URL https://doi.org/10.1214/009053606000000029 .Yehuda Koren, Robert Bell, and Chris Volinsky. Matrix factorization techniques for recommender systems. Computer , 42(8):30–37, 2009. Jing Lei, Alessandro Rinaldo, and Larry Wasserman. A conformal prediction approach to explore functional data. Annals of Mathematics and Artificial Intelligence , 74(1): 29–43, 2015. Jing Lei, Max G’Sell, Alessandro Rinaldo, Ryan J. Tibshirani, and Larry Wasserman. Distribution-free predictive inference for regression. Journal of the American Statis-tical Association , 113(523):1094–1111, 2018. doi: 10.1080/01621459.2017.1307116. Lihua Lei and Emmanuel J Candès. Conformal inference of counterfactuals and indi-vidual treatment effects. Journal of the Royal Statistical Society Series B: Statistical Methodology , 83(5):911–938, 2021. 21 Jordan Lekeufack, Anastasios N Angelopoulos, Andrea Bajcsy, Michael I Jordan, and Jitendra Malik. Conformal decision theory: Safe autonomous decisions from imper-fect predictions. In 2024 IEEE International Conference on Robotics and Automation (ICRA) , pages 11668–11675. IEEE, 2024. Bruce G. Lindsay. Mixture Models: Theory, Geometry, and Applications , volume 5 of NSF-CBMS Regional Conference Series in Probability and Statistics . Institute of Mathematical Statistics and American Statistical Association, Hayward, CA and Alexandria, VA, 1995. ISBN 9780940600324. doi: 10.1214/cbms/1462106013. Jan-Matthis Lueckmann, Jan Boelts, David Greenberg, Pedro Goncalves, and Jakob Macke. Benchmarking simulation-based inference. In Arindam Banerjee and Kenji Fukumizu, editors, Proceedings of the 24th International Conference on Artificial Intelligence and Statistics , volume 130 of Proceedings of Machine Learning Re-search , pages 343–351. PMLR, 2021. URL https://proceedings.mlr.press/v130/ lueckmann21a.html .Balz Maag, Zimu Zhou, and Lothar Thiele. A survey on sensor calibration in air pollution monitoring deployments. IEEE Internet of Things Journal , 5(6):4857–4870, 2018. Susan A Murphy and Aad W Van der Vaart. On profile likelihood. Journal of the American Statistical Association , 95(450):449–465, 2000. Yudi Pawitan. In all likelihood: statistical modelling and inference using likelihood .Oxford University Press, 2001. Glenn Shafer and Vladimir Vovk. A tutorial on conformal prediction. Journal of Machine Learning Research , 9:371–421, 2008. Toru Shirakawa, Tetsuro Morimura, Hiroki Yanagisawa, and Tatsushi Oka. A Con-formalized Inference on Unobservable Variables. OpenReview, 2025. URL https: //openreview.net/forum?id=3FdIUbIjXb .Jake A Soloff, Adityanand Guntuboyina, and Bodhisattva Sen. Multivariate, het-eroscedastic empirical bayes via nonparametric maximum likelihood. Journal of the Royal Statistical Society Series B: Statistical Methodology , 87(1):1–32, 2025. Andrew M Stuart. Inverse problems: a bayesian perspective. Acta numerica , 19:451– 559, 2010. Martin A Tanner and Wing Hung Wong. The calculation of posterior distributions by data augmentation. Journal of the American statistical Association , 82(398):528–540, 1987. Vladimir Vovk and Ruodu Wang. E-values: Calibration, combination and applications. 
+
+The Annals of Statistics , 49(3):1736–1754, 2021. Vladimir Vovk, Alexander Gammerman, and Glenn Shafer. Algorithmic Learning in a Random World . Springer, New York, 2005. ISBN 978-0-387-00152-4. doi: 10.1007/ b106715. 22 Abraham Wald. Tests of statistical hypotheses concerning several parameters when the number of observations is large. Transactions of the American Mathematical society ,54(3):426–482, 1943. Zhendong Wang, Ruijiang Gao, Mingzhang Yin, Mingyuan Zhou, and David Blei. Prob-abilistic conformal prediction using conditional random samples. In Francisco Ruiz, Jennifer Dy, and Jan-Willem van de Meent, editors, Proceedings of The 26th Interna-tional Conference on Artificial Intelligence and Statistics , volume 206 of Proceedings of Machine Learning Research , pages 8814–8836. PMLR, 25–27 Apr 2023. URL 
+
+https://proceedings.mlr.press/v206/wang23n.html .Chen Xu, Yao Xie, Daniel A Zuniga Vazquez, Rui Yao, and Feng Qiu. Spatio-temporal wildfire prediction using multi-modal data. IEEE Journal on Selected Areas in In-formation Theory , 4:302–313, 2023. Chen Xu, Hanyang Jiang, and Yao Xie. Conformal prediction for multi-dimensional time series by ellipsoidal sets. In Proceedings of the 41st International Conference on Machine Learning , pages 55076–55099, 2024. Margaux Zaffran, Olivier Féron, Yannig Goude, Julie Josse, and Aymeric Dieuleveut. Adaptive conformal predictions for time series. In International conference on ma-chine learning , pages 25834–25866. PMLR, 2022. Soroush H Zargarbashi, Simone Antonelli, and Aleksandar Bojchevski. Conformal pre-diction sets for graph neural networks. In International Conference on Machine Learning , pages 12292–12318. PMLR, 2023. Jifan Zhang, Fangxin Wang, Zihe Song, Philip S Yu, Kaize Ding, and Shixiang Zhu. Topology-aware conformal prediction for stream networks. In D. Belgrave, C. Zhang, H. Lin, R. Pascanu, P. Koniusz, M. Ghassemi, and N. Chen, editors, Advances in Neural Information Processing Systems , volume 38, pages 88976–89008. Curran Asso-ciates, Inc., 2025. URL https://proceedings.neurips.cc/paper_files/paper/ 2025/file/806288e682d8a38c0bf21e37ab38af0a-Paper-Conference.pdf .Minxing Zheng and Shixiang Zhu. Generative conformal prediction with optimized coverage allocation. arXiv preprint arXiv:2410.13735 , 2024. Wenbin Zhou and Shixiang Zhu. Hierarchical probabilistic conformal prediction for distributed energy resources adoption. The Annals of Applied Statistics , 20(2):1626– 1645, 2026. Wenbin Zhou, Agni Orfanoudaki, and Shixiang Zhu. Conformalized decision risk as-sessment. In The Fourteenth International Conference on Learning Representations ,2026. URL https://openreview.net/forum?id=xRjOrcj08o .23 A Why Set-Valued Latent Inference Is Necessary 
+
+This appendix formalizes two distinct obstacles to point identification of the latent distributional parameter. The first is latent heterogeneity : the latent parameter of a new sample remains random after conditioning on its observed context. The second is observational non-identifiability : different latent parameters may induce identical response distributions. 
+
+## A.1 Latent Heterogeneity 
+
+Consider first the standard independent-sampling setting in which the calibration data provide information about the population but not about the particular latent draw associated with the new sample. Formally, suppose that 
+
+θn+1 ⊥⊥ D n | Xn+1 .
+
+This condition holds when the calibration samples and the new sample are indepen-dently generated according to (1). Conditional on Dn and Xn+1 = x, the latent param-eter therefore continues to follow π(· | x).The following result bounds the probability with which any point estimator can exactly recover this latent draw. 
+
+Lemma 2 (Impossibility of exact identification) . Suppose that θn+1 ⊥⊥ D n | Xn+1 . Let 
+
+bθ(Dn, X n+1 ) be any possibly randomized estimator taking values in Θ. Then 
+
+P
+
+nbθ(Dn, X n+1 ) = θn+1 
+
+o
+
+≤ E
+
+
+
+sup 
+
+> t∈Θ
+
+π({t} | Xn+1 )
+
+
+
+. (8) 
+
+In particular, if π(· | x) is non-atomic for PX -almost every x, then 
+
+P
+
+nbθ(Dn, X n+1 ) = θn+1 
+
+o
+
+= 0 
+
+for every point estimator and every calibration sample size. Proof. Let R denote any internal randomness used by the estimator, chosen indepen-dently of the data and the new sample. We may therefore write 
+
+bθ(Dn, X n+1 ) = h(Dn, X n+1 , R )
+
+for some measurable function h.Condition on Dn, Xn+1 = x, and R. Under the conditional-independence assump-tion, the conditional distribution of θn+1 remains π(· | x). Hence, 
+
+P
+
+nbθ(Dn, X n+1 ) = θn+1 Dn, X n+1 = x, R 
+
+o
+
+=π ({h(Dn, x, R )} | x)
+
+≤ sup 
+
+> t∈Θ
+
+π({t} | x).
+
+Taking expectations over Dn, Xn+1 , and R yields (8). If π(· | x) is non-atomic, then 
+
+π({t} | x) = 0 for every t ∈ Θ, so the right-hand side of (8) is zero. 24 Lemma 2 has a direct interpretation in the discrete case. If the largest conditional probability among the possible latent classes is 0.6, no point estimator based only on Dn
+
+and Xn+1 can achieve an exact-recovery probability greater than 0.6. A set containing multiple latent classes is therefore necessary to obtain, for example, 90% coverage. In the continuous case, every singleton has probability zero, so a non-singleton set is necessary for any positive coverage rate. The lemma concerns exact recovery before observing Yn+1 . It does not preclude accurate point estimation under a loss such as absolute or squared error, nor does it determine how large a valid uncertainty set must be. Its purpose is to explain why a singleton cannot generally satisfy the coverage objective in (2). 
+
+## A.2 Observational Non-Identifiability 
+
+Latent heterogeneity is distinct from non-identifiability of the forward model. For a fixed context x, define the observational equivalence relation 
+
+θ ≡x θ′ ⇐⇒ Pθ(· | x) = Pθ′ (· | x).
+
+Parameters in the same equivalence class generate identical observable response distri-butions and therefore cannot be distinguished through response data alone. 
+
+Lemma 3 (Observational equivalence) . Fix x ∈ X and suppose that θ ≡x θ′. Let Y
+
+be generated from either Pθ(· | x) or Pθ′ (· | x). Then every measurable statistic T (Y, x )
+
+has the same distribution under θ and θ′. In particular, for any possibly randomized test φ : Y × X → [0 , 1] ,
+
+EY ∼Pθ (·| x) [φ(Y, x ) | x] = EY ∼Pθ′ (·| x) [φ(Y, x ) | x] .
+
+Consequently, no response-based test can distinguish θ from θ′ with power exceeding its size. Proof. Because θ ≡x θ′, the conditional probability measures Pθ(· | x) and Pθ′ (· | x) are identical. Therefore, for every measurable function g,
+
+Z
+
+g(y) Pθ(d y | x) = 
+
+Z
+
+g(y) Pθ′ (d y | x).
+
+Taking g(y) = φ(y, x ) gives the equality of rejection probabilities. More generally, ap-plying any measurable transformation T to two identically distributed responses pro-duces identical pushforward distributions. This non-identifiability persists under repeated observations whenever the corre-sponding joint response laws remain identical. In particular, if responses are condi-tionally independent and Pθ(· | x) = Pθ′ (· | x), then their m-fold product distributions are equal for every finite m. Repeated observations may distinguish parameters whose forward distributions are different but close; they cannot distinguish parameters whose forward distributions are exactly the same. Our proposed procedure respects these equivalence classes. For any measurable response set C ⊆ Y , observational equivalence implies 
+
+Pθ(Y ∈ C | x) = Pθ′ (Y ∈ C | x).
+
+25 Table 1: Comparison of the proposed problem with standard conformal prediction and Bayesian inference. 
+
+Problem Target Info. for new unit Required knowledge Output 
+
+Standard conformal prediction 
+
+Yn+1 Xn+1 Neither Pθ nor 
+
+π
+
+Prediction set for the response Bayesian posterior inference 
+
+θn+1 Xn+1 , Y n+1 Forward family and π
+
+Posterior credible set Bayesian or empirical-Bayes θn+1 Xn+1 Specified or estimated 
+
+π(· | x)
+
+Prior-predictive region 
+
+LatentCP θn+1 Xn+1 only Forward family, but not π
+
+Frequentist marginal prediction set Consequently, LatentCP applies the same inclusion decision to θ and θ′. Rather than selecting an arbitrary inverse branch, it retains or excludes observationally equivalent parameters together. The resulting uncertainty set therefore represents both sample-specific latent heterogeneity and ambiguity inherent in the forward model. 
+
+# B Connection to Other Relevant Inference Problems 
+
+In this section, we discuss the distinctions between our LatentCP setup and Bayesian inference (Section B.1) and likelihood-based inference (Section B.2). They represent two alternative classes of estimators that one may use to construct uncertainty sets for latent parameters, and have already been incorporated in our experiment comparison. This section dives deeper into explaining their key differences. 
+
+## B.1 Comparison to Bayesian Inference 
+
+The hierarchical model in (1) has a familiar Bayesian interpretation, but our inferential target and information structure are different. Suppose that Pθ(· | x) admits a density or probability mass function pθ(· | x). For fixed θ, pθ(y | x) specifies the forward response distribution. After observing (x, y ), the same quantity, viewed as a function of θ, serves as the likelihood for the latent parameter. If both the mixing law π(· | x)
+
+and the response y from the instance of interest were available, Bayes’ rule would yield 
+
+π(d θ | x, y ) = pθ(y | x)π(d θ | x)
+
+Z
+
+> Θ
+
+pϑ(y | x)π(d ϑ | x)
+
+. (9) 26 Thus, the forward family in our formulation plays the same mathematical role as the likelihood family in a hierarchical Bayesian model. The distinction is that we construct Uα(Xn+1 ) before observing Yn+1 . Consequently, there is no unit-specific likelihood pθ(Yn+1 | Xn+1 ) with which to update uncertainty about θn+1 . Before observing the new response, a Bayesian predictive distribution for 
+
+θn+1 would be precisely the mixing law π(· | Xn+1 ). When this law is unknown, a Bayesian or empirical-Bayes approach must specify it, estimate it, or place a hyper-prior on it, typically through the marginal mixture p(y | x) = R 
+
+> Θ
+
+pθ(y | x)π(d θ | x).
+
+Estimating a context-dependent mixing law from indirect observations can be difficult or ill-posed, particularly when each latent draw generates only one response or when the forward family is non-identifiable [Ignatiadis and Wager, 2019]. Our objective is therefore not to approximate the posterior in (9). The set Uα does not assign posterior probabilities or relative weights to candidate latent parameters. Instead, it is a frequentist prediction set for the random latent parameter θn+1 , with finite-sample marginal coverage that does not require specifying or estimating π(· | x).This mixing-law robustness does not make the procedure fully model-free: validity continues to rely on exchangeability and on a correctly specified or conservatively ap-proximated forward family. See Table 1 for a comparison between Bayesian inference paradigms and our conformal prediction workflow. 
+
+## B.2 Comparison to Likelihood-Based Inference 
+
+Classical likelihood-based confidence intervals, such as Wald and profile-likelihood in-tervals, address a fundamentally different inferential problem [Pawitan, 2001]. They typically posit a fixed parameter θ0 shared across repeated observations and quantify uncertainty about this common parameter using its likelihood. A Wald interval relies on the asymptotic normality of an estimator [Wald, 1943], whereas a profile-likelihood interval is commonly obtained by inverting a likelihood-ratio statistic whose reference distribution is justified asymptotically [Murphy and Van der Vaart, 2000]. Conse-quently, except in special models admitting exact finite-sample inference, their nominal coverage is generally asymptotic and may be inaccurate in small samples or under weak identification, nonregularity, or model misspecification. These methods are not directly applicable to our target. Because each historical response Yi is generated under its own latent parameter θi, the historical observations do not constitute repeated measurements from a common parameter θn+1 . Furthermore, since Yn+1 has not yet been observed, there is no unit-specific likelihood pθ(Yn+1 | Xn+1 )
+
+from which a Wald or profile-likelihood interval for θn+1 can be constructed. Although covariates may enter a conventional likelihood, they generally describe how the response distribution depends on observed predictors while the underlying parameter remains fixed. Modeling θn+1 itself as a context-dependent random variable instead requires a distribution such as π(· | Xn+1 ), returning to the hierarchical or empirical-Bayes formulations discussed above. See Table 2 for a summary of their distinctions. In contrast, LatentCP is designed specifically for the random, instance-specific target 
+
+θn+1 . Its uncertainty set adapts to the observed context through both the conformal response set Cγ (Xn+1 ; Dn) and the context-dependent forward family {Pθ(· | Xn+1 ) : 
+
+θ ∈ Θ}. Under the exchangeability conditions in Assumption 1, it provides finite-sample marginal coverage for every calibration sample size without requiring asymptotic 27 Table 2: Comparison of Wald intervals, profile-likelihood intervals, and LatentCP. 
+
+Method Target Info. for inference Context Required knowledge Output and guarantee 
+
+Wald interval Fixed population parameter θ0
+
+Observations governed by the same θ0
+
+Covariates may enter the likelihood, but θ0
+
+remains fixed Parametric likelihood, standard error, and regularity conditions Confidence interval with typically asymptotic coverage Profile-likelihood interval Fixed parameter of interest ψ0,possibly with nuisance parameters Observations governed by the same underlying parameter Covariates may enter the likelihood, but ψ0
+
+remains fixed Full likelihood and regularity conditions for likelihood-ratio approximation Likelihood-ratio confidence set with typically asymptotic coverage 
+
+LatentCP Random, unit-specific latent parameter 
+
+θn+1 
+
+Xn+1 only; 
+
+θn+1 and 
+
+Yn+1 are unobserved The set 
+
+Uα(Xn+1 )
+
+adapts to the observed context Forward family 
+
+{Pθ(· | x) : θ ∈
+
+Θ}, but not 
+
+π(· | x)
+
+Frequentist prediction set with finite-sample marginal coverage 
+
+normality, a likelihood-ratio approximation, or knowledge of π(· | x). The guarantee remains marginal over the context distribution rather than conditional on each fixed value of Xn+1 ; nevertheless, the resulting set is context-adaptive in its construction. These distinctions make LatentCP more appropriate than standard Bayesian inference or fixed-parameter likelihood intervals for the inferential setting considered in this work. 
+
+# C Technical Proofs 
+
+## C.1 Proof of Lemma 1 
+
+Proof. Fix any permutation σ of {1, . . . , n + 1 }. Conditional independence implies that, after permuting the context-parameter pairs, the corresponding response vector has conditional distribution 
+
+L  Yσ(1) , . . . , Y σ(n+1) (Xσ(i), θ σ(i))n+1 
+
+> i=1
+
+ = ⊗n+1  
+
+> i=1
+
+Pθσ(i) (· | Xσ(i)).
+
+Thus, permuting the indices only reorders the same sample-specific response distribu-tions; it does not change how the responses are jointly generated. Since the context-parameter pairs are exchangeable, the complete triples are therefore exchangeable. Marginalizing over the unobserved θi’s establishes exchangeability of (Xi, Y i)n+1  
+
+> i=1
+
+.28 C.2 Proof of Theorem 1 
+
+Proof. Let Rγ := 1 − pγ (θn+1 , X n+1 ) denote the probability mass that the true forward distribution assigns outside the conformal response set. By Assumption 1 and (3), 
+
+E[Rγ ] = P {Yn+1 /∈ C γ (Xn+1 ; Dn)} ≤ γ. 
+
+By the definition of Uα, θn+1 /∈ U α(Xn+1 ; γ) only if Rγ > γ/α . Markov’s inequality therefore gives 
+
+P {θn+1 /∈ U α(Xn+1 ; γ)} ≤ E[Rγ ]
+
+γ/α ≤ α. 
+
+## C.3 Proof of Theorem 2 
+
+Proof. By Tonelli’s theorem and the fixed-level moment bound, 
+
+E [eν (θn+1 , X n+1 )] = E
+
+Z 
+
+> Γ
+
+eγ (θn+1 , X n+1 )d ν(γ)
+
+
+
+=
+
+Z
+
+> Γ
+
+E [eγ (θn+1 , X n+1 )] d ν(γ)
+
+≤
+
+Z
+
+> Γ
+
+1d ν(γ) = 1 .
+
+Applying Markov’s inequality gives 
+
+P {θn+1 /∈ U α(Xn+1 ; ν)} = P
+
+
+
+eν (θn+1 , X n+1 ) > 1
+
+α
+
+
+
+≤ α E [eν (θn+1 , X n+1 )] 
+
+≤ α. 
+
+The stated coverage guarantee follows. 
+
+## C.4 Proof of Proposition 1 
+
+Proof. We prove the two inclusions separately. First, let 
+
+θ ∈
+
+> K
+
+\
+
+> k=1
+
+Uα(x; γk).
+
+By the definition of the fixed-level uncertainty sets in (5), 
+
+eγk (θ, x ) ≤ 1
+
+α for every k = 1 , . . . , K. 
+
+Because the weights are nonnegative and sum to one, 
+
+eν (θ, x ) = 
+
+> K
+
+X
+
+> k=1
+
+wkeγk (θ, x ) ≤
+
+> K
+
+X
+
+> k=1
+
+wk
+
+1
+
+α = 1
+
+α
+
+> K
+
+X
+
+> k=1
+
+wk = 1
+
+α .
+
+29 Therefore, θ ∈ U α(x; ν), which proves TKk=1 Uα(x; γk) ⊆ U α(x; ν).
+
+For the second inclusion, we prove the contrapositive. Suppose that 
+
+θ / ∈
+
+> K
+
+[
+
+> k=1
+
+Uα(x; γk).
+
+Then θ is excluded by every fixed-level set, so 
+
+eγk (θ, x ) > 1
+
+α for every k = 1 , . . . , K. 
+
+It follows that 
+
+eν (θ, x ) − 1
+
+α =
+
+> K
+
+X
+
+> k=1
+
+wkeγk (θ, x ) − 1
+
+α
+
+> K
+
+X
+
+> k=1
+
+wk =
+
+> K
+
+X
+
+> k=1
+
+wk
+
+
+
+eγk (θ, x ) − 1
+
+α
+
+
+
+> 0,
+
+where the strict inequality follows because every weight is positive and every term inside the parentheses is strictly positive. Hence, 
+
+eν (θ, x ) > 1
+
+α ,
+
+which implies θ / ∈ U α(x; ν). We have therefore shown that 
+
+θ / ∈
+
+> K
+
+[
+
+> k=1
+
+Uα(x; γk) =⇒ θ / ∈ U α(x; ν).
+
+Taking the contrapositive gives Uα(x; ν) ⊆ SKk=1 Uα(x; γk). Combining the two inclusions completes the proof. 
+
+# D Computational and Implementation Details 
+
+This appendix describes the practical implementation of LatentCP , which involves two main computational tasks. First, for a fixed response-space miscoverage level γ ∈ (0 , α ),we evaluate the forward compatibility pγ (θ, x ) over the latent parameter space, which in principle requires enumerating all candidate values of θ. Second, using an independent tuning sample, we select either a single response level γ or multiple levels γ1, . . . , γ K
+
+together with their aggregation weights w1, . . . , w K .
+
+## D.1 Distribution Configurations in Figure 3 
+
+We consider four synthetic data-generating mechanisms without informative context, equivalently taking X to be constant. In each repetition, latent parameters are inde-pendently sampled from the specified mixing distribution and then used to generate the observable responses. The latent parameters are used only for data generation and are not supplied to LatentCP .For the first three settings, we use the absolute-residual nonconformity score 
+
+bs(y) = |y − bm|,
+
+30 where bm is a fitted constant response predictor held fixed during calibration. Conse-quently, 
+
+Cγ = [ bm − bq1−γ , bm + bq1−γ ] ∩ Y ,
+
+where bq1−γ is the split-conformal empirical quantile. 
+
+Gaussian location model. The latent parameter follows a standard Gaussian dis-tribution truncated to Θ = [ −4, 4] :
+
+θ ∼ N (0 , 1) [−4,4] , Y | θ ∼ N (θ, 0.52).
+
+For Cγ = [ ℓγ , u γ ], the forward compatibility is available analytically as 
+
+pγ (θ) = Φ 
+
+uγ − θ
+
+0.5
+
+
+
+− Φ
+
+ℓγ − θ
+
+0.5
+
+
+
+,
+
+where Φ denotes the standard Gaussian distribution function. Set size is measured by Lebesgue length over [−4, 4] .
+
+Poisson log-rate model. We generate 
+
+θ ∼ N (0 , 1) [−3.5,3.5] , Y | θ ∼ Poisson  eθ ,
+
+so that θ represents the logarithm of the Poisson rate. Because the response is integer-valued, its compatibility is computed by summing the Poisson probability mass over the conformal response set: 
+
+pγ (θ) = X 
+
+> y∈C γ∩N0
+
+exp( −eθ)eθy 
+
+y! .
+
+Set size is measured by Lebesgue length over [−3.5, 3.5] .
+
+Bernoulli model. The latent success probability and response are generated accord-ing to 
+
+θ ∼ Beta(1 , 19) , Y | θ ∼ Bernoulli( θ), Θ = [0 , 1] .
+
+For any conformal response set Cγ ⊆ { 0, 1}, the forward compatibility is 
+
+pγ (θ) = (1 − θ)1{0 ∈ C γ } + θ1{1 ∈ C γ }.
+
+Set size is measured by Lebesgue length over [0 , 1] .
+
+Categorical simplex model. Let 
+
+Θ = (θ1, θ 2) ∈ R2+ : θ1 + θ2 ≤ 1 , θ0 = 1 − θ1 − θ2.
+
+We generate the latent probability vector and response as 
+
+(θ0, θ 1, θ 2) ∼ Dirichlet(55 , 4, 1) , Y | θ ∼ Categorical( θ0, θ 1, θ 2),
+
+31 and use the ordinal nonconformity score bs(y) = y. The marginal response probabilities are therefore 
+
+P(Y = 0) = 55 60 , P(Y = 1) = 460 , P(Y = 2) = 160 .
+
+For Cγ ⊆ { 0, 1, 2}, compatibility is evaluated exactly: 
+
+pγ (θ) = 
+
+> 2
+
+X
+
+> j=0
+
+θj 1{j ∈ C γ }.
+
+Set size is measured by two-dimensional Lebesgue area over Θ, whose total area is 1/2.This final mechanism is constructed to illustrate a strict benefit from multilevel aggregation. At α = 0 .2, consider 
+
+γ⋆ 
+
+> 1
+
+= 160 , γ⋆ 
+
+> 2
+
+= 560 , ν⋆ = 12δγ⋆ 
+
+> 1
+
++ 12δγ⋆ 
+
+> 2
+
+.
+
+The corresponding population response sets are Cγ⋆ 
+
+> 1
+
+= {0, 1} and Cγ⋆ 
+
+> 2
+
+= {0}, which produce 
+
+U1 =
+
+
+
+θ ∈ Θ : θ2 ≤ 112 
+
+
+
+, U2 =
+
+
+
+θ ∈ Θ : θ1 + θ2 ≤ 512 
+
+
+
+.
+
+The equal-weight multilevel construction yields 
+
+Uα(ν⋆) = 
+
+
+
+θ ∈ Θ : θ1 + 6 θ2 ≤ 56
+
+
+
+.
+
+Its area is 
+
+μ(Uα(ν⋆)) = 25 432 ≈ 0.05787 ,
+
+whereas the smallest fixed-level set has area 
+
+min {μ(U1), μ (U2)} = 23 288 ≈ 0.07986 .
+
+Thus, this setting provides an explicit example in which a nondegenerate mixing dis-tribution is strictly more efficient than every point-mass construction. For each mechanism, Figure 3 averages set size over 60 Monte Carlo repetitions, each using 3,000 calibration observations. The top panels consider α ∈ { 0.1, 0.2, 0.3}
+
+and compare the point-mass construction δγ with 
+
+νγ,γ ′ = 12δγ + 12δγ′ ,
+
+where the latter is minimized over γ′ for each displayed γ. The bottom panels show the complete set-size surface over (γ, γ ′) at α = 0 .2 and the corresponding minimizing path γ′⋆(γ).32 D.2 Parameter-Space Evaluation and Construction 
+
+Fix a context x, calibration data Dn, and a response-space miscoverage level γ ∈ (0 , α ).Recall that the forward compatibility is 
+
+pγ (θ, x ) = Pθ{Y ∈ C γ (x; Dn) | x} .
+
+Because the forward family Pθ(· | x) is given, this probability can be evaluated directly by integrating or summing the forward law over Cγ (x; Dn).When Θ is finite, we enumerate every θ ∈ Θ and apply the inclusion rule in (5). When Θ is continuous, we evaluate the same rule over a finite parameter design ΘN =
+
+{θ1, . . . , θ N } and construct 
+
+bUα,N (x; γ) = 
+
+n
+
+θj ∈ ΘN : pγ (θj , x ) ≥ 1 − γα
+
+o
+
+. (10) For a multilevel distribution ν = PKk=1 wkδγk , the same parameter design is used to compute 
+
+eν (θj , x ) = 
+
+> K
+
+X
+
+> k=1
+
+wk
+
+1 − pγk (θj , x )
+
+γk
+
+,
+
+yielding 
+
+bUα,N (x; ν) = 
+
+
+
+θj ∈ ΘN : eν (θj , x ) ≤ 1
+
+α
+
+
+
+. (11) All forward-compatibility evaluations are independent across candidates and can there-fore be parallelized. We next describe an expansion of the finite-design set that preserves the coverage guarantee when Θ is continuous. Let 
+
+rN = sup 
+
+> θ∈Θ
+
+min  
+
+> 1≤j≤N
+
+∥θ − θj ∥
+
+be the covering radius of ΘN . Suppose that, for each response level γk used in the construction, 
+
+|pγk (θ, x ) − pγk (θ′, x )| ≤ Lγk (x)∥θ − θ′∥, θ, θ ′ ∈ Θ.
+
+Then every θ ∈ Θ lies in some ball B(θj , r N ) ∩ Θ, and for all θ in this ball, 
+
+pγk (θ, x ) ≤ ujk (x) := min {1, p γk (θj , x ) + Lγk (x)rN }.
+
+For the multilevel construction, define the lower cell-wise incompatibility bound 
+
+eν,j (x) = 
+
+> K
+
+X
+
+> k=1
+
+wk
+
+1 − ujk (x)
+
+γk
+
+.
+
+Since eν,j (x) ≤ eν (θ, x ) for every θ ∈ B(θj , r N ) ∩ Θ, the conservative expansion is 
+
+bUexp  
+
+> α,N
+
+(x; ν) = [  
+
+> j:eν,j (x)≤1/α
+
+{B(θj , r N ) ∩ Θ} .
+
+33 For the point-mass case ν = δγ , this reduces to 
+
+bUexp  
+
+> α,N
+
+(x; γ) = [  
+
+> j:uj(x;γ)≥1−γ/α
+
+{B(θj , r N ) ∩ Θ} ,
+
+where uj (x; γ) = min {1, p γ (θj , x ) + Lγ (x)rN }.
+
+Proposition 2 (Coverage of the expanded construction) . Suppose that ΘN has covering radius rN and that the Lipschitz bounds above hold for all response levels used in the construction. Then, for any fixed multilevel distribution ν = PKk=1 wkδγk satisfying the conditions of Theorem 2, 
+
+Uα(x; ν) ⊆ bUexp  
+
+> α,N
+
+(x; ν).
+
+Consequently, 
+
+P
+
+n
+
+θn+1 ∈ bUexp  
+
+> α,N
+
+(Xn+1 ; ν)
+
+o
+
+≥ 1 − α. 
+
+In particular, taking ν = δγ gives the same conclusion for the point-mass construction 
+
+bUexp  
+
+> α,N
+
+(x; γ).Proof. Fix θ ∈ U α(x; ν). By the definition of the covering radius, there exists j such that θ ∈ B(θj , r N ) ∩ Θ. For every k, the Lipschitz bound implies 
+
+pγk (θ, x ) ≤ pγk (θj , x ) + Lγk (x)rN ≤ ujk (x).
+
+Therefore 
+
+eν,j (x) = 
+
+> K
+
+X
+
+> k=1
+
+wk
+
+1 − ujk (x)
+
+γk
+
+≤
+
+> K
+
+X
+
+> k=1
+
+wk
+
+1 − pγk (θ, x )
+
+γk
+
+= eν (θ, x ).
+
+Since θ ∈ U α(x; ν), we have eν (θ, x ) ≤ 1/α . Hence eν,j (x) ≤ 1/α , so the ball B(θj , r N ) ∩
+
+Θ is included in bUexp  
+
+> α,N
+
+(x; ν). Thus θ ∈ bUexp  
+
+> α,N
+
+(x; ν), proving the set inclusion. The coverage statement follows immediately from Theorem 2 and the inclusion 
+
+Uα(Xn+1 ; ν) ⊆ bUexp  
+
+> α,N
+
+(Xn+1 ; ν).
+
+The point-mass case follows by setting ν = δγ , for which Theorem 1 applies. 
+
+## D.3 Optimization of Response Levels 
+
+We now describe how to optimize the response-space levels for both the point-mass construction and the multilevel construction with a fixed number of levels K. The optimization is performed on an independent tuning split 
+
+Dtun  
+
+> m
+
+= {(Xtun  
+
+> i
+
+, Y tun  
+
+> i
+
+)}mi=1 ,
+
+which is independent of the final calibration data Dn. For a search interval Γ = [γmin , γ max ] ⊂ (0 , α ), define the breakpoint set 
+
+Γm = {γmin } ∪ 
+
+ jm + 1 : γmin < jm + 1 ≤ γmax , j = 1 , . . . , m 
+
+
+
+. (12) 34 Algorithm 1 Point-mass tuning of the response level 
+
+Require: Independent tuning data Dtun  
+
+> m
+
+; search interval Γ; parameter design ΘN with size weights {aj }Nj=1 ; forward evaluator.  
+
+> 1:
+
+Construct Γm from (12).  
+
+> 2:
+
+for all γ ∈ Γm do  
+
+> 3:
+
+Construct the tuning response set Cγ (·; Dtun  
+
+> m
+
+). 
+
+> 4:
+
+for i = 1 , . . . , m do  
+
+> 5:
+
+Evaluate pγ (θj , X tun  
+
+> i
+
+) for all θj ∈ ΘN . 
+
+> 6:
+
+Construct bUα,N (Xtun  
+
+> i
+
+; γ, Dtun  
+
+> m
+
+). 
+
+> 7:
+
+end for  
+
+> 8:
+
+Compute bRm(γ) from (13).  
+
+> 9:
+
+end for  
+
+> 10:
+
+return bγ from (14). For each γ ∈ Γm, construct provisional sets using Dtun  
+
+> m
+
+and define 
+
+bRm(γ) = 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+bμN
+
+n bUα,N (Xtun  
+
+> i
+
+; γ, Dtun  
+
+> m
+
+)
+
+o
+
+, (13) where bμN is the numerical approximation of the chosen set-size measure. For example, for a weighted parameter design, 
+
+bμN (A) = 
+
+> N
+
+X
+
+> j=1
+
+aj 1{θj ∈ A},
+
+with aj equal to the cell volume or another prespecified quadrature weight. We select 
+
+bγ ∈ arg min 
+
+> γ∈Γm
+
+bRm(γ), (14) using a fixed rule, such as the smallest γ, to break ties. The finite search over Γm is exact for the empirical point-mass objective. Between consecutive breakpoints, the conformal rank ⌈(m+1)(1 −γ)⌉ is constant, so the response set is fixed. Over the same interval, the inclusion threshold 1 − γ/α decreases with γ,and hence the latent set can only expand. Therefore the minimum over each interval is attained at its left endpoint. For the multilevel construction, let 
+
+νγ,w =
+
+> K
+
+X
+
+> k=1
+
+wkδγk , w ∈ ∆K ,
+
+where ∆K = {w ∈ [0 , 1] K : PKk=1 wk = 1 }. We optimize over support locations 
+
+γ1, . . . , γ K ∈ Γm and over a finite weight grid WK ⊂ ∆K . For a candidate pair (γ, w ),define 
+
+bRm(νγ,w ) = 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+bμN
+
+n bUα,N (Xtun  
+
+> i
+
+; νγ,w , Dtun  
+
+> m
+
+)
+
+o
+
+.
+
+35 Algorithm 2 Multilevel tuning of response levels and weights 
+
+Require: Independent tuning data Dtun  
+
+> m
+
+; breakpoint set Γm; number of levels K; weight grid WK ; parameter design ΘN with size weights {aj }Nj=1 ; forward evaluator.  
+
+> 1:
+
+Precompute eγ (θj , X tun  
+
+> i
+
+) for all γ ∈ Γm, j = 1 , . . . , N , and i = 1 , . . . , m . 
+
+> 2:
+
+for all ordered tuples γ1: K ∈ ΓKm do  
+
+> 3:
+
+for all w ∈ W K do  
+
+> 4:
+
+for i = 1 , . . . , m do  
+
+> 5:
+
+Construct 
+
+bUα,N (Xtun  
+
+> i
+
+; νγ,w , Dtun  
+
+> m
+
+) = 
+
+(
+
+θj ∈ ΘN :
+
+> K
+
+X
+
+> k=1
+
+wkeγk (θj , X tun  
+
+> i
+
+) ≤ 1
+
+α
+
+)
+
+. 
+
+> 6:
+
+end for  
+
+> 7:
+
+Compute bRm(νγ,w ). 
+
+> 8:
+
+end for  
+
+> 9:
+
+end for  
+
+> 10:
+
+return (bγ1: K , bw) from (15). Equivalently, after computing 
+
+eγk (θj , X tun  
+
+> i
+
+) = 1 − pγk (θj , X tun  
+
+> i
+
+)
+
+γk
+
+,
+
+the multilevel inclusion rule is 
+
+> K
+
+X
+
+> k=1
+
+wkeγk (θj , X tun  
+
+> i
+
+) ≤ 1
+
+α .
+
+We select 
+
+(bγ1: K , bw) ∈ arg min  
+
+> γ1: K∈ΓKm, w ∈W K
+
+bRm(νγ,w ), (15) with a fixed tie-breaking rule. One may restrict to ordered tuples γ1 ≤ · · · ≤ γK to remove duplicate representations. Let G = |Γm| and let Cp denote the cost of one forward-compatibility evalua-tion. The point-mass tuning cost is O(mN GC p), plus O(mN G ) operations to form the sets and compute their sizes. For multilevel tuning, the precomputation cost is again O(mN GC p). A direct search over ordered K-tuples and a weight grid WK then costs 
+
+O
+
+
+
+mN K 
+
+G + K − 1
+
+K
+
+
+
+|W K |
+
+
+
+after precomputation. In practice, K is kept small, and the dominant computations over 
+
+i, j, and γ are parallelizable. Because tuning uses only Dtun  
+
+> m
+
+, numerical approximation in the tuning objective affects efficiency but not the finite-sample validity of the final set calibrated on Dn.For a fixed response level, sorting the n calibration scores costs O(n log n) time and 
+
+O(n) memory; a linear-time order-statistic routine may be used when only one level is required. If N parameter candidates are evaluated using M forward simulations each, 36 the leading cost is O(N M ) time and O(N ) memory when the simulations are processed sequentially. The N compatibility evaluations are embarrassingly parallel. Let K = |Γm| be the number of tuning breakpoints. A direct implementation over 
+
+m tuning contexts costs O(KmN M ) Monte Carlo operations. This can be reduced by reusing the same M forward draws for every candidate level. After sorting the M
+
+simulated nonconformity scores for each context–parameter pair, all K compatibility values are empirical distribution-function queries, giving total time 
+
+O(mN {M log M + K log M }) ,
+
+in addition to the O(m log m) cost of sorting the tuning calibration scores. The calcu-lation may be streamed over contexts or parameter candidates when storing all mN M 
+
+simulated scores is impractical. 
+
+# E Experiment Details 
+
+This appendix describes the baseline methods implementations, data-generating mech-anisms, sample splitting, and real-data details used in the experiments. Unless stated otherwise, every feasible method observes only context–response pairs (X, Y ) during fitting and calibration and receives only the context X at test time. 
+
+## E.1 Baseline Methods 
+
+Let pθ(y | x) denote the density or probability mass function of the forward law Pθ(· | x),and let ΘN = {ϑ1, . . . , ϑ N } be the common latent-parameter grid when discretization is required. All feasible baselines are fitted using only observed context–response pairs and receive only Xn+1 at test time. 
+
+EmpBayes. We posit a parametric mixing law Qη(d θ | x) and estimate η from the marginal response model 
+
+pη(y | x) = 
+
+Z
+
+> Θ
+
+pθ(y | x)Qη(d θ | x).
+
+The continuous experiments use a Gaussian or diagonal-Gaussian mixing family, fitted by marginal moments or EM as appropriate. The reported set is the smallest grid-weighted region carrying at least 1 − α mass under Qbη(· | x) [Efron and Morris, 1973, Ignatiadis and Wager, 2019]. 
+
+NPMLE. This likelihood baseline estimates an unrestricted discrete mixing law on ΘN
+
+by 
+
+bw ∈ arg max 
+
+> w∈∆N
+
+X
+
+> i
+
+log 
+
+( NX
+
+> j=1
+
+wj pϑj (Yi | Xi)
+
+)
+
+,
+
+using EM. It returns a minimum-mass 1 − α grid set; for an ordered scalar grid, we use the shortest interval carrying that mass. Thus, NPMLE denotes the nonparametric maximum-likelihood estimator of the latent mixing law [Lindsay, 1995, Soloff et al., 2025]. 
+
+Noisy CP. For each observed pair, we first construct the unitwise inverse proxy 
+
+eθi ∈ arg max 
+
+> ϑ∈ΘN
+
+pϑ(Yi | Xi),
+
+37 using the prescribed tie-breaking rule when the inverse is non-unique. A predictor bm(x)
+
+is fitted to the training proxies, and split conformal prediction is then calibrated using 
+
+d{eθi, bm(Xi)}. Its test set is 
+
+UNoisy  
+
+> α
+
+(x) = {ϑ ∈ ΘN : d{ϑ, bm(x)} ≤ bq1−α} .
+
+This baseline treats noisy inverse estimates as if they were latent labels and therefore need not cover the true θn+1 when inversion is ambiguous [Lei et al., 2018, Einbinder et al., 2024]. 
+
+Oracle CP. Oracle CP applies the same split-conformal construction using the true latent labels θi in place of eθi. For the two-dimensional grid experiments, the corre-sponding oracle reference is the smallest region A satisfying π(A | x) ≥ 1 − α under the true conditional latent law. Both versions use information unavailable to feasible methods and serve only as efficiency benchmarks. 
+
+## E.2 Synthetic Data Generation 
+
+The synthetic experiments cover four scalar and four two-dimensional latent parameter families. In every setting, X is observed, θ is latent, and Y is generated from the known forward law Pθ(· | X). The distribution of θ | X is used only to generate data and is not supplied to LatentCP. Each synthetic dataset is divided into independent training, tuning, calibration, and test samples. Unless stated otherwise, each split contains 
+
+1,000 observations, and results are evaluated on an independent test sample. We use the absolute residual score for scalar responses, equivalently the ℓ2 score bs(x, y ) = 
+
+∥y − bf (x)∥2. The tuning sample selects γ or the multilevel support and weights, after which the response sets are calibrated on the independent calibration sample. 
+
+Scalar θ data-generating mechanisms. The four one-dimensional settings in Fig-ure 6 are: 
+
+• Gaussian mixture. Draw X ∼ N (0 , I 3) and set m(X) = X1 − 0.6X2 + 0 .4X3.Then θ | X ∼ 0.85 N { m(X) − 0.3, 0.22} + 0 .15 N { m(X) + 1 .7, 0.22} and Y | θ, X ∼N (θ, 0.22).
+
+• Sign nonidentifiability. Let 
+
+Z | X ∼ N { 1.2 + 0 .25 tanh( X1), 0.12},M = max {0.1, Z }, θ = SM, Pr( S = 1) = 0 .9.
+
+The forward law is Y | θ, X ∼ N (θ2, 0.25 2), so θ and −θ are observationally equiva-lent. 
+
+• Regime crossing. With no informative context, the latent law belongs to a core, displaced, or bursty family with total masses (0 .95 , 0.02 , 0.03) . The core laws are 
+
+Pa = N (a, 1) for a ∈ {− 1, −0.75 , . . . , 1}, weighted by a discrete Gaussian kernel with scale 0.5. The displaced laws are Ps,d = N (sd, 0.12) for s ∈ {− 1, 1} and 
+
+d ∈ { 2.5, 2.75 , 3, 3.25 , 3.5}. Finally, the bursty laws are Pb = (1 − b)N (0 , 0.12) + (b/ 2) N (−30 , 0.12) + ( b/ 2) N (30 , 0.12) for b ∈ { 0.10 , 0.125 , 0.15 , 0.175 , 0.20 }. The dis-placed and bursty laws are uniform within their respective families. Their response distributions cross repeatedly as the response-set level changes, making this setting favorable to combining information across multiple γ values. 38 • Aliased spikes. Draw X ∼ N (0 , 1) and assign θ to left, central, and right regimes with probabilities (0 .002 , 0.993 , 0.005) . The outer regimes are uniform on [−1, −0.1] 
+
+and [0 .1, 1] ; the central regime is split equally between width-0.005 intervals adjacent to −0.1 and 0.1. Let (I0, I 1, I 2, I 3) = ([0 , 1] , [2 , 3] , [3 , 4] , [4 , 5]) . Conditional on the left regime, B is uniform on {0, 3}; in the central regime, its probabilities over the four bands are (938 , 15 , 35 , 5) /993 ; and in the right regime, B = 1 . We then draw S
+
+uniformly from {− 1, 1}, UB ∼ Unif( IB ), and set Y = X + SU B .
+
+Two-dimensional θ data-generating mechanisms. For all four families, X ∼N (0 , I 2). We set β = (0 .8, −0.4) ⊤ and e(X) = exp(0 .35 X1). Conditional on X = x, the latent coordinates are independent. Coordinate j follows a mixture of two components; its second component is selected with probability 
+
+wj (x) = logit −1{logit(0 .15) + 0 .9xdj }, (d1, d 2) = (2 , 1) .
+
+The component pairs and forward laws are: 
+
+• Gaussian location–scale. With θ = ( μ, log σ),
+
+μ : N (0 , 0.30 2) / N (0 , 0.70 2),
+
+log σ : N (0 , 0.18 2) / N { log(1 .6) , 0.18 2},Y = β⊤X + μ + σe (X)Z, Z ∼ N (0 , 1) .
+
+• Negative binomial. With θ = (log λ, log ϕ),
+
+log λ : N (0 , 0.10 2) / N { log(1 .5) , 0.12 2},
+
+log ϕ : N { log(35) , 0.20 2} / N { log(5) , 0.15 2},Y ∼ NegBin( m, ϕ ), m = 6 exp {log λ + β⊤X}, Var( Y | X, θ ) = m + m2/ϕ. 
+
+• Beta-binomial. With θ = ( p, log κ), the latent baseline probability p is generated from a two-component mixture on the logit scale: 
+
+logit( p) ∼ π N { logit(0 .50) , τ 20.50 } + (1 − π) N { logit(0 .65) , τ 20.65 },
+
+where τ0.50 and τ0.65 are chosen so that the induced standard deviations of p are ap-proximately 0.03 in both components. The remaining latent component and forward law are log κ : N { log(220) , 0.20 2} / N { log(40) , 0.15 2},
+
+ep = logit −1{logit( p) + 0 .5β⊤X},Y ∼ BetaBin(40 , ep, κ ).
+
+• Student t. With θ = (log σ, log ν), the component pairs and forward law are 
+
+log σ : N (0 , 0.15 2) / N { log(1 .5) , 0.15 2},
+
+log ν : N { log(35) , 0.20 2} / N { log(6) , 0.12 2},Y = β⊤X + σe (X)Tν , Tν ∼ tν .
+
+The geometry panels use x = (1 .5, 1.5) and a 40 × 40 parameter grid; all mixture draws are truncated to the candidate rectangles used in the code. 39 E.3 Real Data 
+
+We use 1, 689 California wildfires recorded by Monitoring Trends in Burn Severity during 1984–2023 and 2024 Census county boundaries [Eidenshink et al., 2007, Finco et al., 2012]. We partition the study period into ten nonoverlapping four-year win-dows. Figure 7 uses California’s 58 counties (580 county–window observations) for an interpretable geographic illustration. The formal analysis in Figure 8 uses 179 equal-area 50-km grid cells clipped to the state boundary (1,790 cell–window observations), retaining cells with at least 15% of their original area. For spatial unit s and window t, let Ys,t denote the mapped-fire count and define the area–time exposure 
+
+∆s,t = area( s)1,000 km 2 × 4 years .
+
+We use the forward model 
+
+Ys,t | Xs,t , λ s,t ∼ Poisson(∆ s,t λs,t ),
+
+so λs,t is the latent annual intensity per 1,000 km 2. The context Xs,t ∈ R10 contains standardized east–west and north–south coordinates, standardized time, log exposure, retained area fraction, transformed preceding-window count, historical rate computed strictly from earlier windows, and three spatial–temporal interaction terms. We fit a gradient-boosting model for the observed count on 1984 –2003 , tune γ on 
+
+2004 –2007 , calibrate on 2008 –2015 , and evaluate on 2016 –2023 . With α = 0 .10 , we select γ by minimizing mean latent-set size on the tuning window and then calibrate the response set on the calibration data. For each test context and exposure, the reported set is 
+
+Uα(X) = 
+
+
+
+λ : PY ∼Poisson(∆ λ) {Y /∈ C bγ (X)} ≤ bγα
+
+
+
+.
+
+For the grid analysis, tuning selects bγ = 0 .0278 . Across the 358 held-out cell–window observations, the response sets attain empirical coverage 0.992 , and tuning reduces mean latent-set size from 0.551 under the fixed choice γ = α/ 2 to 0.490 , an 11 .1% reduction. The optimized two-level construction selects the same level at both support points and therefore coincides with the tuned single-level method in this application. The latent maps use a common nonlinear color scale only to reveal small positive intensities; it does not alter the reported endpoints or widths. Because λ is unobserved and the observations exhibit spatial and temporal dependence, we report response coverage and latent-set size, but not empirical latent coverage. 40

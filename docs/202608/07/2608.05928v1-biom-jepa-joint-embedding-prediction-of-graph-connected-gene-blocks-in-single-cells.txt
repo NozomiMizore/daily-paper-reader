@@ -1,0 +1,1411 @@
+Title: BioM-JEPA: joint-embedding prediction of graph-connected gene blocks in single cells
+
+URL Source: https://arxiv.org/pdf/2608.05928v1
+
+Published Time: Fri, 07 Aug 2026 01:06:40 GMT
+
+Number of Pages: 34
+
+Markdown Content:
+# BioM-JEPA: joint-embedding prediction of graph-connected gene blocks in single cells 
+
+## Yuhao Wang 1,∗, Zelin Zang 1,2,∗,†, Yuxuan Liu 1, Zhen Lei 2,3,4,†, Stan Z. Li 1,†
+
+> 1
+
+Westlake University, Hangzhou, Zhejiang, China 
+
+> 2
+
+Centre for Artificial Intelligence and Robotics (CAIR), Hong Kong Institute of Science & Innovation, Chinese Academy of Sciences (HKISI-CAS), Hong Kong SAR, China 
+
+> 3
+
+State Key Laboratory of Multimodal Artificial Intelligence Systems (MAIS), Institute of Automation, Chinese Academy of Sciences (CASIA), Beijing, China 
+
+> 4
+
+School of Artificial Intelligence, University of Chinese Academy of Sciences (UCAS), Beijing, China 
+
+> ∗
+
+These authors contributed equally to this work. 
+
+> †
+
+Correspondence: Zelin Zang (zangzelin@westlake.edu.cn), Zhen Lei (zhen.lei@ia.ac.cn) and Stan Z. Li (Stan.ZQ.Li@westlake.edu.cn). 
+
+Abstract 
+
+Single-cell transcriptomes are sparse observations of coordinated biological programmes, yet most self-supervised models learn by reconstructing individual genes. Here we present BioM-JEPA, a joint-embedding predictive architecture that instead predicts aggregate representations of graph-connected gene blocks defined by protein-association and corpus-derived coexpression evidence. A student network infers each target-block representation from the remaining genes in a cell, while a slowly updated teacher supplies the corresponding target from the full observed gene set. Under the reported extraction procedure, block-level prediction produced embeddings with higher effective rank and weaker association with detected-gene depth in the tested diagnostics than token-prediction, random-block and reconstruction controls. Across CellBench tasks, frozen BioM-JEPA embeddings retained expression, pathway and neighbourhood information and achieved the lowest aggregate perturbation-response error among the evaluated models. Representation diagnostics were also consistent with canonical pancreatic programmes and compositional relationships between genetic perturbations. Linear attention avoids constructing a quadratic gene-by-gene attention matrix; in a matched one-epoch hPancreas experiment at batch size 8, BioM-JEPA provided 5.75-fold higher fine-tuning throughput and 3.76-fold higher held-out embedding throughput than scFoundation. Together, these results support graph-connected gene blocks as useful prediction units for JEPA-style representation learning in single-cell biology. 
+
+Single-cell RNA sequencing measures each cell through an incomplete, depth-dependent sample of its transcriptome. Two cells in the same biological state can therefore contain different observed genes, while technical quantities such as library size and the number of detected genes can dominate their apparent similarity[ 1 ]. The biological processes of interest are more stable than these individual measurements. Cell identity, activation and response to perturbation are expressed through coordinated programmes in which many genes contribute partially redundant evidence. A useful representation-learning system must distinguish this programme-level signal from the stochastic sampling process that produced the observed counts. Large pretrained models have made it possible to learn from transcriptomes collected across many tissues, studies and experimental conditions. Geneformer represents cells as ranked gene contexts, scGPT uses generative masked modelling, and scFoundation and scMulan combine value-aware representations with reconstruction or multitask training[ 2– 5]. CellFM extends pretraining to 100 million cells, while Nicheformer incorporates both dissociated and spatial transcriptomes[ 6, 7 ]. These models demonstrate the potential of broad transcriptomic pretraining. They also expose an unresolved design question: what should a model predict in order to learn a reusable cell representation? Larger models and lower reconstruction error do not consistently produce better frozen embeddings, and recent evaluations have found substantial variation across tasks and datasets[8–10]. Joint-embedding predictive architectures (JEPAs) provide an alternative to reconstructing the original observation. A JEPA learns by predicting a target representation from related context[ 11 ]. In I-JEPA, the context surrounding a masked image region is used to predict the teacher representation of that region; V-JEPA extends this principle to spatiotemporal regions in video[ 12 , 13 ]. In both settings, the target is a coherent part of the underlying scene. A direct translation to transcriptomics would treat each masked gene as an independent target. However, a single gene 1arXiv:2608.05928v1 [cs.LG] 6 Aug 2026 measurement is not the molecular equivalent of an image region: it is sparse, noisy and often biologically ambiguous when separated from its programme. These considerations led us to ask whether graph-connected gene blocks could serve as the prediction units of a transcriptomic JEPA. We developed BioM-JEPA, a block-level JEPA for single cells (Fig. 1). A binary gene graph combines high-confidence STRING v12 protein associations with transcriptome-wide coexpression estimated from the unlabeled pretraining corpus[ 14 ]. Connected sets sampled from this graph define candidate target blocks. The student encoder observes the complementary genes in the cell and predicts one aggregate representation for each hidden block, while a slowly updated teacher receives the full observed gene set and provides the corresponding target representation. Crucially, teacher states are aggregated across the genes from the block that are observed in that cell before the prediction error is evaluated. Thus, BioM-JEPA learns to infer a block-scale representation instead of reproducing every target gene independently. We reserve the terms biological programme and pathway for gene sets supported by an independent annotation or biological analysis; graph connectivity alone does not confer that status. The model uses linear attention throughout the student, teacher and predictor. This avoids constructing a complete gene-by-gene attention matrix and allows computation to grow linearly with the number of observed genes at fixed model width[ 15 ]. The biological objective and the computational architecture address separate problems: graph-defined blocks determine what the representation is trained to preserve, whereas linear attention makes broad gene contexts practical. The analysed representation was obtained after 10.24 million cell presentations, less than half of the 22.1-million-cell local collection and 2.04% of the 502-million-cell scBaseCount resource on a presentation-equivalent basis[ 16 ]. This exposure is below the reported pretraining-corpus sizes of Geneformer (approximately 30 million cells), scGPT (more than 33 million), scFoundation (more than 50 million) and CellFM (102.3 million)[2–4, 6], showing that the representation emerged after a comparatively compact training exposure. We evaluated the resulting representations with shared-backbone controls and across CellBench within-dataset few-shot annotation, reconstruction and perturbation tasks[ 17 ]. Under the reported extraction procedure, block prediction produced higher effective rank and weaker association with detected-gene depth in two diagnostics than token-level prediction, random blocks or decoder-only reconstruction. Frozen BioM-JEPA representations retained continuous expression, pathway and neighbourhood structure and provided the lowest aggregate perturbation-response error among the evaluated models. In a matched hPancreas timing experiment at batch size 8 with nearly identical trainable parameter counts, BioM-JEPA increased one-epoch fine-tuning throughput by 5.75-fold and held-out embedding throughput by 3.76-fold relative to scFoundation. Finally, targeted analyses were consistent with canonical pancreatic cell programmes, directed predictive associations between graph blocks and compositional relationships between genetic perturbations. These results support block-level prediction as a practical construction for extending JEPA learning to molecular data. 
+
+# 1 Results 
+
+## 1.1 Token prediction can optimize without producing a robust cell representation 
+
+We first asked whether successful latent prediction at the gene level is sufficient to organize cells in a biologically useful representation space. We trained BioM-JEPA, pure token-IJEPA and a decoder-only control using the same vocabulary, hidden width, linear-attention backbone and pretraining data. Token-IJEPA predicted individual teacher gene states, the decoder reconstructed expression, and BioM-JEPA predicted one teacher representation for each graph-defined target block. All three training losses decreased, while teacher-target similarity increased for the two JEPA models (Fig. 2a). Their pooled cell representations nevertheless developed differently. Across matched hPancreas training snapshots, the effective rank of the BioM-JEPA embedding rose from approximately 19 to nearly 40. Token-IJEPA remained near 19, whereas the decoder-only representation contracted to fewer than ten effective dimensions (Fig. 2b). Accurate token prediction or expression reconstruction therefore did not ensure that cell-to-cell variation was retained across many independent directions. The geometry also differed in its association with sequencing depth. We correlated the leading embedding axis and the embedding norm with the number of detected genes. BioM-JEPA showed the weakest mean absolute association, token-IJEPA the strongest and decoder-only an intermediate value (Fig. 2c). When the encoders were frozen and evaluated using the same CellBench Top-5 probe, BioM-JEPA achieved the highest macro-F1 on both hPancreas and cortex (Fig. 2d). These results support a failure mode specific to pooled transcriptomic representations: a 2Figure 1: Graph-connected block prediction with BioM-JEPA. a , A cell is represented as a sparse set of observed genes and their expression values. b, A gene graph defines connected candidate target blocks. c, Target-block genes are removed from the student input in the dominant masking regime, whereas the EMA teacher receives the full observed gene set. The student predicts the aggregate teacher representation of each target block from the complementary context; gradients do not pass through the teacher target. d, BioM-JEPA optimizes block-level alignment and regularizes the predicted block representations. It does not use an individual target-gene reconstruction objective. Detailed definitions and training pseudocode are provided in Supplementary Methods. 
+
+gene-level predictive objective can converge while the resulting cell embedding remains low dimensional and coupled to technical depth. 
+
+## 1.2 BioM-JEPA improves the annotation–robustness balance 
+
+We next compared graph-based target construction and objective choice using a shared encoder backbone and an identical embedding-extraction and downstream-evaluation pipeline. Random block used target sets sampled from the same size range without graph expansion. Token-IJEPA retained the teacher–student architecture but predicted genes individually. Decoder-only retained graph blocks but replaced latent alignment with expression reconstruction. BioM-JEPA combined graph-connected blocks with aggregate block-level prediction (Fig. 3a). BioM-JEPA achieved the highest mean Top-5 macro-F1 across hPancreas and cortex (0.835), compared with 0.817 for token-IJEPA, 0.812 for random block and 0.797 for decoder-only (Fig. 3b). The same ordering was observed for effective rank on both datasets (Fig. 3c). Participation ratio, which measures how evenly variation is distributed across the representation, likewise placed BioM-JEPA above random block and decoder-only, with greater dataset dependence for token-IJEPA. The complete block objective also reduced technical coupling in the tested diagnostics. Correlations between detected-gene count and either the leading embedding axis or embedding norm were lower for BioM-JEPA than for the three controls (Fig. 3d). Plotting within-dataset annotation performance against depth association placed BioM-JEPA in the favourable region of high annotation score and low technical coupling (Fig. 3e). Random targets produced weaker annotation despite matching the block-size range, while token prediction retained stronger depth 3Figure 2: Objective optimization separates from pooled representation quality. a , Relative training losses for all three models (solid lines) and teacher-target similarity for the two JEPA models (dotted lines). Loss is normalized within each objective family. b, Effective rank of hPancreas cell embeddings across training snapshots. c, Mean absolute association between embedding diagnostics and detected-gene depth; open symbols show individual diagnostics and filled symbols their mean. d, CellBench within-dataset Top-5 few-shot macro-F1 for hPancreas and cortex (mean and s.d. over five seeds). 
+
+association. Because all models used the same encoder backbone, the observed differences were associated with the complete pretraining formulations rather than encoder width or depth. 
+
+## 1.3 Linear attention accelerates embedding extraction and fine-tuning 
+
+The model contains twelve linear-attention encoder layers and a four-layer predictor. Unlike dense softmax attention, the attention core does not construct a matrix containing every pair of observed genes. Keys and values are summarized before they are combined with each query, so computation grows linearly with the number of observed genes at fixed model width[ 15 ]. This allows BioM-JEPA to preserve the full observed-gene sequence rather than impose an attention-driven token cap. We first isolated frozen encoder execution on identical ordered hPancreas cells at batch size 8. BioM-JEPA encoded 678.26 cells per second, compared with 353.35 cells per second for scFoundation, a 1.92-fold increase. hPancreas contained a median of 319 and a maximum of 1,659 observed gene tokens, and no artificial length cap was used. We then measured a task-realistic one-epoch hPancreas run at the same batch size. The final encoder block, leaf normalization parameters and an identical two-layer prediction head were trainable, giving 26.09 million trainable parameters for each model. BioM-JEPA processed 24.37 training cells per second, compared with 4.24 for scFoundation, a 5.75-fold increase (Table 1). During the no-gradient validation and test loops, held-out embedding throughput was 62.78 versus 16.68 cells per second, a 3.76-fold increase. The complete train–validation–test epoch required 66.08 s for BioM-JEPA and 352.68 s for scFoundation. Within this matched protocol, BioM-JEPA was faster than scFoundation in both frozen and partially tuned downstream use. Strong frozen-probe performance emerged after 10.24 million cell presentations, approximately 46% of the 22.1-4Figure 3: Controlled comparison of pretraining objective families. a , Components used by the four pretrained variants. b, Mean Top-5 few-shot macro-F1 over hPancreas and cortex. c, Effective rank and participation ratio for hPancreas (circles) and cortex (diamonds). d, Absolute correlations between detected-gene count and the leading embedding axis or embedding norm. e, Mean within-dataset macro-F1 versus mean depth association. Higher annotation performance and lower association are preferred. 
+
+million-cell local collection. The reported corpus sizes of Geneformer, scGPT, scFoundation and CellFM range from approximately 30 million to 102.3 million cells[ 2 – 4, 6]. BioM-JEPA therefore learned a useful block-aware representation after a comparatively compact training exposure. 
+
+## 1.4 Frozen embeddings retain expression, pathway and neighbourhood information 
+
+A representation can support cell-type classification while discarding continuous transcriptional structure. To test what remained accessible from each frozen embedding, we trained the same supervised decoder to predict a canonical expression vector (Fig. 4a). Encoder weights were never updated, and every model used the same decoder architecture, supervision budget, held-out split and stopping rule. Across eight CellBench datasets, BioM-JEPA achieved the highest dataset-mean cell-wise Pearson correlation and the lowest normalized root-mean-square error among the evaluated frozen representation models (Fig. 4b). It also recovered more of the 50 most highly expressed genes, gave the highest Reactome programme correlation and best preserved expression-space nearest neighbours (Fig. 4c,d). These metrics measure distinct properties: numerical expression fidelity, recovery of prominent genes, pathway-level activity and local cell-state geometry. Increasing the decoder training budget improved programme recovery for every model, but BioM-JEPA remained strongest from 100 to 900 labelled cells per class (Fig. 4e). In hPancreas, reconstructed marker-programme matrices preserved the major endocrine and exocrine organization, including alpha, beta, ductal, acinar, delta and pancreatic-polypeptide states (Fig. 4f). Thus, block prediction did not improve annotation by reducing the transcriptome to a 5Table 1: Matched one-epoch hPancreas efficiency. Both models used batch size 8, bfloat16 precision, one A100-SXM4-80GB GPU, the same data order, pooling structure and prediction head. Held-out throughput is measured over the no-gradient validation and test loops. 
+
+Model Trainable Train cells s −1 Held-out emb. cells s −1 Full epoch (s) Peak (GiB) BioM-JEPA 26,088,205 24.37 62.78 66.08 27.98 scFoundation 26,104,077 4.24 16.68 352.68 24.59 Speed-up — 5.75 × 3.76 × 5.34 × —narrow class code; the frozen representation retained continuous and multiscale biological information. 
+
+## 1.5 Block representations support perturbation-response prediction 
+
+We next evaluated whether frozen cell representations support prediction of responses that were not provided to the encoder. The CellBench response model receives a control-cell embedding and a perturbation identity and predicts the perturbed expression profile (Fig. 5a). We evaluated Adamson, Norman and Dixit using matched Top-k controls and five fixed seeds. The encoder remained frozen and the response predictor was identical across models. With Top-5 controls, BioM-JEPA achieved the lowest aggregate mean-squared error of the log-fold-change response (10.31), compared with 10.87–10.98 for scFoundation, scVI, scGPT and Geneformer (Fig. 5b). Its Pearson correlation was highest for the aggregate and unseen-single categories (Fig. 5c). On the Norman combination subset, the only dataset containing combination perturbations, scVI obtained the highest correlation. BioM-JEPA also recovered the largest fraction of the top 50 response genes (0.123), followed by scFoundation (0.115; Fig. 5d). In a representative Adamson condition, its predictions reproduced the direction and relative magnitude of the dominant response programme (Fig. 5e). Agreement across error, correlation and response-gene recovery is consistent with the block representation preserving information relevant to both the magnitude and biological composition of perturbation responses in the tested protocol. 
+
+## 1.6 BioM-JEPA representations reflect biological programmes and genetic relation-ships 
+
+We finally asked whether the frozen representation could expose recognizable biological structure without fitting a classifier. In the hPancreas dataset[ 18 ], the genes that most frequently supplied the maximal token activation aligned with canonical cell identities: GCG in alpha cells, INS in beta cells, SST in delta cells, PPY in pancreatic-polypeptide cells, GHRL in epsilon cells and REG1A in acinar cells (Fig. 6a). We then removed each of eight graph-defined programmes and measured how far the frozen cell embedding moved relative to removal of an expression- and detection-matched random gene set. Across the eight pre-specified programme identities, the corresponding cell identity showed a larger displacement than the mean of the other identities (mean excess shift, 5.34 versus 0.064; two-sided paired Wilcoxon test across programmes, n = 8, P = 0 .0078; Fig. 6b). Directed ablations also produced an asymmetric matrix of changes in target-block prediction error (Fig. 6c). These results associate cell identity with coordinated graph programmes rather than only with isolated high-activation genes. The Norman perturbation atlas provides a second test of biological organization[ 19 ]. For each double perturbation, we compared its latent displacement with the sum of the displacements produced by its two constituent single perturbations. All 80 evaluated combination conditions agreed more strongly with their matched constituent pair than with the mean of 200 expression-matched random pairs per condition (two-sided paired Wilcoxon test across conditions, n = 80, P = 7 .85 × 10 −15 ; Fig. 6d). The highest-agreement examples included MAP2K3–MAP2K6, which converge on p38 signalling[ 20 ]; CEBPA–CEBPE, which coordinate granulocytic differentiation[ 21 ]; and the related developmental regulators TBX2–TBX3[ 22 ]. These examples are consistent with established functional relationships being reflected in the geometry of the frozen representation and provide a starting point for testable biological hypotheses. 6Figure 4: Reconstruction probes of frozen single-cell embeddings. a, Shared-decoder evaluation. b, Cell-wise expression fidelity across eight datasets. c, Recovery of highly expressed genes and Reactome programmes. d, Preservation of cell-state neighbourhoods. e, Reactome programme correlation as decoder supervision increases. f, hPancreas marker-programme reconstruction. Small symbols in b–d denote datasets; large points and intervals summarize the dataset mean and its uncertainty. 
+
+7Figure 5: Perturbation prediction from frozen cell representations. a , CellBench response-prediction protocol. 
+
+b, Top-5 MSE-LFC (mean ± s.d. over five seeds; lower is better). c, Pearson-LFC by perturbation type; combination perturbations are available for Norman only. d, Top-50 response-gene overlap (mean ± s.d. over five seeds; higher is better). 
+
+e, Representative Adamson Top-5 observed and predicted response profiles. 
+
+8GCG   
+
+> INS
+> SST
+> PPY
+> GHRL
+> REG1A
+> COL1A1
+> TPSAB1
+> alpha
+> beta
+> delta
+> PP
+> epsilon
+> acinar
+> PSC
+> mast
+> 0.73
+> 0.82
+> 0.97
+> 0.97
+> 0.14 0.75
+> 0.64
+> 0.17
+> 0.25 0.19
+
+a Cell-type max-token winners      
+
+> 0.0 2.5 5.0 7.5 10.0 12.5
+
+excess shift over matched random 
+
+> alpha
+> beta
+> delta
+> PP
+> acinar
+> ductal
+> PSC
+> endothelial
+
+b Program ablation is cell-type specific 
+
+> matched
+> other
+> α
+> β
+> δ
+> PP
+> Acinar
+> Ductal
+> PSC
+> Endo.
+
+target block 
+
+> α
+> β
+> δ
+> PP
+> Acinar
+> Ductal
+> PSC
+> Endo.
+> ablated block
+
+c Directed block dependencies        
+
+> −0.4 −0.2 0.0 0.2 0.4 0.6 0.8 1.0
+
+random-pair additive cosine    
+
+> −0.4
+> −0.2
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> matched-pair additive cosine
+> 80/80 above random mean
+> paired Wilcoxon P= 7.8 e− 15
+
+d Norman double-perturbation composition        
+
+> −0.75 −0.50 −0.25 0.00 0.25 0.50 0.75 1.00
+
+cosine to observed double perturbation 
+
+> CEBPB+MAPK1
+> TBX3+TBX2
+> CEBPE+CEBPA
+> MAP2K3+MAP2K6
+
+e Literature-supported gene-pair relationships  
+
+> true pair random mean ± s.d.
+> 0.0
+> 0.5
+> 1.0
+> winner fraction
+> −0.04
+> −0.02
+> 0.00
+> 0.02
+> 0.04
+> excess  ΔMSE
+
+Figure 6: Biological structure reflected in frozen BioM-JEPA representations. a , Cell-type-resolved max-token winner fractions for canonical hPancreas genes. b, Excess embedding shift after graph-programme ablation relative to one expression- and detection-matched random set per programme. Points summarize 24 cells per identity; the aggregate test uses the eight programme identities as paired statistical units. c, Descriptive directed change in target-block prediction error after ablating each context programme, corrected by the mean of three matched-random ablations; each ordered pair was evaluated in 24 cells from the target-matched identity. d, Agreement between each of 80 Norman double-perturbation displacements and the additive displacement of its matched constituent pair, compared with 200 matched-random pairs per condition. e, Selected literature-supported gene pairs. Teal points show the matched pair; grey points and intervals show the random-pair mean and s.d. MAP2K3–MAP2K6, CEBPE–CEBPA, TBX3–TBX2 and CEBPB–MAPK1 represent p38 signalling, granulocytic differentiation, developmental regulation and ERK–C/EBP β signalling, respectively. Complete definitions and source-data construction are provided in Supplementary Methods. 
+
+92 Discussion 
+
+BioM-JEPA defines graph-connected gene blocks as prediction units for joint-embedding learning in single cells. Under a shared backbone and extraction procedure, aggregate block prediction produced representations with higher effective rank, weaker association with detected-gene depth in the tested diagnostics and stronger frozen-probe performance than token prediction, random blocks and expression reconstruction. These findings support prediction scale as a central design choice: convergence of a gene-level objective does not by itself ensure a cell representation that retains broad biological variation. The block objective is well matched to sparse transcriptomic observations. Failure to detect one gene is weak evidence that its biological programme is inactive, whereas multiple connected genes provide partially redundant evidence for a shared latent state. Graph connectivity also gives each target an identity independent of gene order. Graph-connected blocks therefore play a role analogous to coherent spatial regions in I-JEPA and spatiotemporal regions in V-JEPA, while adapting the prediction unit to molecular data[12, 13]. The learned representation retained information across biological scales. It supported few-shot annotation, continuous expression reconstruction, Reactome programme recovery, local cell-state neighbourhoods and perturbation-response prediction. Max-token analysis aligned with canonical pancreatic genes, programme ablation selectively displaced the corresponding cell identities and latent perturbation arithmetic reflected established functional gene pairs. Because the graph contains protein-association and coexpression evidence but no cell-type labels, regulatory direction or perturbation-combination identities, these analyses reveal biological structure learned beyond the annotations directly supplied to the model. They provide a representation-level basis for prioritizing candidate relationships for experimental study. Linear attention makes this objective practical for broad observed-gene contexts. By contracting keys and values before applying each query, BioM-JEPA avoids materializing all gene pairs and scales linearly with sequence length at fixed width. In matched hPancreas measurements at batch size 8, BioM-JEPA was 5.75 times faster than scFoundation during one-epoch partial fine-tuning and 3.76 times faster during held-out embedding extraction, with nearly identical trainable parameter counts. The representation was obtained after 10.24 million cell presentations, below the published pretraining-corpus sizes of Geneformer, scGPT, scFoundation and CellFM. Together, these results show that a useful block-aware representation can emerge from a comparatively compact training exposure. The pretraining collection lacks study accession identifiers, so study-level overlap with CellBench cannot be excluded and annotation is reported as within-dataset frozen-probe evaluation. Graph-connected blocks are operational prediction targets rather than curated pathways, and the objective controls compare complete pretraining formulations. Depth association was evaluated through the leading embedding axis and embedding norm. These scope conditions motivate accession-resolved pretraining corpora, component-wise objective studies and broader technical-covariate tests, while preserving the central observation that block-level JEPA produced the strongest aggregate representation across the tested objectives. BioM-JEPA extends joint-embedding prediction from ordered visual regions to unordered molecular observations. Its essential step is to define the latent target through relationships native to the modality rather than treating individual genes as transcriptomic image patches. This principle provides a direct route to prediction units based on independently validated pathways, regulatory circuits and molecular complexes in future representation models for biological data. 
+
+# 3 Methods 
+
+## 3.1 Problem formulation               
+
+> Let Vdenote a shared vocabulary of G= 19 ,264 genes. A cell iis represented by its observed gene set Oi⊆ V and normalized expression values xig for g∈ O i. Our aim is to learn a cell representation without cell-type, perturbation or study labels. Rather than reconstructing every expression value, BioM-JEPA learns by predicting latent representations of structured subsets of the observed transcriptome. The central prediction unit is a graph-connected gene block . We use this term strictly for a connected set sampled from a gene graph; biological programme or pathway refers only to a set supported by an independent annotation or downstream analysis. This distinction separates the mathematical object used for self-supervision from the biological interpretation tested after training.
+
+10 3.2 Cell representation and gene graph 
+
+Raw counts were mapped to V, normalized to a constant library size and transformed as xig = log (1 + 10 4cig / P 
+
+> g′
+
+cig ′ ). Two technical values encoding a fixed resolution and log library depth were available to the encoders as context but were excluded from target sampling and downstream pooling. We constructed a sparse gene graph G = ( V, E) from two complementary sources. High-confidence STRING v12 protein associations supplied experimentally and computationally supported molecular links, and corpus-level coexpression supplied transcriptomic proximity[ 14 ]. For each gene, we retained at most 64 outgoing neighbours after taking the binary union of STRING associations with combined score at least 700 and the strongest approximate absolute coexpression neighbours. The resulting adjacency contained 1,123,337 directed entries, with mean out-degree 58.31. No cell-type label, perturbation identity, pathway membership or transcription-factor direction was used to construct the graph. 
+
+## 3.3 Graph-connected target blocks 
+
+For each cell and each of K = 4 targets, we sample an observed seed gene and a requested block size between 2,000 and 8,000 genes. Breadth-first expansion from the seed produces a candidate block Bik ⊆ V . Only genes detected in the current cell contribute to its target support, Tik = Bik ∩ O i. The nominal student context is the complementary observed set 
+
+Ci = Oi \ S 
+
+> k
+
+Tik . When this operation leaves fewer than 512 context tokens, the observed set is retained as context to avoid an uninformative short sequence. The teacher always receives the full observed gene set. Thus, target construction is shared across cells through the gene graph, whereas the realized target is specific to the genes observed in each cell. Each block is identified by the median vocabulary index of its candidate genes. Its learned query combines the corresponding gene-position embedding with a mask embedding and contains no target expression value. On the student side, the query first selects visible context within a 64-neighbour coexpression neighbourhood; when no such neighbour is visible, all visible context genes remain eligible. A temperature-controlled similarity weighting then summarizes this context into one student block state. 
+
+## 3.4 Student–teacher prediction 
+
+The student encoder fθ and teacher encoder fξ share a 12-layer, 768-dimensional linear-attention architecture. The teacher is updated as an exponential moving average of the student, ξ ← μξ + (1 − μ)θ, with momentum increasing from 0.996 to 0.9997. It is never optimized by backpropagation. A four-layer predictor pϕ maps the pooled student context to the target-representation space. For a valid cell–block pair ( i, k ), the teacher target is the mean of the teacher token states over Tik , followed by EMA centring and gradient stopping. If htig is the teacher state of gene g and c is the running centre, the target is 
+
+tik = sg 
+
+ 1
+
+|Tik |
+
+X
+
+> g∈Tik
+
+htig − c
+
+ .
+
+The corresponding student state sik is obtained by query-conditioned pooling of the visible context, and the prediction is 
+
+btik = pϕ(sik ). Aggregation therefore precedes the prediction error: one graph-connected block contributes one latent target, irrespective of how many of its genes are observed. This is the defining difference from token-level JEPA, which assigns a separate target to every masked gene. 
+
+## 3.5 Block-level objective 
+
+For the set B of valid cell–block pairs in a minibatch, the alignment term is the mean squared distance between predicted and teacher block states. We additionally regularize the batch of predictions to retain variation across embedding dimensions and reduce redundant covariance. The complete objective is 
+
+LB = 1
+
+|B| 
+
+X
+
+> (i,k )∈B
+
+∥btik − tik ∥22 + λvar Lvar + λcov Lcov ,
+
+where Lvar penalizes dimensions whose batch standard deviation falls below one and Lcov penalizes off-diagonal covariance. We used λvar = 0 .05 and λcov = 0 .01. No individual target-gene reconstruction term enters this objective. This construction has two consequences. First, genes from the same connected block provide redundant evidence for a shared latent target, reducing the dependence of supervision on any one sparse measurement. Second, the target dimension is fixed by the number of sampled blocks rather than the number of detected target genes, so cells of different sequencing depth contribute comparable numbers of prediction units. 
+
+11 3.6 Linear-attention encoder 
+
+All student, teacher and predictor layers use linear attention. A positive feature map, φ(u) = ELU (u) + 1, permits keys and values to be contracted into a shared summary before each query is applied. At fixed hidden width, this factorization grows linearly with the number of observed genes and avoids constructing a dense gene-by-gene attention matrix[ 15 ]. It therefore permits the encoder to retain the observed gene sequence without an attention-imposed length cap. 
+
+## 3.7 Cell-level embedding 
+
+After training, the encoder is frozen and each cell is represented by pooling its gene-token states. For the 768-dimensional token matrix, we concatenate the element-wise maximum with the mean of the five largest values in each feature dimension, producing a 1,536-dimensional cell embedding. Technical-token positions are excluded from this operation. The same cell embedding is used without encoder updates for annotation, reconstruction, perturbation prediction and representation diagnostics. 
+
+## 3.8 Pretraining data and optimization 
+
+Pretraining used a scBaseCount snapshot containing records available no later than 25 February 2025[ 16 ]. The local corpus comprised 22.1 million cells. We trained with an effective batch of 512 cells and analysed the representation after 20,000 optimizer steps, corresponding to 10.24 million cell presentations. This is 46.33% of one traversal of the local collection and 2.04% of the 502-million-cell scBaseCount resource on a presentation-equivalent basis. The local matrices do not retain source-study accessions; this provenance boundary is considered in the Discussion. 
+
+## 3.9 Evaluation framework 
+
+BioM-JEPA is the method studied throughout this work. To contextualize its representation behaviour, we evaluated three matched objective controls. Token-IJEPA predicted individual teacher gene states; random block replaced graph expansion with uniformly sampled target sets while preserving aggregate prediction; and decoder-only replaced latent alignment with expression reconstruction. Each control retained the vocabulary, encoder width, linear-attention backbone and downstream extraction procedure used for BioM-JEPA. 
+
+## 3.10 Within-dataset few-shot annotation 
+
+We followed the CellBench-LS within-dataset protocol[ 17 ]. For each cell type, one, five or nine labelled support cells were selected by label-stratified sampling, an SVM was fitted to frozen embeddings and all remaining labelled cells formed the held-out set. Macro-F1 was the unweighted mean of class-wise F1 values. We used five fixed support-set seeds; reported error bars show one standard deviation. 
+
+## 3.11 Frozen-embedding reconstruction 
+
+To measure information accessible from the representation, we trained the same multilayer perceptron on each model’s frozen embedding to predict a canonical 400-gene expression vector. We evaluated cell-wise Pearson correlation, normalized root-mean-square error, overlap among the top 50 expressed genes, Reactome programme correlation[ 23 ] and overlap between 15-nearest-neighbour cell-state graphs. The decoder architecture, data split and optimization budget were shared across models. 
+
+## 3.12 Perturbation-response prediction 
+
+The CellBench response model received a frozen control-cell embedding and a perturbation identity and predicted the corresponding perturbed expression profile. Adamson, Norman and Dixit were evaluated with matched Top-k control examples and five fixed seeds. We quantified expression and log-fold-change error, Pearson correlation and overlap among the 50 strongest response genes. Norman additionally provided single- and combination-perturbation strata. 
+
+## 3.13 Efficiency evaluation 
+
+Embedding extraction and one-epoch partial fine-tuning were measured separately on hPancreas with batch size 8 on one NVIDIA A100-SXM4-80GB GPU using bfloat16 computation. Both BioM-JEPA and scFoundation received the same ordered cells. For partial fine-tuning, the final encoder block, leaf normalization parameters and a common two-layer classification 
+
+12 head were trainable, yielding 26,088,205 and 26,104,077 trainable parameters, respectively. Training throughput includes forward propagation, backpropagation and the optimizer step; held-out throughput measures no-gradient encoding followed by the shared prediction head. 
+
+## 3.14 Biological representation analyses 
+
+For the max-token analysis, we identified the gene providing the largest token contribution in each held-out hPancreas cell and calculated its winner fraction within each annotated cell type. For programme ablation, genes from a graph-defined set were removed and the embedding displacement was compared with expression- and detection-matched random removals. Directed programme dependence was measured as the change in teacher-target prediction error after ablating a context programme, corrected by the matched-random effect. For Norman double perturbations, each perturbation was represented by its mean displacement from control cells in the frozen embedding space. The sum of the two single-perturbation displacements was compared with the observed double-perturbation displacement, with expression-matched random gene pairs defining the null distribution. 
+
+## 3.15 Representation geometry and statistics 
+
+Effective rank and participation ratio were calculated from the eigenvalue spectrum of the centred embedding covariance. Association with sequencing depth was summarized by the absolute Pearson correlation of detected-gene count with the leading embedding axis and with embedding norm. These diagnostics measure two specified technical axes rather than complete statistical independence from depth. Few-shot and perturbation analyses used five fixed seeds unless stated otherwise. Cross-dataset intervals were obtained by nonparametric bootstrap resampling of datasets. Programme-ablation and double-perturbation effects were evaluated with paired nonparametric tests using the statistical units specified in the corresponding figure legends. Detailed metric definitions, pseudocode and complete evaluation protocols are provided in the Supplementary Information. 
+
+# 4 Acknowledgements 
+
+This work was supported by the National Key R&D Program of China (No. 2022ZD0115100), the National Natural Science Foundation of China (No. U21A20427), the Center of Synthetic Biology and Integrated Bioengineering of Westlake University (No. WU2022A009), the “Pioneer” and “Leading Goose” R&D Program of Zhejiang (No. 2024C01140), the Key Research and Development Program of Hangzhou (No. 2023SZD0073), the InnoHK programme and the CAAI–Ant Research Fund. We thank the Westlake University HPC Center for providing computational resources. 
+
+# 5 Data availability 
+
+The pretraining shards were derived from the public scBaseCount resource, and the evaluation datasets are available through the CellBench-LS release ( https://github.com/sky-Yongjie-Xu/2026-CellBench ) and their original repositories. The arXiv ancillary bundle contains the fixed dataset identities, benchmark protocol metadata, accession-overlap audit and panel-level numerical values underlying every quantitative figure and supplementary summary. It does not redistribute count matrices, per-cell embeddings or full prediction arrays. No private patient-level metadata were used. 
+
+# 6 Code availability 
+
+The BioM-JEPA checkpoint, training and inference software, fixed graph, vocabulary and an AnnData-to-embedding interface will be released through GitHub. The repository will also document data preparation, representation extraction and reproduction of the reported analyses. Numerical source data for the figures accompany the arXiv submission. 
+
+13 References 
+
+[1] Romain Lopez, Jeffrey Regier, Michael B. Cole, Michael I. Jordan, and Nir Yosef. Deep generative modeling for single-cell transcriptomics. Nature Methods , 15:1053–1058, 2018. doi: 10.1038/s41592-018-0229-2. [2] Christina V. Theodoris et al. Transfer learning enables predictions in network biology. Nature , 618:616–624, 2023. doi: 10.1038/s41586-023-06139-9. [3] Haotian Cui et al. scGPT: toward building a foundation model for single-cell multi-omics using generative AI. Nature Methods , 21:1470–1480, 2024. doi: 10.1038/s41592-024-02201-0. [4] Minsheng Hao et al. Large-scale foundation model on single-cell transcriptomics. Nature Methods , 21:1481–1491, 2024. doi: 10.1038/s41592-024-02305-7. [5] Haiyang Bian et al. scMulan: a multitask generative pre-trained language model for single-cell analysis. In Research in Computational Molecular Biology , pages 479–482. Springer, 2024. doi: 10.1007/978-1-0716-3989-4 57. [6] Yuansong Zeng et al. CellFM: a large-scale foundation model pre-trained on transcriptomics of 100 million human cells. 
+
+Nature Communications , 16:4679, 2025. doi: 10.1038/s41467-025-59926-5. [7] Alejandro Tejada-Lapuerta et al. Nicheformer: a foundation model for single-cell and spatial omics. Nature Methods , 22: 2525–2538, 2025. doi: 10.1038/s41592-025-02814-z. [8] Kasia Z. Kedzierska, Lorin Crawford, Ava P. Amini, and Alex X. Lu. Zero-shot evaluation reveals limitations of single-cell foundation models. Genome Biology , 26:101, 2025. doi: 10.1186/s13059-025-03574-x. [9] Alan DenAdel et al. Evaluating the role of pretraining dataset size and diversity on single-cell foundation model performance. Nature Methods , 23:1447–1457, 2026. doi: 10.1038/s41592-026-03120-y. [10] Constantin Ahlmann-Eltze, Wolfgang Huber, and Simon Anders. Deep-learning-based gene perturbation effect prediction does not yet outperform simple linear baselines. Nature Methods , 22:1657–1661, 2025. doi: 10.1038/s41592-025-02772-6. [11] Yann LeCun. A path towards autonomous machine intelligence. OpenReview, 2022. URL https://openreview.net/ forum?id=BZ5a1r-kVsf .[12] Mahmoud Assran et al. Self-supervised learning from images with a joint-embedding predictive architecture. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 15619–15629, 2023. doi: 10.1109/CVPR52729.2023.01499. [13] Adrien Bardes et al. Revisiting feature prediction for learning visual representations from video. Transactions on Machine Learning Research , 2024. URL https://arxiv.org/abs/2404.08471 .[14] Damian Szklarczyk, Rebecca Kirsch, Mikaela Koutrouli, Katerina Nastou, Farrokh Mehryary, Raisa Hachilif, Annika L. Gable, Tao Fang, Nadezhda T. Doncheva, Sampo Pyysalo, Peer Bork, Lars Juhl Jensen, and Christian von Mering. The STRING database in 2023: protein–protein association networks and functional enrichment analyses for any sequenced genome of interest. Nucleic Acids Research , 51(D1):D638–D646, 2023. doi: 10.1093/nar/gkac1000. [15] Angelos Katharopoulos, Apoorv Vyas, Nikolaos Pappas, and Fran¸ cois Fleuret. Transformers are RNNs: fast autoregressive transformers with linear attention. In Proceedings of the 37th International Conference on Machine Learning , volume 119 of Proceedings of Machine Learning Research , pages 5156–5165. PMLR, 2020. URL https://proceedings.mlr.press/ v119/katharopoulos20a.html .[16] Nicholas D. Youngblut, Christopher Carpenter, Arshia Nayebnazar, Abhinav Adduri, Rohan Shah, Chiara Ricci-Tam, Jaanak Prashar, Rajesh Ilango, Noam Teyssier, Silvana Konermann, Patrick D. Hsu, Alexander Dobin, Dave P. Burke, Hani Goodarzi, and Yusuf H. Roohani. scBaseCount: an AI agent-curated, uniformly processed, and autonomously updated single-cell data repository. bioRxiv , 2025. doi: 10.1101/2025.02.27.640494. [17] Yongjie Xu, Y. Li, Y. Yuan, C. Yu, and Z. Zang. CellBench-LS: benchmark evaluation of single-cell foundation models for low-supervision scenarios. bioRxiv , 2026. doi: 10.64898/2026.04.01.714123. [18] ˚ Asa Segerstolpe, Athanasia Palasantza, Pernilla Eliasson, Eva-Marie Andersson, Anne-Christine Andr´ easson, Xiaoyan Sun, Simone Picelli, Alan Sabirsh, Maryam Clausen, Magnus K. Bjursell, David M. Smith, Maria Kasper, Carina ¨Amm¨ al¨ a, and Rickard Sandberg. Single-cell transcriptome profiling of human pancreatic islets in health and type 2 diabetes. Cell Metabolism , 24(4):593–607, 2016. doi: 10.1016/j.cmet.2016.08.020. [19] Thomas M. Norman, Max A. Horlbeck, Joseph M. Replogle, Alex Y. Ge, Albert Xu, Marco Jost, Luke A. Gilbert, and Jonathan S. Weissman. Exploring genetic interaction manifolds constructed from rich single-cell phenotypes. Science ,365(6455):786–793, 2019. doi: 10.1126/science.aax4438. 
+
+14 [20] Jean Raingeaud, Alan J. Whitmarsh, Tanya Barrett, Benoit D´ erijard, and Roger J. Davis. MKK3- and MKK6-regulated gene expression is mediated by the p38 mitogen-activated protein kinase signal transduction pathway. Molecular and Cellular Biology , 16(3):1247–1255, 1996. doi: 10.1128/MCB.16.3.1247. [21] Renato Avellino, Harmen J. G. van de Werken, et al. Transcription factor-driven coordination of cell cycle exit and lineage-specification in vivo during granulocytic differentiation. Nature Communications , 13:3595, 2022. doi: 10.1038/s41467-022-31332-1. [22] Reena Singh, Willem M. Hoogaars, Phil Barnett, Thomas Grieskamp, M. Sameer Rana, Henk Buermans, Henner F. Farin, Marianne Petry, Todd Heallen, James F. Martin, Antoon F. M. Moorman, Peter A. C. ’t Hoen, Andreas Kispert, and Vincent M. Christoffels. Tbx2 and Tbx3 induce atrioventricular myocardial development and endocardial cushion formation. Cellular and Molecular Life Sciences , 69(8):1377–1389, 2012. doi: 10.1007/s00018-011-0884-2. [23] Marc Gillespie et al. The Reactome pathway knowledgebase 2022. Nucleic Acids Research , 50:D687–D692, 2022. doi: 10.1093/nar/gkab1028. 
+
+15 Supplementary Information Supplementary Methods 
+
+## Study design and notation 
+
+We evaluated BioM-JEPA as a frozen embedding model and used the same saved representation for annotation, clustering, reconstruction and perturbation prediction. Let xi ∈ RG denote the canonical expression vector of cell 
+
+i, yi ∈ { 1, . . . , C } its cell-type label and zi = f (xi) ∈ Rd the frozen model embedding. All supervised heads were trained after freezing f . We used fixed split identities and the same random seeds for every model within a task. The reported benchmark models were UMAP, scVI, CellPLM, Geneformer, LangCell, scGPT, scMulan, scFoundation, Nicheformer and BioM-JEPA where outputs were available. 
+
+## Pretraining corpus, sampling and exposure accounting 
+
+The pretraining shards were prepared from a scBaseCount snapshot containing records available no later than 25 February 2025. scBaseCount is an AI-agent-curated and uniformly processed single-cell repository[ 16 ]; the current source repository contains more than 502 million cells across organisms, tissues and studies. The present model was trained on a curated shard collection rather than for one full pass over the complete repository. The pretraining collection contained 442 CSR sparse matrices, each with 50,000 rows and 19,264 columns, for a total of 
+
+Nlocal = 442 × 50 ,000 = 22 ,100 ,000 cells. Shard order and row order within each shard were shuffled. Shards were partitioned across eight distributed ranks and then across eight data-loader workers per rank, so each row was assigned to one rank–worker pair during a traversal. Pretraining used eight GPUs, a local batch of eight cells per GPU and eight gradient-accumulation batches. If Blocal 
+
+is the local batch, D the number of distributed workers and A the accumulation factor, one optimizer step represents 
+
+Beff = Blocal DA = 8 × 8 × 8 = 512 cell presentations. The representation analysed in this study was obtained at optimizer step s = 20 ,000, giving 
+
+Npresent = sB eff = 10 ,240 ,000 cell presentations. One complete local pass requires approximately 
+
+Nlocal /B eff = 43 ,164 .1optimizer steps. The analysed representation therefore precedes the first complete pass and covers 46.33% of the local rows, with no intentional row resampling. Apart from incomplete worker batches discarded by sortish batching, Nunique ≃ Npresent . Relative to the 502-million-cell resource, 10.24 million corresponds to 2.04% on a presentation-equivalent scale. 
+
+Context relative to reported foundation-model corpora. The 10.24 million presentations are lower than the published pretraining-corpus counts for Geneformer (approximately 30 million cells), scGPT (more than 33 million), scFoundation (more than 50 million) and CellFM (102,304,686 cells)[ 2 – 4, 6 ]. Table S1 reports these quantities without converting them into nominal epochs. These quantities place the training exposure in context: the reported representation emerged after fewer cell presentations than the published corpus size of each comparator. Because the models differ in architecture, vocabulary and preprocessing, Table S1 is an exposure comparison rather than a fitted scaling law. 
+
+Evaluation-overlap audit. No benchmark labels or task-specific train–test splits were used during pretraining or graph construction. The 442 local shards contain sparse expression matrices but no study-accession or cell-source manifest; study-level overlap with the public datasets underlying CellBench-LS therefore cannot be excluded. We therefore describe annotation as within-dataset frozen-probe evaluation. The same terminology is applied to comparator models for which accession-resolved pretraining manifests are unavailable. 16 Table S1: Cell scale used to contextualize pretraining exposure. The BioM-JEPA value is the number of cell presentations used in this study; comparator values are published corpus sizes.             
+
+> Model Reported scale Quantity represented
+> BioM-JEPA 10.24 million Cell presentations Geneformer ∼30 million Pretraining corpus cells scGPT >33 million Pretraining corpus cells scFoundation >50 million Pretraining corpus cells CellFM 102.3 million Pretraining corpus cells
+
+Table S2: Pretraining and graph-overlap status. Matrix-only shards do not permit accession-level exclusion of the public studies underlying the benchmark. 
+
+Evaluation family Datasets Pretraining overlap Coexpression-source overlap Annotation/reconstruction hPancreas, cortex, MS, liver Cannot be excluded Cannot be excluded Annotation/reconstruction Zheng68k, lung, COVID, immune Cannot be excluded Cannot be excluded Annotation only PBMC12k Cannot be excluded Cannot be excluded Perturbation Adamson, Norman, Dixit Cannot be excluded Cannot be excluded 
+
+Temporal audit against the pretraining cutoff. The CellBench-LS manuscript was posted in 2026, after the 25 February 2025 scBaseCount snapshot cutoff, but publication of the benchmark is distinct from generation of its constituent data. We audited the dataset descriptions and original sources cited by CellBench-LS[ 17 ], together with the additional Dixit perturbation dataset used by our CellBench adapter. The latest source years for the general-purpose datasets range from 2017 to 2024; the batch-correction datasets trace to 2021, and the perturbation datasets trace to 2016–2019. Thus, no benchmark dataset used here can be certified as generated after the pretraining cutoff (Table S3). The audit establishes that the present benchmark suite is not a temporal holdout; it does not establish that its studies were included in the matrix-only shards. 
+
+Table S3: Benchmark temporal audit relative to 25 February 2025. Years denote source-publication dates reported by CellBench-LS or, for the additional Dixit dataset, its original study; they are not necessarily the first date on which every raw file became public. 
+
+Evaluation family Dataset Source publication year Certified post-cutoff? Annotation/clustering PBMC12k; hPancreas; MS; Zheng68k 2020; 2022; 2019; 2017 No Annotation/clustering cortex; COVID; liver; lung; immune 2023; 2024; 2021; 2020; 2022 No Batch correction UC-EPI; UC-IMM 2021; 2021 No Perturbation Adamson; Norman 2016; 2019 No Additional perturbation Dixit 2016 No 
+
+## CellBench-LS datasets and preprocessing 
+
+Annotation and clustering used the nine CellBench-LS datasets PBMC12k, hPancreas, cortex, multiple sclerosis (MS), liver, Zheng68k, lung, COVID and immune. Reconstruction used hPancreas, cortex, MS, liver, Zheng68k, lung, COVID and immune. Perturbation prediction used Adamson, Norman and Dixit; combination perturbations occur in Norman. Raw count matrices were retained where required. Gene identifiers were mapped to each model’s published vocabulary, duplicated identifiers were resolved before inference and cells lacking a valid benchmark label were removed. Each model retained its documented tokenization and value transformation. BioM-JEPA mapped sparse raw counts to the 19,264-gene vocabulary and applied vig = log (1 + 10 4cig / P 
+
+> g′
+
+cig ′ ). Two scFoundation-style control values represented a fixed high-resolution value of 4 and log 10 library size. They were visible context entries for the student and teacher but were excluded from graph-target eligibility. Frozen BioM-JEPA embeddings excluded these positions and concatenated the element-wise maximum gene-token state with the mean of the five largest gene-token states per feature, producing a 1,536-dimensional embedding. The same pooling and control-position policy was used for the objective controls. 17 Linear-attention architecture 
+
+BioM-JEPA used a 19,264-gene vocabulary, hidden width d = 768, twelve encoder layers and twelve heads per layer. All encoder layers used flash linear attention. The prediction head used four linear-attention layers, twelve heads and dropout 0 .05. The student was fully trainable. The teacher shared the encoder architecture and was updated only by EMA with momentum annealed from 0 .996 to 0 .9997. For one head, let Q, K, V ∈ Rn×dh and φ(u) = ELU( u) + 1. Linear attention evaluates 
+
+yi =
+
+φ(qi)⊤
+
+hP 
+
+> j
+
+φ(kj )v⊤
+
+> j
+
+i
+
+φ(qi)⊤
+
+hP 
+
+> j
+
+φ(kj )
+
+i
+
++ 10 −6
+
+,
+
+after setting padded keys and values to zero. The numerator and normalizer are contracted once rather than materializing an n × n token-affinity matrix. With h heads and dh = d/h , the attention-core complexity is 
+
+O hnd 2
+
+> h
+
+ = O
+
+ nd 2
+
+h
+
+
+
+,
+
+compared with O(n2d) for dense softmax attention. The asymptotic statement assumes fixed width and does not include tokenization, feed-forward layers or input/output transfer. We therefore report it separately from measured end-to-end throughput. 
+
+## Biological graph and target blocks 
+
+The implemented target graph was restricted to the shared gene vocabulary V, with |V| = 19 ,264. It used two sources. 
+
+STRING protein-association adjacency. STRING v12 human links were mapped to the vocabulary by preferred symbol and unambiguous aliases[ 14 ]. Links with combined score below 700 and self-edges were removed. For each row, the 64 highest-scoring mapped neighbours were retained and the result was symmetrized. This graph mapped 17,892 STRING proteins and contained 356,772 nonzero adjacency entries. 
+
+Corpus coexpression adjacency. All 22.1 million local cells were transformed as 
+
+x′ 
+
+> ig
+
+= log 1 + 10 4xig / X
+
+> h
+
+xih 
+
+!
+
+.
+
+Centred random projections with 256 projection dimensions approximated the absolute Pearson association between every gene pair. The 64 strongest neighbours per gene were retained and symmetrized, producing 2,360,480 nonzero entries. Thus, the coexpression graph was estimated from unlabeled expression matrices; it did not use a benchmark label, but accession overlap cannot be excluded for the reason above. The STRING and corpus-coexpression adjacencies were binarized, combined by union and truncated row-wise to 64 neighbours: 
+
+A = RowTop 64 
+
+ 1[ASTRING > 0] ∨ 1[Acoexp > 0]  .
+
+Because the final row-wise truncation was applied after the union, A is a directed neighbourhood table rather than a guaranteed symmetric matrix. It contains 1,123,337 entries and has mean out-degree 58.31. No pathway-membership table, transcription-factor direction, cell-type label or perturbation-pair identity entered A.
+
+Operational target-block definition. In this work a graph-connected gene block is a candidate target set under 
+
+A. Biological programme and pathway are reserved for independently supported gene sets. For cell i, let Oi be its observed genes. For each of K = 4 targets, we draw a seed 
+
+rik ∼ Uniform( Oi)18 and an integer requested size Lik ∼ Uniform {2000 , . . . , 8000 }. Breadth-first expansion over outgoing neighbour lists gives 
+
+Bik = BFS( A, r ik , L ik ).
+
+The cell-specific target support is not all 2,000–8,000 candidate genes, but only the observed intersection 
+
+Tik = Bik ∩ O i.
+
+The teacher block state is averaged over Tik . The query identifier is the median vocabulary index in Bik , denoted 
+
+cik , and contains a learned position embedding plus a learned mask vector but no target expression value. The nominal student context is 
+
+Ci = Oi \
+
+> K
+
+[
+
+> k=1
+
+Tik .
+
+If |C i| < 512, the minimum-context safeguard restores Ci = Oi rather than presenting an uninformative short sequence. This permits target values to remain visible in the affected cells. On the student side, query-conditioned pooling first restricts context candidates to 
+
+CDMT  
+
+> ik
+
+= Ci ∩ N coexp 64 (cik )and falls back to Ci when the intersection is empty. The teacher always receives the full observed gene set. 
+
+Target-visibility audit. We quantified the minimum-context safeguard on 10,000 cells sampled uniformly from 16 of the 442 training shards, using four graph blocks, requested block sizes of 2,000–8,000 genes, the 64-neighbour graph, the 512-token threshold and random seed 42. For every sampled cell, we reconstructed the realized target union, residual context and safeguard decision. Mean target coverage was 0.6932, consistent with the training mean of 0.6917 over 2,400 batches. The safeguard restored the observed context in 289 of 10,000 cells (2.89%; 95% Wilson interval, 2.58–3.24%). Those cells contained fewer observed genes than the remaining cells (mean, 1,804.8 versus 3,796.4) and had a mean residual context of 418.6 tokens. Weighting by target tokens, 401,208 of 25,821,660 targets were visible (1.55%). 
+
+Table S4: Minimum-context target-visibility audit. Intervals for counts show the median and interquartile range unless stated otherwise.           
+
+> Audit quantity Value Cells / sampled training shards 10,000 / 16 Observed gene tokens 3,463 [2,825–4,394] Realized target tokens per block 1,063 [762–1,430] Union target tokens per cell 2,407 [1,960–3,031] Nominal residual context tokens 1,049 [809–1,396] Mean audited / training target coverage 0.6932 / 0.6917 Cells entering full-context fallback 289 (2.89%) Fallback fraction, 95% Wilson interval 2.58–3.24% Target-token-weighted visible fraction 1.55%
+
+Target hiding governed 97.11% of sampled cells and 98.45% of target-token exposures; the remaining minority followed the quantified minimum-context safeguard. The random-block control sampled candidate gene indices uniformly with requested ratio in [0 .104 , 0.415], matching the 2,000–8,000 candidate-size interval, and used neither graph expansion nor DMT. It was a size-matched objective-family control; it did not match graph degree or the realized number of observed target genes. 
+
+## Block aggregation and BioM-JEPA loss 
+
+Relation to established JEPA objectives. The general JEPA principle predicts a target state in representation space instead of reconstructing the raw input[ 11 ]. In I-JEPA, a context encoder and predictor estimate a collection of teacher patch embeddings for masked image regions[ 12 ]; V-JEPA applies the same feature-prediction principle 19 to masked spatiotemporal regions[ 13 ]. Denoting the patch or token targets in block Tk by {hti : i ∈ Tk}, the corresponding token-level objective has the generic form 
+
+Ltoken = 1
+
+P 
+
+> k
+
+|Tk|
+
+X
+
+> k
+
+X
+
+> i∈Tk
+
+ℓ
+
+bhi, sg( hti)
+
+
+
+.
+
+BioM-JEPA changes the supervision unit rather than the teacher–student principle. It first maps each graph-defined gene set to one teacher module state 
+
+tk = sg Agg {hti : i ∈ Tk} − c ,
+
+and then aligns one predicted state btk with tk. Consequently, the implemented loss contains K aggregate block-level prediction terms, not P 
+
+> k
+
+|Tk| gene-level prediction terms. The student and EMA teacher produced token matrices 
+
+Hsi = fθ (xi, C ), Hti = f¯θ (xi), ¯θ ← μ¯θ + (1 − μ)θ. 
+
+For block Tk with representative vocabulary index ck, the query was 
+
+qk = e(ck) + m, 
+
+where ck is the median vocabulary index of the sampled candidate set, e(ck) is its learned gene-position embedding and m is a learned mask embedding. This query communicates a reproducible target-block identifier but contains no target expression. The reported DMT aggregator first restricted context candidates to Cik = Ci ∩ N coexp 64 (ck) and fell back to the complete visible context when the intersection was empty. It then summarized the visible student context: 
+
+sik = X
+
+> j∈C ik
+
+aikj hsij , aikj = exp {cos( qk, h sij )/τ }
+
+P 
+
+> ℓ∈C ik
+
+exp {cos( qk, h siℓ )/τ } .
+
+The teacher block state was aggregated before any prediction error was formed, 
+
+tik = sg 
+
+|Tk|−1 X
+
+> j∈Tk
+
+htij − c
+
+ , btik = pϕ(sik ),
+
+where c is an EMA centre and sg stops gradients. For the valid cell–block index set B, alignment was 
+
+Lalign = λ2
+
+|B| 
+
+X
+
+> (i,k )∈B
+
+∥btik − tik ∥22 + λs
+
+|B| 
+
+X
+
+> (i,k )∈B
+
+btik 
+
+∥btik ∥2
+
+− tik 
+
+∥tik ∥2
+
+> 22
+
+.
+
+Let bT ∈ R|B|× d contain the predicted block states. We used 
+
+Lvar = 1
+
+d
+
+> d
+
+X
+
+> r=1
+
+max {0, γ − sd( bT·r )}, Lcov = 1
+
+d
+
+X 
+
+> r̸=s
+
+Cov( bT )2
+
+> rs
+
+,
+
+We used λ2 = 1, λs = 0, λv = 0 .05 and λc = 0 .01. Thus, the active alignment was block-level mean-squared error and the optimized objective was 
+
+LBioM-JEPA = Lalign + λv Lvar + λcLcov .
+
+No individual target-gene term is present. The token-IJEPA control instead optimized 
+
+Ltoken = 1
+
+|T | 
+
+X
+
+> (i,j )∈T
+
+ℓ
+
+bhij , sg( htij )
+
+
+
+.
+
+The decoder-only control retained graph blocks and optimized expression decoding without LBioM-JEPA .20 Algorithm S1 BioM-JEPA pretraining 
+
+Require: Minibatch X; gene graph G; student fθ ; teacher f¯θ ; predictor pϕ; EMA rate μ 
+
+> 1:
+
+for each minibatch X do  
+
+> 2:
+
+T ← SampleGraphBlocks (X, G) 
+
+> 3:
+
+C ← O (X) \ S  
+
+> T∈T
+
+T 
+
+> 4:
+
+if |C i| < 512 for cell i then  
+
+> 5:
+
+Ci ← O i ▷ minimum-context safeguard  
+
+> 6:
+
+end if  
+
+> 7:
+
+Hs ← fθ (XC ) 
+
+> 8:
+
+Ht ← StopGradient (f¯θ (X))  
+
+> 9:
+
+bZ ← [ ]; Z ← [ ]  
+
+> 10:
+
+for each valid target block Tk ∈ T do  
+
+> 11:
+
+qk ← e(ck) + m 
+
+> 12:
+
+sk ← ContextPool (Hs, q k, N coexp 64 (ck))  
+
+> 13:
+
+tk ← MeanPool (HtTk ) − c 
+
+> 14:
+
+bZ ← bZ ∥ pϕ(sk) 
+
+> 15:
+
+Z ← Z ∥ StopGradient (tk) 
+
+> 16:
+
+end for  
+
+> 17:
+
+L ← MSE ( bZ, Z) + λv VariancePenalty ( bZ) + λcCovariancePenalty ( bZ) 
+
+> 18:
+
+(θ, ϕ ) ← OptimizerStep (L, θ, ϕ ) 
+
+> 19:
+
+¯θ ← μ¯θ + (1 − μ)θ 
+
+> 20:
+
+c ← UpdateEMACentre (c, Z) 
+
+> 21:
+
+end for 
+
+## Objective curves and target similarity 
+
+Raw objectives have different units; therefore, the curve in Fig. 2a was normalized within run by the median loss during the first 400 optimization steps: 
+
+eLr (s) = Lr (s)median u≤400 Lr (u) .
+
+We plotted a centred rolling median and summarized local dispersion with the rolling standard deviation of residuals. At every 800-step training snapshot, we quantified target agreement with orthogonal-Procrustes cosine similarity. For centred prediction and teacher matrices P, T ∈ Rn×d,
+
+R⋆ = arg min 
+
+> R⊤R=I
+
+∥P R − T ∥2 
+
+> F
+
+, SProc = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+cos( PiR⋆, T i).
+
+This rotation-invariant measure compares the geometry of the two latent sets without requiring their coordinate bases to coincide. It was evaluated at the native supervision unit: blocks for BioM-JEPA and genes for token-IJEPA. 
+
+## Embedding geometry and depth association 
+
+For centred embedding matrix Z ∈ RN ×d with covariance eigenvalues λr , define pr = λr / P 
+
+> j
+
+λj . Effective rank and participation ratio were 
+
+reff = exp − X
+
+> r
+
+pr log pr
+
+!
+
+, rPR = (P 
+
+> r
+
+λr )2
+
+P 
+
+> r
+
+λ2
+
+> r
+
+.
+
+Fig. 2b evaluated effective rank every 800 steps on hPancreas. Fig. 3c evaluated both statistics on hPancreas and cortex. For each cell we retained total counts dtotal  
+
+> i
+
+and the number of detected genes dnnz  
+
+> i
+
+. Let ui be the score along the leading embedding axis and ni = ∥zi∥2. The four technical associations were 
+
+|r(u, d total )|, |r(u, d nnz )|, |r(n, d total )|, |r(n, d nnz )|,
+
+21 where r is Pearson correlation. The main control figure displays the detected-gene associations. The failure-mode summary reports their mean over the retained diagnostics and uses dataset values as the uncertainty unit. These diagnostics quantify association along the leading embedding axis and embedding norm. Random-block, token-IJEPA and decoder-only provide comparisons among complete pretraining formulations; their interpretation is therefore confined to the tested objective families. 
+
+## Few-shot annotation 
+
+For each dataset, top-k annotation used k ∈ { 1, 5, 9} labelled cells per class as the support set. Support indices were sampled independently for each class, and all remaining labelled cells formed the held-out evaluation set. Splitting was label-stratified. A support-vector machine was trained on frozen embeddings with identical hyperparameters for all models. We used five fixed seeds, 42–46. For class c, precision, recall and F1 were 
+
+Pc = TP c
+
+TP c + FP c
+
+, Rc = TP c
+
+TP c + FN c
+
+, F1,c = 2PcRc
+
+Pc + Rc
+
+.
+
+Accuracy and macro-F1 were Acc = 1
+
+N
+
+X
+
+> i
+
+1[byi = yi], F macro 1 = 1
+
+C
+
+> C
+
+X
+
+> c=1
+
+F1,c .
+
+Figures 2d and 3b use Top-5 macro-F1 on hPancreas and cortex. Points are means over five seeds and error bars are one standard deviation unless stated otherwise. 
+
+## Matched efficiency benchmark 
+
+We used two complementary timing protocols. BioM-JEPA and scFoundation were evaluated on the same NVIDIA A100-SXM4-80GB GPU with PyTorch 2.7.1, CUDA 11.8 and bfloat16 computation. The same ordered raw-count cells and 19,264-gene vocabulary were used. Gene mapping and disk input/output were completed before each timed interval. 
+
+Encoder-only extraction. We prepared 2,048 cells from hPancreas and used batch size 8, eight warm-up iterations and 40 synchronized timed iterations. No artificial token-length cap was applied. hPancreas contained 14,818 available cells and had observed-gene lengths of 69–1,659 (median, 319; mean, 386.8; 95th percentile, 931). BioM-JEPA used its 1,536-dimensional maximum-plus-top-five-mean embedding; scFoundation used its documented four-part 3,072-dimensional control-token/max/mean representation. These are model-native frozen embeddings rather than dimension-matched projections. If N cells are encoded between synchronized times t0 and t1, throughput is 
+
+Remb = Nt1 − t0
+
+.         
+
+> Table S5: Encoder-only embedding throughput. Values are cells s −1; the final column is the BioM-JEPA/scFoundation ratio.
+> Dataset Batch BioM-JEPA scFoundation Speed-up hPancreas 8678.26 353.35 1.92 ×
+
+One-epoch partial fine-tuning. We used 1,279 hPancreas training cells, 427 validation cells and 427 test cells, with batch size 8 and one epoch. Both models received the same 19,264 genes plus two scFoundation-style control values and formed the same four-part pooled vector (last control, second-last control, gene-wise maximum and gene-wise mean; 3,072 dimensions). Each used the identical head LayerNorm → Linear(3072 , 6144) → GELU → Linear(6144 , C ).
+
+22 The head learning rate was 10 −3, the encoder learning rate was 5 × 10 −5, weight decay was 0 .01 and AdamW coefficients were (0 .9, 0.999). We froze each decoder and updated only the final encoder block, direct parameters of leaf normalization layers and the common head. Direct rather than recursive normalization-parameter selection was used so that wrapper modules could not unintentionally unfreeze a decoder. The resulting encoder-trainable counts were 7,121,664 for BioM-JEPA and 7,137,536 for scFoundation; total trainable counts including the common head were 26,088,205 and 26,104,077. Training throughput includes forward propagation, backward propagation and the optimizer step, 
+
+Rtrain = Nglobal 
+
+tstep 
+
+,
+
+whereas held-out throughput is 
+
+Rheldout = Nvalid + Ntest 
+
+tvalid + ttest 
+
+.
+
+The held-out loop computed no-gradient encoder embeddings followed by the identical head. We therefore report its 3.76-fold ratio as task-time embedding throughput and distinguish it from the 1.92-fold isolated encoder-only measurement. 
+
+Table S6: One-epoch hPancreas timing. One A100 GPU, bfloat16 and batch size 8 were used. 
+
+Model Train (s) Valid (s) Test (s) Train cells s −1 Held-out cells s −1 Trainable Peak GiB 
+
+BioM-JEPA 52.48 6.87 6.73 24.37 62.78 26,088,205 27.98 scFoundation 301.49 25.93 25.26 4.24 16.68 26,104,077 24.59 BioM-JEPA/scFoundation — — — 5.75 × 3.76 × — —
+
+The train–validation–test epoch took 66.08 s for BioM-JEPA and 352.68 s for scFoundation, corresponding to a 5.34-fold wall-clock speed-up. 
+
+## Clustering 
+
+We clustered frozen embeddings with k-means using the true number of benchmark classes, while withholding labels during clustering. Cluster accuracy used the optimal Hungarian assignment π:ACC clust = max 
+
+> π
+
+1
+
+N
+
+X
+
+> i
+
+1[yi = π(ci)] .
+
+Normalized mutual information (NMI), adjusted Rand index (ARI) and mean silhouette width (ASW) were computed from the same assignment. With contingency counts nab , row sums na·, column sums n·b and N = P 
+
+> ab
+
+nab ,NMI = 2 P 
+
+> ab nab
+> N
+
+log N n ab 
+
+> na·n·b
+
+H(Y ) + H(C) .
+
+ARI used the standard chance-corrected pair-count statistic, ARI = 
+
+P
+
+> ab
+
+ nab 
+
+> 2
+
+ − 
+
+> P
+> a
+
+(na · 
+
+> 2
+
+) P 
+
+> b
+
+(n·b 
+
+> 2
+
+)(N 
+
+> 2
+
+)
+
+> 12
+
+P 
+
+> a
+
+ na·
+
+> 2
+
+ + P
+
+> b
+
+ n·b
+
+> 2
+
+ − 
+
+> P
+> a
+
+(na · 
+
+> 2
+
+) P 
+
+> b
+
+(n·b 
+
+> 2
+
+)(N 
+
+> 2
+
+)
+
+.
+
+For cell i, silhouette width was si = ( bi − ai)/ max (ai, b i), where ai is its mean within-cluster distance and bi the smallest mean distance to another cluster. CellBench AvgBio is AvgBio = NMI + ARI + ASW 3 .
+
+23 Frozen-embedding reconstruction 
+
+Each model embedding was passed to the same 512–1024–512 multilayer perceptron with identical optimization and early-stopping rules. We predicted a 400-gene canonical expression vector. Training budgets were 100, 500, 700 and 900 cells per class, capped by class availability. Classwise rare-safe stratification preserved every evaluable class in the held-out set. Five seeds, 42–46, were used. For truth xi and prediction bxi, the cell-wise Pearson score was 
+
+ρcell = 1
+
+N
+
+X
+
+> i
+
+corr( xi, bxi).
+
+Normalized RMSE was NRMSE = 
+
+s P 
+
+> i
+
+∥bxi − xi∥22
+
+P 
+
+> i
+
+∥xi − xtrain ∥22
+
+.
+
+For S50 (x), the indices of the 50 largest expression values, Top50 = 150 N
+
+X
+
+> i
+
+|S50 (xi) ∩ S50 (bxi)|.
+
+For Reactome program m with gene set Gm, we formed qim = |Gm|−1 P 
+
+> g∈Gm
+
+xig and its predicted analogue bqim .Program recovery was the median over programs of corr( q·m, bq·m). Cell-state geometry was measured by k-nearest-neighbour overlap at k = 15: kNN@15 = 115 N
+
+X
+
+> i
+
+|N 15 (xi) ∩ N 15 (bxi)|.
+
+Large points in Fig. 4b–d are means across eight datasets. Their 95% intervals were obtained from 4,000 nonparametric bootstrap resamples of datasets. Small symbols are individual datasets. For the hPancreas marker-program matrix, we selected the six most abundant cell types and the five strongest positive marker genes per type from the training partition only. Each gene was standardized with its training mean and standard deviation. The displayed entry for cell type a and marker program b is the held-out mean standardized score of program b among cells of type a. No test label or test expression value entered marker selection. 
+
+## Perturbation-response prediction 
+
+The CellBench response predictor received a frozen control-cell embedding and a perturbation identity. Top-k denotes 
+
+k ∈ { 1, 5, 9} control examples. We used the benchmark perturbation splits and five seeds. Let μpg and μ0g be mean expression of gene g under perturbation p and control, and define the observed and predicted log-fold changes ∆pg = μpg − μ0g , b∆pg = bμpg − μ0g .
+
+The reported error was MSE-LFC = 1
+
+|P| G
+
+X
+
+> p∈P
+> G
+
+X
+
+> g=1
+
+( b∆pg − ∆pg )2.
+
+Pearson-LFC was the Pearson correlation after concatenating {∆pg } and { b∆pg } within each evaluation category. Categories were All, unseen single perturbations and unseen combinations; the combination category is defined only for Norman. Response-gene recovery was Top50 response = 150 |P| 
+
+X
+
+> p∈P
+
+|S50 (|∆p|) ∩ S50 (| b∆p|)|.
+
+Fig. 5b,d report mean ± standard deviation over five seeds. Fig. 5e shows one pre-specified Adamson Top-5 condition. Genes were selected by the magnitude of the observed response, and the colour scale displays signed response divided by the corresponding observed response magnitude, clipped symmetrically to [ −1.5, 1.5]. 24 Biological-programme and genetic-interaction analysis 
+
+All analyses in Fig. 6 operate on frozen embeddings and token states. Cell-type and perturbation labels are used only after embedding extraction to organize the analysis; they do not update the encoder. 
+
+Max-token cell-type programmes. Let uig denote the contribution of gene g to the pooled representation of cell i under the fixed extraction rule. For cell type c with held-out cell set Ic, the max-token winner fraction is 
+
+Acg = 1
+
+|I c|
+
+X
+
+> i∈I c
+
+1
+
+
+
+g = arg max  
+
+> j∈O (xi)
+
+uij 
+
+
+
+.
+
+Genes were ordered by their largest winner fraction and the displayed heat map retained canonical endocrine, exocrine, stromal and immune examples. This analysis recovered, among others, GCG , INS , SST , PPY , GHRL and 
+
+REG1A in their expected hPancreas cell populations. 
+
+Graph-programme ablation. For a graph block B selected to represent an independently annotated cell programme, its cell-type score is 
+
+AcB = 1
+
+|I c|
+
+X
+
+> i∈I c
+
+1
+
+|B ∩ O (xi)|
+
+X
+
+> g∈B∩O (xi)
+
+uig .
+
+Scores are computed independently in every seed before aggregation. For cell i, let zi be its unmodified embedding and z(−B) 
+
+> i
+
+the embedding after genes in B are removed. The mean displacement of cell type c is 
+
+DcB = 1
+
+|I c|
+
+X
+
+> i∈I c
+
+zi − z(−B) 
+
+> i2
+
+.
+
+Each of the eight programmes was paired with one random gene set matched for set size, mean expression and detection frequency. If eDcB is the mean displacement under this matched null, the excess programme effect is 
+
+EcB = DcB − eDcB .
+
+For each programme, the annotated cell identity corresponding to the programme was designated the matched identity before model inspection; all remaining identities formed the comparison group. We sampled 24 cells from each of eight identities, giving 192 unique cells. The plotted matched value for programme B is the mean excess displacement over its 24 corresponding cells; the comparison value is the mean over the 168 cells from the other seven identities. The eight programme-level matched and comparison means were the statistical pairs. Their grand means were 5.34 and 0.064, respectively (two-sided paired Wilcoxon signed-rank test, n = 8 programmes, statistic 
+
+W = 0, P = 0 .0078125). This programme-level test replaces a cell-level test that would treat cells from one dataset as independent biological replicates. It is the only inferential comparison in Fig. 6b, so no multiplicity correction was applied. 
+
+Directed programme dependencies. Let εb(x) be the teacher-target prediction error for target programme b in cell x. After ablating context programme a, the directed effect was 
+
+Ia→b = Ex
+
+h
+
+εb(x(−a)) − εb(x)
+
+i
+
+− Ex
+
+h
+
+εb(x(−ea)) − εb(x)
+
+i
+
+,
+
+where ea is an expression- and detection-matched random set. Positive values indicate that programme a contains context associated with prediction of programme b beyond the matched-random expectation. The matrix is directional because ablating a while predicting b is not equivalent to ablating b while predicting a. The matrix contains 56 ordered, non-self programme pairs. Each pair was evaluated on 24 cells from the target-matched identity, and the null correction is the mean over three independently sampled matched random sets. The matrix is presented descriptively; cell-level unadjusted tests retained in the source table are not used as evidence for individual directed edges. 25 Compositional perturbation geometry. For perturbation p, let Ip be its cells and I0 the controls. We defined the mean latent displacement 
+
+δp = 1
+
+|I p|
+
+X
+
+> i∈I p
+
+zi − 1
+
+|I 0|
+
+X
+
+> i∈I 0
+
+zi.
+
+For a measured double perturbation ( a, b ), additive consistency was 
+
+Cab = cos( δab , δ a + δb) .
+
+The null distribution replaced ( a, b ) with 200 expression-matched random single-perturbation pairs for each com-bination condition. Each displacement used 24 cells from the combination or single condition and the same 128 control cells. The statistical unit was one of the 80 evaluable combination conditions, and each observed cosine was paired with that condition’s random-pair mean. All 80 differences were positive (two-sided paired Wilcoxon signed-rank test, n = 80 conditions, P = 7 .8495 × 10 −15 ). This was one pre-specified aggregate comparison, so no multiplicity correction was applied. Literature-supported pairs highlighted in Fig. 6 include MAP2K3–MAP2K6, CEBPA–CEBPE and TBX2–TBX3[ 20 –22 ]; these examples are descriptive and were not assigned separate P values. 
+
+Null distributions and multiplicity. Expression- and detection-matched nulls were constructed by replacing each candidate gene with genes from the same bins of mean expression and detection frequency. Figure 6b uses one matched set for each of eight programmes; Fig. 6c uses three sets for each source programme and reports no edge-level significance; and Fig. 6d uses 200 random single-perturbation pairs for each of 80 combination conditions. The two reported P values correspond to one aggregate hypothesis in Fig. 6b and one aggregate hypothesis in Fig. 6d. No family of individual programme, edge or gene-pair claims was declared significant, and therefore no multiplicity correction was applied to these two aggregate tests. 
+
+Algorithm S2 Construction of the biological-knowledge analyses in Fig. 6 
+
+Require: Frozen encoder f ; hPancreas cells and labels; Norman controls, singles and doubles; graph modules M 
+
+> 1:
+
+Extract token states and cell embeddings once with f 
+
+> 2:
+
+for each hPancreas cell type c do  
+
+> 3:
+
+Count the max-token winner in each held-out cell  
+
+> 4:
+
+Compute winner fractions Acg  
+
+> 5:
+
+end for  
+
+> 6:
+
+for each programme B ∈ M and cell type c do  
+
+> 7:
+
+Re-embed cells after removing B 
+
+> 8:
+
+Re-embed cells after removing matched random gene sets  
+
+> 9:
+
+Compute excess displacement EcB  
+
+> 10:
+
+end for  
+
+> 11:
+
+for each ordered programme pair ( a, b ) do  
+
+> 12:
+
+Ablate context programme a and measure target error for b 
+
+> 13:
+
+Subtract the expression-matched random-set effect to obtain Ia→b 
+
+> 14:
+
+end for  
+
+> 15:
+
+for each Norman perturbation p do  
+
+> 16:
+
+Compute mean displacement δp from controls  
+
+> 17:
+
+end for  
+
+> 18:
+
+for each measured double perturbation ( a, b ) do  
+
+> 19:
+
+Compute Cab = cos( δab , δ a + δb) 
+
+> 20:
+
+Compare with expression-matched random perturbation pairs  
+
+> 21:
+
+end for  
+
+> 22:
+
+Apply the two pre-specified aggregate paired tests; retain the directed matrix as descriptive  
+
+> 23:
+
+Export one source-data table per panel and render Fig. 6 
+
+## Figure source data 
+
+Figures 1–6 were generated from panel-level source-data tables. The conceptual method schematic contains no numerical result and summarizes graph blocks, context removal, the EMA teacher, the stop-gradient block target and 26 aggregate block loss. Figure 6 combines the max-token, programme-ablation, directed-dependency and perturbation-composition analyses described above. Each quantitative panel was assembled from the stated transformation of its source table. Model colours, marker shapes, dataset order and axis limits were specified consistently across panels. Error bars denote either seed standard deviations or dataset-bootstrap intervals as identified in the captions. The source-data archive contains the numerical input for every panel. 27 Supplementary benchmark tables 
+
+The tables below report the complete CellBench-style outputs used in this study. Annotation is a within-dataset few-shot benchmark. BioM-JEPA rows use the frozen-embedding and probe protocols defined above. Tables are numbered consecutively as Table S1–S13. 
+
+Table S7: Cross-dataset summary of CellBench within-dataset Top-5 few-shot annotation. Macro-F1 values are averaged over the nine datasets in Tables S8–S10; intervals are percentile 95% confidence intervals from 20,000 nonparametric bootstrap resamples of datasets. Mean rank is calculated within each dataset among the ten displayed methods. Datasets, rather than cells, are the uncertainty unit. 
+
+Model Datasets Mean macro-F1 (%) Dataset-bootstrap 95% CI Mean rank UMAP 9 52.43 39.87–65.03 6.56 scVI 9 49.29 41.17–56.95 6.67 CellPLM 9 65.27 55.21–74.61 3.44 Geneformer 9 40.00 32.90–47.34 8.33 LangCell 9 32.26 24.35–42.52 9.44 scGPT 9 52.04 43.46–61.14 7.22 scMulan 9 63.77 54.69–72.95 4.00 scFoundation 9 66.17 56.34–75.97 3.00 Nicheformer 9 67.30 57.46–77.43 2.00 
+
+BioM-JEPA 9 61.62 51.56–71.94 4.33 
+
+28 Table S8: Full CellBench within-dataset few-shot annotation benchmark with BioM-JEPA. The reported metrics are Acc/F 1/Recall (%). 
+
+Dataset Model Top1 Top5 Top9 Acc F1 Recall Acc F1 Recall Acc F1 Recall PBMC12k UMAP 44.73 32.17 37.52 55.20 42.51 44.60 56.51 45.94 47.38 scVI 23.35 21.02 25.20 50.00 50.30 47.34 62.32 60.08 56.19 CellPLM 81.79 71.95 73.04 90.44 83.02 81.57 93.04 87.19 84.77 Geneformer 57.66 40.89 44.81 75.66 59.55 57.52 76.21 62.38 59.69 LangCell 19.62 17.18 21.61 36.90 35.02 36.13 43.56 41.83 41.62 scGPT 46.31 31.47 36.93 70.10 54.98 54.10 72.21 59.20 56.91 scMulan 80.96 69.30 72.24 91.48 83.77 81.92 92.25 87.12 84.98 scFoundation 78.33 67.03 67.24 91.18 85.50 83.16 91.23 87.29 84.45 Nicheformer 82.36 71.33 71.86 91.56 84.72 84.05 92.77 88.65 87.36 
+
+BioM-JEPA 58.11 47.47 54.52 83.31 70.95 77.94 84.12 73.95 81.45 
+
+BioM-JEPA rank 5/10 5/10 5/10 5/10 5/10 5/10 5/10 5/10 5/10 hPancreas UMAP 65.11 55.70 59.49 87.83 65.22 65.97 83.80 64.33 65.62 scVI 39.62 34.10 34.49 82.91 68.18 62.20 89.87 69.84 64.38 CellPLM 57.60 55.09 56.41 75.54 65.28 62.60 83.70 68.50 65.28 Geneformer 22.31 23.65 26.97 45.92 44.46 44.15 55.75 48.96 46.44 LangCell 19.21 17.13 20.24 37.63 33.84 35.67 47.74 39.85 39.30 scGPT 40.17 41.60 43.25 59.93 56.01 55.12 71.79 56.17 51.71 scMulan 58.21 49.20 52.00 86.82 69.72 65.98 91.20 74.98 70.66 scFoundation 47.54 47.30 49.50 87.46 75.30 71.87 93.62 76.47 72.88 Nicheformer 45.95 49.92 52.84 73.94 67.96 65.74 84.28 74.36 70.74 
+
+BioM-JEPA 58.14 43.13 64.87 93.27 75.44 88.61 96.37 80.68 90.22 
+
+BioM-JEPA rank 3/10 6/10 1/10 1/10 1/10 1/10 1/10 1/10 1/10 Cortex UMAP 80.38 73.06 76.98 83.50 75.10 77.84 88.34 79.06 81.70 scVI 40.35 35.53 34.68 77.87 61.31 55.84 93.77 79.00 73.43 CellPLM 90.52 77.65 76.22 95.76 84.48 83.13 96.91 81.69 80.31 Geneformer 43.31 29.27 33.25 77.30 54.20 52.27 87.56 63.60 60.28 LangCell 65.13 39.86 41.69 88.33 67.61 64.93 92.52 72.60 69.65 scGPT 84.31 67.34 67.06 96.60 80.20 79.50 98.21 84.16 82.89 scMulan 67.84 60.67 61.80 97.47 84.70 83.31 98.60 87.00 85.63 scFoundation 98.03 85.27 84.50 97.84 88.75 88.51 98.87 92.04 92.20 Nicheformer 97.80 84.58 85.65 98.46 92.51 91.54 98.91 90.74 90.95 
+
+BioM-JEPA 88.39 72.57 80.81 99.07 90.34 90.39 99.09 91.06 90.93 
+
+BioM-JEPA rank 4/10 5/10 3/10 1/10 2/10 2/10 1/10 2/10 3/10  
+
+> 29 Table S9: Full CellBench within-dataset few-shot annotation benchmark with BioM-JEPA (continued). The reported metrics are Acc/F 1/Recall (%).
+
+Dataset Model Top1 Top5 Top9 Acc F1 Recall Acc F1 Recall Acc F1 Recall MS UMAP 23.87 23.75 27.89 29.01 30.31 33.26 32.41 33.39 34.80 scVI 30.91 29.55 30.94 63.60 58.70 57.29 68.69 63.69 61.79 CellPLM 52.78 50.97 53.51 65.31 65.25 65.09 69.28 68.02 68.12 Geneformer 23.57 26.32 29.19 32.85 37.13 37.21 35.05 38.98 38.82 LangCell 13.02 10.37 12.60 18.28 16.47 17.54 20.67 19.15 20.03 scGPT 32.93 29.94 33.89 52.09 49.14 49.28 59.30 56.38 56.51 scMulan 37.75 35.40 37.81 55.56 55.92 56.40 59.09 59.65 60.10 scFoundation 41.77 42.94 45.54 53.36 56.62 56.56 58.55 61.12 61.61 Nicheformer 43.42 42.70 45.97 60.13 58.02 58.37 63.71 62.06 63.45 
+
+BioM-JEPA 33.69 31.84 34.37 51.82 51.84 56.82 58.01 57.33 61.64 
+
+BioM-JEPA rank 5/10 5/10 5/10 7/10 6/10 4/10 7/10 6/10 4/10 Liver UMAP 62.61 62.15 65.56 70.36 75.49 74.48 70.33 74.77 73.06 scVI 25.43 23.02 24.57 41.86 43.41 40.96 52.87 52.71 49.55 CellPLM 56.93 56.74 56.04 70.43 72.34 69.71 74.24 75.04 72.05 Geneformer 26.32 22.58 26.04 41.91 37.88 38.36 51.81 47.88 46.42 LangCell 22.30 17.57 22.48 34.36 30.34 32.57 43.89 39.26 40.40 scGPT 41.44 36.27 40.06 58.96 56.19 55.47 66.08 62.26 59.57 scMulan 55.31 52.15 53.54 65.93 65.59 62.16 69.70 69.58 66.66 scFoundation 53.87 50.99 50.91 70.49 68.45 65.64 72.67 72.62 69.64 Nicheformer 49.39 46.53 47.88 72.89 73.91 71.52 74.06 75.68 73.25 
+
+BioM-JEPA 35.31 31.04 41.40 63.49 63.33 71.64 70.12 69.65 77.67 
+
+BioM-JEPA rank 7/10 7/10 6/10 6/10 6/10 2/10 5/10 5/10 1/10 Zheng68k UMAP 23.92 22.01 25.12 31.34 28.56 30.67 32.79 29.76 31.46 scVI 13.82 13.97 16.68 27.01 25.06 25.95 34.79 32.17 32.61 CellPLM 44.68 36.59 40.10 47.21 43.13 44.55 48.42 46.31 48.00 Geneformer 29.18 27.31 31.76 38.41 36.97 37.28 39.77 38.44 38.78 LangCell 20.57 19.97 24.14 35.63 33.44 33.57 38.03 36.95 37.19 scGPT 25.24 25.00 28.26 35.47 32.81 33.15 39.40 37.49 37.90 scMulan 28.80 27.78 32.49 46.69 42.63 43.87 50.31 46.80 48.06 scFoundation 37.00 32.52 35.76 44.25 42.88 43.57 48.53 46.98 47.89 Nicheformer 37.98 35.17 38.52 44.64 43.26 44.66 46.99 45.66 46.37 
+
+BioM-JEPA 26.93 23.79 30.69 40.89 38.09 44.05 41.04 40.29 47.10 
+
+BioM-JEPA rank 6/10 7/10 6/10 5/10 5/10 3/10 5/10 5/10 4/10  
+
+> 30 Table S10: Full CellBench within-dataset few-shot annotation benchmark with BioM-JEPA (continued). The reported metrics are Acc/F 1/Recall (%).
+
+Dataset Model Top1 Top5 Top9 Acc F1 Recall Acc F1 Recall Acc F1 Recall Lung UMAP 74.50 58.40 62.42 89.98 76.39 73.48 88.23 73.80 71.66 scVI 25.90 19.21 22.93 59.59 45.57 42.98 72.14 56.42 52.33 CellPLM 77.11 54.85 58.07 91.39 74.96 72.43 91.55 76.04 72.91 Geneformer 24.76 17.27 23.30 53.99 40.45 41.41 63.96 50.23 49.48 LangCell 23.38 15.40 20.32 41.56 31.23 34.22 45.25 34.41 36.84 scGPT 49.40 33.66 37.31 80.11 59.70 57.28 85.46 67.44 63.62 scMulan 61.02 46.18 48.33 84.98 68.24 64.16 88.05 72.29 67.62 scFoundation 66.31 51.45 52.30 88.22 72.43 69.77 90.74 75.42 72.35 Nicheformer 59.49 50.03 55.72 91.87 77.26 74.38 92.70 78.36 75.16 
+
+BioM-JEPA 48.91 35.20 54.73 85.96 69.44 88.20 88.67 74.01 90.84 
+
+BioM-JEPA rank 7/10 6/10 4/10 5/10 5/10 1/10 4/10 4/10 1/10 Covid UMAP 29.83 31.52 37.54 35.63 33.79 37.01 47.57 45.98 45.69 scVI 23.27 18.49 18.50 46.21 40.34 36.23 50.86 42.21 37.43 CellPLM 28.16 26.95 28.91 38.89 39.38 39.51 44.55 44.14 42.97 Geneformer 13.11 10.38 12.31 24.68 22.40 22.48 27.18 24.26 24.10 LangCell 10.20 7.96 10.18 23.56 17.55 18.48 29.45 22.58 21.70 scGPT 20.90 17.20 19.53 37.09 32.22 33.31 45.43 38.27 36.29 scMulan 33.36 28.43 28.46 50.81 45.18 42.45 60.71 50.18 46.30 scFoundation 29.81 27.16 28.10 51.62 47.90 45.89 59.79 52.19 48.63 Nicheformer 32.77 30.20 30.85 54.47 49.39 47.53 57.43 50.23 46.75 
+
+BioM-JEPA 27.58 24.64 40.83 48.16 43.97 64.04 52.77 46.58 67.54 
+
+BioM-JEPA rank 6/10 6/10 1/10 4/10 4/10 1/10 4/10 4/10 1/10 Immune UMAP 28.09 31.14 38.08 44.84 44.47 46.86 51.92 48.02 49.20 scVI 27.16 24.79 25.26 55.21 50.77 47.91 63.23 61.10 58.73 CellPLM 45.90 42.89 43.12 60.17 59.59 57.53 63.78 63.76 61.32 Geneformer 18.63 13.85 15.84 31.22 26.96 26.14 33.38 32.67 32.72 LangCell 14.91 12.71 15.09 26.31 24.87 25.09 30.46 30.62 30.76 scGPT 29.27 25.41 26.70 50.04 47.09 44.79 55.25 53.06 50.73 scMulan 35.34 36.11 37.24 59.94 58.18 55.98 63.40 63.40 62.15 scFoundation 35.68 33.92 35.37 58.72 57.68 56.93 66.52 65.46 63.41 Nicheformer 40.79 37.97 38.82 61.28 58.67 57.30 65.61 64.84 62.91 
+
+BioM-JEPA 31.59 28.24 38.93 54.11 51.21 62.37 57.61 58.24 66.70 
+
+BioM-JEPA rank 5/10 6/10 2/10 6/10 5/10 1/10 6/10 6/10 1/10  
+
+> 31 Table S11: CellBench clustering performance with BioM-JEPA (AvgBio and accuracy, %). AvgBio is the mean of NMI, ARI and ASW.
+
+Model PBMC12k hPancreas Cortex MS Liver AvgBio Acc AvgBio Acc AvgBio Acc AvgBio Acc AvgBio Acc UMAP 58.59 70.51 65.86 56.57 85.35 94.28 33.31 36.53 52.70 48.11 scVI 71.68 89.12 57.27 60.63 84.62 98.75 58.56 64.76 59.62 70.92 CellPLM 80.62 92.51 64.17 76.16 87.24 97.02 52.94 55.90 67.99 80.98 
+
+Geneformer 59.50 74.75 33.78 43.22 72.71 93.77 32.23 34.38 28.08 30.17 LangCell 26.77 18.22 31.64 37.64 77.33 94.30 24.10 23.39 26.70 21.01 scGPT 55.59 71.77 45.29 52.58 84.56 96.64 42.47 38.37 61.18 79.38 scMulan 69.55 80.18 56.81 58.90 68.87 74.56 43.00 49.40 38.86 33.60 scFoundation 71.81 84.11 47.95 45.04 77.44 85.77 46.41 47.21 61.46 76.48 
+
+BioM-JEPA 71.39 89.43 61.79 67.93 85.67 99.10 42.76 45.19 58.23 68.52 
+
+BioM-JEPA rank 4/9 2/9 3/9 2/9 2/9 1/9 5/9 5/9 5/9 5/9 
+
+# Model Zheng68k Lung Covid Immune AvgBio Acc AvgBio Acc AvgBio Acc AvgBio Acc UMAP 32.73 38.01 65.44 61.52 40.30 38.28 44.76 41.51 scVI 41.16 55.31 71.28 89.11 43.83 40.01 51.79 46.76 CellPLM 42.60 57.16 79.12 92.71 48.62 48.52 58.63 63.13 
+
+# Geneformer 39.17 47.14 36.97 44.98 34.05 34.19 41.03 39.71 LangCell 33.08 36.92 34.21 55.38 26.30 21.93 35.22 28.33 scGPT 37.68 43.83 70.98 88.25 46.46 51.46 50.59 49.01 scMulan 36.16 42.80 53.27 56.87 44.53 39.59 45.88 36.25 scFoundation 39.59 51.54 70.35 80.58 46.45 46.28 47.71 42.06 
+
+# BioM-JEPA 40.96 47.93 71.95 89.48 45.75 47.99 50.61 50.69 
+
+# BioM-JEPA rank 3/9 4/9 2/9 2/9 4/9 3/9 3/9 2/9 
+
+> 32
+
+Table S12: CellBench perturbation-prediction error metrics with BioM-JEPA. Values are mean ±s.d. over five seeds; BioM-JEPA ranks are computed among the nine displayed models. 
+
+Dataset Model MSE-LFC ↓ MSE-Expr ↓
+
+Top1 Top5 Top9 Mean Top1 Top5 Top9 Mean Adamson UMAP 15.446 ±0.140 15.257 ±0.049 15.067 ±0.052 15.234 0.218 ±0.003 0.201 ±0.001 0.196 ±0.001 0.203 scVI 15.405 ±0.081 15.378 ±0.071 15.173 ±0.051 15.303 0.217 ±0.001 0.197 ±0.001 0.194 ±0.001 0.202 CellPLM 15.324 ±0.033 15.346 ±0.037 15.165 ±0.079 15.272 0.225 ±0.002 0.201 ±0.000 0.196 ±0.000 0.206 Geneformer 15.333 ±0.040 15.432 ±0.043 15.316 ±0.048 15.374 0.224 ±0.002 0.204 ±0.001 0.200 ±0.001 0.208 LangCell 15.339 ±0.032 15.405 ±0.056 15.248 ±0.050 15.334 0.225 ±0.002 0.204 ±0.001 0.199 ±0.001 0.208 scGPT 15.348 ±0.087 15.396 ±0.018 15.241 ±0.086 15.337 0.224 ±0.002 0.203 ±0.001 0.199 ±0.001 0.207 scMulan 15.431 ±0.244 15.286 ±0.068 15.286 ±0.047 15.268 0.207 ±0.002 0.199 ±0.001 0.196 ±0.001 0.200 scFoundation 15.928 ±0.300 15.224 ±0.123 15.193 ±0.084 15.388 0.202 ±0.001 0.195 ±0.001 0.194 ±0.001 0.196 
+
+BioM-JEPA 14.887 ±0.171 14.381 ±0.076 14.801 ±0.080 14.694 0.198 ±0.001 0.191 ±0.000 0.192 ±0.000 0.194 
+
+BioM-JEPA rank 1/9 1/9 1/9 1/9 1/9 1/9 1/9 1/9 Norman UMAP 6.528 ±0.048 6.535 ±0.082 6.473 ±0.036 6.507 0.089 ±0.000 0.085 ±0.001 0.084 ±0.000 0.085 scVI 6.633 ±0.062 6.406 ±0.043 6.457 ±0.116 6.423 0.088 ±0.001 0.083 ±0.000 0.083 ±0.000 0.084 CellPLM 6.462 ±0.026 6.501 ±0.042 6.460 ±0.058 6.477 0.090 ±0.000 0.084 ±0.000 0.083 ±0.000 0.085 Geneformer 6.467 ±0.037 6.535 ±0.054 6.465 ±0.021 6.498 0.090 ±0.000 0.085 ±0.001 0.083 ±0.000 0.086 LangCell 6.484 ±0.016 6.531 ±0.033 6.435 ±0.022 6.499 0.090 ±0.001 0.085 ±0.000 0.083 ±0.000 0.086 scGPT 6.457 ±0.014 6.541 ±0.040 6.480 ±0.021 6.497 0.089 ±0.001 0.085 ±0.001 0.084 ±0.000 0.085 scMulan 6.451 ±0.074 6.378 ±0.087 6.285 ±0.089 6.330 0.086 ±0.001 0.083 ±0.000 0.081 ±0.000 0.083 scFoundation 6.737 ±0.149 6.523 ±0.062 6.343 ±0.077 6.461 0.086 ±0.001 0.083 ±0.000 0.081 ±0.000 0.083 
+
+BioM-JEPA 6.236 ±0.046 6.249 ±0.070 6.200 ±0.048 6.188 0.083 ±0.000 0.082 ±0.000 0.081 ±0.000 0.082 
+
+BioM-JEPA rank 1/9 1/9 1/9 1/9 1/9 1/9 1/9 1/9 
+
+33 Table S13: CellBench perturbation-prediction directional and response-gene metrics with BioM-JEPA. Values are mean ±s.d. over five seeds; BioM-JEPA ranks are computed among the nine displayed models. 
+
+Dataset Model Sign ↑ Top50 ↑
+
+Top1 Top5 Top9 Mean Top1 Top5 Top9 Mean Adamson UMAP 0.735 ±0.004 0.739 ±0.001 0.740 ±0.001 0.739 0.073 ±0.001 0.085 ±0.003 0.092 ±0.002 0.084 scVI 0.736 ±0.002 0.738 ±0.002 0.741 ±0.001 0.739 0.074 ±0.003 0.094 ±0.001 0.105 ±0.002 0.092 CellPLM 0.740 ±0.001 0.739 ±0.001 0.739 ±0.002 0.740 0.072 ±0.001 0.088 ±0.002 0.097 ±0.002 0.086 Geneformer 0.741 ±0.001 0.741 ±0.000 0.741 ±0.002 0.741 0.072 ±0.001 0.086 ±0.002 0.093 ±0.003 0.083 LangCell 0.740 ±0.001 0.740 ±0.001 0.740 ±0.001 0.740 0.073 ±0.001 0.083 ±0.002 0.089 ±0.001 0.081 scGPT 0.740 ±0.001 0.741 ±0.001 0.742 ±0.002 0.741 0.074 ±0.002 0.086 ±0.002 0.095 ±0.001 0.085 scMulan 0.737 ±0.005 0.740 ±0.001 0.738 ±0.001 0.740 0.077 ±0.004 0.097 ±0.001 0.107 ±0.002 0.096 scFoundation 0.730 ±0.006 0.741 ±0.002 0.742 ±0.001 0.739 0.087 ±0.004 0.102 ±0.002 0.109 ±0.003 0.100 
+
+BioM-JEPA 0.746 ±0.002 0.751 ±0.001 0.745 ±0.002 0.748 0.086 ±0.003 0.113 ±0.002 0.110 ±0.003 0.104 
+
+BioM-JEPA rank 1/9 1/9 1/9 1/9 2/9 1/9 1/9 1/9 Norman UMAP 0.885 ±0.002 0.886 ±0.001 0.887 ±0.001 0.886 0.093 ±0.005 0.117 ±0.005 0.125 ±0.004 0.113 scVI 0.883 ±0.001 0.889 ±0.001 0.888 ±0.002 0.888 0.102 ±0.002 0.130 ±0.006 0.136 ±0.007 0.127 CellPLM 0.887 ±0.001 0.886 ±0.001 0.887 ±0.001 0.887 0.097 ±0.003 0.115 ±0.004 0.126 ±0.004 0.114 Geneformer 0.888 ±0.001 0.887 ±0.001 0.888 ±0.000 0.887 0.098 ±0.001 0.114 ±0.005 0.126 ±0.002 0.114 LangCell 0.888 ±0.001 0.887 ±0.001 0.889 ±0.000 0.887 0.097 ±0.002 0.111 ±0.003 0.127 ±0.001 0.113 scGPT 0.888 ±0.000 0.886 ±0.000 0.887 ±0.001 0.887 0.099 ±0.004 0.117 ±0.002 0.128 ±0.005 0.116 scMulan 0.888 ±0.001 0.888 ±0.002 0.889 ±0.002 0.889 0.115 ±0.003 0.131 ±0.004 0.143 ±0.004 0.132 scFoundation 0.883 ±0.003 0.887 ±0.001 0.890 ±0.002 0.888 0.116 ±0.005 0.128 ±0.004 0.142 ±0.005 0.131 
+
+BioM-JEPA 0.889 ±0.002 0.891 ±0.001 0.891 ±0.001 0.891 0.134 ±0.006 0.134 ±0.003 0.142 ±0.001 0.137 
+
+BioM-JEPA rank 1/9 1/9 1/9 1/9 1/9 1/9 2/9 1/9 
+
+34
