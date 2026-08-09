@@ -6,28 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-08
-- 运行时间：2026-08-08 20:37:59 UTC
+- 最新运行日期：2026-08-09
+- 运行时间：2026-08-09 20:45:14 UTC
 - 运行状态：成功
 - 本次总论文数：1
 - 精读区：0
 - 速读区：1
 
 ### 今日简报（AI）
-今日精读挂零，仅速读1篇论文，整体节奏偏缓。
-
-值得关注的是《Learning Molecular Representations from Cellular Phenotypes with Structure Preservation》（6.0分），聚焦细胞表型与分子结构表征的融合。
-
-建议后续优先补读精读文章，并围绕该方向检索更多高分文献以形成对比。
-- 详情：[/202608/08/README](/202608/08/README)
+今日仅速读1篇论文，聚焦AI建模工程骨骼肌收缩动力学。  
+值得关注的是《A Physics-Flavored Transformer Network》一文，提出用物理风格Transformer参数化肌肉组织收缩行为，评分6.0，适合了解AI+生物力学交叉方向。  
+若想入门，可先读摘要与图表，再对比传统力学模型，体会“物理味”神经网络的优势与局限。
+- 详情：[/202608/09/README](/202608/09/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Learning Molecular Representations from Cellular Phenotypes with Structure Preservation](/202608/08/2608.02688v1-learning-molecular-representations-from-cellular-phenotypes-with-structure-preservation)  
+1. [A Physics-Flavored Transformer Network for Parametrizing Contraction Dynamics of Engineered Skeletal Muscle Tissues](/202608/09/2608.03927v1-a-physics-flavored-transformer-network-for-parametrizing-contraction-dynamics-of-engineered-skeletal-muscle-tissues)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：利用深度学习关联分子结构与细胞表型，可用于药物扰动建模
+   evidence：面向药物筛选的深度学习物理风味代理，用于组织收缩动力学
 
 
 <div class="dpr-home-promo-card">
