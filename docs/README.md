@@ -6,26 +6,33 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-09
-- 运行时间：2026-08-09 20:45:14 UTC
+- 最新运行日期：2026-08-10
+- 运行时间：2026-08-10 20:37:15 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：0
-- 速读区：1
+- 本次总论文数：3
+- 精读区：1
+- 速读区：2
 
 ### 今日简报（AI）
-今日仅速读1篇论文，聚焦AI建模工程骨骼肌收缩动力学。  
-值得关注的是《A Physics-Flavored Transformer Network》一文，提出用物理风格Transformer参数化肌肉组织收缩行为，评分6.0，适合了解AI+生物力学交叉方向。  
-若想入门，可先读摘要与图表，再对比传统力学模型，体会“物理味”神经网络的优势与局限。
-- 详情：[/202608/09/README](/202608/09/README)
+今日精读1篇、速读2篇，聚焦虚拟细胞扰动建模与基因组学习方法。
+
+最值得关注的是满分论文《Control-Anchored Residual Flow Matching Conditioned on Gene Geometry》，用基因几何条件化流匹配实现虚拟细胞扰动预测；另两篇分别探索非线性动态到线性状态空间模型的蒸馏、以及生物学引导的递归混合架构。
+
+建议普通读者优先精读该满分论文，后续可追踪其在药物响应与基因调控模拟中的实际应用。
+- 详情：[/202608/10/README](/202608/10/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [Control-Anchored Residual Flow Matching Conditioned on Gene Geometry for Virtual Cell Perturbation Modeling](/202608/10/2608.06824v1-control-anchored-residual-flow-matching-conditioned-on-gene-geometry-for-virtual-cell-perturbation-modeling)  
+   标签：评分：10.0/10、query:virtual-cell
+   evidence：直接面向虚拟细胞扰动建模，预测未见过遗传扰动和药物组合下的单细胞转录响应。
 
 ### 速读区论文标签
-1. [A Physics-Flavored Transformer Network for Parametrizing Contraction Dynamics of Engineered Skeletal Muscle Tissues](/202608/09/2608.03927v1-a-physics-flavored-transformer-network-for-parametrizing-contraction-dynamics-of-engineered-skeletal-muscle-tissues)  
+1. [Spectral Distillation: From Nonlinear Dynamics to Linear State-Space Models](/202608/10/2608.05416v1-spectral-distillation-from-nonlinear-dynamics-to-linear-state-space-models)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：面向药物筛选的深度学习物理风味代理，用于组织收缩动力学
+   evidence：学习非线性动力系统的线性状态空间模型，可应用于扰动建模
+2. [bioMoR: Biology-Guided Mixture-of-Recursions for Effective Genomic Learning](/202608/10/2608.06727v1-biomor-biology-guided-mixture-of-recursions-for-effective-genomic-learning)  
+   标签：评分：6.0/10、query:virtual-cell
+   evidence：提出生物学引导的递归混合骨干用于基因/通路级组学学习，是可扩展虚拟细胞建模的可复用组件。
 
 
 <div class="dpr-home-promo-card">
