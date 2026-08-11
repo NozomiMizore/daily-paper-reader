@@ -1,0 +1,688 @@
+Title: FlowGRN: Scalable and Dropout-Robust Gene Regulatory Network Inference via Flow Matching-Based Trajectory Reconstruction (Technical Report)
+
+URL Source: https://arxiv.org/pdf/2608.09798v1
+
+Published Time: Tue, 11 Aug 2026 02:34:35 GMT
+
+Number of Pages: 26
+
+Markdown Content:
+# FlowGRN: Scalable and Dropout-Robust Gene Regulatory Network Inference via Flow Matching-Based Trajectory Reconstruction (Technical Report) 
+
+## TSZ PAN TONG and JUN PANG, Department of Computer Science, University of Luxembourg, Luxembourg and Institute for Advanced Studies, University of Luxembourg, Luxembourg 
+
+Inferring gene regulatory networks (GRNs) from single-cell RNA sequencing (scRNA-seq) data offers insights into cellular behavior, but is complicated by the lack of temporal information and the prevalence of dropout noise. To address these challenges, we present FlowGRN, a method that integrates conditional flow matching and score matching for robust trajectory reconstruction with dynGENIE3 for scalable GRN inference. FlowGRN incorporates a novel cell similarity measure that is resilient to dropout effects in high-dimensional scRNA-seq data. Evaluation on the BEELINE benchmark demonstrates that FlowGRN achieves state-of-the-art performance on both synthetic and experimental datasets. Ablation studies validate the importance of both the dropout-robust similarity measure and the trajectory reconstruction step, highlighting FlowGRN’s ability to accurately model dynamic regulatory relationships. CCS Concepts: • Applied computing → Recognition of genes and regulatory elements ; Bioinformatics ; • Computing method-ologies → Neural networks .Additional Key Words and Phrases: Gene regulatory networks, trajectory reconstruction, conditional flow matching, neural ODE 
+
+1 Introduction 
+
+Gene regulatory networks (GRNs), which map the intricate interplay between genes and their regulators, are fundamental to our understanding of cellular life. Accurate deciphering of these networks is essential for elucidating cellular processes and for designing therapeutic strategies against complex diseases [51]. Recent advances in single-cell RNA sequencing (scRNA-seq) technology have enabled the profiling of gene expression at the single-cell level, providing a wealth of data and valuable insights into cellular dynamics. However, accurately inferring GRNs from scRNA-seq data remains challenging, primarily because sequencing data are snapshots of cellular states, lacking explicit dynamic information, and dealing with extremely high-dimensional gene spaces. Current scRNA-seq technology requires stopping the cell evolution process to capture snapshots of cell states. To balance sequencing depth and resolution, the sampling time points are often sparse, and thus key dynamic changes such as cell transitions are unobserved. Thus, cell developmental trajectories are lost during sequencing, and the low temporal resolution further hinders our ability to restore cellular dynamics. In addition, GRN inference involves tens of thousands of genes. At this scale, the Euclidean distance becomes less informative due to the curse of dimensionality, and the scalability of inference methods becomes a critical issue. Facing the challenges of loss of cell dynamics and high dimensionality, researchers have taken various approaches to infer GRNs from scRNA-seq data. Given that gene regulation involves interactions between macromolecules governed by the laws of physics and chemistry, ordinary differential equations (ODEs) have become a natural choice for modeling dynamics. Different methods based on ODEs, both statistical [3, 28] and deep learning-based [42, 48], have been proposed to model cellular dynamics. However, these methods either oversimplify the system or are computationally intractable because of the high dimensionality. Additionally, restoring dynamics relies on accurate pseudotime estimations for each cell. However, the performance of different pseudotime estimation algorithms varies on the same dataset [39], and many GRN inference methods [33, 36] are highly sensitive to pseudotime accuracy [35]. 
+
+> Authors’ Contact Information: Tsz Pan TONG, tszpan.tong@uni.lu; Jun PANG, jun.pang@uni.lu, Department of Computer Science, University of Luxembourg, Esch-sur-Alzette, Luxembourg and Institute for Advanced Studies, University of Luxembourg, Esch-sur-Alzette, Luxembourg.
+
+1arXiv:2608.09798v1 [cs.CE] 10 Aug 2026 2 Tong and Pang Another research track maximizes scalability by discarding temporal information and treating the scRNA-seq data as a static snapshot. GRN inference methods such as GENIE3 [19], GRNBOOST2 [30] and PIDC [6] are widely used and show promising results on various benchmarks [8, 35]. They infer regulatory relationships by quantifying the information gain of each gene in predicting other genes, or the unique information decomposed from the mutual information between genes. Although these methods are powerful, scalable, and supported by statistical theories, they discard temporal information and make the direction of regulations unidentifiable [44]. The loss of dynamic information and the high-dimensionality problem constitute a dilemma in GRN inference, and the community is urging the development of a precise, scalable, and identifiable GRN inference model that utilizes temporal information and reconstructs cellular dynamics in the high-dimensional gene space. Recently, conditional flow matching (CFM) [2] has been proposed to use a neural network to model the vector field that flows high-dimensional data from one distribution to another. Compared to traditional neural ODEs [42, 48], CFM can learn the flow in >10,000 dimensions efficiently by making a specific assumption about the distribution of pairings between the source and target distributions. This motivated us to utilize CFM to reconstruct cellular trajectories and infer the GRN from scRNA-seq data. In practice, we noticed that the heavy dropout noise in scRNA-seq data introduces additional uncertainty to the measurement of the distance between cells, which is a cornerstone in dynamic modeling. Dropouts are a common phenomenon in scRNA-seq data, where a gene is not detected in a cell even though it is expressed [21]. Some imputation methods, such as MAGIC [52], SAVER [17], and DCA [9], have been proposed to restore missing gene expression from its neighbors and latent data geometry. Unfortunately, they bring additional false positive edges to the inferred GRN, thus the imputed data are not suitable for GRN inference [26]. To address dropout noise, we propose a new similarity measure that is robust to dropout in high-dimensional spaces. In this work, we utilize advances in conditional flow matching and score matching [49] to reconstruct cellular trajectories. We then employ dynGENIE3 [18], a dynamic version of GENIE3, to infer an identifiable GRN from the reconstructed cellular trajectories with thousands of genes. We propose a new similarity measure to address dropout noise, which experimentally shows robustness to dropout. By combining advances in CFM for dynamics modeling, reliable dynGENIE3 for GRN inference, and a dropout-robust cell similarity measure, our scalable GRN inference solution, FlowGRN, outperforms state-of-the-art methods for directed GRN inference in terms of precision. Our contribution is summarized as follows: 
+
+• We propose a new cell similarity measure that shows robustness to dropout and the curse of dimensionality. 
+
+• We apply this new measure on conditional flow matching and show that it can reconstruct cellular trajectories with non-linear dynamics, scalable up to 1,783 genes. 
+
+• We show that the gradient of the ODEs cannot accurately infer GRNs because of indirect regulations, thus dynGENIE3 is used to infer the GRN from the learned trajectory. 
+
+• Our method, FlowGRN, has the highest average precision rank in the BEELINE benchmark [35] on experimental datasets. Our method is publicly available at https://github.com/1250326/FlowGRN. Technical Report of FlowGRN 3
+
+2 Related Work 2.1 Gene regulatory network inference 
+
+ScRNA-seq data are the primary source for GRN inference, providing snapshots of cell states in the form of a series of gene expression profiles. To ensure sufficient sequencing depth and resolution, sampling time points are often sparse, which limits the application of time-series models. Correlation-based methods (ppcor [24], LEAP [46]), information theory-based methods (ARACNe [27], CLR [10], PIDC [6], Scribe [36]) and regression methods (TIGRESS [16], SINCERITIES [33], GRNVBEM [40]) provide a statistically sound approach to infer GRNs from limited data. However, these methods are bound by the development and strong assumptions of statistical theories. ODE-based methods (SCODE [28], GRISLI [3]) attempt to model cell dynamics with linear ODEs, which oversimplify system complexity and are computationally inefficient on large GRNs. Taking advantage of the rapid development of machine learning, ensemble methods (GENIE3 [19], dynGENIE3 [18], GRNBOOST2 [30]) offer powerful and scalable options for GRN inference. GENIE3 and GRNBOOST2 are the most recognized and widely used for GRN inference, and the latter is the default option in the SCENIC [1] and SCENIC+ [5] protocols for coarse selection of regulatory pairs. Both methods train a tree ensemble model to predict the expression of each target gene from other genes, and use the importance score in each model to quantify the regulatory relation-ships. Jump3 [20] and dynGENIE3 aim to incorporate temporal information, but their reliance on continuous cellular trajectories, which are unobservable in destructive snapshot-based scRNA-seq, has largely limited their application to simulated datasets rather than real-world scenarios. Recently, researchers have tried to borrow concepts from deep learning, such as convolutional neural networks (DeepDRIM [7], 3DCEMA [11], DELAY [38]), variational autoencoder (DeepSEM [43]), and explainable AI (LRP [23]). However, many of these emerging deep learning methods have not yet matched ensemble methods in terms of accuracy and scalability, and thus their practical application is not yet widespread. GENIE3 and its variants have dominated the field of GRN inference since 2010, and researchers have sought break-throughs from multi-omics data. Representative methods include CellOracle [22], Inferelator 3.0 [45] and Pando [13]. These methods integrate scRNA-seq data with scATAC-seq and spatial transcriptomics data to infer GRNs. Interested readers can refer to recent reviews [4, 25] for more details. Although multi-omics data offer new perspectives for GRN inference, revolutionizing our understanding of cellular dynamics using only scRNA-seq data remains an important long-term challenge. 
+
+2.2 The curse of dimensionality 
+
+A full-genome GRN inference task contains approximately 20,000 protein-encoding genes. If we further consider protein-protein interactions, the network size would be even larger. Thus, scalability is a critical challenge in GRN inference. Methods such as SCODE [28] and TIGON [42] use linear mapping and variational autoencoder (VAE) to compress the high-dimensional gene space into an actionable latent space. Latent space is a powerful tool for dimensionality reduction, and it is widely used in scRNA-seq data visualization and analysis [29, 31]. DCA [9] also uses latent space to impute dropout values. However, compressing gene expression into a lower-dimensional latent space can obscure individual gene interactions. This can lead to difficulties in accurately reconstructing gene-specific dynamics and potentially introduce spurious relationships when mapping latent interactions back to the gene level. Fortunately, GRN is sparse, and only a small fraction of genes are regulated by each other. This enables feature selection and stability selection approaches to tackle high dimensionality. In brief, feature selection methods select a 4 Tong and Pang subset of genes from the whole genome and use them to train models, while stability selection identifies important genes that consistently contribute to the feature-selected models in multiple runs. Methods like TIGRESS [16], LEAP [46], and GRISLI [3] combine two selection methods and show promising results on different benchmarks [35, 55]. Notably, the popular GENIE3 [19] also uses a similar approach in general, because its underlying algorithm is random forest, which uses multiple subsets of genes to train decision trees, and the importance score of each gene is averaged across all trees. This suggests that the ideas of feature and stability selection, along with their variants, are widely applicable in GRN inference. 
+
+2.3 Technical noise challenges in scRNA-seq data 
+
+10x Genomics sequencing technology offers a high-throughput and cost-effective solution for capturing transcripts in individual cells. It uses Gel Beads-in-Emulsion (GEM) to encapsulate cells and barcodes and count transcripts in each cell [58]. This technology is widely used in the field of single-cell biology, but it brings additional dropouts to the gene expression matrix. Jiang et al. [21] classified zero reads from sequencing into biological, technical, and sampling zeros. Biological zeros are caused by silent genes and uncaptured transcriptional bursts, technical zeros are caused by inefficient reverse transcription from mRNA to cDNA, and sampling zeros are caused by inefficient amplification and low sampling depth. Thus, only biological zeros and nonzero reads are informative for GRN inference, while technical zeros and sampling zeros are recognized as dropouts. However, most mainstream regression-based [3, 16, 18, 19, 28, 30] and correlation-based [24, 46] methods simply use Euclidean distance and do not adequately account for dropout effects. This introduces biases in modeling, which affect the GRN inference accuracy. 
+
+3 Preliminaries 3.1 Notations and problem definition 
+
+Denote 𝑋 = {𝑋 (𝑡 0 ) , 𝑋 (𝑡 1 ) , · · · , 𝑋 (𝑡 𝑛 −1 ) } be a scRNA-seq dataset containing a series of 𝑛 gene expression profiles, each profile 𝑋 (𝑡 𝑖 ) ∈ R𝑔 ×𝑐 𝑖 contains 𝑔 genes and 𝑐 𝑖 cells sampled at time 𝑡 𝑖 . Denote the total number of cells as 𝑐 = Í𝑛 −1 
+
+> 𝑖 =0
+
+𝑐 𝑖 . A cell 𝑥 ∈ R𝑔 can be viewed as a point in the 𝑔 -dimensional gene space. A GRN is a directed graph G = (V , E, 𝜔 ), where 
+
+V is the set of genes, E ⊂ V × V is the set of edges, and 𝜔 : E → R is the weight function (regulation strength). Positive (Negative) weights indicate activation (inhibition) regulations. An adjacency matrix 𝐴 ∈ R𝑔 ×𝑔 is a matrix representation of the GRN, where 𝐴 𝑖,𝑗 = 𝜔 (𝑖, 𝑗 ) if (𝑖, 𝑗 ) ∈ E and 𝐴 𝑖,𝑗 = 0 otherwise. We aim to infer the directed GRN G
+
+from the scRNA-seq dataset 𝑋 without any prior knowledge of the GRN structure. 
+
+3.2 Conditional flow matching and score matching 
+
+Cellular trajectories are crucial for inferring gene regulatory networks (GRNs). In a parallel field, structure inference, researchers have shown that trajectory data alone can accurately reconstruct the underlying dynamics of a system [54– 56]. This motivates us to reconstruct the cellular trajectories to facilitate GRN inference. Neural ODE is a powerful framework for modeling dynamical systems: it learns a vector field whose ODE solution matches observed time-series data. Recent methods, such as TrajectoryNet [48] and TIGON [42], have successfully applied neural ODEs to scRNA-seq data. However, their reliance on ODE integration makes them computationally expensive and numerically unstable, limiting their applications to small gene sets (< 50) or low-dimensional latent spaces. To overcome these limitations, we adopted the [SF] 2M model [49], an integration-free conditional flow matching Technical Report of FlowGRN 5and score matching model. [SF] 2M leverages optimal transport (OT) plans between snapshots to define target vector fields, guiding the learning of the dynamics driving cellular transitions. Conditional flow matching (CFM) trains the vector field referenced to the displacement between the two distributions, whereas neural ODEs train the vector field referenced to the observed trajectories, thereby incurring costly ODE integration. Viewing scRNA-seq snapshots as a sequence of gene-expression distributions, CFM is a natural choice for learning the vector field driving those flows. Score matching also trains a vector field, but refers to the score of the distributions of the cell trajectories, restricting the divergence of the CFM model to observed regions. Score matching can be viewed as the valley in the Waddington landscape, where the vector field points toward regions of higher probability. In practice, score matching is used as regularization to the CFM model, and the cell dynamics is captured by the CFM model. In a theoretical sense, [SF] 2M can be seen as solving a Schrödinger bridge problem whose marginal evolution of densities is governed by the Fokker-Planck equation. They model cellular dynamics by the stochastic differential equation (SDE) with the form 𝑑𝑥 = 𝑢 𝑡 (𝑥 )𝑑𝑡 +𝑔 (𝑡 )𝑑𝐵 𝑡 , where 𝑢 𝑡 (𝑥 ) is the drift and 𝑑𝐵 𝑡 is the Brownian motion. This SDE, together with the initial distribution 𝑝 0, induces probability paths 𝑝 𝑡 via the continuity equation 𝜕 𝑡 𝑝 𝑡 = −∇ · ( 𝑢 𝑡 𝑝 𝑡 ). [SF] 2Mdecomposes the drift 𝑢 𝑡 into two components: probability flow drift 𝑢 ◦ 
+
+> 𝑡
+
+= 𝑢 𝑡 − 12 𝑔 2 (𝑡 )∇ log 𝑝 𝑡 and score 12 𝑔 2 (𝑡 )∇ log 𝑝 𝑡 ,which points to regions of higher probability. Thus, the dynamics can be learned by minimizing two neural networks 𝑣 𝜃 , 𝑠 𝜃 with the following loss function: 
+
+Lunconditional = E𝑡 ∼U ( 0,1),𝑥 ∼𝑝 𝑡 (𝑥 )
+
+h
+
+𝑣 𝜃 (𝑥, 𝑡 ) − 𝑢 ◦ 
+
+> 𝑡
+
+(𝑥 ) 2 + 𝜆 (𝑡 )2 ∥𝑠 𝜃 (𝑥, 𝑡 ) − ∇ log 𝑝 𝑡 (𝑥 )∥ 2 i
+
+, (1) where 12 𝑔 (𝑡 )2 is absorbed into the positive weight 𝜆 (𝑡 )2. 𝑣 𝜃 is called the flow matching model, and 𝑠 𝜃 is the score matching model. Since 𝑝 𝑡 is intractable, [SF] 2M conditioned on the OT plan 𝜋 to guide the flow. For a given pair of distributions 
+
+𝑝 0 and 𝑝 1, the OT plan 𝜋 is a joint distribution with marginal distributions 𝑝 0, 𝑝 1, which minimizes the cost function 
+
+E(𝑥 0,𝑥 1 )∼ 𝜋 [𝑐 (𝑥 0, 𝑥 1)] . Sampling (𝑥 0, 𝑥 1) ∼ 𝜋 allows us to compute: 
+
+𝑢 ◦ 
+
+> 𝑡
+
+(𝑥 |𝑥 0, 𝑥 1) = 1 − 2𝑡 𝑡 (1 − 𝑡 ) (𝑥 − ( 𝑡𝑥 1 + ( 1 − 𝑡 )𝑥 0)) + ( 𝑥 1 − 𝑥 0)∇ log 𝑝 𝑡 (𝑥 |𝑥 0, 𝑥 1) =𝑡𝑥 1 + ( 1 − 𝑡 )𝑥 0 − 𝑥 𝜎 2𝑡 (1 − 𝑡 ) , (2) when 𝑔 (𝑡 ) = 𝜎 is a constant, and thus the loss function is written as: 
+
+Lconditional = E𝑡 ∼U ( 0,1),(𝑥 0,𝑥 1 )∼ 𝜋,𝑥 ∼𝑝 𝑡 (𝑥 |𝑥 0,𝑥 1 )
+
+h
+
+𝑣 𝜃 (𝑥, 𝑡 ) − 𝑢 ◦ 
+
+> 𝑡
+
+(𝑥 |𝑥 0, 𝑥 1) 2 +𝜆 (𝑡 )2 ∥𝑠 𝜃 (𝑥, 𝑡 ) −∇ log 𝑝 𝑡 (𝑥 |𝑥 0, 𝑥 1)∥ 2 i
+
+. (3) 
+
+4 Our Method FlowGRN 
+
+To address the identified challenges in GRN inference, we propose FlowGRN, a novel method comprising three parts: 
+
+• A dropout-robust cell similarity measure that quantifies the geodesic distance between cells in high-dimensional gene space to solve the dropout noise (detailed in Alg. 1). 
+
+• A conditional flow matching and score matching model that learns the underlying vector fields and reconstructs the cellular trajectories. 
+
+• The dynGENIE3 model that infers an identifiable GRN from the learned trajectories. Figure 1 illustrates the overall pipeline of FlowGRN, and Algs. 2–3 summarize the trajectory reconstruction and GRN inference processes. 6 Tong and Pang ,  
+
+> (a) Dropout-robust
+> Cell Similarity (Alg. 1)
+> ScRNA-seq (b) Optimal
+> Transport
+> (c) Conditional Flow
+> and Score Matching
+> (d) Trajectory
+> Reconstruction
+> OT
+> dyn-
+> GENIE3
+> Inferred GRN
+> kNN
+> (e) Network
+> Inference
+> ✘
+> ✘
+> ✘
+
+Fig. 1. The overall pipeline of FlowGRN. (a) Compute 𝑑 raw after dropping zeros in each cell pair. (b-c) Train CFM 𝑣 𝜃 and score matching 
+
+𝑠 𝜃 models to learn the cell dynamics. (d) Reconstruct cell trajectories by integrating the learned dynamics. (e) Feed trajectories into dynGENIE3 model for GRN inference. 
+
+4.1 Dropout-robust cell similarity measure 
+
+The scalability of [SF] 2M comes from the use of the optimal transport (OT) plan 𝜋 to guide the flow. OT plan 𝜋 is a joint distribution with marginal distributions 𝑝 0, 𝑝 1 that minimizes the cost function E(𝑥 0,𝑥 1 )∼ 𝜋 [𝑐 (𝑥 0, 𝑥 1)] . The cost function is usually defined as the Euclidean distance ∥𝑥 0 − 𝑥 1 ∥2, but this metric is severely affected by the dropout noise in the scRNA-seq data and ignores the underlying geometry of the gene expression data manifold. In Section 2.3, we discuss that only biological zeros and nonzero reads are informative for GRN inference, while technical zeros and sampling zeros are recognized as dropout. Thus, the zeros are corrupted by dropout, while the non-zeros do not. This enlightens us to only use non-zeros to quantify the cell similarity. Given two cells 𝑥, 𝑦 ∈ R𝑔 , let the set of non-zero genes in 𝑥 and 𝑦 be 𝑆 𝑥 = {𝑖 |𝑥 𝑖 ≠ 0} and 𝑆 𝑦 = {𝑖 |𝑦 𝑖 ≠ 0}, respectively. The size of the intersection 𝑆 𝑥,𝑦 = 𝑆 𝑥 ∩ 𝑆 𝑦 is |𝑆 𝑥,𝑦 |. We define the dropout-robust cell similarity measure 𝑑 raw (𝑥, 𝑦 ) as: 
+
+𝑑 raw (𝑥, 𝑦 ) = 1
+
+|𝑆 𝑥,𝑦 |∑︁ 𝑖 ∈𝑆 𝑥,𝑦 
+
+|𝑥 𝑖 − 𝑦 𝑖 |. (4) Here, the L1 norm is used to avoid distance inflation due to the different sizes of the intersection sets |𝑆 𝑥,𝑦 |. If 𝑆 𝑥,𝑦 is an empty set, a large 𝑑 raw will be assigned to indicate dissimilarity. Although this measure discards the information from the biological zeros, it ensures that the distance is not affected by any dropout noise. Addressing the geometric structure of the gene expression manifold is not a new idea and has been used in various tasks such as visualization [29, 31], imputation [52, 53], and reconstruction of developmental trajectory [41]. We first build a mesh graph 𝐺 𝑘𝑛𝑛 from the gene expression matrix 𝑋 using k-nearest neighbors (kNN) with our cell similarity measure 𝑑 raw (𝑥, 𝑦 ). If 𝐺 𝑘𝑛𝑛 is not connected, we connect the disconnected components by adding edges between the closest cells in different components. Then, the final cell similarity 𝑑 𝑘𝑛𝑛 is defined as the shortest path distance on the mesh graph 𝐺 𝑘𝑛𝑛 . The shortest path distance can be efficiently calculated using Dijkstra’s algorithm, or approximated by diffusion [52] or random walk [15]. This design brings geometry awareness to the cell similarity measure, and it is robust to dropout noise. Our algorithm is summarized in Alg. 1, and its effectiveness is tested in Section 6.6. Technical Report of FlowGRN 7
+
+Algorithm 1: ComputeCellSimilarity: Dropout-Robust Cell Similarity Measure 
+
+Input: Gene expression matrix 𝑋 , kNN nearest neighbors 𝑘 
+
+Output: Pairwise distance matrix 𝑑 𝑘𝑛𝑛 
+
+foreach cells 𝑥, 𝑦 ∈ 𝑋 do 
+
+𝑆 𝑥 ← { 𝑖 | 𝑥 𝑖 ≠ 0}; 𝑆 𝑦 ← { 𝑖 | 𝑦 𝑖 ≠ 0}; 𝑆 𝑥,𝑦 ← 𝑆 𝑥 ∩ 𝑆 𝑦 ;
+
+if |𝑆 𝑥,𝑦 | > 0 then 
+
+𝑑 raw (𝑥, 𝑦 ) ← 1 
+
+> |𝑆 𝑥,𝑦 |
+
+Í𝑖 ∈𝑆 𝑥,𝑦 |𝑥 𝑖 − 𝑦 𝑖 |;
+
+else 
+
+𝑑 raw (𝑥, 𝑦 ) ← 10 6;Build kNN graph 𝐺 𝑘𝑛𝑛 on 𝑋 with edge weights 𝑑 raw ;
+
+if 𝐺 𝑘𝑛𝑛 not connected then 
+
+Connect components by adding edges with minimal 𝑑 raw ;
+
+foreach cells 𝑥, 𝑦 ∈ 𝑋 do 
+
+𝑑 𝑘𝑛𝑛 (𝑥, 𝑦 ) ← DijkstraShortestPath (𝐺 𝑘𝑛𝑛 , 𝑥, 𝑦 );
+
+return 𝑑 𝑘𝑛𝑛 
+
+4.2 Trajectory reconstruction with CFM 
+
+With the cell similarity 𝑑 𝑘𝑛𝑛 , we can apply the CFM model to learn the underlying vector field 𝑣 𝜃 (𝑥, 𝑡 ) and reconstruct the trajectories. We first apply Slingshot [47] to the dataset 𝑋 and obtain the cell lineages. Trajectories are reconstructed per lineage to encode the lineage information and maximize parallelism. Since gene expression values are non-negative, we must ensure that the reconstructed trajectories are also non-negative. Constraining the boundary of the vector field or enforcing a strictly positive gradient at the boundary are not ideal solutions, as they bring additional complexity and numerical instability. We solve this issue by converting the expression value 𝑥 ∈ R𝑔  
+
+> ≥0
+
+to a log domain 𝑥 ′ ∈ R𝑔 through the following transformation T :
+
+𝑥 ′ = T ( 𝑥 ) =
+
+
+
+log (𝑥 + 𝜖 ) + 1, if 𝑥 + 𝜖 < 1
+
+𝑥 + 𝜖, if 𝑥 + 𝜖 ≥ 1,
+
+(5) where 𝜖 > 0 is a small positive value to avoid undefined logarithm. This ensured that the transformation is 𝐶 1
+
+differentiable at 𝑥 = 1 − 𝜖 so that training did not get stuck at the discontinuity during optimization. In addition, the transformation magnifies low expression values and avoids compressing high expression values, thereby capturing cell dynamics at different scales. We train the CFM and score matching models following the procedure in Section 3.2 in the log domain with the loss function Lconditional , conditioned on the OT plan 𝜋 with the cell similarity measure 𝑑 𝑘𝑛𝑛 as the cost function. The trajectories can be recomputed by solving an initial value problem (IVP) starting from 𝑥 ′ (𝑡 ):
+
+𝑥 ′ (𝑡 + Δ𝑡 ) = 𝑥 ′ (𝑡 ) + 
+
+∫ 𝑡 +Δ𝑡 𝑡 
+
+𝑣 𝜃 (𝑥 ′ (𝑠 ), 𝑠 ) 𝑑𝑠, 𝑡 0 ≤ 𝑡 + Δ𝑡 ≤ 𝑡 𝑛 −1. (6) For each cell 𝑥 observed at time 𝑡 𝑖 , its transformed state 𝑥 ′ (𝑡 𝑖 ) = T ( 𝑥 (𝑡 𝑖 )) serves as an anchor point. We then generate its trajectory segments by solving the IVP 𝑑𝑥 ′/𝑑𝑡 = 𝑣 𝜃 (𝑥 ′, 𝑡 ) forward from 𝑡 𝑖 to 𝑡 𝑛 −1 and backward from 𝑡 𝑖 to 𝑡 0. The workflow of trajectory reconstruction is outlined in Alg. 2. 8 Tong and Pang 
+
+Algorithm 2: FlowGRN (Part 1): Trajectory Reconstruction. 
+
+Input: Series of snapshots 𝑋 = {𝑋 (𝑡 0 ) , . . . , 𝑋 (𝑡 𝑛 −1 ) }, branch labels 𝑏 (𝑥 ), batch size 𝑚 , kNN nearest neighbors 𝑘 
+
+Output: Reconstructed trajectories 𝑇 , flow network 𝑣 𝜃 
+
+// Compute cell similarity (see Alg. 1) 
+
+𝑑 𝑘𝑛𝑛 ← ComputeCellSimilarity (𝑋, 𝑘 );
+
+foreach branch 𝛽 do 
+
+// Modeling the dynamics of branch 𝛽 
+
+Initialize networks 𝑣 𝜃 , 𝑠 𝜃 ;
+
+for epoch = 1 to 𝐸 do for 𝑖 = 0 to 𝑛 − 2 do 
+
+𝑋 𝑖 ← 𝑋 (𝑡 𝑖 ) ∩ { 𝑏 (𝑥 ) = 𝛽 };
+
+𝑋 𝑖 +1 ← 𝑋 (𝑡 𝑖 +1 ) ∩ { 𝑏 (𝑥 ) = 𝛽 };Sample batches {𝑥 0 } ∼ 𝑋 𝑖 , {𝑥 1 } ∼ 𝑋 𝑖 +1 of size 𝑚 ;Compute OT plan 𝜋 between {𝑥 0 } and {𝑥 1 } w.r.t. cost 𝑑 𝑘𝑛𝑛 ;
+
+foreach (𝑥 0, 𝑥 1) ∼ 𝜋 do 
+
+Sample 𝑡 ∼ U ( 0, 1) and 𝜉 ∼ N ( 0, 𝐼 𝑔 );
+
+𝑥 ′ 
+
+> 0
+
+= T ( 𝑥 0), 𝑥 ′ 
+
+> 1
+
+= T ( 𝑥 1) via Eq. (5); 
+
+𝑥 ′ ← 𝑡 𝑥 ′ 
+
+> 1
+
++ ( 1 − 𝑡 ) 𝑥 ′ 
+
+> 0
+
++ 𝜎 √︁ 𝑡 (1 − 𝑡 ) 𝜉 ;Compute 𝑢 ◦ 
+
+> 𝑡
+
+(𝑥 ′ |𝑥 ′
+
+> 0
+
+, 𝑥 ′
+
+> 1
+
+), ∇ log 𝑝 𝑡 (𝑥 ′ |𝑥 ′
+
+> 0
+
+, 𝑥 ′
+
+> 1
+
+) via Eq. (2); Update (𝑣 𝜃 , 𝑠 𝜃 ) with the loss Lconditional in Eq. (3); 
+
+// Reconstructing trajectories 
+
+foreach cell 𝑥 where 𝑏 (𝑥 ) = 𝛽 do 
+
+Solve 𝑑𝑥 ′ 
+
+> 𝑑𝑡
+
+= 𝑣 𝜃 (𝑥 ′, 𝑡 ), 𝑥 ′ (𝑡 𝑖 ) = T ( 𝑥 ) from 𝑡 0 to 𝑡 𝑛 −1;
+
+𝑥 (𝑡 ) ← T −1 (𝑥 ′ (𝑡 )) ;Store 𝑥 (𝑡 )
+
+Combine all {𝑥 (𝑡 )} over branches into trajectories 𝑇 ;
+
+return 𝑇 , 𝑣 𝜃 
+
+4.3 GRN inference from the learned trajectory 
+
+The learned trajectory 𝑥 (𝑡 ) = T −1 (𝑥 ′ (𝑡 )) is a time series of gene expression to be fed into dynGENIE3 to infer the GRN. dynGENIE3 [18] is an extension of GENIE3 [19] that incorporates temporal information into the GRN inference process. Same as GENIE3, dynGENIE3 uses random forest 𝑓 𝑗 to model each target gene 𝑗 in a cell trajectory 𝑥 (𝑡 ):
+
+𝑑𝑥 𝑗 (𝑡 )
+
+𝑑𝑡 = 𝑓 𝑗 (𝑥 (𝑡 )) − 𝛼 𝑗 𝑥 𝑗 (𝑡 ), (7) where 𝛼 𝑗 is the decay rate of gene 𝑗 and 𝑑𝑥 𝑗 (𝑡 ) 
+
+> 𝑑𝑡
+
+is approximated by finite differences: 
+
+𝑑𝑥 𝑗 (𝑡 )
+
+𝑑𝑡 = 𝑥 𝑗 (𝑡 + Δ𝑡 ) − 𝑥 𝑗 (𝑡 )
+
+Δ𝑡 . (8) The importance score I𝑗 (𝑖 ) of each random forest model 𝑓 𝑗 is used to quantify the regulatory strength of the gene 𝑖 on 𝑗 .To determine the type of regulation, we use the learned vector field 𝑣 𝜃 . Denote 𝐺 ∈ R𝑔 ×𝑔 ×𝑐 as the stack of Jacobians evaluated at the observed cellular states (𝑥 ′, 𝑡 ), such that 𝐺 𝑖,𝑗, · collects (∇ 𝑥 ′ 𝑣 𝜃 (𝑥 ′, 𝑡 )) 𝑖,𝑗 across cells. The regulation type 
+
+𝐺𝑠 ∈ [ 0, 1]𝑔 ×𝑔 is assigned based on a majority vote of the signs in 𝐺 , and the signed adjacency matrix 𝐴 is defined as: 
+
+𝐺𝑠 𝑖,𝑗 = sgn  mean (sgn  𝐺 𝑖,𝑗, · ) , 𝐴 𝑖,𝑗 = 𝐺𝑠 𝑖,𝑗 · I 𝑗 (𝑖 ). (9) Technical Report of FlowGRN 9
+
+Algorithm 3: FlowGRN (Part 2): GRN Inference. 
+
+Input: Reconstructed trajectories 𝑇 
+
+Output: Signed adjacency matrix 𝐴 ∈ R𝑔 ×𝑔 
+
+// GRN inference with dynGENIE3 
+
+for 𝑗 = 1 to 𝑔 do 
+
+Fit random forest 𝑓 𝑗 on 𝑇 to model 𝑑𝑥 𝑗 (𝑡 ) 
+
+> 𝑑𝑡
+
+≈ 𝑓 𝑗 (𝑥 (𝑡 )) − 𝛼 𝑗 𝑥 𝑗 (𝑡 ) in Eq. (7); Compute importance score I𝑗 (𝑖 ) of gene 𝑖 on 𝑗 from 𝑓 𝑗 ;
+
+// Assign edge types using the lineage-specific flow networks 
+
+Initialize 𝐺 as an empty gradient tensor and 𝐺𝑠 as a zero matrix; 
+
+foreach transformed cell 𝑥 ′ do 
+
+Append the Jacobian ∇𝑥 ′ 𝑣 𝜃 (𝑥 ′, 𝑡 ) to 𝐺 ;
+
+for 𝑗 = 1 to 𝑔 do for 𝑖 = 1 to 𝑔 do 
+
+𝐺𝑠 𝑖,𝑗 ← sgn  mean (sgn  𝐺 𝑖,𝑗, · ) ;
+
+𝐴 𝑖,𝑗 ← 𝐺𝑠 𝑖,𝑗 · I 𝑗 (𝑖 );
+
+return 𝐴 
+
+Here, the Jacobian is only used to assign the sign of an edge whose strength is determined by dynGENIE3, rather than to determine the existence of the edge. Also, the asymmetric importance scores I𝑗 (𝑖 ) and I𝑖 ( 𝑗 ) yield a directed graph, as the strengths in opposite directions are not generally equal. This approach allows us to assign regulation types (activation/inhibition) for inferred GRNs, a feature not available from the standard dynGENIE3 output. The workflow of the GRN inference algorithm is outlined in Alg. 3. 
+
+4.4 Model implementation 
+
+A pictorial overview of the FlowGRN model is shown in Figure 1, and the detailed algorithms of our new similarity measure and FlowGRN pipeline are outlined in Algs. 1–3. We first compute the pairwise cell similarity 𝑑 𝑘𝑛𝑛 using Alg. 1 on the gene expression matrix 𝑋 . Then, for each lineage 𝛽 , we initialize the flow matching 𝑣 𝜃 and score matching model 𝑠 𝜃 . For each successive pair of snapshots 𝑋 (𝑡 𝑖 ) , 𝑋 (𝑡 𝑖 +1 ) , we compute the OT plan 𝜋 between two snapshots using the cell similarity 𝑑 𝑘𝑛𝑛 , and then sample (𝑥 0, 𝑥 1) ∼ 𝜋 . Samples are transformed to the log domain via T in Eq. (5) and train the neural ODEs following Eqs. (2) and (3). We reconstruct the trajectories by solving the IVP for each cell and inverse transform the trajectories back to the original gene expression space. Finally, we combine all trajectories 𝑇 from different lineages and feed them into dynGENIE3 to infer the signed GRN 𝐴 .
+
+5 Experiments 5.1 Datasets and evaluation metrics 
+
+We tested our method on the BEELINE [35] benchmark, which includes 6 synthetic datasets, 4 curated datasets, and 7 experimental datasets. Synthetic data sets include linear (LI), linear long (LL), cyclic (CY), bifurcating (BF), bifurcating converging (BFC), and trifurcating (TF), capturing common dynamics such as long cascades and furcating branches. Curated datasets include mCAD, VSC, HSC, and GSD, which mimic the reported biological processes. Both types of datasets are simulated with BoolODE [35] to generate 10 sets of simulated scRNA-seq data with 2,000 cells. Their network statistics are shown in Table 7 in the Appendix. 10 Tong and Pang 
+
+> Table 1. Network Statistics of the Experimental Datasets
+
+Dataset # Cells # Genes # Edges Network Density (×10 −3)
+
+TFs + 500 genes 
+
+hESC 758 1283 20007 12.15 hHep 425 1209 16915 11.57 mDC 383 1113 2854 2.30 mESC 421 501 139 0.55 mHSC-E 1071 763 945 1.62 mHSC-GM 889 698 676 1.39 mHSC-L 847 624 442 1.14 
+
+TFs + 1,000 genes 
+
+hESC 758 1783 26553 8.35 hHep 425 1709 22007 7.53 mDC 383 1613 3404 1.31 mESC 421 1001 416 0.42 mHSC-E 1071 1263 1135 0.71 mHSC-GM 889 1198 895 0.62 mHSC-L 847 1124 729 0.58 Experimental datasets are real gene expression profiles from sequencing data. There are 7 sets of gene expression profiles from human and mouse cells, namely hESC, hHep, mDC, mESC, mHSC-E, mHSC-GM, and mHSC-L. The top 500 (1,000) high-variance genes and their corresponding transcription factors are selected from each dataset, matching the “TFs + 500 (1,000) genes” in the BEELINE benchmark. Although BEELINE provides cell-type-specific and non-cell-type-specific GRNs as reference networks, these reference networks have not been updated since 2020. We retrieved the gene regulations from the DoRothEA [14] and CollecTRI [32] databases and used them as reference networks. Their data statistics are shown in Table 1. We compare FlowGRN with the baselines on the BEELINE benchmark, which includes LEAP [46], SCODE [28], GRISLI [3], GRNVBEM [40], SINCERITIES [33], Scribe [36], GENIE3 [19], and GRNBOOST2 [30]. Their descriptions are listed in Table 8 in Appendix A. Among the listed baselines, only SCODE, GRNVBEM, SINCERITIES, and FlowGRN support inference of edge types (activation/inhibition). Here, we excluded SCNS [57] as it requires prior knowledge of GRN. Furthermore, we excluded ppcor [24] and PIDC [6] because they cannot determine the direction of regulations. We evaluate the performance of FlowGRN and the baselines on the BEELINE benchmark using two metrics: Area under Precision-Recall Curve (AUPRC) and Early Precision Ratio (EPR). For a model output 𝐴 and a threshold 𝜏 , the numbers of true positive 𝑇 𝑃 (𝜏 ), false positive 𝐹 𝑃 (𝜏 ), true negative 𝑇 𝑁 (𝜏 ), and false negative 𝐹 𝑁 (𝜏 ) edges are counted. Precision is defined as 𝑃 (𝜏 ) = 𝑇 𝑃 (𝜏 )     
+
+> 𝑇 𝑃 (𝜏 )+ 𝐹 𝑃 (𝜏 )
+
+, and recall is defined as 𝑅 (𝜏 ) = 𝑇 𝑃 (𝜏 )     
+
+> 𝑇 𝑃 (𝜏 )+ 𝐹 𝑁 (𝜏 )
+
+. The AUPRC is calculated by integrating the precision over all thresholds 𝜏 :AUPRC =
+
+∫ 10
+
+𝑃 (𝜏 )𝑑𝑅 (𝜏 ). (10) The EPR is defined as the precision among the top 𝑘 edges, and the definition of precision is the same as above. Both metrics emphasize the precision of the inferred GRN and minimize the false positive rate, with higher values indicating Technical Report of FlowGRN 11 better performance. However, EPR is sensitive to the number of edges in the ground truth network, especially when the network is sparse. 
+
+5.2 Experimental Setup 
+
+We first construct a series of snapshots for each dataset by clustering cells and ordering each cell cluster by their average pseudotime. Details of the preprocessing are described in Appendix A.2. During trajectory reconstruction, 𝑘 = 15 for the kNN graph 𝐺 𝑘𝑛𝑛 , 𝜎 is set to 0.1 for the Brownian motion diffusion, 𝜆 (𝑡 ) is set to 1 for the score matching loss, and 𝜖 
+
+is set to 10 −6 for the log-like transformation. Exact OT plans are computed using the Python Optimal Transport (POT) library [12]. During trajectory reconstruction, 𝑣 𝜃 , 𝑠 𝜃 in the [SF] 2M model are implemented as MLPs with 5 hidden layers, each with 128 hidden units and SELU activations. Both neural networks are optimized by AdamW with a learning rate of 10 −4 decayed by a factor of 2 every 100 epochs. Models are trained for 1,000 epochs with a batch size of 64 samples. Trajectories are integrated using a DOPRI5 neural ODE solver [34] with an absolute and relative tolerance of 10 −7,sampled at 5 time points between each pair of snapshots. All neural network models are trained on a single NVIDIA V100 SXM2 GPU with 16GB memory, although the peak memory usage is less than 1GB and can be run on a domestic computer. In GRN inference, dynGENIE3 is used with the default parameters: 1,000 random forest trees, each trained with √𝑔 
+
+genes. dynGENIE3 is trained on a computing node with 128 CPUs at 2.6GHz and 256GB memory. All baselines are also run on the same platform within a given 48-hour time interval, using their default parameters wrapped in a Singularity container to ensure reproducibility. Each method, including FlowGRN, is run 10 times with different random seeds on each dataset, and the average and standard deviation of AUPRC and EPR are reported. Model elapsed times are recorded and reported in Table 4 for scalability analysis. 
+
+6 Results and Discussion 6.1 FlowGRN infers identifiable GRNs in simulated data 
+
+We first evaluate FlowGRN on the BEELINE benchmark using both synthetic and curated datasets, and the average AUPRC and EPR are shown in Figures 2 and 3, respectively. The standard deviations are shown in Figures 5 and 6 in the Appendix. FlowGRN has the highest average rank of AUPRC (1.5) and EPR (2.0) among all models, significantly surpassing the second-best model GENIE3 with average ranks of 3.9 in AUPRC and 3.1 in EPR. Although FlowGRN adopts dynGENIE3, a temporal extension of GENIE3, it outperforms GENIE3, especially in the LL and CY datasets. The LL dataset features long cascades, indicating that FlowGRN effectively captures long-range gene expression dependencies. The CY dataset is characterized by cyclic dynamics, thus determining the edge direction is crucial for the GRN inference. Incorporating temporal information enables FlowGRN to capture the principal direction of cyclic dynamics, which static models like GENIE3 struggle with. 
+
+6.2 FlowGRN determines edge types in simulated data 
+
+We further test FlowGRN’s ability to determine the activation and inhibition edges on top of the directed GRN inference. Figure 4 shows the average AUPRC of FlowGRN and the baselines on the BEELINE benchmark with edge types, and their standard deviations are reported in Figure 7 in the Appendix. EPR is not applicable here as GRN inference with edge type is a multi-class classification problem. Note that there are fewer baselines capable of inferring edge types. FlowGRN 12 Tong and Pang BF BFC LI LL CY TF mCAD VSC HSC GSD LEAP SCODE GRISLI GRNVBEM SINCERITIES Scribe GENIE3 GRNBOOST2 
+
+FlowGRN (Ours) 
+
+41.82 34.30 48.54 22.65 32.31 56.34 56.90 29.05 29.59 24.02 36.37 21.74 19.24 7.59 16.16 43.90 71.59 31.70 21.17 22.12 28.78 23.10 16.39 35.31 22.84 31.20 77.07 26.27 31.92 28.92 31.04 35.86 35.41 30.66 16.13 38.23 41.83 16.09 32.89 26.96 21.80 16.94 15.54 7.67 16.32 28.14 57.93 33.60 22.17 24.33 39.40 36.80 50.90 25.93 41.04 43.81 54.68 26.48 26.48 28.49 34.49 33.64 39.58 33.21 35.34 51.77 55.05 74.15 45.15 28.12 33.55 25.10 35.92 28.82 36.03 45.90 56.84 59.53 36.63 29.23 41.15 37.13 53.30 69.03 71.60 55.19 58.35 77.54 37.14 31.02 
+
+AUPRC (in %) 
+
+Average Rank 
+
+4.6 6.6 5.6 6.4 7.4 4.7 3.9 4.3 1.5 
+
+Fig. 2. Average AUPRC and its average rank of directed GRN inference models on different simulated datasets out of 10 runs. Synthetic and curated datasets are separated by a vertical line. BF BFC LI LL CY TF mCAD VSC HSC GSD LEAP SCODE GRISLI GRNVBEM SINCERITIES Scribe GENIE3 GRNBOOST2 
+
+FlowGRN (Ours) 
+
+1.67 1.88 2.53 4.31 2.30 1.73 1.10 0.80 1.41 1.05 1.33 1.20 0.61 1.53 0.40 1.26 1.06 1.31 0.54 0.87 0.88 1.33 0.46 6.28 0.70 0.88 1.19 0.94 1.37 1.19 1.97 1.85 3.06 5.12 1.40 1.33 0.56 0.77 1.49 1.34 0.51 0.71 0.31 1.35 0.00 0.64 0.89 1.14 0.75 1.18 1.50 2.04 2.68 5.47 2.30 1.31 1.03 0.91 0.98 1.42 1.33 2.41 2.91 4.22 1.80 1.55 1.15 2.84 1.88 1.55 1.19 1.45 2.60 6.28 1.80 1.39 1.02 2.28 1.43 1.53 1.67 2.44 2.99 11.49 4.10 1.44 1.10 3.10 1.41 1.58 
+
+Early Precision Rate 
+
+Average Rank 
+
+4.6 7.0 6.0 4.8 8.2 4.8 3.1 4.5 2.0 
+
+Fig. 3. Average EPR and its average rank of directed GRN inference models on different simulated datasets out of 10 runs. Synthetic and curated datasets are separated by a vertical line. Color scale is capped at 4 for better visualization. 
+
+achieves the best performance in 7 out of 10 datasets, and its performance remarkably surpasses the second-best model, GRNVBEM. Technical Report of FlowGRN 13 BF BFC LI LL CY TF mCAD VSC HSC GSD SCODE GRNVBEM SINCERITIES                                     
+
+> FlowGRN (Ours)
+> 16.32 13.46 12.68 3.29 15.69 19.87 34.83 27.51 11.40 11.45 35.29 35.23 37.69 15.67 23.43 29.99 36.00 29.48 27.45 17.68 13.49 11.81 8.24 18.53 8.75 17.29 47.85 39.96 16.61 15.51 39.03 37.50 53.54 34.74 72.50 40.64 46.62 67.27 26.24 13.87
+
+AUPRC (in %) 
+
+> Average Rank
+> 3.5 2.1 3.0 1.4
+
+Fig. 4. Average AUPRC of directed GRN inference models with edge types on different simulated datasets out of 10 runs. Synthetic and curated datasets are separated by a vertical line. Table 2. AUPRC ( ×10 −3) of directed GRN inference models on different experimental datasets out of 10 runs. The best and second-best results are highlighted in bold and underlined, respectively. “OT” and “NE” mean “over time in a 48-hour time span” and “numerical error”, respectively. 
+
+dataset hESC hHep mDC mESC mHSC-E mHSC-GM mHSC-L 
+
+TFs + 500 genes 
+
+LEAP 11.91 ±0.00 12.99 ±0.00 2.38 ±0.00 5.36 ±0.00 1.94 ±0.00 2.00 ±0.00 1.28 ±0.00 SCODE 10.00 ±0.10 10.56 ±0.04 2.01 ±0.04 0.84 ±0.03 1.50 ±0.02 1.30 ±0.03 0.94 ±0.01 GRISLI 11.05 ±0.00 10.57 ±0.00 2.95 ±0.00 0.51 ±0.00 1.65 ±0.00 1.21 ±0.00 1.29 ±0.00 GRNVBEM OT OT 2.34 ±0.00 0.55 ±0.00 1.62 ±0.00 1.39 ±0.00 1.14 ±0.00 SINCERITIES 12.47 ±0.00 10.60 ±0.00 2.69 ±0.00 0.51 ±0.00 1.49 ±0.00 1.37 ±0.00 1.18 ±0.00 Scribe 10.67 ±0.00 9.64 ±0.00 1.83 ±0.00 0.53 ±0.00 1.65 ±0.00 1.38 ±0.00 1.12 ±0.00 GENIE3 10.50 ±0.01 9.75 ±0.02 2.10 ±0.01 3.01 ±0.10 3.02 ±0.43 2.44 ±0.08 1.95 ±0.10 GRNBOOST2 11.97 ±0.02 11.42 ±0.02 2.32 ±0.01 2.45 ±0.62 1.78 ±0.04 1.93 ±0.11 1.63 ±0.37 FlowGRN (Ours) 12.53 ±0.11 12.66 ±0.19 2.32 ±0.03 1.83 ±0.15 3.36 ±0.23 3.33 ±0.14 2.35 ±0.14 TFs + 1,000 genes 
+
+LEAP 8.79 ±0.00 8.99 ±0.00 1.38 ±0.00 1.89 ±0.00 1.01 ±0.00 1.01 ±0.00 0.66 ±0.00 SCODE 6.68 ±0.08 6.74 ±0.08 1.08 ±0.01 0.52 ±0.01 0.63 ±0.01 0.58 ±0.01 0.47 ±0.01 GRISLI 7.71 ±0.00 7.01 ±0.00 1.72 ±0.00 0.42 ±0.00 0.72 ±0.00 0.55 ±0.00 0.63 ±0.00 GRNVBEM OT OT OT 0.42 ±0.00 OT OT 0.58 ±0.00 SINCERITIES 8.57 ±0.00 6.95 ±0.00 1.47 ±0.00 0.37 ±0.00 NE 0.62 ±0.00 NE Scribe 7.30 ±0.00 6.17 ±0.00 0.99 ±0.00 0.48 ±0.00 0.71 ±0.00 0.65 ±0.00 0.63 ±0.00 GENIE3 7.19 ±0.01 6.25 ±0.02 1.17 ±0.01 1.11 ±0.03 1.30 ±0.08 1.14 ±0.04 0.88 ±0.02 GRNBOOST2 8.29 ±0.01 7.48 ±0.02 1.33 ±0.01 0.88 ±0.07 0.82 ±0.02 0.88 ±0.05 0.70 ±0.05 FlowGRN (Ours) 8.82 ±0.15 8.98 ±0.76 1.27 ±0.02 0.81 ±0.05 1.60 ±0.11 1.56 ±0.07 0.93 ±0.04 
+
+6.3 FlowGRN is a top-tier model on experimental data 
+
+We compared FlowGRN with the baselines on 7 experimental datasets, and their performances are listed in Tables 2– 3. The main difficulties of these datasets are the high dimensionality and the presence of dropout, as discussed in Sections 2.2 and 2.3. Most baselines successfully completed the tasks, except for GRNVBEM, which failed to complete half of its tasks within a 48-hour time span, and SINCERITIES, which exhibits numerical errors on the mHSC-E and mHSC-L datasets. 14 Tong and Pang   
+
+> Table 3. EPR of directed GRN inference models on different experimental datasets out of 10 runs. The best and second-best results are highlighted in bold and underlined, respectively. “OT” and “NE” mean “over time in a 48-hour time span” and “numerical error”, respectively.
+
+dataset hESC hHep mDC mESC mHSC-E mHSC-GM mHSC-L 
+
+TFs + 500 genes 
+
+LEAP 0.94 ±0.00 1.84 ±0.00 1.98 ±0.00 38.97 ±0.00 5.87 ±0.00 3.20 ±0.00 1.99 ±0.00 SCODE 0.39 ±0.08 0.99 ±0.04 0.00 ±0.00 0.00 ±0.00 0.00 ±0.00 2.13 ±0.00 0.00 ±0.00 GRISLI 0.94 ±0.00 0.91 ±0.00 2.13 ±0.00 0.00 ±0.00 1.96 ±0.00 1.07 ±0.00 5.98 ±0.00 GRNVBEM OT OT 0.76 ±0.00 0.00 ±0.00 1.96 ±0.00 1.07 ±0.00 0.00 ±0.00 SINCERITIES 1.34 ±0.00 0.51 ±0.00 1.06 ±0.00 0.00 ±0.00 0.65 ±0.00 0.00 ±0.00 0.00 ±0.00 Scribe 0.67 ±0.00 0.61 ±0.00 0.00 ±0.00 0.00 ±0.00 1.30 ±0.00 1.07 ±0.00 0.00 ±0.00 GENIE3 0.82 ±0.02 1.07 ±0.02 2.05 ±0.23 3.90 ±6.28 5.41 ±0.44 8.10 ±0.55 5.98 ±0.00 GRNBOOST2 0.78 ±0.02 0.95 ±0.04 1.43 ±0.29 11.69 ±12.92 2.93 ±0.98 8.10 ±2.02 6.98 ±1.69 
+
+FlowGRN (Ours) 1.09 ±0.10 1.40 ±0.11 0.52 ±0.22 0.00 ±0.00 5.80 ±0.57 9.38 ±0.67 6.98 ±1.41 TFs + 1,000 genes 
+
+LEAP 1.28 ±0.00 2.36 ±0.00 2.92 ±0.00 46.32 ±0.00 8.67 ±0.00 5.38 ±0.00 0.00 ±0.00 SCODE 0.27 ±0.07 1.02 ±0.05 0.00 ±0.00 0.00 ±0.00 0.00 ±0.00 4.12 ±1.21 0.00 ±0.00 GRISLI 0.82 ±0.00 0.93 ±0.00 2.92 ±0.00 0.00 ±0.00 1.24 ±0.00 0.00 ±0.00 2.38 ±0.00 GRNVBEM OT OT OT 0.00 ±0.00 OT OT 0.00 ±0.00 SINCERITIES 1.42 ±0.00 0.58 ±0.00 0.22 ±0.00 0.00 ±0.00 NE 0.00 ±0.00 NE Scribe 0.69 ±0.00 0.60 ±0.00 0.22 ±0.00 11.58 ±0.00 2.48 ±0.00 0.00 ±0.00 0.00 ±0.00 GENIE3 1.10 ±0.02 1.31 ±0.04 2.87 ±0.25 5.79 ±4.73 9.16 ±1.20 13.26 ±1.25 7.13 ±0.00 GRNBOOST2 0.96 ±0.04 1.09 ±0.06 1.82 ±0.40 11.00 ±6.93 6.81 ±1.46 11.47 ±2.42 8.56 ±1.66 
+
+FlowGRN (Ours) 1.47 ±0.20 2.23 ±0.53 0.90 ±0.33 0.58 ±1.83 11.89 ±0.64 15.77 ±1.13 7.37 ±0.75 LEAP, GENIE3, and FlowGRN are the top-tier models on both metrics. FlowGRN ranks first or second in 10 of 14 tasks for both AUPRC and EPR, compared with 5 and 6 tasks for LEAP and 8 and 4 tasks for GENIE3, respectively. All of them adopt the idea of feature selection in their methodologies (Section 2.2), suggesting that feature selection is crucial for GRN inference in high-dimension and sparse interactions. Our model demonstrates scalability up to 1,783 genes. However, it achieves only average performance in the mDC and mESC datasets. This can be attributed to the low number of cells (383 and 421 cells) in both datasets, which is approximately half the number of cells in the other datasets. Insufficient cell samples may result in inadequate information for the model to accurately capture complex gene interactions, particularly in deep learning models. We believe that this issue can be addressed by simplifying the model’s complexity or incorporating biological priors into the flow matching model. 
+
+6.4 Computational scalability 
+
+The model run times are reported in Table 4. Our model is as scalable as GENIE3 and GRNBOOST2, which can be trained in less than 10 minutes. However, different methods have various levels of parallelization, and we have optimized the implementation for GENIE3, GRNBOOST2, and FlowGRN on multiple-core computation. Technical Report of FlowGRN 15 
+
+> Table 4. Average elapsed time (seconds) of different GRN inference models in various dataset sizes
+
+# genes LEAP SCODE GRISLI GRN-VBEM SINCER-ITIES Scribe GENIE3 GRN-BOOST2 FlowGRN 501 44.20 2424.83 1660.29 280.16 121.80 1627.46 38.34 20.15 84.10 624 155.84 3414.29 1930.55 303.83 206.57 6527.50 86.63 16.94 104.80 698 190.48 4062.10 2846.68 414.96 299.78 8648.80 111.44 18.81 117.17 763 203.75 4479.20 4082.15 555.18 304.91 13190.50 151.49 22.66 128.26 1001 139.61 4420.80 5789.50 1284.02 458.13 6490.50 82.61 32.52 167.92 1113 144.60 4918.70 6317.20 1831.28 782.26 7416.80 90.934 22.31 187.07 1124 253.55 5862.20 9271.00 1862.92 - 22202.30 204.17 37.35 188.92 1198 327.18 6322.10 11711.20 - 886.09 25344.70 236.54 40.62 201.37 1209 291.89 5431.50 8433.50 - 882.68 9994.00 91.46 25.56 203.36 1263 358.72 7180.30 15125.00 - - 35624.30 325.91 37.25 212.09 1283 363.35 6685.20 12561.40 - 1157.01 25166.50 191.59 32.61 215.38 1613 417.06 6859.70 16224.90 - 1313.31 15535.30 149.80 31.65 270.81 1709 429.82 7256.10 19567.90 - 1285.11 19758.00 151.11 34.47 287.16 1783 465.11 9019.50 27275.80 - 1442.53 47802.70 308.98 44.18 299.60                                                                  
+
+> Table 5. AUPRC ( ×10 −3) of FlowGRN and GENIE3 trained with and without trajectories in different experimental datasets out of 10 runs. The best and second-best results are highlighted in bold and underlined, respectively.
+> dataset hESC hHep mDC mESC mHSC-E mHSC-GM mHSC-L
+> TFs + 500 genes
+> GENIE3 10.497 ±0.012 9.754 ±0.015 2.097 ±0.013 3.006 ±0.100 3.018 ±0.429 2.442 ±0.083 1.950 ±0.101 W/ traj. 12.154 ±0.000 11.572 ±0.000 2.304 ±0.000 0.554 ±0.000 1.623 ±0.000 1.388 ±0.000 1.135 ±0.000 FlowGRN 12.526 ±0.112 12.660 ±0.186 2.315 ±0.030 1.826 ±0.152 3.364 ±0.233 3.333 ±0.145 2.348 ±0.139
+> W/o traj. 10.250 ±0.190 13.360 ±0.564 2.014 ±0.055 1.254 ±0.182 1.236 ±0.055 1.230 ±0.062 0.976 ±0.095
+> TFs + 1,000 genes
+> GENIE3 7.192 ±0.012 6.246 ±0.017 1.172 ±0.006 1.105 ±0.033 1.296 ±0.083 1.142 ±0.037 0.877 ±0.016 W/ traj. 8.352 ±0.000 7.535 ±0.000 1.308 ±0.000 0.415 ±0.000 0.712 ±0.000 0.624 ±0.000 0.577 ±0.000 FlowGRN 8.815 ±0.147 8.978 ±0.761 1.270 ±0.024 0.808 ±0.048 1.602 ±0.109 1.556 ±0.067 0.931 ±0.041
+> W/o traj. 7.313 ±0.218 7.814 ±0.273 1.044 ±0.021 0.962 ±0.203 0.541 ±0.012 0.546 ±0.030 0.504 ±0.026
+
+6.5 Trajectory reconstruction is irreplaceable in FlowGRN 
+
+We performed an ablation study on the use of reconstructed trajectories in the GENIE3 and FlowGRN models, and the results are shown in Table 5. GENIE3 initially relies on static gene expression data, but we may also use the reconstructed trajectories as augmented inputs, as the set of all trajectories contains static gene expression data. The latter approach is labeled as “GENIE3 (w/ traj.)”. In FlowGRN, the trajectories reconstructed by the CFM model serve as input to the dynGENIE3 model. However, we may also use the trained vector field 𝑣 𝜃 from the CFM model to reconstruct GRN directly from its Jacobian ∇𝑥 ′ 𝑣 𝜃 , labeled as “FlowGRN (w/o traj.)”. This ablation study demonstrates that trajectory reconstruction is an indispensable component in the FlowGRN model, as the performance of FlowGRN without trajectories is significantly lower than that with trajectories. This is because the chain rule allows a gene to influence another either directly or indirectly via other genes, making it challenging to discern direct regulations solely from gene expression data. 16 Tong and Pang                                                                      
+
+> Table 6. AUPRC ( ×10 −3) of FlowGRN under different model settings in different experimental datasets out of 10 runs. “ 𝑑 raw ” is the use of dropout-robust measure, and “kNN” is the use of shortest path distance in the kNN graph. The best and second-best results are highlighted in bold and underlined, respectively.
+> dataset hESC hHep mDC mESC mHSC-E mHSC-GM mHSC-L
+> TFs + 500 genes
+> FlowGRN 12.526 ±0.112 12.660 ±0.186 2.315 ±0.030 1.826 ±0.152 3.364 ±0.233 3.333 ±0.145 2.348 ±0.139
+> W/o kNN 12.541 ±0.150 12.644 ±0.179 2.302 ±0.030 1.835 ±0.154 3.354 ±0.247 3.268 ±0.081 2.292 ±0.161 W/o 𝑑 raw 12.536 ±0.105 12.628 ±0.172 2.306 ±0.027 1.858 ±0.126 3.306 ±0.342 3.295 ±0.091 2.254 ±0.144 W/o 𝑑 raw , kNN 12.537 ±0.112 12.624 ±0.162 2.309 ±0.032 1.833 ±0.158 3.293 ±0.176 3.312 ±0.089 2.304 ±0.159
+> TFs + 1,000 genes
+> FlowGRN 8.815 ±0.147 8.978 ±0.761 1.270 ±0.024 0.808 ±0.048 1.602 ±0.109 1.556 ±0.067 0.931 ±0.041 W/o kNN 8.817 ±0.144 8.907 ±0.759 1.282 ±0.026 0.811 ±0.042 1.540 ±0.065 1.592 ±0.097 0.933 ±0.041
+> W/o 𝑑 raw 8.845 ±0.140 8.889 ±0.646 1.278 ±0.030 0.805 ±0.043 1.587 ±0.093 1.586 ±0.100 0.921 ±0.037 W/o 𝑑 raw , kNN 8.845 ±0.138 8.883 ±0.635 1.277 ±0.025 0.802 ±0.044 1.575 ±0.053 1.557 ±0.077 0.916 ±0.024
+
+However, the effect of trajectory is almost tied in the GENIE3 model. Although augmented trajectories may be helpful in some instances, the formulation of GENIE3 is not designed to leverage these trajectories. Although both GENIE3 and dynGENIE3 train random forest models and extract the network in the same way, GENIE3 aims to capture interactions from static states, while dynGENIE3 focuses on dynamic modeling. Thus, the performance of GENIE3 with dynamic information is not significantly better than that without trajectories. Additionally, data augmentation introduces noise to GENIE3, which may also impact performance. 
+
+6.6 Dropout-robust measure boosts GRN inference 
+
+We conducted another ablation study to justify the design of our dropout-robust measure on the experimental datasets. We compared the FlowGRN model with and without the dropout-robust measure, and with and without the kNN graph geodesic distance. Both components are defined in Section 4.1, and the results are shown in Table 6. Although performance differences are minor and within standard deviations, we can see that the dropout-robust measure 𝑑 is the primary driver of performance improvement, especially on the “TFs + 1,000 genes” dataset. This shows that the dropout-robust measure is essential for the GRN inference task, as it helps to avoid the noise introduced by dropout. 
+
+6.7 Visualization of reconstructed trajectories 
+
+As part of the quality check, we visualized the reconstructed trajectories 𝑇 of the 7 experimental datasets with two gene set sizes in Figures 8–9 in the Appendix. In most datasets, the reconstructed trajectories broadly follow the progression of the observed cell distributions in the PCA space, although some trajectories leave dense cell regions or bend sharply. A clear example is the hHep-1000 dataset in Figure 9, where several reconstructed trajectories twist around 𝑡 = 4. This pattern may reflect the rapid change in cell distributions between 𝑡 = 3 and 𝑡 = 5, although the 2-dimensional PCA projection may also introduce apparent overlaps that are absent from the original space. Therefore, these visualizations provide a qualitative sanity check rather than evidence of accurate cell-level trajectory reconstruction. In addition, we observed that the CFM model also gives velocity predictions outside the observed cell distributions, and these non-zero velocity predictions potentially misguide trajectory reconstruction during integration, once the Technical Report of FlowGRN 17 reconstructed trajectory leaves the observed cell distributions. This observation further reminds us that the learned vector field is only valid in the observed cell distributions. 
+
+7 Conclusion and Limitations 
+
+In this paper, we proposed FlowGRN, a novel deep learning model for inferring GRNs from scRNA-seq data. FlowGRN is a combination of a CFM model and an ensemble tree model that reconstructs gene expression trajectories and infers the GRN from the reconstructed trajectories. To mitigate the impact of dropout, we proposed a dropout-robust cell similarity measure that captures cell-cell similarity in the presence of dropout. We evaluated FlowGRN on the BEELINE benchmark and compared it with eight state-of-the-art GRN inference models. FlowGRN demonstrated top-tier performance in both synthetic and curated datasets, achieving the best performance in 6 of 10 tasks. It has advantages in learning regulation types and modeling dynamics with long cascades and cycles, which are well-known challenges in GRN inference. FlowGRN is also scalable to high-dimensional experimental datasets of up to 1,783 genes with dropout, thanks to the advanced CFM model and the dropout-robust cell similarity measure. We also conducted ablation studies to validate the design of FlowGRN, demonstrating that the dropout-robust cell similarity measure and trajectory reconstruction are essential for our model. FlowGRN has some limitations. First, FlowGRN exhibits a notable performance drop on datasets with few cells, such as mDC and mESC, which is a common pitfall of deep learning models. Second, our method cannot model the dynamics and infer network structure in a unified manner, which limits its interpretability. In the future, we will combine dynamic modeling and GRN inference in a unified framework by restricting the CFM model with biological constraints, following the approach of physics-informed neural networks (PINN). We will also replace the Euclidean distance in the CFM training with our similarity measure and align the trajectories with the tendency of the cell distribution shifts. We expect that these improvements will further enhance the performance of FlowGRN on high-dimensional datasets. 
+
+Conflicts of Interest 
+
+The authors declare no conflicts of interest. 
+
+Data and Code Availability 
+
+We do not generate any new data in this work. All the data used in this work are publicly available. The code of FlowGRN is available at https://github.com/1250326/FlowGRN, implemented in Python 3.9. 
+
+Acknowledgments 
+
+Authors Tsz Pan Tong and Jun Pang acknowledge financial support from the Institute for Advanced Studies of the University of Luxembourg through an Audacity Grant (AUDACITY-2021). This work was also supported by the Luxembourg National Research Fund (FNR) under the grant agreement INTER/NCN/24/18732364/EdgeCR. 
+
+References       
+
+> [1] Sara Aibar, Carmen Bravo González-Blas, Thomas Moerman, Vân Anh Huynh-Thu, Hana Imrichova, Gert Hulselmans, Florian Rambow, Jean-Christophe Marine, Pierre Geurts, Jan Aerts, et al. 2017. SCENIC: Single-cell regulatory network inference and clustering. Nature Methods 14, 11 (2017), 1083–1086. [2] Michael S Albergo, Michael Lindsey, Nicholas M Boffi, and Eric Vanden-Eijnden. 2024. Multimarginal generative modeling with stochastic interpolants. In 12th International Conference on Learning Representations, ICLR 2024 .
+
+18 Tong and Pang 
+
+[3] Pierre-Cyril Aubin-Frankowski and Jean-Philippe Vert. 2020. Gene regulation inference from single-cell RNA-seq data with linear differential equations and velocity inference. Bioinformatics 36, 18 (2020), 4774–4780. [4] Pau Badia-i Mompel, Lorna Wessels, Sophia Müller-Dott, Rémi Trimbour, Ricardo O Ramirez Flores, Ricard Argelaguet, and Julio Saez-Rodriguez. 2023. Gene regulatory network inference in the era of single-cell multi-omics. Nature Reviews Genetics 24, 11 (2023), 739–754. [5] Carmen Bravo González-Blas, Seppe De Winter, Gert Hulselmans, Nikolai Hecker, Irina Matetovici, Valerie Christiaens, Suresh Poovathingal, Jasper Wouters, Sara Aibar, and Stein Aerts. 2023. SCENIC+: single-cell multiomic inference of enhancers and gene regulatory networks. Nature Methods 
+
+20, 9 (2023), 1355–1367. [6] Thalia E Chan, Michael PH Stumpf, and Ann C Babtie. 2017. Gene Regulatory Network Inference from Single-Cell Data Using Multivariate Information Measures. Cell Systems 5, 3 (2017), 251–267. [7] Jiaxing Chen, ChinWang Cheong, Liang Lan, Xin Zhou, Jiming Liu, Aiping Lyu, William K Cheung, and Lu Zhang. 2021. DeepDRIM: a deep neural network to reconstruct cell-type-specific gene regulatory network using single-cell RNA-seq data. Briefings in Bioinformatics 22, 6 (2021), bbab325. [8] Shuonan Chen and Jessica C Mar. 2018. Evaluating methods of inferring gene regulatory networks highlights their lack of performance for single cell gene expression data. BMC Bioinformatics 19, 1 (2018), 232. [9] Gökcen Eraslan, Lukas M Simon, Maria Mircea, Nikola S Mueller, and Fabian J Theis. 2019. Single-cell RNA-seq denoising using a deep count autoencoder. Nature Communications 10, 1 (2019), 390. [10] Jeremiah J Faith, Boris Hayete, Joshua T Thaden, Ilaria Mogno, Jamey Wierzbowski, Guillaume Cottarel, Simon Kasif, James J Collins, and Timothy S Gardner. 2007. Large-Scale Mapping and Validation of Escherichia coli Transcriptional Regulation from a Compendium of Expression Profiles. 
+
+PLOS Biology 5, 1 (2007), e8. [11] Yue Fan and Xiuli Ma. 2021. Gene regulatory network inference using 3D convolutional neural network. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 35. AAAI Press, 99–106. [12] Rémi Flamary, Nicolas Courty, Alexandre Gramfort, Mokhtar Z. Alaya, Aurélie Boisbunon, Stanislas Chambon, Laetitia Chapel, Adrien Corenflos, Kilian Fatras, Nemo Fournier, Léo Gautheron, Nathalie T.H. Gayraud, Hicham Janati, Alain Rakotomamonjy, Ievgen Redko, Antoine Rolet, Antony Schutz, Vivien Seguy, Danica J. Sutherland, Romain Tavenard, Alexander Tong, and Titouan Vayer. 2021. POT: Python Optimal Transport. Journal of Machine Learning Research 22, 78 (2021), 1–8. http://jmlr.org/papers/v22/20-451.html [13] Jonas Simon Fleck, Sophie Martina Johanna Jansen, Damian Wollny, Fides Zenk, Makiko Seimiya, Akanksha Jain, Ryoko Okamoto, Malgorzata Santel, Zhisong He, J Gray Camp, et al. 2023. Inferring and perturbing cell fate regulomes in human brain organoids. Nature 621, 7978 (2023), 365–372. [14] Luz Garcia-Alonso, Christian H. Holland, Mahmoud M. Ibrahim, Denes Turei, and Julio Saez-Rodriguez. 2019. Benchmark and integration of resources for the estimation of human transcription factor activities. Genome Research 29, 8 (2019), 1363–1375. [15] Laleh Haghverdi, Maren Büttner, F Alexander Wolf, Florian Buettner, and Fabian J Theis. 2016. Diffusion pseudotime robustly reconstructs lineage branching. Nature Methods 13, 10 (2016), 845–848. [16] Anne-Claire Haury, Fantine Mordelet, Paola Vera-Licona, and Jean-Philippe Vert. 2012. TIGRESS: Trustful Inference of Gene REgulation using Stability Selection. BMC Systems Biology 6, 1 (2012), 145. [17] Mo Huang, Jingshu Wang, Eduardo Torre, Hannah Dueck, Sydney Shaffer, Roberto Bonasio, John I Murray, Arjun Raj, Mingyao Li, and Nancy R Zhang. 2018. SAVER: gene expression recovery for single-cell RNA sequencing. Nature Methods 15, 7 (2018), 539–542. [18] Vân Anh Huynh-Thu and Pierre Geurts. 2018. dynGENIE3: dynamical GENIE3 for the inference of gene networks from time series expression data. 
+
+Scientific Reports 8, 1 (2018), 3384. [19] Vân Anh Huynh-Thu, Alexandre Irrthum, Louis Wehenkel, and Pierre Geurts. 2010. Inferring regulatory networks from expression data using tree-based methods. PLOS ONE 5, 9 (2010), e12776. [20] Vân Anh Huynh-Thu and Guido Sanguinetti. 2015. Combining tree-based and dynamical systems for the inference of gene regulatory networks. 
+
+Bioinformatics 31, 10 (2015), 1614–1622. [21] Ruochen Jiang, Tianyi Sun, Dongyuan Song, and Jingyi Jessica Li. 2022. Statistics or biology: the zero-inflation controversy about scRNA-seq data. 
+
+Genome Biology 23, 1 (2022), 31. [22] Kenji Kamimoto, Blerta Stringa, Christy M Hoffmann, Kunal Jindal, Lilianna Solnica-Krezel, and Samantha A Morris. 2023. Dissecting cell identity via network inference and in silico gene perturbation. Nature 614, 7949 (2023), 742–751. [23] Philipp Keyl, Philip Bischoff, Gabriel Dernbach, Michael Bockmayr, Rebecca Fritz, David Horst, Nils Blüthgen, Grégoire Montavon, Klaus-Robert Müller, and Frederick Klauschen. 2023. Single-cell gene regulatory network prediction by explainable AI. Nucleic Acids Research 51, 4 (2023), e20. [24] Seongho Kim. 2015. ppcor: An R Package for a Fast Calculation to Semi-partial Correlation Coefficients. Communications for Statistical Applications and Methods 22, 6 (2015), 665–674. [25] Jens Uwe Loers and Vanessa Vermeirssen. 2024. A single-cell multimodal view on gene regulatory network inference from transcriptomics and chromatin accessibility data. Briefings in Bioinformatics 25, 5 (2024), bbae382. [26] Lam-Ha Ly and Martin Vingron. 2022. Effect of imputation on gene network reconstruction from single-cell RNA-seq data. Patterns 3, 2 (2022), 11 pages. [27] Adam A Margolin, Ilya Nemenman, Katia Basso, Chris Wiggins, Gustavo Stolovitzky, Riccardo Dalla Favera, and Andrea Califano. 2006. ARACNE: An Algorithm for the Reconstruction of Gene Regulatory Networks in a Mammalian Cellular Context. BMC Bioinformatics 7, 1 (2006), S7. Technical Report of FlowGRN 19 
+
+[28] Hirotaka Matsumoto, Hisanori Kiryu, Chikara Furusawa, Minoru SH Ko, Shigeru BH Ko, Norio Gouda, Tetsutaro Hayashi, and Itoshi Nikaido. 2017. SCODE: an efficient regulatory network inference algorithm from single-cell RNA-Seq during differentiation. Bioinformatics 33, 15 (2017), 2314–2321. [29] Leland McInnes, John Healy, and James Melville. 2018. UMAP: Uniform manifold approximation and projection for dimension reduction. arXiv preprint arXiv:1802.03426 (2018). [30] Thomas Moerman, Sara Aibar Santos, Carmen Bravo González-Blas, Jaak Simm, Yves Moreau, Jan Aerts, and Stein Aerts. 2019. GRNBoost2 and Arboreto: efficient and scalable inference of gene regulatory networks. Bioinformatics 35, 12 (2019), 2159–2161. [31] Kevin R Moon, David Van Dijk, Zheng Wang, Scott Gigante, Daniel B Burkhardt, William S Chen, Kristina Yim, Antonia van den Elzen, Matthew J Hirn, Ronald R Coifman, et al. 2019. Visualizing structure and transitions in high-dimensional biological data. Nature Biotechnology 37, 12 (2019), 1482–1492. [32] Sophia Müller-Dott, Eirini Tsirvouli, Miguel Vazquez, Ricardo O Ramirez Flores, Pau Badia-i Mompel, Robin Fallegger, Dénes Türei, Astrid Lægreid, and Julio Saez-Rodriguez. 2023. Expanding the coverage of regulons from high-confidence prior knowledge for accurate estimation of transcription factor activities. Nucleic Acids Research 51, 20 (2023), 10934–10949. [33] Nan Papili Gao, SM Minhaz Ud-Dean, Olivier Gandrillon, and Rudiyanto Gunawan. 2018. SINCERITIES: inferring gene regulatory networks from time-stamped single cell transcriptional expression profiles. Bioinformatics 34, 2 (2018), 258–266. [34] Michael Poli, Stefano Massaroli, Atsushi Yamashita, Hajime Asama, and Jinkyoo Park. 2020. Torchdyn: A neural differential equations library. arXiv preprint arXiv:2009.09346 (2020). [35] Aditya Pratapa, Amogh P Jalihal, Jeffrey N Law, Aditya Bharadwaj, and TM Murali. 2020. Benchmarking algorithms for gene regulatory network inference from single-cell transcriptomic data. Nature Methods 17, 2 (2020), 147–154. [36] Xiaojie Qiu, Arman Rahimzamani, Li Wang, Bingcheng Ren, Qi Mao, Timothy Durham, José L McFaline-Figueroa, Lauren Saunders, Cole Trapnell, and Sreeram Kannan. 2020. Inferring Causal Gene Regulatory Networks from Coupled Single-Cell Expression Dynamics Using Scribe. Cell Systems 
+
+10, 3 (2020), 265–274. [37] Arman Rahimzamani and Sreeram Kannan. 2016. Network inference using directed information: The deterministic limit. In 54th Annual Allerton Conference on Communication, Control, and Computing . IEEE Press, 156–163. [38] Caleb C Reagor, Nicolas Velez-Angel, and A J Hudspeth. 2023. Depicting pseudotime-lagged causality across single-cell trajectories for accurate gene-regulatory inference. PNAS Nexus 2, 4 (2023), pgad113. [39] Wouter Saelens, Robrecht Cannoodt, Helena Todorov, and Yvan Saeys. 2019. A comparison of single-cell trajectory inference methods. Nature Biotechnology 37, 5 (2019), 547–554. [40] Manuel Sanchez-Castillo, David Blanco, Isabel M Tienda-Luna, MC Carrion, and Yufei Huang. 2018. A Bayesian framework for the inference of gene regulatory networks from time and pseudo-time series data. Bioinformatics 34, 6 (2018), 964–970. [41] Manu Setty, Michelle D Tadmor, Shlomit Reich-Zeliger, Omer Angel, Tomer Meir Salame, Pooja Kathail, Kristy Choi, Sean Bendall, Nir Friedman, and Dana Pe’er. 2016. Wishbone identifies bifurcating developmental trajectories from single-cell data. Nature biotechnology 34, 6 (2016), 637–645. [42] Yutong Sha, Yuchi Qiu, Peijie Zhou, and Qing Nie. 2024. Reconstructing growth and dynamic trajectories from single-cell transcriptomics data. 
+
+Nature Machine Intelligence 6, 1 (2024), 25–39. [43] Hantao Shu, Jingtian Zhou, Qiuyu Lian, Han Li, Dan Zhao, Jianyang Zeng, and Jianzhu Ma. 2021. Modeling gene regulatory networks using neural network architectures. Nature Computational Science 1, 7 (2021), 491–501. [44] David M Simcha, Laurent Younes, Martin J Aryee, and Donald Geman. 2013. Identification of direction in gene networks from expression and methylation. BMC systems biology 7 (2013), 1–15. [45] Claudia Skok Gibbs, Christopher A Jackson, Giuseppe-Antonio Saldi, Andreas Tjärnberg, Aashna Shah, Aaron Watters, Nicholas De Veaux, Konstantine Tchourine, Ren Yi, Tymor Hamamsy, et al. 2022. High-performance single-cell gene regulatory network inference at scale: the Inferelator 3.0. Bioinformatics 38, 9 (2022), 2519–2528. [46] Alicia T Specht and Jun Li. 2017. LEAP: constructing gene co-expression networks for single-cell RNA-sequencing data using pseudotime ordering. 
+
+Bioinformatics 33, 5 (2017), 764–766. [47] Kelly Street, Davide Risso, Russell B Fletcher, Diya Das, John Ngai, Nir Yosef, Elizabeth Purdom, and Sandrine Dudoit. 2018. Slingshot: cell lineage and pseudotime inference for single-cell transcriptomics. BMC Genomics 19 (2018), 1–16. [48] Alexander Tong, Jessie Huang, Guy Wolf, David Van Dijk, and Smita Krishnaswamy. 2020. TrajectoryNet: A Dynamic Optimal Transport Network for Modeling Cellular Dynamics. In 37th International Conference on Machine Learning . PMLR, 9526–9536. [49] Alexander Tong, Nikolay Malkin, Kilian Fatras, Lazar Atanackovic, Yanlei Zhang, Guillaume Huguet, Guy Wolf, and Yoshua Bengio. 2024. Simulation-free Schrödinger bridges via score and flow matching. In 27th International Conference on Artificial Intelligence and Statistics . 1279–1287. [50] Laurens Van der Maaten and Geoffrey Hinton. 2008. Visualizing data using t-SNE. Journal of Machine Learning Research 9, 11 (2008), 2579–2605. [51] Monique GP Van Der Wijst, Dylan H de Vries, Harm Brugge, Harm-Jan Westra, and Lude Franke. 2018. An integrative approach for building personalized gene regulatory networks for precision medicine. Genome Medicine 10 (2018), 1–15. [52] David Van Dijk, Roshan Sharma, Juozas Nainys, Kristina Yim, Pooja Kathail, Ambrose J Carr, Cassandra Burdziak, Kevin R Moon, Christine L Chaffer, Diwakar Pattabiraman, et al. 2018. Recovering gene interactions from single-cell data using data diffusion. Cell 174, 3 (2018), 716–729. [53] Florian Wagner, Yun Yan, and Itai Yanai. 2017. K-nearest neighbor smoothing for high-throughput single-cell RNA-Seq data. BioRxiv (2017), 217737. 20 Tong and Pang 
+
+[54] Aoran Wang and Jun Pang. 2022. Iterative structural inference of directed graphs. In 36th International Conference on Neural Information Processing Systems . Curran Associates, Inc., 8717–8730. [55] Aoran Wang, Tsz Pan Tong, Andrzej Mizera, and Jun Pang. 2024. Benchmarking Structural Inference Methods for Interacting Dynamical Systems with Synthetic Data. In Advances in Neural Information Processing Systems , Vol. 37. Curran Associates, Inc., 135129–135185. [56] Aoran Wang, Tsz Pan Tong, and Jun Pang. 2023. Effective and Efficient Structural Inference with Reservoir Computing. In 40th International Conference on Machine Learning . PMLR, 36391–36410. [57] Steven Woodhouse, Nir Piterman, Christoph M Wintersteiger, Berthold Göttgens, and Jasmin Fisher. 2018. SCNS: a graphical tool for reconstructing executable regulatory networks from single-cell genomic data. BMC Systems Biology 12 (2018), 1–7. [58] Grace XY Zheng, Jessica M Terry, Phillip Belgrader, Paul Ryvkin, Zachary W Bent, Ryan Wilson, Solongo B Ziraldo, Tobias D Wheeler, Geoff P McDermott, Junjie Zhu, et al. 2017. Massively parallel digital transcriptional profiling of single cells. Nature Communications 8, 1 (2017), 14049. Technical Report of FlowGRN 21 
+
+A Appendix A.1 Network statistics and baseline descriptions 
+
+Table 7 shows the network statistics of the synthetic and curated datasets in the BEELINE benchmark. The number of genes in the dataset, the number of edges in the ground truth GRN, and the network density are reported, where the network density is defined as #Edges /𝑔 2.
+
+> Table 7. Network Statistics of the Synthetic and Curated Datasets
+
+Dataset # Genes # Edges Network Density 
+
+Synthetic 
+
+BF 7 12 0.24 BFC 10 18 0.18 LI 7 8 0.16 LL 18 19 0.06 CY 6 6 0.17 TF 8 20 0.31 
+
+Curated 
+
+mCAD 5 14 0.56 VSC 8 15 0.23 HSC 11 30 0.25 GSD 19 79 0.22 Table 8 compares FlowGRN with BEELINE baseline models in terms of their properties, inferred GRN types, and methodologies. We categorize the models into 5 categories: Correlation (Corr), ODE, Regression (Reg), Mutual Information (MI), and Tree. A model is said to be signed if it can determine the activation or inhibition of gene interactions, and the positive (negative) values in the inferred GRN correspond to the activation (inhibition). Our FlowGRN is a combination of ODE and ensemble tree models, leveraging the advantages of both methodologies to reconstruct cell dynamics and efficiently and scalably extract gene interactions. 
+
+A.2 Preprocessing of the experimental datasets 
+
+Our FlowGRN model is designed for GRN inference from a time series of gene expression data. However, the data in the BEELINE benchmark lack temporal information; instead, they provide pseudotime for each cell from Slingshot [47]. To adapt the data for our model, we first cluster the cells by their dimension-reduced gene expression in each dataset. We manually checked the clustering results and their alignment with the pseudotime. Then, we used the mean pseudotime of each cluster as its sampling time. Note that FlowGRN only requires the temporal ordering but not the exact time, so the mean pseudotime is sufficient for our model. In implementation, we use UMAP [29] for dimension reduction. For clustering, we use DBSCAN and KMeans, depending on the within-cluster distance after clustering. We prioritize the use of DBSCAN, as it is more robust to noise and does not require the number of clusters to be specified in advance. However, DBSCAN requires a hard threshold for the minimum distance between clusters, which may form large clusters with multiple cell states. Thus, KMeans serves as a backup, and the number of clusters is set to match the manual inspection. 22 Tong and Pang 
+
+Table 8. Comparison between FlowGRN and BEELINE baseline models on their properties, inferred GRN types and methodologies. Model categories include Correlation (Corr), ODE, Regression (Reg), Mutual Information (MI) and Tree. 
+
+Category Signed? Description LEAP [46] Corr ✗ A model that uses the maximum Pearson correlations at different time lags as the gene interaction strength SCODE [28] ODE ✓ A linear ODE model for the gene expression level GRISLI [3] ODE ✗ A model similar to SCODE but with sparsity constraint and less restrictions due to the stability selection algorithm GRNVBEM [40] Reg ✓ A multivariate AR1MA1 time series model solved by the variational Bayesian inference SINCERITIES [33] Reg ✓ Models the gene distributional shift distances by linear regression to spot significant gene interactions Scribe [36] MI ✗ Causality inferencing model on GRN that computes restricted directed information [37] GENIE3 [19] Tree ✗ A tree model using random forests as predictors and feature importance as gene interaction strength GRNBOOST2 [30] Tree ✗ A tree model using gradient boosting machines as predictors and feature importance as gene interaction strength FlowGRN (Ours) ODE+Tree ✓ A tree model using random forests to extract gene interaction strengths from cell trajectories reconstructed by neural ODE 
+
+A.3 Standard deviations of the reported data 
+
+Figure 5 shows the standard deviation of AUPRC of the directed GRN inference models on all simulated datasets out of 10 runs. FlowGRN has relatively high deviations in the synthetic datasets, but low deviations in the curated datasets. Note that deterministic models (LEAP, GRISLI, GRNVBEM, SINCERITIES, and Scribe) have a nonzero standard deviation in synthetic and curated datasets because both types of datasets contain 10 independent simulations of the same GRN. However, BEELINE only contains one scRNA-seq experiment for each experimental dataset. Thus, the standard deviation of the deterministic models is zero. Figure 6 shows the standard deviation of the EPR of the directed GRN inference models on all simulated datasets out of 10 runs. FlowGRN has an average standard deviation compared to other baselines, and the standard deviation is also low in the curated datasets. It is notable that the standard deviations in the LL dataset are consistently high for all models, which may be attributed to the inherent difficulty of its long cascade dynamics. Technical Report of FlowGRN 23 BF BFC LI LL CY TF mCAD VSC HSC GSD LEAP SCODE GRISLI GRNVBEM SINCERITIES Scribe GENIE3 GRNBOOST2 
+
+FlowGRN (Ours)                                                                                  
+
+> 17.05 2.88 2.99 3.69 1.71 5.36 0.79 3.84 2.24 0.40 14.17 3.06 3.53 0.69 3.41 8.78 8.82 7.70 2.10 1.90 1.80 2.35 1.59 10.71 7.68 4.05 4.72 2.72 4.56 2.76 2.30 3.60 3.14 2.44 1.89 2.57 1.16 0.94 1.20 1.29 2.66 2.61 1.40 2.11 0.74 4.22 7.12 6.04 3.14 1.56 10.10 5.55 6.84 8.30 7.17 6.98 3.44 4.68 3.85 2.08 3.28 1.57 2.56 1.53 1.57 2.68 0.40 0.84 1.08 0.24 3.87 2.96 4.06 4.25 2.17 3.20 4.05 4.55 3.36 2.23 5.32 4.21 6.57 3.21 10.85 6.10 1.68 1.96 1.40 1.59
+
+## AUPRC Standard Deviation (in %) 
+
+Fig. 5. Standard deviation of AUPRC of directed GRN inference models on different simulated datasets out of 10 runs. Synthetic and curated datasets are separated by a vertical line. 
+
+Figure 7 shows the standard deviation of AUPRC of the directed GRN inference models with edge types on all simulated datasets out of 10 runs. The standard deviation of FlowGRN is comparable to the second-best model, GRNVBEM, indicates that FlowGRN has a better performance than GRNVBEM with the same level of stability. 
+
+A.4 Visualization of reconstructed trajectories 
+
+For each dataset, we use PCA to project the 𝑔 -dimensional gene space to a 2-dimensional space. While nonlinear dimensionality reduction methods such as UMAP [29] and t-SNE [50] are widely used in single-cell data visualization, they distort the reconstructed trajectories and cannot provide a continuous mapping from the original space to the low-dimensional space. PCA learns a linear mapping 𝑊 𝑝𝑐𝑎 : R𝑔 → R2 to bridge the original space R𝑔 and the 2-dimensional space R2, as well as their tangent spaces. Denote 𝜇 ′ as the mean of log-transformed gene expression data, cell 𝑥 ′ ∈ R𝑔 
+
+is projected to 𝑊 𝑝𝑐𝑎 (𝑥 ′ − 𝜇 ′) ∈ R2, and the tangent vector 𝑣 𝜃 (𝑥 ′, 𝑡 ) ∈ R𝑔 is projected to 𝑊 𝑝𝑐𝑎 𝑣 𝜃 (𝑥 ′, 𝑡 ) ∈ R2. Since the projection is linear, the projected trajectories and vector field remain continuous, although the projection may distort distances and cause distinct trajectories to overlap. With the PCA projection, we can visualize the cells, reconstructed trajectories, and the vector field in the 2-dimensional space. For each dataset, cell clustering and time ordering results detailed in Section A.2 in the Appendix are colored in the cell scatter plot. For each time point, we randomly sample 5 reconstructed trajectories and plot them as curves. We also compute the vector field 𝑣 𝜃 on a grid of points and plot it as arrows. 24 Tong and Pang BF BFC LI LL CY TF mCAD VSC HSC GSD LEAP SCODE GRISLI GRNVBEM SINCERITIES Scribe GENIE3 GRNBOOST2 
+
+FlowGRN (Ours) 
+
+0.73 0.23 0.37 0.82 0.48 0.07 0.07 0.35 0.34 0.11 0.49 0.40 0.48 0.61 0.52 0.44 0.11 0.47 0.17 0.17 0.29 0.48 0.54 1.69 0.67 0.31 0.06 0.30 0.33 0.14 0.31 0.33 0.00 0.61 0.52 0.19 0.07 0.38 0.17 0.08 0.49 0.62 0.40 0.76 0.00 0.31 0.09 0.35 0.31 0.14 0.43 0.36 0.54 1.37 0.67 0.27 0.09 0.29 0.22 0.17 0.19 0.32 0.32 1.34 0.42 0.15 0.00 0.00 0.09 0.10 0.24 0.29 0.54 1.04 0.42 0.20 0.06 0.27 0.11 0.11 0.30 0.18 0.43 0.57 0.32 0.34 0.07 0.09 0.16 0.10 
+
+## Early Precision Rate Standard Deviation 
+
+Fig. 6. Standard deviation of EPR of directed GRN inference models on different simulated datasets out of 10 runs. Synthetic and curated datasets are separated by a vertical line. BF BFC LI LL CY TF mCAD VSC HSC GSD SCODE GRNVBEM SINCERITIES 
+
+FlowGRN (Ours) 
+
+3.26 3.02 4.02 0.33 7.11 4.10 5.03 6.16 0.60 0.98 5.34 8.97 22.87 1.61 5.34 3.10 2.54 6.21 3.25 0.96 2.04 2.25 0.86 19.74 1.10 2.14 9.88 8.01 1.91 1.34 4.29 5.04 21.42 2.68 11.75 6.46 3.14 6.42 3.14 0.54 
+
+## AUPRC Standard Deviation (in %) 
+
+Fig. 7. Standard deviation of AUPRC of directed GRN inference models with edge types on different simulated datasets out of 10 runs. Synthetic and curated datasets are separated by a vertical line. Technical Report of FlowGRN 25 PC1 PC2 
+
+hESC-500  
+
+> t=0 t=1 t=2
+> v()
+> PC1 PC2
+
+hHep-500  
+
+> t=0 t=1 t=2 t=3
+> v()
+> PC1 PC2
+
+mDC-500  
+
+> t=0 t=1 t=2 t=3
+> v()
+> PC1 PC2
+
+mESC-500  
+
+> t=0 t=1 t=2 t=3
+> v()
+> PC1 PC2
+
+mHSC-E-500  
+
+> t=0 t=1 t=2 t=3
+> v()
+> PC1 PC2
+
+mHSC-GM-500  
+
+> t=0 t=1 t=2
+> v()
+> PC1 PC2
+
+mHSC-L-500  
+
+> t=0 t=1 t=2
+> v()
+
+Fig. 8. Trained vector field and reconstructed trajectories of the 7 experimental “TFs + 500 genes” datasets. 26 Tong and Pang PC1 PC2 
+
+hESC-1000 
+
+t=0 t=1 t=2 
+
+v( )
+
+PC1 PC2 
+
+hHep-1000 
+
+t=0 t=1 t=2 t=3 t=4 t=5 
+
+v( )
+
+PC1 PC2 
+
+mDC-1000 
+
+t=0 t=1 t=2 t=3 
+
+v( )
+
+PC1 PC2 
+
+mESC-1000 
+
+t=0 t=1 t=2 t=3 
+
+v( )
+
+PC1 PC2 
+
+mHSC-E-1000 
+
+t=0 t=1 t=2 t=3 
+
+v( )
+
+PC1 PC2 
+
+mHSC-GM-1000 
+
+t=0 t=1 t=2 
+
+v( )
+
+PC1 PC2 
+
+mHSC-L-1000 
+
+t=0 t=1 t=2 
+
+v( )
+
+Fig. 9. Trained vector field and reconstructed trajectories of the 7 experimental “TFs + 1,000 genes” datasets.
