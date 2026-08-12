@@ -1,0 +1,498 @@
+Title: FlowGRN+: Improving Gene Regulatory Network Inference by Spline Fitting and Manifold Projection in Conditional Flow Matching (Technical Report)
+
+URL Source: https://arxiv.org/pdf/2608.10407v1
+
+Published Time: Wed, 12 Aug 2026 00:29:16 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# FlowGRN+: Improving Gene Regulatory Network Inference by Spline Fitting and Manifold Projection in Conditional Flow Matching (Technical Report) 
+
+Tsz Pan Tong 
+
+Faculty of Science, Technology and Medicine Institute for Advanced Studies University of Luxembourg Esch-sur-Alzette, Luxembourg tszpan.tong@uni.lu 
+
+Jun Pang 
+
+Faculty of Science, Technology and Medicine Institute for Advanced Studies University of Luxembourg Esch-sur-Alzette, Luxembourg jun.pang@uni.lu 
+
+Abstract —Gene regulatory networks (GRNs) are fundamental in understanding cellular dynamics and underlying mechanisms during development and disease. Although scRNA-seq tech-nologies have enabled the collection of vast numbers of gene expression profiles at single-cell resolution, inferring GRNs from scRNA-seq data remains a significant challenge due to high dimensionality and dropout. Recently, FlowGRN has shown promising results in reconstructing cell trajectories and inferring GRNs by applying conditional flow matching (CFM) to learn the cell dynamics. However, FlowGRN still faces limitations in the temporal coherence of reconstructed dynamics and relies on human inspection, which hinders downstream applications and reproducibility. In this paper, we propose FlowGRN+, an improved version of FlowGRN that integrates spline fitting into the CFM framework to generate more stable reference trajectories for training, thereby improving the temporal co-herence of the learned dynamics. To address overshooting in spline fitting, we further introduce a projection scheme that projects spline tangents onto the local tangent space of the data manifold. We evaluate FlowGRN+ on the BEELINE benchmark and show improved trajectory smoothness with a competitive GRN inference performance. FlowGRN+ provides a practical framework for reconstructing cell trajectories and inferring GRNs from scRNA-seq data, and the insights from this work may also be useful for other CFM-based models of cellular dynamics. 
+
+Index Terms —Artificial intelligence, Computational systems biology, Gene expression, Deep learning 
+
+I. I NTRODUCTION 
+
+Gene regulatory networks (GRNs) are fundamental to un-derstanding how cell states change during development and disease, yet inferring the underlying network dynamics from single-cell snapshot data remains a significant challenge. Cur-rent droplet-based single-cell RNA sequencing (scRNA-seq) technologies cannot track the same cell’s gene expression profile over time, and cells are destroyed during the assay. The observable gene expression profiles are thus snapshots of 
+
+Authors Tsz Pan Tong and Jun Pang acknowledge financial support of the Institute for Advanced Studies (IAS) of the University of Luxembourg through an Audacity Grant (AUDACITY-2021). This work was also supported by the Luxembourg National Research Fund (FNR) under the grant agreement INTER/NCN/24/18732364/EdgeCR. 
+
+the underlying dynamic process, making it difficult to infer the hidden GRN dynamics within the complex biological system. Classical GRN inference methods, such as GENIE3 [1], TIGRESS [2], and PIDC [3], discard temporal information and treat the scRNA-seq data as a static snapshot, which limits their ability to capture the dynamic nature of GRNs. Although methods based on ordinary differential equations (ODEs), such as SCODE [4] and GRISLI [5], attempt to model cell dynamics explicitly, they suffer from oversimplification and scalability problems because cell dynamics are high-dimensional, complex, and non-linear. Recently, deep learning frameworks such as flow matching and diffusion models enable the learning of the dynamics underlying distributional shifts in high-dimensional data, such as images and texts [6]– [8]. This provides a promising route for reconstructing cell dynamics and GRN inference from snapshot data. FlowGRN [9] is the first GRN inference model that im-plements this idea. Starting from observed gene expression snapshots at discrete time points, FlowGRN computes optimal transport (OT) couplings between consecutive time points to generate reference velocity vectors from linearly interpolated trajectories and trains a neural network to match the references using conditional flow matching (CFM). The cell trajectories are reconstructed by integrating the learned vector field start-ing from each observed cell, and the GRN is inferred by applying dynGENIE3 [10] on the reconstructed trajectories. While it shows top-tier performance on both simulated and real-world datasets in the BEELINE benchmark [11], it still has limitations in the temporal coherence of the learned dynamics and the need for human inspection, hindering the downstream use of trajectories and reproducibility. First, the linear-interpolated reference trajectories introduce discontinu-ities in the learned vector field at the boundaries of the time interval, which is biologically unrealistic and inconsistent with the continuous nature of cell dynamics. Moreover, linearly interpolated references discard information beyond adjacent time points, focusing only on local dynamics and potentially missing long-range temporal structure. In addition, although arXiv:2608.10407v1 [cs.CE] 11 Aug 2026 FlowGRN uses a dropout-robust cost when computing OT couplings, the linearly interpolated references are also affected by dropouts, which induce sudden changes in the reference velocity vectors. Finally, FlowGRN relies on well-separated snapshot distributions at each time point, which are not always available in real-world datasets, especially when time points are close and developmental speed is non-uniform. While we acknowledge that CFM is a promising framework for modeling cell dynamics, we argue that the temporal coherence of the learned dynamics can be further improved by designing better reference trajectories for CFM training. In this paper, we build on the multi-marginal flow matching (MMFM) framework [12], [13] to propose FlowGRN+, an improved version of FlowGRN that improves the temporal coherence of the learned dynamics. We experimentally show that smoothing splines can generate dropout-robust reference trajectories, which in turn improve the temporal coherence of the dynamics learned by CFM. To address overshooting in spline fitting, we further introduce a projection scheme to refine the reference velocity vectors by projecting them onto the local tangent space of the data manifold. We evaluate FlowGRN+ on the BEELINE benchmark and show improved trajectory smoothness with competitive GRN inference perfor-mance. Our method is publicly available at https://github.com/ 1250326/FlowGRN plus. In short, our contributions are three-fold:  
+
+> •
+
+We propose FlowGRN+, an improved version of Flow-GRN that uses spline fitting to generate dropout-robust reference trajectories for CFM training, thereby improv-ing the temporal coherence of the learned dynamics.  
+
+> •
+
+We introduce a projection scheme to refine the reference velocity vectors by projecting them onto the local tan-gent space of the data manifold, which helps mitigate overshooting in spline fitting.  
+
+> •
+
+We evaluate FlowGRN+ on the experimental BEELINE datasets and demonstrate a trade-off: FlowGRN+ im-proves trajectory smoothness and achieves top-tier EPR, whereas its AUPRC drops slightly and varies compared to FlowGRN. II. R ELATED WORK 
+
+A. Gene regulatory network inference 
+
+GRN inference is a long-standing problem in computa-tional biology and has been extensively studied in the past decades. Although single-cell sequencing technologies enrich the available data for GRN inference, the problem remains challenging due to the high dimensionality, noise, and sparsity of the data, as well as the complex and dynamic nature of GRNs. Correlation-based methods (ppcor [14], LEAP [15]), information theory-based methods (ARACNe [16], CLR [17], PIDC [3], Scribe [18]) and regression methods (TIGRESS [2], SINCERITIES [19], GRNVBEM [20]) provide a statistically sound approach to infer GRNs from limited data. However, these methods are bound by strong statistical assumptions and less flexible in modeling complex cell dynamics. ODE-based methods (SCODE [4], GRISLI [5]) attempt to model cell dynamics with linear ODEs, which oversimplify system complexity and are computationally inefficient on large GRNs. Taking advantage of the rapid development of machine learning, ensemble methods (GENIE3 [1], dynGENIE3 [10], GRNBOOST2 [21]) offer powerful and scalable options for GRN inference. GENIE3 and GRNBOOST2 are the most established and widely used GRN inference methods, and the latter is the default option in the SCENIC [22] and SCENIC+ [23] protocols for coarse-grained regulatory pair screening. Both methods train a tree ensemble model to predict the expression of each target gene from other genes and use the importance score in each model to quantify the regulatory relationships. Jump3 [24] and dynGENIE3 aim to incorporate temporal information, but their reliance on continuous cellular trajectories, which are unobservable in destructive snapshot-based scRNA-seq, has largely limited their application to simulated datasets rather than real-world scenarios. Recently, researchers have tried to borrow concepts from deep learning, such as convolutional neural networks (DeepDRIM [25], 3DCEMA [26], DELAY [27]), variational autoencoder (DeepSEM [28]), and explainable AI (LRP [29]). However, many of these emerging deep learning methods have not yet matched ensemble methods in terms of precision and scalability, and thus their application is not yet widespread. 
+
+B. Conditional flow matching in cellular dynamics 
+
+Conditional flow matching (CFM) [8] is a type of generative model for learning a vector field that pushes the source distribution toward the target. Since scRNA-seq data are intrinsically a series of snapshot distributions of the underlying cell dynamics, CFM is a natural choice for modeling cell dynamics. OTCFM [30] and [SF] 2M [31] are the earliest simulation-free CFM approaches applied to cell trajectory reconstruction. They use the OT coupling between cell distri-butions to generate a reference velocity for CFM training and avoid costly integration in neural ODE training, successfully scaling up to thousands of genes. Following their success, metric flow matching (MFM) [32] introduces a metric learning module to capture the intrinsic geometry of the data manifold; Curly-FM [33] extends CFM to learn non-gradient dynamics and integrate RNA velocity prior; and VGFM [34] jointly considers the state transition and cell growth dynamics. These methods highlight CFM’s flexibility in modeling complex cell dynamics and integrating various biological priors. In particular, we focus on a special type of CFM with multi-marginal coupling. Standard CFM methods only con-sider couplings between two distributions, whereas scRNA-seq data typically form a sequence of distributions across multiple time points. To leverage the temporal dependencies across multiple distributions, multi-marginal flow matching (MMFM) [12] samples cells from OT couplings across multi-ple time points and fits cubic splines as reference trajectories for CFM training. Similarly, MMSFM [13] uses Hermite splines to fit the reference trajectories under irregular time intervals and regularizes the CFM model with score matching. Spline fitting, together with OT coupling, provides a direct TABLE I COMPARISON OF CONDITIONAL REFERENCE CONSTRUCTION .                       
+
+> MDENOTES THE DATA MANIFOLD .Method Marginals Coupling Ref. path Manifold handling OTCFM [30] 2Pairwise OT Linear Euclidean MMFM [12] Multi. OT chain Cubic spline Euclidean MMSFM [13] Multi. OT chain Monotone Hermite Euclidean MFM [32] 2Pairwise OT Approxi. geodesic
+> M-aware metric FlowGRN [9] 2Dropout-aware pairwise OT Linear Euclidean FlowGRN+ Multi. Dropout-aware OT chain Smooth-ing spline
+> M-aware projection
+
+way to link a sequence of distributions and preserve long-range temporal structure, which is useful for learning more temporally coherent dynamics and reconstructing trajectories better aligned with the local manifold structure. Table I summarizes the methodological differences in reference-path construction among closely related CFM mod-els in terms of coupling of marginal distributions, choice of reference paths, and data manifold handling. III. P RELIMINARIES 
+
+A. Notations and problem definition 
+
+A scRNA-seq dataset contains a series of n gene expres-sion profiles X = {X(t0), X (t1), · · · , X (tn−1)}, each profile 
+
+X(ti) ∈ Rg×ci contains g genes and ci cells sampled at time ti.A cell x ∈ Rg can be viewed as a point in the g-dimensional gene space. Because of non-uniform developmental speeds, cells collected at different time points may overlap in the gene expression space, and thus, pseudotime is often used to represent the developmental progress of each cell. Denote the normalized pseudotime of cell x as τ (x) ∈ [0 , 1] , which can be estimated by existing methods such as Monocle [35], Slingshot [36], and DPT [37]. A GRN is a directed graph 
+
+G = ( V, E, ω ), where V is the set of genes, E ⊂ V × V 
+
+is the set of edges, and ω : E → R is the weight function (regulation strength). An adjacency matrix A ∈ Rg×g is a matrix representation of the GRN, where Ai,j = ω(i, j ) if 
+
+(i, j ) ∈ E and Ai,j = 0 otherwise. We aim to infer the directed GRN G from the scRNA-seq dataset X without any prior knowledge of the GRN structure. 
+
+B. Conditional flow matching 
+
+Cellular trajectories are crucial for inferring GRNs. In a related line of research, structural inference studies [38]– [40] have shown that trajectory data alone can recover the underlying system dynamics. This motivates us to reconstruct the cellular trajectories to facilitate GRN inference. Neural ODE is a powerful framework for modeling dy-namical systems: it learns a vector field whose ODE solution matches observed time-series data. Recent methods, such as TrajectoryNet [41] and TIGON [42], have successfully applied neural ODEs to scRNA-seq data. However, their reliance on ODE integration makes them computationally expensive and numerically unstable, limiting their applications to small gene sets ( < 50 ) or low-dimensional latent spaces. To overcome these limitations, we adopted the OTCFM model [30], an integration-free conditional flow matching model. OTCFM leverages optimal transport (OT) plans between snapshots to define target vector fields, thereby guiding the learning of the dynamics that drive cellular transitions. CFM trains the vector field with respect to the displacement between the two distributions, whereas neural ODE trains the vector field with respect to the observed trajectories, thereby incurring costly ODE integration. Viewing scRNA-seq snapshots as a sequence of gene expression distributions, CFM is a natural choice for learning the vector field that drives those flows. CFM is a generative model that learns a vector field vθ : Rg × [0 , 1] → Rg such that dx dt = vθ (x, t )
+
+pushes the source distribution p0 to the target distribution p1.Given a conditioning variable z ∼ q(z) and a probability path p(t|z) connecting p0 and p1, we can compute velocity vectors u(x, t |z) from p(t|z) to be matched with vθ by minimizing the following objective by taking the expectation on t ∼ U (0 , 1) , z ∼ q(z), x ∼ p(t|z):
+
+LCF M (θ) = E∥vθ (x, t ) − u(x, t |z)∥2. (1) OTCFM sets q(z) = π(x0, x 1) as the optimal transport coupling π between x0 ∼ p0 and x1 ∼ p1. Then, under linear interpolation μ(t|x0, x 1) and noise scale σ:
+
+μ(t|x0, x 1) = tx 1 + (1 − t)x0, σ (t) = σpt(1 − t), (2) 
+
+p(t|x0, x 1) = N (μ(t|x0, x 1), σ (t)2I), (3) 
+
+u(x, t |x0, x 1) = σ′(t)
+
+σ(t) (x − μ(t)) + μ′(t). (4) These settings make the CFM objective computable. 
+
+C. Multi-marginal flow matching 
+
+Multi-marginal flow matching (MMFM) [12] extends CFM to learn the vector field that pushes a sequence of distributions 
+
+p0, p 1, · · · , p n−1. Suppose each distribution pi is observed at time ti, and the OT coupling between consecutive distributions 
+
+pi and pi+1 is πi. MMFM assumes that q(z) is Markovian and can be factorized as q(z) = q(x0, x 1, · · · , x n−1) =Qn−2 
+
+> i=0
+
+πi(xi, x i+1 ). Then, MMFM fits a cubic spline γ(t) = 
+
+μ(t|x0, x 1, · · · , x n−1) as the reference trajectory for CFM training. In this setting, Eqs. (3)–(4) are piecewise defined in each time interval [ti, t i+1 ] with μ(t|z), σ (t):
+
+μ(t|z) = γ(t), σ(t) = σ
+
+p(ti+1 − t)( t − ti)
+
+ti+1 − ti
+
+, (5) 
+
+D. dynGENIE3 
+
+dynGENIE3 [10] is a GRN inference method that extends GENIE3 [1] to time-series data. dynGENIE3 trains a random forest fj to model each target gene j in cell trajectories {x(t)}
+
+using dx j (t) 
+
+> dt
+
+= fj (x(t)) − αj xj (t), where αj is a decay rate of gene j and dx j (t) 
+
+> dt
+
+is approximated by finite differences    
+
+> xj(t+∆ t)−xj(t)∆t
+
+. The importance score Ij (i) of each random forest model fj is used to quantify the regulatory strength of the gene i on j and to build the adjacency matrix Ai,j = Ij (i).This will yield a directed graph, as the importance scores Ij (i)
+
+and Ii(j) are generally unequal. IV. M ETHOD 
+
+A. Revisiting FlowGRN 
+
+FlowGRN [9] is the first GRN inference model that re-constructs cell trajectories using CFM and infers the GRN using dynGENIE3. It is designed to capture key properties of scRNA-seq measurements for CFM training, such as dropouts and positive gene expression values. Because gene expression measurements are corrupted by dropout and zero entries are unreliable for OT coupling, FlowGRN defines a dropout-robust cell similarity measure 
+
+d(x, y ) that ignores dimensions with zero values. Besides, since the vector field is generally defined on Rg ,whereas gene expression is non-negative, FlowGRN scales the expression values x ∈ Rg 
+
+> ≥0
+
+to a log domain x′ ∈ Rg through a bijective, differentiable transformation T :
+
+x′ = T (x) = 
+
+(
+
+log( x + ϵ) + 1 , if x < 1
+
+x + ϵ, if x ≥ 1, (6) where ϵ is a positive value to avoid an undefined logarithm. Overall, FlowGRN first computes the OT coupling πi be-tween consecutive time points ti, t i+1 using d as the metric, then transforms each cell x into the log domain via T .FlowGRN is then trained under the [SF] 2M framework (an OTCFM model regularized by score matching) and learns a unified vector field vθ that pushes each cell population X(ti)
+
+to X(ti+1 ) in each time interval [ti, t i+1 ]. Finally, the cell trajectories x(t) are reconstructed by solving an initial value problem (IVP) starting from each x, followed by the inverse transformation T −1, and the GRN is inferred by applying dynGENIE3 to the reconstructed trajectories. 
+
+B. Limitation of FlowGRN 
+
+While FlowGRN shows top-tier performance on the BEE-LINE benchmark, it still faces limitations regarding the tempo-ral coherence of the learned dynamics and human inspection. 
+
+1) Dropout-sensitive references: FlowGRN uses a single unified neural network to learn the vector field across all time intervals, but the reference velocity vectors are generated from linearly interpolated trajectories with nodes at the boundaries of the time intervals. Thus, if a trajectory at one node is affected by dropouts, the reference velocity vectors will drasti-cally change around the node, which introduces contradictory supervision signals for CFM training. 
+
+2) Vector field discontinuity and loss of global dynamics: 
+
+Because linear interpolation only considers the pairwise local interval between two time points, the reference velocity vectors are discontinuous at the time interval boundaries. This imposes no constraint on vθ to learn a temporally coherent vector field across time intervals, because the vector field in each time interval is trained only to match local dynamics between corresponding time points, which is biologically unrealis-tic. IMMFM [43] and 3MSBM [44] also observe the same problem and mitigate it by applying pchip interpolation and modeling dynamics in the phase space, respectively. 
+
+3) Reliance on clear snapshot distributions: FlowGRN assumes that the cell distributions at each time point are well-separated, which is not always the case in real-world datasets, especially when the time points are close, and the developmen-tal speed is non-uniform. Thus, instead of using sampling time as a cell partition, FlowGRN relies on clustering algorithms to partition cells into ordered clusters for downstream OT coupling and CFM training. This requires human inspection to select the best clustering parameters and results that align with biological understanding, making the process less reproducible and not automated. 
+
+C. Our solution: FlowGRN+ 
+
+To overcome these limitations of FlowGRN, we build on the MMFM idea and propose FlowGRN+, an improved version of FlowGRN that integrates spline fitting and manifold projection into the CFM framework using pseudotime. Spline fitting primarily improves the temporal coherence of the reference dynamics across pseudotime, whereas the projection scheme primarily improves manifold alignment by suppressing off-manifold components. Our model, FlowGRN+, is trained with five steps in the log domain: 1) Bins cells evenly by count along pseudotime and manu-ally removes steady-state cells if the inferred pseudotime and sample time order do not match. 2) Samples cells from different pseudotime bins with z ∼
+
+q(z) and fits smoothing splines γ(τ ) (see Section IV-D). 3) Samples τ ∼ U (0 , 1) and constructs training pairs x ∼
+
+p(τ |z) and u = u(x, τ |z) using Eqs. (3)–(4) with spline-defined μ(τ |z) and σ(τ ) from Eq. (5). 4) Projects x and u onto the data manifold and its tangent space, respectively, using the projection scheme detailed in Sections IV-E and IV-F. 5) Trains the CFM model vθ (x, τ ) to match the projected 
+
+u by minimizing the loss LM F M (θ) with regularization 
+
+η in Eq. (11). Similar to FlowGRN, the well-trained model vθ will be used to reconstruct the cell trajectories by solving the IVP starting from each cell x at τ (x):
+
+x(τ + ∆ τ ) = x(τ ) + 
+
+Z τ +∆ ττ
+
+vθ (x(s), s ) ds. (7) In practice, trajectories are integrated using tangent-projected velocities, followed by retraction toward the data manifold at each numerical solver step. The reconstructed trajectories are mapped back to the gene expression domain via T −1 and are used for GRN inference by dynGENIE3, as detailed in Section III-D. Optimal Transport   
+
+> Spline Fitting
+> Trajectory
+> Reconstruction Network Inference
+> dyn-
+> GENIE3
+> ScRNA-seq Data
+> Inferred GRN
+> Conditional
+> Flow Matching
+> Projection
+> Correction Fig. 1. Graphical overview of FlowGRN+. Cells are binned along pseudotime, coupled by OT, fitted with splines, refined by manifold projection, and then used to train a CFM model for trajectory reconstruction and downstream GRN inference.
+
+D. Spline fitting 
+
+We first bin the cells into b bins evenly by count along the pseudotime τ (x), compute the OT coupling πi between consecutive bins, and sample cells (x0, · · · , x b−1) ∼ q(z) = Qb−2 
+
+> i=0
+
+πi(xi, x i+1 ). Unlike FlowGRN, MMFM, or MMSFM, which use linear, cubic, and Hermite splines, respectively, we fit a smoothing spline on pseudotime γ(τ ) to the samples 
+
+{(τ (xi), x i)}b−1 
+
+> i=0
+
+. This spline is implemented as a B-spline with a regularization term λreg that balances data fitting and spline curvature. It minimizes the following objective: 
+
+> b−1
+
+X
+
+> i=0
+
+∥xi − γ(τ (xi)) ∥2 + λreg 
+
+Z
+
+∥γ′′ (τ )∥2dτ. (8) This brings three advantages that solve the limitations of FlowGRN:  
+
+> •
+
+Each spline is fitted on a different set of pseudotime 
+
+{τ (xi)}b−1 
+
+> i=0
+
+, so any discontinuity is scattered across the pseudotime range, reducing its impact on CFM training.  
+
+> •
+
+Splines can link nonlocal observations across pseudotime, while smoothing splines can mitigate dropouts via curva-ture regularization, thus stabilizing the training signal.  
+
+> •
+
+Our binning strategy is a stratified sampling strategy that does not rely on any clustering algorithm and is therefore more automated and reproducible. However, spline fitting, especially cubic splines, may suffer from overshooting, which produces reference velocity vectors with substantial off-manifold components, thereby degrading CFM training. Moreover, when integrating the learned vector field, the reconstructed trajectories may drift away from the support of the observed data distribution. 
+
+E. Projection scheme for reference velocity refinement 
+
+To alleviate this problem, we draw inspiration from weighted linear local tangent space alignment [45] and in-troduce a projection scheme to refine the reference velocity vectors by projecting them onto the tangent space T M of the data manifold M. This encourages CFM to learn a vector field better aligned with local manifold structure and to reconstruct trajectories that remain close to the data manifold. Overall, to project a vector v at a point x onto T M, we: 1) use kNN neighbors Nk(x) to capture the local geometry of M at x,2) compute the weighted local covariance matrix Σ( Nk(x)) 
+
+as the local geometry descriptor, 3) apply spectral filtering to suppress the eigenvectors in the normal direction and obtain the approximated projection matrix P , and 4) construct an affine retraction operator ΠR that maps off-manifold points back toward the data manifold. Specifically, to project a vector v at a point x onto T M,we first find the kNN neighborhood Nk(x) of x from all observed cells as the local patch of M. Then, we compute the local covariance matrix Σ( x) weighted by an RBF kernel 
+
+w(x, y ) = exp( − ∥x−y∥2 
+
+> h(x)2
+
+) for y ∈ N k(x), where the band-width h(x) is set as the median distance between x and its neighbors. Under a local linear approximation of the manifold, the dominant directions of variation align with the tangent space T M, and thus the basis of T M can be approximated by the top-m eigenvectors of Σ( Nk(x)) , where m is the intrinsic dimension of M.However, the intrinsic dimension m is unknown, and threshold-based eigenvalue selection, such as the explained variance ratio, is not robust and can induce jumps in the projection matrix across different points. Therefore, we apply spectral filtering with shrinkage gλ0 (λ) = λλ+λ0 on the eigen-values of Σ( x), where λ0 is a hyperparameter that controls the shrinkage strength. If λ ≫ λ0, then gλ0 (λ) ≈ 1 and the corresponding eigenvectors are preserved, and vice versa. Assuming the eigen-decomposition of Σ is U ΛU T , where U
+
+is the matrix of eigenvectors and Λ is the diagonal matrix of eigenvalues, we can compute the approximated projection matrix as P (x) = U g λ0 (Λ) U T . Equivalently, 
+
+P (x) = Σ  Σ + λ0I−1 = I − λ0
+
+ Σ + λ0I−1. (9) Note that P (x) is just an approximation of the projection matrix, which is not idempotent due to the shrinkage. Similarly, to retract a point x toward M, we define an affine operator Π, and denote by ΠR its R-fold composition: 
+
+Π( x) = Nk(x) + P (x)( x − N k(x)) , (10) ( |z)   
+
+> xp(|z)
+> R(x)
+> uP(x)uTFig. 2. Illustration of the notation used in the projection scheme
+
+where Nk(x) is the mean of the neighbors of x. This iterative retraction can be interpreted as a local curvature correction to the first-order tangent-space approximation so that the resulting point remains close to M.The above projection scheme, as illustrated in Fig. 2, provides a practical link between the ambient space Rg and the data manifold M. However, the CFM loss in Eq. (1) is defined in the ambient space, not in the tangent space. We use the loss objective from MFM [32] with metric G(x) = P (x)
+
+by taking expectation on τ ∼ U (0 , 1) , z ∼ q(z), x ∼ p(τ |z):
+
+LM F M (θ) = E∥vθ (x, τ ) − u(x, τ |z)∥2
+
+> G(x)
+
+. (11) However, this objective penalizes only the tangent-space com-ponent of vθ and ignores the normal component, which may still drive trajectories away from M during integration, even though each numerical step is retracted toward M. Thus, we use a metric with a small regularization term G(x) = 
+
+P (x) + ηI .
+
+F. Efficient computation via the Woodbury identity 
+
+Directly computing P (x) = Σ( Nk(x))  Σ( Nk(x))+ λ0I−1
+
+requires solving a linear system in the ambient space Rg ,which is computationally expensive when g is large. However, since the weighted local covariance is constructed from only 
+
+k neighbors, it is intrinsically low-rank. Let ¯y1, . . . , ¯yk denote the demeaned neighbors of x, and let 
+
+¯wi(x) = w(x,y i)   
+
+> Pkj=1 w(x,y j)
+
+be the normalized weights. We define the weighted centered neighborhood matrix 
+
+Z(x) = 
+
+p ¯w1(x) ¯ y⊤
+
+> 1
+
+...p ¯wk(x) ¯ y⊤
+
+> k
+
+ ∈ Rk×g , (12) so that Σ( Nk(x)) = Z(x)⊤Z(x). Using the Woodbury iden-tity, P (x) can be rewritten as 
+
+P (x) = 1
+
+λ0
+
+Z(x)⊤
+
+
+
+Ik + 1
+
+λ0
+
+Z(x)Z(x)⊤
+
+−1
+
+Z(x). (13) Therefore, instead of solving a g × g linear system, we only need to solve a k × k system, reducing the computational cost from O(g3) to O(gk 2 + k3). This is particularly beneficial in our setting, where the neighborhood size k is much smaller than the ambient dimension g.
+
+Algorithm 1: Training and inference pipeline of Flow-GRN+ 
+
+Input: Single-cell snapshots X and pseudotime τ (x)
+
+Output: Reconstructed trajectories and inferred GRN  
+
+> 1
+
+repeat  
+
+> 2
+
+Sample cells from different pseudotime bins z ∼ q(z)
+
+and fit smoothing-spline trajectories γ(τ ) as described in Section IV-D;  
+
+> 3
+
+Sample τ ∼ U (0 , 1) ; 
+
+> 4
+
+Compute μ(τ |z) and σ(τ ) with (5);  
+
+> 5
+
+Sample x ∼ p(τ |z) and reference velocity u = u(x, τ |z)
+
+according to (3)–(4);  
+
+> 6
+
+Project x and u onto the data manifold M and tangent space T M using the projective scheme in Sections IV-E and IV-F;  
+
+> 7
+
+Update the CFM model vθ (x, τ ) by minimizing the metric-aware loss LM F M (θ) in (11);  
+
+> 8
+
+until convergence ; 
+
+> 9
+
+foreach cell x with pseudotime τ (x) do  
+
+> 10
+
+Reconstruct the trajectory by integrating the IVP;  
+
+> 11
+
+x(τ + ∆ τ ) ← x(τ ) + R τ +∆ ττ P (x(s)) vθ (x(s), s ) ds ; 
+
+> 12
+
+Map reconstructed trajectories back to the gene expression domain via T −1; 
+
+> 13
+
+Infer the GRN from reconstructed trajectories using dynGENIE3 as described in Section III-D; 
+
+Furthermore, since the projection is computed at each step of the integration, a large portion of the computational cost comes from repeated kNN queries, which rarely change during integration when the change in x is infinitesimal. To optimize integration, we cache the (k + 1) -NN neighbors and their distances {dist i}k+1  
+
+> i=1
+
+from the last query, and reuse the neighborhood for up to 100 iterations or until the change in 
+
+x exceeds the threshold (dist k+1 − dist k)/4.V. E XPERIMENTS 
+
+A. Datasets and evaluation metrics 
+
+We tested our method on experimental datasets in the BEELINE [11] benchmark, which are real gene expression profiles from sequencing data. There are 7 sets of gene expression profiles from human and mouse cells: hESC, hHep, mDC, mESC, mHSC-E, mHSC-GM, and mHSC-L. The top 500 (1,000) high-variance genes and their corresponding transcription factors are selected from each dataset, matching the “TFs + 500 (1,000) genes” in the BEELINE benchmark. Although BEELINE provides cell-type-specific and non-cell-type-specific GRNs as reference networks, they have not been updated since 2020. We retrieved the gene regulations from the DoRothEA [46] and CollecTRI [47] databases and used them as reference networks. Table II describes their data statistics. We compare FlowGRN and FlowGRN+ with the baselines on the BEELINE benchmark, which includes LEAP [15], SCODE [4], GRISLI [5], GRNVBEM [20], SINCERI-TIES [19], Scribe [18], GENIE3 [1], and GRNBOOST2 [21]. Here, we excluded SCNS [48] as it requires prior knowledge of GRN. Furthermore, we excluded ppcor [14] and PIDC [3] because they cannot determine the direction of regulations, which is inconsistent with our research problem. TABLE II NETWORK STATISTICS OF THE EXPERIMENTAL DATASETS                                                            
+
+> Dataset # Cells # Genes # Edges Network Density (×10 −3)
+> TFs + 500 genes
+> hESC 758 1283 20007 12.15 hHep 425 1209 16915 11.57 mDC 383 1113 2854 2.30 mESC 421 501 139 0.55 mHSC-E 1071 763 945 1.62 mHSC-GM 889 698 676 1.39 mHSC-L 847 624 442 1.14
+> TFs + 1,000 genes
+> hESC 758 1783 26553 8.35 hHep 425 1709 22007 7.53 mDC 383 1613 3404 1.31 mESC 421 1001 416 0.42 mHSC-E 1071 1263 1135 0.71 mHSC-GM 889 1198 895 0.62 mHSC-L 847 1124 729 0.58
+
+We evaluate the performance of FlowGRN+ and the base-lines on the BEELINE benchmark using Area under Precision-Recall Curve (AUPRC) and Early Precision Ratio (EPR). The EPR is defined as the precision among the top k edges normalized by the random precision, which emphasizes the precision of the inferred GRN and minimizes the false positive rate, with higher values indicating better performance and random performance corresponding to an EPR of 1. AUPRC summarizes the precision-recall trade-off on all edges, whereas EPR focuses on the precision of top-ranked regulatory edges. Besides, we also compare the smoothness of the recon-structed trajectories by computing the normalized total varia-tion (TV) of the trajectories averaged across gene dimensions and time steps, which is defined as: TV (x) = 1
+
+N × g 
+
+> N−1
+
+X
+
+> i=1
+
+∥x(ti+1 ) − x(ti)∥,
+
+for a trajectory with N time points and g genes. However, we note that a smoother trajectory does not necessarily imply higher reconstruction fidelity. 
+
+B. Experimental setup 
+
+We use Slingshot [36] to compute pseudotime for all datasets, and normalize it to [0 , 1] for CFM training. During trajectory reconstruction, vθ in the OTCFM model is imple-mented as a ResNet [49] with 20 hidden layers, each with 128 hidden units and SELU activations, optimized by AdamW with a learning rate of 10 −4 decayed by a factor of 2 every 100 epochs. The hyperparameters in FlowGRN+ are set as follows: 
+
+b = 6 for binning, σ = 0 .01 , λ0 = 0 .001 , η = 0 .001 , k = 15 
+
+for kNN, R = 2 for retraction on u, and R = 3 for retraction on x. λreg in smoothing spline fitting is chosen by generalized cross-validation. Models are trained for 1,000 epochs with a batch size of 128 samples. Trajectories are integrated using the DOPRI5 solver in TorchDyn [50]. All neural networks are trained on an NVIDIA V100 SXM2 GPU with 16GB memory. In GRN inference, dynGENIE3 is used with the default parameters: 1,000 random forest trees, each trained with √g
+
+genes. dynGENIE3 is trained on a computing node with 128 CPUs at 2.6GHz and 256GB of memory. All baselines are also run on the same platform within a 48-hour interval, using their default parameters, wrapped in a Singularity container to ensure reproducibility. Each method is run 5 times with random seeds 1–5 on each dataset, and the average and standard deviation of EPR are reported. VI. R ESULTS AND DISCUSSION 
+
+A. FlowGRN+ achieves top-tier performance on the BEE-LINE benchmark 
+
+Tables III–IV report the AUPRC and EPR of FlowGRN+, FlowGRN, and the baselines on the BEELINE experimental datasets. Overall, FlowGRN+ achieves top-tier performance on the experimental datasets, ranking among the top two models on 6 out of 14 settings for AUPRC and 10 of the 14 settings for EPR. Compared directly with FlowGRN, FlowGRN+ achieves a higher EPR in 10 of the 14 settings, whereas its AUPRC is higher in only 4 of the 14 settings. This suggests that its downstream advantage is concentrated in recovering top-ranked edges and does not extend consistently across the full ranked edge list. Notably, FlowGRN+ outperforms FlowGRN on mDC and mESC datasets. We speculate that this improvement is partly due to the removal of stationary cells, because near equilibrium the dynamical signal is weak and pseudotime-based temporal ordering becomes unreliable. 
+
+B. FlowGRN+ with projection recovers smoother trajectories 
+
+In this work, we define the default FlowGRN+ setting as multi-marginal OT-chain sampling with smoothing splines and manifold projection, and treat remaining variants as ablations. For trajectories reconstructed by FlowGRN (Orig.), spline fitting (Spl.), and FlowGRN+ (Traj.), we examine in Fig. 3 how the projection scheme and the choice of spline fitting method affect the average EPR and normalized TV. A higher EPR indicates more precise GRN inference, and a lower normalized TV indicates smoother trajectories. 
+
+1) Spline fitting versus CFM models: We observe that spline fitting without CFM learning has a nearly-zero EPR and a much higher normalized TV. This is expected because spline fitting only interpolates each gene’s expression trajec-tory as a function of pseudotime, whereas CFM-based models (FlowGRN and FlowGRN+) learn a coupled, state-dependent vector field that captures cross-gene dependencies. 
+
+2) CFM models with and without projection: Across 42 settings, projection yields higher EPR in 28 settings (66.67%) and lower normalized TV in 30 settings (71.43%), empirically supporting the view that the projection scheme often improves the learned dynamics and GRN inference performance. 
+
+3) Spline fitting methods on projected CFM models: In gen-eral, smoothing splines have a higher EPR average rank ( 1.64 )across datasets than pchip ( 2.00 ) and cubic ( 2.36 ) splines, and a consistently lower normalized TV average rank ( 1.14 ) than TABLE III AUPRC ( ×10 −3 ) OF DIRECTED GRN INFERENCE MODELS ON DIFFERENT EXPERIMENTAL DATASETS OUT OF 5 RUNS . T HE BEST AND SECOND -BEST RESULTS ARE HIGHLIGHTED . “OT” AND “NE” MEAN “OVER TIME ” AND “NUMERICAL ERROR ”, RESPECTIVELY .Dataset hESC hHep mDC mESC mHSC-E mHSC-GM mHSC-L 
+
+TFs + 500 genes 
+
+LEAP 11.91 ±0.00 12.99 ±0.00 2.38 ±0.00 5.36 ±0.00 1.94 ±0.00 2.00 ±0.00 1.28 ±0.00 SCODE 10.01 ±0.07 10.57 ±0.05 2.01 ±0.06 0.85 ±0.02 1.51 ±0.02 1.30 ±0.05 0.95 ±0.01 GRISLI 11.05 ±0.00 10.57 ±0.00 2.95 ±0.00 0.51 ±0.00 1.65 ±0.00 1.21 ±0.00 1.29 ±0.00 GRNVBEM OT OT 2.34 ±0.00 0.55 ±0.00 1.62 ±0.00 1.39 ±0.00 1.14 ±0.00 SINCERITIES 12.47 ±0.00 10.60 ±0.00 2.69 ±0.00 0.51 ±0.00 1.49 ±0.00 1.37 ±0.00 1.18 ±0.00 Scribe 10.67 ±0.00 9.64 ±0.00 1.83 ±0.00 0.53 ±0.00 1.65 ±0.00 1.38 ±0.00 1.12 ±0.00 GENIE3 10.50 ±0.01 9.76 ±0.02 2.10 ±0.01 3.02 ±0.12 2.94 ±0.48 2.46 ±0.09 1.93 ±0.09 GRNBOOST2 11.96 ±0.02 11.42 ±0.02 2.32 ±0.02 2.61 ±0.82 1.79 ±0.03 1.94 ±0.12 1.45 ±0.16 FlowGRN 12.56 ±0.15 12.69 ±0.20 2.31 ±0.03 1.88 ±0.18 3.43 ±0.28 3.45 ±0.09 2.38 ±0.13 
+
+FlowGRN+ (Ours) 11.31 ±0.47 12.62 ±0.17 2.29 ±0.10 1.82 ±0.17 4.44 ±0.08 3.44 ±0.14 1.95 ±0.08 
+
+TFs + 1,000 genes 
+
+LEAP 8.79 ±0.00 8.99 ±0.00 1.38 ±0.00 1.89 ±0.00 1.01 ±0.00 1.01 ±0.00 0.66 ±0.00 SCODE 6.66 ±0.07 6.76 ±0.10 1.08 ±0.02 0.52 ±0.01 0.63 ±0.01 0.58 ±0.01 0.48 ±0.01 GRISLI 7.71 ±0.00 7.01 ±0.00 1.72 ±0.00 0.42 ±0.00 0.72 ±0.00 0.55 ±0.00 0.63 ±0.00 GRNVBEM OT OT OT 0.42 ±0.00 OT OT 0.58 ±0.00 SINCERITIES 8.57 ±0.00 6.95 ±0.00 1.47 ±0.00 0.37 ±0.00 NE 0.62 ±0.00 NE Scribe 7.30 ±0.00 6.17 ±0.00 0.99 ±0.00 0.48 ±0.00 0.71 ±0.00 0.65 ±0.00 0.63 ±0.00 GENIE3 7.20 ±0.01 6.25 ±0.01 1.17 ±0.01 1.11 ±0.04 1.29 ±0.09 1.13 ±0.02 0.87 ±0.01 GRNBOOST2 8.29 ±0.01 7.48 ±0.01 1.33 ±0.01 0.88 ±0.06 0.81 ±0.01 0.86 ±0.05 0.69 ±0.04 FlowGRN 8.88 ±0.17 8.69 ±0.56 1.28 ±0.03 0.82 ±0.05 1.62 ±0.15 1.60 ±0.06 0.91 ±0.03 FlowGRN+ (Ours) 7.87 ±0.20 8.30 ±0.15 1.46 ±0.08 0.93 ±0.03 1.57 ±0.05 1.51 ±0.07 0.95 ±0.03 
+
+TABLE IV EPR OF DIRECTED GRN INFERENCE MODELS ON DIFFERENT EXPERIMENTAL DATASETS OUT OF 5 RUNS WITH DIFFERENT RANDOM SEEDS . T HE BEST 
+
+> AND SECOND
+
+-BEST RESULTS ARE HIGHLIGHTED . “OT” AND “NE” MEAN “OVER TIME ” AND “NUMERICAL ERROR ”, RESPECTIVELY .Dataset hESC hHep mDC mESC mHSC-E mHSC-GM mHSC-L 
+
+TFs + 500 genes 
+
+LEAP 0.94 ±0.00 1.84 ±0.00 1.98 ±0.00 38.97 ±0.00 5.87 ±0.00 3.20 ±0.00 1.99 ±0.00 SCODE 0.39 ±0.06 0.97 ±0.06 0.00 ±0.00 0.00 ±0.00 0.00 ±0.00 2.13 ±1.27 0.00 ±0.00 GRISLI 0.94 ±0.00 0.91 ±0.00 2.13 ±0.00 0.00 ±0.00 1.96 ±0.00 1.07 ±0.00 5.98 ±0.00 GRNVBEM OT OT 0.76 ±0.00 0.00 ±0.00 1.96 ±0.00 1.07 ±0.00 0.00 ±0.00 SINCERITIES 1.34 ±0.00 0.51 ±0.00 1.06 ±0.00 0.00 ±0.00 0.65 ±0.00 0.00 ±0.00 0.00 ±0.00 Scribe 0.67 ±0.00 0.61 ±0.00 0.00 ±0.00 0.00 ±0.00 1.30 ±0.00 1.07 ±0.00 0.00 ±0.00 GENIE3 0.82 ±0.01 1.06 ±0.02 1.98 ±0.24 5.20 ±7.12 5.35 ±0.29 7.89 ±0.58 5.98 ±0.00 GRNBOOST2 0.78 ±0.02 0.96 ±0.02 1.43 ±0.17 15.59 ±16.94 2.87 ±0.74 8.10 ±0.58 6.78 ±1.78 FlowGRN 1.14 ±0.12 1.36 ±0.12 0.64 ±0.13 0.00 ±0.00 5.61 ±0.58 9.60 ±0.75 7.18 ±1.78 
+
+FlowGRN+ (Ours) 1.18 ±0.16 1.84 ±0.08 2.16 ±0.39 2.60 ±5.81 5.74 ±0.85 10.87 ±0.89 6.38 ±0.89 
+
+TFs + 1,000 genes 
+
+LEAP 1.28 ±0.00 2.36 ±0.00 2.92 ±0.00 46.32 ±0.00 8.67 ±0.00 5.38 ±0.00 0.00 ±0.00 SCODE 0.29 ±0.06 1.03 ±0.06 0.00 ±0.00 0.00 ±0.00 0.00 ±0.00 3.58 ±1.27 0.00 ±0.00 GRISLI 0.82 ±0.00 0.93 ±0.00 2.92 ±0.00 0.00 ±0.00 1.24 ±0.00 0.00 ±0.00 2.38 ±0.00 GRNVBEM OT OT OT 0.00 ±0.00 OT OT 0.00 ±0.00 SINCERITIES 1.42 ±0.00 0.58 ±0.00 0.22 ±0.00 0.00 ±0.00 NE 0.00 ±0.00 NE Scribe 0.69 ±0.00 0.60 ±0.00 0.22 ±0.00 11.58 ±0.00 2.48 ±0.00 0.00 ±0.00 0.00 ±0.00 GENIE3 1.10 ±0.02 1.30 ±0.04 2.87 ±0.33 6.95 ±4.84 8.92 ±1.04 13.26 ±0.98 7.13 ±0.00 GRNBOOST2 0.95 ±0.04 1.09 ±0.04 1.80 ±0.42 10.42 ±4.84 6.44 ±1.61 11.11 ±1.96 8.08 ±1.30 
+
+FlowGRN 1.59 ±0.22 2.09 ±0.38 0.85 ±0.37 1.16 ±2.59 11.39 ±0.55 16.13 ±0.00 7.61 ±1.06 FlowGRN+ (Ours) 1.55 ±0.21 2.29 ±0.11 3.28 ±1.10 8.11 ±3.17 12.38 ±0.00 16.13 ±1.27 7.13 ±0.00 
+
+cubic ( 2.36 ) and pchip ( 2.50 ) splines. A plausible explanation is that smoothing splines do not need to pass through all data points and are therefore less prone to overfitting to dropout values and overshooting than interpolation-based methods. VII. C ONCLUSION AND LIMITATIONS 
+
+In this work, we have presented FlowGRN+, an improved framework for GRN inference from scRNA-seq data that in-corporates spline fitting and manifold projection to improve the temporal coherence of the learned dynamics and the manifold alignment of reconstructed trajectories. It achieves top-tier performance on the experimental BEELINE benchmark, and the projection scheme often improves the smoothness of the reconstructed trajectories. Compared with FlowGRN, our new method reduces the reliance on manual clustering-based partitioning of cells into hESC-500 hESC-1000 hHep-500 hHep-1000 mDC-500 mDC-1000 mESC-500 mESC-1000 mHSC-E-500 mHSC-E-1000 mHSC-GM-500 mHSC-GM-1000 mHSC-L-500 mHSC-L-1000 dataset_size linear cubic pchip smoothing cubic pchip smoothing cubic pchip smoothing                                                                                                                                   
+
+> 1.14 1.59 1.36 2.09 0.64 0.85 0.00 1.16 5.61 11.39 9.60 16.13 7.18 7.61 0.98 0.74 1.06 1.96 0.64 0.99 0.00 0.00 0.26 0.25 0.00 0.36 1.20 0.00 0.93 0.99 1.21 1.53 0.85 0.99 5.20 1.16 1.30 0.99 0.21 0.36 0.40 0.00 0.99 0.77 1.00 1.06 1.40 0.76 0.00 0.00 2.09 2.48 0.21 1.43 0.00 0.00 0.99 1.28 1.63 1.67 1.06 0.90 7.79 1.16 4.43 9.41 8.10 11.83 5.98 4.28 0.76 0.95 1.88 2.98 1.55 1.17 15.59 9.26 4.69 8.92 8.10 12.54 5.18 4.28 0.90 1.20 1.48 1.75 2.40 2.56 15.59 13.90 3.91 7.92 7.46 11.11 4.78 4.75 1.07 1.73 1.47 2.12 1.89 2.65 5.20 9.26 4.04 6.44 11.09 13.26 5.98 3.80 1.20 1.58 1.47 1.57 1.76 3.01 7.79 6.95 4.95 8.42 10.45 17.20 6.78 6.18 1.18 1.55 1.84 2.29 2.16 3.28 2.60 8.11 5.74 12.38 10.87 16.13 6.38 7.13
+> Orig. Spl. Traj. No Proj. With Proj.
+
+Average EPR in ablation study                                                                                                                                   
+
+> hESC-500 hESC-1000 hHep-500 hHep-1000 mDC-500 mDC-1000 mESC-500 mESC-1000 mHSC-E-500 mHSC-E-1000 mHSC-GM-500 mHSC-GM-1000 mHSC-L-500 mHSC-L-1000 dataset_size
+> 4.99 4.75 5.87 7.86 2.86 2.55 2.90 2.43 4.57 4.13 2.60 2.45 1.89 1.80 1e+3 1e+3 2e+2 3e+2 87.79 94.30 3e+2 2e+2 5e+2 4e+2 3e+2 3e+2 6e+2 6e+2 4e+5 3e+5 1e+2 87.00 59.49 69.75 2e+3 2e+3 3e+5 3e+5 1e+3 3e+2 3e+3 3e+4 2e+2 2e+2 26.79 26.49 15.23 15.71 23.48 21.60 23.91 23.67 26.18 24.70 36.79 37.99 3.31 4.98 4.59 3.93 21.99 22.26 12.40 11.73 3.49 3.52 4.85 5.26 5.56 5.53 10.55 10.39 12.11 12.51 7.56 11.20 8.27 7.72 7.84 7.43 6.34 5.95 7.31 6.97 9.83 9.62 8.22 8.12 4.41 4.46 6.46 5.74 8.23 7.74 6.52 6.29 7.47 7.00 2.02 3.45 4.47 6.53 24.61 8.46 7.70 12.39 6.87 7.88 5.36 5.77 6.59 8.33 3.21 3.93 10.15 8.95 4.65 3.91 8.00 7.28 9.81 9.66 4.67 4.75 5.52 7.15 3.08 2.90 4.76 4.60 2.48 2.18 5.09 4.41 3.60 3.59 3.04 3.08 3.57 4.05
+
+Average normalized TV in ablation study Fig. 3. Ablation studies on the trajectories reconstructed by FlowGRN (Orig.), spline fitting (Spl.) and FlowGRN+ (Traj.), with or without projection scheme. Rows are grouped by model family and projection setting, and columns correspond to dataset-size combinations. EPR and normalized TV are averaged across 5 random seeds for each setting. Color scale in normalized TV is in log scale and capped at 3,000 for better visualization. 
+
+distinct distributions and is therefore more automated and reproducible. In addition, the learned dynamics are more tem-porally coherent and give smoother trajectory reconstruction. However, the projection scheme also has limitations. First, the smooth manifold assumption may be violated in branching datasets, and the uniqueness of ODE solutions can further limit the modeling of branching trajectories, potentially contributing to the performance drop. Second, the projection scheme is computationally expensive, resulting in a longer training time than FlowGRN. A tighter integration of the projection scheme with the CFM model remains an important future direction. In the future, we will explore how to better extract networks from the learned dynamics. In our experiments, GRNBOOST2 yields lower AUPRC than GENIE3 in 8 of the 14 settings and lower EPR in 9 of the 14 settings, although both follow a per-target supervised-learning paradigm for GRN inference. This suggests that the choice of model class and explanation method can materially affect downstream network recovery. We will also explore how to constrain the CFM model to align with known biological pathways, so that we can leverage prior knowledge to improve GRN inference. CONFLICTS OF INTEREST 
+
+The authors declare no conflicts of interest. DATA AND CODE AVAILABILITY 
+
+We do not generate any new data in this work. All the data used in this work are publicly available. The code of FlowGRN+ is implemented in Python 3.13 and is available at https://github.com/1250326/FlowGRN plus. REFERENCES [1] V. A. Huynh-Thu, A. Irrthum, L. Wehenkel, and P. Geurts, “Inferring regulatory networks from expression data using tree-based methods,” 
+
+PLOS ONE , vol. 5, no. 9, p. e12776, 2010. [2] A.-C. Haury, F. Mordelet, P. Vera-Licona, and J.-P. Vert, “TIGRESS: Trustful Inference of Gene REgulation using Stability Selection,” BMC Systems Biology , vol. 6, no. 1, p. 145, 2012. [3] T. E. Chan, M. P. Stumpf, and A. C. Babtie, “Gene Regulatory Net-work Inference from Single-Cell Data Using Multivariate Information Measures,” Cell Systems , vol. 5, no. 3, pp. 251–267, 2017. [4] H. Matsumoto, H. Kiryu, C. Furusawa, M. S. Ko, S. B. Ko, N. Gouda, T. Hayashi, and I. Nikaido, “SCODE: an efficient regulatory network inference algorithm from single-cell RNA-Seq during differentiation,” 
+
+Bioinformatics , vol. 33, no. 15, pp. 2314–2321, 2017. [5] P.-C. Aubin-Frankowski and J.-P. Vert, “Gene regulation inference from single-cell rna-seq data with linear differential equations and velocity inference,” Bioinformatics , vol. 36, no. 18, pp. 4774–4780, 2020. [6] J. Ho, A. Jain, and P. Abbeel, “Denoising diffusion probabilistic models,” 
+
+Advances in Neural Information Processing Systems , vol. 33, pp. 6840– 6851, 2020. [7] J. Austin, D. D. Johnson, J. Ho, D. Tarlow, and R. Van Den Berg, “Structured denoising diffusion models in discrete state-spaces,” Ad-vances in Neural Information Processing Systems , vol. 34, pp. 17 981– 17 993, 2021. [8] Y. Lipman, R. T. Chen, H. Ben-Hamu, M. Nickel, and M. Le, “Flow matching for generative modeling,” arXiv preprint arXiv:2210.02747 ,2022. [9] T. P. Tong and J. Pang, “FlowGRN: Scalable and dropout-robust gene regulatory network inference via flow matching-based trajectory recon-struction,” in Proceedings of the 16th ACM International Conference on Bioinformatics, Computational Biology, and Health Informatics , 2025, pp. 1–8. [10] V. A. Huynh-Thu and P. Geurts, “dynGENIE3: dynamical GENIE3 for the inference of gene networks from time series expression data,” 
+
+Scientific Reports , vol. 8, no. 1, p. 3384, 2018. [11] A. Pratapa, A. P. Jalihal, J. N. Law, A. Bharadwaj, and T. Murali, “Benchmarking algorithms for gene regulatory network inference from single-cell transcriptomic data,” Nature Methods , vol. 17, no. 2, pp. 147– 154, 2020. [12] M. Rohbeck, E. De Brouwer, C. Bunne, J.-C. Huetter, A. Biton, K. Y. Chen, A. Regev, and R. Lopez, “Modeling complex system dynamics with flow matching across time and conditions,” in 13th International Conference on Learning Representations, ICLR 2025 , 2025. [13] J. Lee, B. Moradijamei, and H. Shakeri, “Multi-marginal stochastic flow matching for high-dimensional snapshot data at irregular time points,” in 
+
+Proceedings of the 42nd International Conference on Machine Learning ,vol. 267. PMLR, 2025, pp. 33 476–33 498. [14] S. Kim, “ppcor: An R Package for a Fast Calculation to Semi-partial Correlation Coefficients,” Communications for Statistical Applications and Methods , vol. 22, no. 6, pp. 665–674, 2015. [15] A. T. Specht and J. Li, “LEAP: constructing gene co-expression net-works for single-cell RNA-sequencing data using pseudotime ordering,” 
+
+Bioinformatics , vol. 33, no. 5, pp. 764–766, 2017. [16] A. A. Margolin, I. Nemenman, K. Basso, C. Wiggins, G. Stolovitzky, R. D. Favera, and A. Califano, “ARACNE: An algorithm for the reconstruction of gene regulatory networks in a mammalian cellular context,” BMC Bioinformatics , vol. 7, no. 1, p. S7, 2006. [17] J. J. Faith, B. Hayete, J. T. Thaden, I. Mogno, J. Wierzbowski, G. Cottarel, S. Kasif, J. J. Collins, and T. S. Gardner, “Large-Scale Mapping and Validation of Escherichia coli Transcriptional Regulation from a Compendium of Expression Profiles,” PLOS Biology , vol. 5, no. 1, p. e8, 2007. [18] X. Qiu, A. Rahimzamani, L. Wang, B. Ren, Q. Mao, T. Durham, J. L. McFaline-Figueroa, L. Saunders, C. Trapnell, and S. Kannan, “Inferring causal gene regulatory networks from coupled single-cell expression dynamics using Scribe,” Cell Systems , vol. 10, no. 3, pp. 265–274, 2020. [19] N. Papili Gao, S. M. Ud-Dean, O. Gandrillon, and R. Gunawan, “SINCERITIES: inferring gene regulatory networks from time-stamped single cell transcriptional expression profiles,” Bioinformatics , vol. 34, no. 2, pp. 258–266, 2018. [20] M. Sanchez-Castillo, D. Blanco, I. M. Tienda-Luna, M. Carrion, and Y. Huang, “A bayesian framework for the inference of gene regula-tory networks from time and pseudo-time series data,” Bioinformatics ,vol. 34, no. 6, pp. 964–970, 2018. [21] T. Moerman, S. Aibar Santos, C. Bravo Gonz´ alez-Blas, J. Simm, Y. Moreau, J. Aerts, and S. Aerts, “GRNBoost2 and Arboreto: efficient and scalable inference of gene regulatory networks,” Bioinformatics ,vol. 35, no. 12, pp. 2159–2161, 2019. [22] S. Aibar, C. B. Gonz´ alez-Blas, T. Moerman, V. A. Huynh-Thu, H. Im-richova, G. Hulselmans, F. Rambow, J.-C. Marine, P. Geurts, J. Aerts 
+
+et al. , “SCENIC: Single-cell regulatory network inference and cluster-ing,” Nature Methods , vol. 14, no. 11, pp. 1083–1086, 2017. [23] C. Bravo Gonz´ alez-Blas, S. De Winter, G. Hulselmans, N. Hecker, I. Matetovici, V. Christiaens, S. Poovathingal, J. Wouters, S. Aibar, and S. Aerts, “SCENIC+: single-cell multiomic inference of enhancers and gene regulatory networks,” Nature Methods , vol. 20, no. 9, pp. 1355– 1367, 2023. [24] V. A. Huynh-Thu and G. Sanguinetti, “Combining tree-based and dynamical systems for the inference of gene regulatory networks,” 
+
+Bioinformatics , vol. 31, no. 10, pp. 1614–1622, 2015. [25] J. Chen, C. Cheong, L. Lan, X. Zhou, J. Liu, A. Lyu, W. K. Cheung, and L. Zhang, “DeepDRIM: a deep neural network to reconstruct cell-type-specific gene regulatory network using single-cell RNA-seq data,” 
+
+Briefings in Bioinformatics , vol. 22, no. 6, p. bbab325, 2021. [26] Y. Fan and X. Ma, “Gene regulatory network inference using 3D convolutional neural network,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 35. AAAI Press, 2021, pp. 99–106. [27] C. C. Reagor, N. Velez-Angel, and A. J. Hudspeth, “Depicting pseudotime-lagged causality across single-cell trajectories for accurate gene-regulatory inference,” PNAS Nexus , vol. 2, no. 4, p. pgad113, 2023. [28] H. Shu, J. Zhou, Q. Lian, H. Li, D. Zhao, J. Zeng, and J. Ma, “Modeling gene regulatory networks using neural network architectures,” Nature Computational Science , vol. 1, no. 7, pp. 491–501, 2021. [29] P. Keyl, P. Bischoff, G. Dernbach, M. Bockmayr, R. Fritz, D. Horst, N. Bl¨ uthgen, G. Montavon, K.-R. M¨ uller, and F. Klauschen, “Single-cell gene regulatory network prediction by explainable AI,” Nucleic Acids Research , vol. 51, no. 4, p. e20, 2023. [30] A. Tong, K. Fatras, N. Malkin, G. Huguet, Y. Zhang, J. Rector-Brooks, G. Wolf, and Y. Bengio, “Improving and generalizing flow-based generative models with minibatch optimal transport,” arXiv preprint arXiv:2302.00482 , 2023. [31] A. Tong, N. Malkin, K. Fatras, L. Atanackovic, Y. Zhang, G. Huguet, G. Wolf, and Y. Bengio, “Simulation-free schr¨ odinger bridges via score and flow matching,” in 27th International Conference on Artificial Intelligence and Statistics , 2024, pp. 1279–1287. [32] K. Kapusniak, P. Potaptchik, T. Reu, L. Zhang, A. Tong, M. Bronstein, J. Bose, and F. Di Giovanni, “Metric flow matching for smooth interpola-tions on the data manifold,” Advances in Neural Information Processing Systems , vol. 37, pp. 135 011–135 042, 2024. [33] K. Petrovi´ c, L. Atanackovic, V. Moro, K. Kapu´ sniak, I. I. Ceylan, M. M. Bronstein, J. Bose, and A. Tong, “Curly flow matching for learning non-gradient field dynamics,” in 39th Annual Conference on Neural Information Processing Systems , 2025. [34] D. Wang, Y. Jiang, Z. Zhang, X. Gu, P. Zhou, and J. Sun, “Joint velocity-growth flow matching for single-cell dynamics modeling,” in 
+
+39th Annual Conference on Neural Information Processing Systems ,2025. [35] K. Van den Berge, H. Roux de B´ ezieux, K. Street, W. Saelens, R. Cannoodt, Y. Saeys, S. Dudoit, and L. Clement, “Trajectory-based differential expression analysis for single-cell sequencing data,” Nature Communications , vol. 11, no. 1, p. 1201, 2020. [36] K. Street, D. Risso, R. B. Fletcher, D. Das, J. Ngai, N. Yosef, E. Purdom, and S. Dudoit, “Slingshot: cell lineage and pseudotime inference for single-cell transcriptomics,” BMC Genomics , vol. 19, pp. 1–16, 2018. [37] L. Haghverdi, M. B¨ uttner, F. A. Wolf, F. Buettner, and F. J. Theis, “Diffusion pseudotime robustly reconstructs lineage branching,” Nature Methods , vol. 13, no. 10, pp. 845–848, 2016. [38] A. Wang and J. Pang, “Iterative structural inference of directed graphs,” in 36th International Conference on Neural Information Processing Systems . Curran Associates, Inc., 2022, pp. 8717–8730. [39] A. Wang, T. P. Tong, and J. Pang, “Effective and efficient structural infer-ence with reservoir computing,” in Proceedings of the 40th International Conference on Machine Learning . PMLR, 2023, pp. 36 391–36 410. [40] A. Wang, T. P. Tong, A. Mizera, and J. Pang, “Benchmarking structural inference methods for interacting dynamical systems with synthetic data,” in Advances in Neural Information Processing Systems , vol. 37. Curran Associates, Inc., 2024, pp. 135 129–135 185. [41] A. Tong, J. Huang, G. Wolf, D. Van Dijk, and S. Krishnaswamy, “TrajectoryNet: A Dynamic Optimal Transport Network for Modeling Cellular Dynamics,” in Proceedings of the 37th International Conference on Machine Learning . PMLR, 2020, pp. 9526–9536. [42] Y. Sha, Y. Qiu, P. Zhou, and Q. Nie, “Reconstructing growth and dynamic trajectories from single-cell transcriptomics data,” Nature Ma-chine Intelligence , vol. 6, no. 1, pp. 25–39, 2024. [43] M. M. Islam, T. P. Kuipers, S. Vadgama, C. de Vente, A. Khan, C. I. S´ anchez, and E. J. Bekkers, “Longitudinal flow matching for trajectory modeling,” arXiv preprint arXiv:2510.03569 , 2025. [44] P. Theodoropoulos, A. D. Saravanos, E. A. Theodorou, and G.-H. Liu, “Momentum multi-marginal Schr¨ odinger bridge matching,” in 39th Annual Conference on Neural Information Processing Systems , 2025. [45] M. Z. H. Shah, Z. Ahmed, and H. Lisheng, “Weighted linear local tangent space alignment via geometrically inspired weighted pca for fault detection,” IEEE Transactions on Industrial Informatics , vol. 19, no. 1, pp. 210–219, 2022. [46] L. Garcia-Alonso, C. H. Holland, M. M. Ibrahim, D. Turei, and J. Saez-Rodriguez, “Benchmark and integration of resources for the estimation of human transcription factor activities,” Genome Research , vol. 29, no. 8, pp. 1363–1375, 2019. [47] S. M¨ uller-Dott, E. Tsirvouli, M. Vazquez, R. O. Ramirez Flores, P. Badia-i Mompel, R. Fallegger, D. T¨ urei, A. Lægreid, and J. Saez-Rodriguez, “Expanding the coverage of regulons from high-confidence prior knowledge for accurate estimation of transcription factor activi-ties,” Nucleic Acids Research , vol. 51, no. 20, pp. 10 934–10 949, 2023. [48] S. Woodhouse, N. Piterman, C. M. Wintersteiger, B. G¨ ottgens, and J. Fisher, “SCNS: a graphical tool for reconstructing executable regu-latory networks from single-cell genomic data,” BMC Systems Biology ,vol. 12, pp. 1–7, 2018. [49] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2016, pp. 770–778. [50] M. Poli, S. Massaroli, A. Yamashita, H. Asama, and J. Park, “Torchdyn: A neural differential equations library,” arXiv preprint arXiv:2009.09346 , 2020.

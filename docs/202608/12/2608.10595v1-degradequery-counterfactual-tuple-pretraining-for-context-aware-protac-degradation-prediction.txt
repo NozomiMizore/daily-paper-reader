@@ -1,0 +1,478 @@
+Title: DegradeQuery: Counterfactual Tuple Pretraining for Context-Aware PROTAC Degradation Prediction
+
+URL Source: https://arxiv.org/pdf/2608.10595v1
+
+Published Time: Wed, 12 Aug 2026 00:54:44 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# DegradeQuery: Counterfactual Tuple Pretraining for Context-Aware PROTAC Degradation Prediction 
+
+Dong Xu 1,2 , Zhangfan Yang 3, Jiantao Wu 1, Zexuan Zhu 1, Jianqiang Li 1, Junkai Ji 1,2,† 
+
+> 1
+
+School of Artificial Intelligence, Shenzhen University 2EasternDawn 
+
+> 3
+
+School of Computer Science, University of Nottingham Ningbo 
+
+## Abstract 
+
+Proteolysis-targeting chimeras (PROTACs) induce protein degradation by recruit-ing a target protein to an E3 ubiquitin ligase, making degradation a joint outcome of the degrader molecule and its biological context. Although public databases contain thousands of structured molecule–target–E3 records, degradation measurements are available for only a small fraction of them. Existing supervised approaches therefore leave most recorded chemical–biological relationships unused. We in-troduce DegradeQuery, a context-aware prediction framework that converts these label-missing records into a pretraining signal. Its counterfactual tuple pretraining objective contrasts recorded tuples with alternatives formed by replacing the target, the E3 ligase, or both, enabling the model to learn contextual associations without assigning activity pseudo-labels. The resulting representation is then fine-tuned to predict degradation from the complete molecule–target–E3 context. On the official PROTAC-8K benchmark, DegradeQuery achieves an area under the receiver op-erating characteristic curve of 0.9065 and an accuracy of 0.8500, outperforming the compared methods. Controlled analyses further show that the improvement is primarily attributable to tuple-level pretraining, can be recovered using only label-missing records, and remains complementary to protein language model representations. These findings demonstrate that incompletely labeled PROTAC databases contain useful relational supervision and provide a practical route for learning context-aware degradation predictors from scarce experimental labels. 
+
+## 1 Introduction 
+
+Proteolysis-targeting chimeras (PROTACs) have fundamentally changed how small molecules can modulate protein function. Unlike conventional inhibitors, which typically act by occluding a binding site, PROTACs recruit a target protein into proximity with an E3 ubiquitin ligase, thereby promot-ing target ubiquitination and subsequent proteasomal degradation [1–4]. This induced-proximity mechanism enables catalytic removal of the target in cells [5] and has been successfully exploited through E3 recruiters such as cereblon ligands [6, 7]. It further broadens the druggable target space to proteins that are difficult to modulate via classical occupancy-driven inhibition [8, 4]. At the same time, this conditional mechanism renders degradation prediction considerably more challenging. A degrader molecule should not be modeled as having a single context-independent degradation label; its measured effect depends jointly on the molecular structure of the degrader, the target protein, the recruited E3 ligase, and the cellular context in which the assay is performed. PROTAC degradation is therefore not solely a molecular property but rather a context-dependent outcome of the molecule–target–E3 system.  
+
+> This work is supported by the Intelligent Computing Center of Shenzhen University.
+> †Corresponding author: Junkai Ji (e-mail: jijunkai@szu.edu.cn ). Preprint. arXiv:2608.10595v1 [q-bio.BM] 11 Aug 2026
+
+This distinction carries direct implications for data-driven degradation modeling. Public PROTAC resources now provide structured records comprising degrader molecules, target proteins, E3 ligases, warheads, linkers, and assay annotations [9–12]. Related resources for molecular glues similarly catalog chemically induced degradation entries by small molecule, recruited protein, and target context [13, 14]. Yet reliable degradation labels remain scarce. Quantities such as the half-maximal degradation concentration ( DC 50 ), maximum degradation ( Dmax ), and measured percent degradation are costly to obtain and consequently unavailable for many entries [9, 10]. As a result, a substantial portion of available data contains chemical and biological context but lacks a complete degradation label. Treating PROTAC prediction as a standard supervised molecular classification problem leaves this context underutilized and encourages models to learn primarily from the labeled subset, even though unlabeled entries still describe which molecules were studied in which target–E3 contexts. Recent computational methods have advanced PROTAC degradation prediction along several di-rections. DeepPROTACs demonstrated that deep learning can predict targeted degradation from PROTAC-derived representations [15]. PROTAC-Degradation-Predictor extended this line of work by incorporating assay and target context into machine-learning-based prediction [16]. More recent models have moved toward explicit ternary or structure-aware representations: PROTAC-STAN employs a structure-informed deep ternary attention framework [17], and DegradeMaster adopts a semi-supervised E(3)-equivariant graph neural network [18]. Complementary work on ternary complex prediction and biomolecular interaction modeling reinforces this perspective, indicating that the relevant computational object is not an isolated molecule but a multi-component interaction system [19, 20]. Together, these studies establish that degradation prediction benefits from modeling beyond the degrader molecule alone. A central open question remains: how should unlabeled PROTAC records be leveraged? One natural strategy is to assign pseudo-labels to unlabeled examples and train on the expanded set, as in semi-supervised degradation prediction [18]. While effective in practice, this approach treats unlabeled data as though the primary missing piece were a degradation label. Such a framing is not the only way to exploit these records. The most reliable signal in an unlabeled PROTAC record is not a latent binary activity label but the recorded molecule–target–E3 context itself. Even without a measured degradation value, an entry typically specifies a PROTAC molecule, a target protein, and an E3 ligase. We interpret this tuple as observed design-context evidence: it indicates that a molecule was recorded or studied in relation to a target and an E3 recruiter, but it does not by itself imply active degradation, ternary-complex formation, or biological feasibility. This observation motivates a different form of self-supervision. Rather than asking a model to impute a degradation label, we ask it to distinguish observed molecule–target–E3 records from counterfactual records formed by replacing the target, the E3 ligase, or both. The model thereby learns a tuple-conditioned pretraining signal: which recorded tuples receive higher scores than sampled alternatives under the chosen corruption process. This idea is connected to the broader principle of learning representations from contrastive structure in unlabeled data [21, 22]. In molecular representation learning, contrastive objectives have been applied to learn robust graph-level or molecular representations [23, 24]. However, PROTAC degradation demands a more specific signal than molecular invariance alone. A given molecule may serve as an effective degrader in one target–E3 context yet fail in another. The self-supervised signal should therefore be defined at the level at which PROTAC records are specified and degradation labels are ultimately assigned: the molecule–target–E3 tuple. We introduce DegradeQuery , a single-model framework built around this principle. DegradeQuery first learns from unlabeled PROTAC records through counterfactual tuple pretraining. Given an observed tuple (mi, t i, e i), where mi denotes the PROTAC molecule, ti the target protein, and ei
+
+the E3 ligase, the model scores this tuple against counterfactual alternatives, including (mi, t j , e i),
+
+(mi, t i, e j ), and (mi, t j , e k), in which one or both biological components are replaced. This objective trains the representation on molecule–target–E3 records before any degradation label is introduced. The resulting pretraining score is a tuple plausibility score relative to sampled counterfactuals, not a degradation probability. The pretrained model is then fine-tuned on labeled degradation data for binary (active versus inactive) classification. Notably, DegradeQuery does not generate pseudo-labels for unlabeled records and does not rely on teacher models, distillation, or ensembles. Unlabeled data enter the learning process solely through their observed tuple structure. 2This design redefines the role of unlabeled PROTAC data. Rather than treating unlabeled records as incomplete supervised examples, DegradeQuery treats them as structured tuple observations. The distinction matters because degradation labels are sparse and assay-dependent, whereas the tuple itself is usually available and reflects the molecule, target, and E3 components required by the induced-proximity mechanism [2, 4]. Generic molecular self-supervision can produce robust molecular representations, yet it cannot, on its own, encode which target and E3 contexts accompany a molecule in the observed PROTAC records. Counterfactual tuple pretraining addresses this gap by situating the molecule within the recorded target–E3 context before supervised degradation labels are used. We evaluate DegradeQuery on the PROTAC-8K benchmark and in additional settings that probe the source and scope of its improvement. On the official split used by DegradeMaster, DegradeQuery achieves the highest reported AUROC and accuracy among the compared methods without relying on pseudo-labels, teacher models, distillation, or ensembles. Matched runs show that the gain is stable on this split, persists when every labeled row is removed from pretraining, and remains present with frozen ESM2-650M protein representations. Component ablations show that tuple pretraining contributes beyond molecule-only self-supervision, while repeated target–E3 group holdouts reveal substantial variation across held-out contexts. Throughout the paper, tuple plausibility denotes a sampler-relative score learned from recorded tuples and counterfactual replacements; it is not evidence of ternary-complex formation, degradative activity, or biological feasibility. This work makes three contributions: (a) We formulate unlabeled PROTAC records as structured molecule–target–E3 observations rather than incomplete examples awaiting pseudo-labels. (b) We propose DegradeQuery, which employs counterfactual tuple pretraining to learn tuple-conditioned PROTAC representations without assigning degradation pseudo-labels, using teacher models, applying distillation, or ensembling models. (c) We isolate the contribution of label-missing records through five-seed paired evaluation, an unlabeled-only pretraining control, a molecule-versus-tuple component analysis, and an ESM2-650M comparison. We further characterize the variability of target–E3 group holdout perfor-mance rather than treating a single held-out split as evidence of uniformly robust extrapolation. 
+
+## 2 Related Work 
+
+Context-Aware PROTAC Degradation Prediction. Computational approaches to PROTAC degrada-tion prediction have increasingly moved beyond molecule-only representations toward context-aware modeling. DeepPROTACs showed that targeted degradation can be predicted by jointly modeling the PROTAC molecule, the protein of interest, and the E3 ligase [15]. PROTAC-Degradation-Predictor further incorporated E3, target, and assay context into degradation prediction [16]. More recent mod-els make this contextual structure more explicit: PROTAC-STAN uses a structure-informed ternary attention framework to model PROTAC–target–E3 interactions [17], while DegradeMaster introduces a semi-supervised E(3)-equivariant graph neural network with memory-based pseudo-labeling for unlabeled PROTAC records [18]. Related progress in ternary complex prediction and biomolecular interaction modeling similarly suggests that the relevant computational object is often an interaction system rather than an isolated molecule [19, 20]. These studies motivate context-aware degradation prediction; our work differs mainly in how unlabeled records are used, treating them as observed molecule–target–E3 tuples rather than as examples requiring imputed degradation labels. 
+
+Learning from Unlabeled Molecular Data. Self-supervised learning has become a standard ap-proach for extracting representations from unlabeled data. Contrastive Predictive Coding and SimCLR learn by distinguishing related views from unrelated ones [21, 22]. In graph and molecular learning, GraphCL uses graph augmentations to learn invariant graph representations [23], and MolCLR applies contrastive learning to molecular graphs for downstream molecular property prediction [24]. These methods show that unlabeled data can provide useful training signals without task-specific labels. For PROTACs, however, molecule-level invariance alone is limited, because the same molecule can be relevant in one target–E3 context and uninformative in another. This motivates defining self-supervision at the molecule–target–E3 tuple level rather than only over augmented views of an isolated molecule. 3Tuple Score 
+
+(e) Molecule-level Contrastive Loss 
+
+> Observed
+
+# =   
+
+> Molecule Encoder PROTAC Mol Target Protein E3 Ligase
+> Degradation Label
+> Fusion
+> Degradation Prediction Head High / Low Degradation
+> Supervised Loss Unlabeled Set Labeled Set
+> Ori. Mol Repre. Target Repre. E3 Repre.
+> Optional Input
+> Assay Descripto Replace Target Replace E3 Replace Target and E3
+> Pretrained Tuple Encoder Protein
+> E3 PROTAC
+
+(c) Counterfactual 
+
+> Input
+> Protein Encoder
+
+(b) Fine-tuning Counterfactual Alternatives Unlabeled Set Random   
+
+> Input Tuple 1 Input Tuple 2 Input Tuple 3
+> 𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀
+> 𝐀 𝐀 𝐀
+
+(d) Tuple-level Contrastive Loss  
+
+> Higher Similarity Lower Similarity
+> Target Replaced E3 Replaced Target + E3 Replaced
+
+(a) Counterfactual Tuple Pretraining  
+
+> Counterfactual
+
+Scoring Head 
+
+> Negative Tuple
+
+Projection Head           
+
+> Pos. Mol Repre.
+> Tuple Score
+> Negative Tuple Positive Tuple Negative Tuple
+> Tuple-level Loss Molecule-level Loss Subgraph Masking SMILES Enumeration
+> O=C... 1CCC
+> Mask
+> C1C... ((=C
+
+Figure 1: Overview of DegradeQuery. DegradeQuery treats the molecule–target–E3 tuple as the unit of unlabeled supervision. In counterfactual tuple pretraining, observed PROTAC tuples from labeled and unlabeled training records are contrasted with alternatives formed by replacing the target, the E3 ligase, or both. This stage learns a tuple-conditioned representation without assigning pseudo-labels to unlabeled records. The pretrained encoder is then fine-tuned on labeled degradation data for binary high/low prediction. 
+
+Low-Resource Molecular Prediction. Low-resource learning remains a central challenge in molec-ular prediction, where many tasks contain only a small number of measured compounds. FS-Mol formalized this setting by aggregating activity measurements across diverse protein targets for few-shot molecular learning [25]. Subsequent work has emphasized the role of task context: Property-Aware Relation Networks learn property-aware molecular embeddings and adaptive relation graphs [26], while context-enriched molecule representations use reference or support molecules to improve few-shot drug discovery [27]. These studies indicate that molecular representations can depend strongly on the task or support context. In this paper, target-wise few-shot adaptation is used as an evaluation protocol for target-conditioned degradation representations, rather than as a claim of a new general-purpose meta-learning algorithm. 
+
+## 3 Method 
+
+Overview. Figure 1 summarizes the DegradeQuery workflow. Rather than treating unlabeled PROTAC records as examples with missing degradation labels, DegradeQuery treats them as recorded molecule–target–E3 contexts. It first learns a tuple-conditioned representation by contrasting recorded tuples with sampled target and E3 replacements, and then fine-tunes the resulting encoder on labeled high/low degradation data. The pretraining objective is defined relative to the train-side tuple set and specified counterfactual sampler; it does not imply degradation activity, ternary-complex formation, or biological feasibility. 
+
+3.1 Problem Formulation 
+
+For a given data split, let DL and DU denote the train-side labeled and unlabeled subsets, respectively. Each PROTAC record comprises a degrader molecule, a target protein, an E3 ligase, and, optionally, an assay descriptor such as a cell line [9, 10]. Only a subset of records carries a degradation label 4[18]. We denote the labeled and unlabeled sets as 
+
+DL = {(mi, t i, e i, c i, y i)}nL
+
+> i=1
+
+, DU = {(mi, t i, e i, c i)}nU
+
+> i=1
+
+, (1) where mi is the PROTAC molecule, ti is the target protein, ei is the E3 ligase, ci is an optional assay descriptor, and yi ∈ { 0, 1} is the binary degradation label. The goal is to learn a tuple-conditioned degradation predictor 
+
+pθ (yi = 1 | mi, t i, e i, c i) = σ(gθ (mi, t i, e i, c i)) , (2) where σ(·) denotes the sigmoid function. The unlabeled set is not treated as a collection of molecules with missing labels, but rather as a set of recorded molecule–target–E3 contexts. We use their empirical co-occurrence structure as a self-supervised signal, while recognizing that this structure may reflect literature coverage, database construction, and medicinal-chemistry design bias rather than degradation activity. For each data split, pretraining constructs the train-side tuple set 
+
+T = {(mi, t i, e i) : ( mi, t i, e i, c i, y i) ∈ D L} ∪ { (mi, t i, e i) : ( mi, t i, e i, c i) ∈ D U }. (3) Held-out test, query, or adaptation-query rows are excluded from T before pretraining. Degradation labels are not used in this stage. Both active and inactive labeled records enter T in the same way. In this stage, a positive tuple means that the molecule–target–E3 context was recorded in the dataset; it does not mean that the tuple is degradation-active. 
+
+3.2 Tuple-Conditioned Degrader Model 
+
+DegradeQuery encodes the molecule, target protein, and E3 ligase into separate representations: 
+
+hmi = fm(mi), hti = fp(ti), hei = fp(ei). (4) Here fm combines a three-layer residual message-passing network over 15-dimensional atom features with a 2,048-bit Morgan fingerprint (radius 2); the two branches are projected to 256 dimensions and summed with layer normalization. The shared protein encoder fp maps 150 sequence features— amino-acid composition, sequence-length and unknown-residue features, and 128 hashed di-/tri-peptide counts—to 256 dimensions. The target and E3 representations remain separate after encoding because they serve distinct roles within the tuple. The fusion module exposes both component identities and pairwise interactions: 
+
+zi = ϕθ
+
+ hmi ∥hti∥hei ∥hmi ⊙ hti∥hmi ⊙ hei ∥hti ⊙ hei ∥| hti − hei | , (5) where ∥ denotes concatenation and ⊙ denotes elementwise multiplication. This role-conditioned fusion is the common prediction architecture used by Sup and CTP; CTP changes the initialization through pretraining, not the downstream topology. When the assay descriptor is available, it is incorporated via ˜zi = ψθ (zi, c i). The self-supervised tuple objective operates on zi, whereas the downstream degradation classifier operates on ˜zi. We use ci only in supervised fine-tuning because assay descriptors can be missing or inconsistently annotated for unlabeled records, whereas molecule, target, and E3 identifiers are available for tuple pretraining. For counterfactual tuple pretraining, DegradeQuery assigns a scalar sampler-relative tuple plausibility score to each molecule–target–E3 tuple: 
+
+sθ (mi, t i, e i) = qθ (ϕθ (fm(mi), f p(ti), f p(ei))) , (6) where qθ is a scoring head. This score is used exclusively during pretraining. It is meaningful only relative to the sampled counterfactual distribution and is not interpreted as a degradation probability or as an absolute biological compatibility score. 
+
+3.3 Counterfactual Tuple Pretraining 
+
+For each recorded tuple u+ 
+
+> i
+
+= ( mi, t i, e i), we construct counterfactual alternatives by replacing the target, the E3 ligase, or both. Let PT and PE denote the empirical train-side distributions over targets and E3 ligases in the pretraining tuple set T . For each u+ 
+
+> i
+
+, we sample R replacement pairs 5{(˜ ti,r , ˜ei,r )}Rr=1 , where ˜ti,r ∼ P T , ˜ei,r ∼ P E , ˜ti,r ̸ = ti, and ˜ei,r ̸ = ei. The resulting counterfactual set is 
+
+Ni =
+
+> R
+
+[
+
+> r=1
+
+(mi, ˜ti,r , e i), (mi, t i, ˜ei,r ), (mi, ˜ti,r , ˜ei,r ) . (7) In split-defined holdout experiments, samples that would create a held-out target–E3 pair are rejected, so held-out pairs are not introduced as corrupted pretraining alternatives. These counterfactuals are not assumed to be biologically impossible or degradation-inactive. They are sampler-defined alternatives that may include untested but viable molecule–target–E3 combinations. Thus, the objective is noise-contrastive rather than supervised with true negative biological examples: the recorded tuple is encouraged to score above sampled alternatives under the chosen replacement distribution. The tuple scoring function is optimized with a contrastive ranking loss: 
+
+Ltuple = − 1
+
+|B| 
+
+X
+
+> i∈B
+
+log exp  sθ (u+ 
+
+> i
+
+)/τ 
+
+exp  sθ (u+ 
+
+> i
+
+)/τ  + P 
+
+> u−∈N i
+
+exp( sθ (u−)/τ ) , (8) where B is a minibatch and τ is a temperature parameter. This loss relies solely on train-side recorded tuples in T and does not require, infer, or assign degradation labels. In addition, following graph and molecular contrastive learning, we employ a lightweight molecular consistency objective to encourage augmentation-invariant molecular representations [23, 24]. Given two stochastic augmentations a(mi) and b(mi) of the same molecule, such as random subgraph masking or simplified molecular-input line-entry system (SMILES) enumeration, let 
+
+rai = ρθ (fm(a(mi))) , rbi = ρθ (fm(b(mi))) , (9) where ρθ is a projection head. The molecule-level objective is the corresponding normalized temperature-scaled contrastive objective [22]: 
+
+Lmol = − 1
+
+|B| 
+
+X
+
+> i∈B
+
+log exp  sim( rai , r bi )/τ m
+
+P 
+
+> j∈B
+
+exp  sim( rai , r bj )/τ m
+
+ , (10) where sim( ·, ·) denotes cosine similarity and τm is a temperature parameter. The full pretraining objective combines both terms: 
+
+Lpre = Ltuple + λmol Lmol . (11) The tuple loss is the primary training signal, while the molecule-level term serves as an auxiliary regularizer. 
+
+3.4 Fine-Tuning and Prediction 
+
+After pretraining, the tuple encoder is fine-tuned on the labeled degradation records. The model predicts 
+
+ˆpi = pθ (yi = 1 | mi, t i, e i, c i) = σ w⊤ ˜zi + b , (12) where ˜zi is the descriptor-aware representation. We optimize a binary classification loss over labeled examples only. Let p∗ 
+
+> i
+
+denote the predicted probability assigned to the true class: 
+
+p∗ 
+
+> i
+
+= yi ˆpi + (1 − yi)(1 − ˆpi). (13) The supervised objective is a class-weighted focal loss [28]: 
+
+Lsup = − 1
+
+|D L|
+
+X
+
+> i∈D L
+
+αyi (1 − p∗ 
+
+> i
+
+)γ log p∗ 
+
+> i
+
+. (14) When γ = 0 , this formulation reduces to weighted binary cross-entropy, so it subsumes the standard case as a special case of focal loss. 6Sup Full CTP 0.87 0.88 0.89 0.90        
+
+> AUROC
+> n= 5; all paired gains > 0
+> APaired official-split runs
+> Sup Full CTP Unlabeled only CTP 0.87 0.88 0.89 0.90
+> AUROC
+> 0.8777 0.8996 0.9007
+> BLabel-missing records suffice
+> Frozen + Sup Last-layer FT + Sup Frozen + CTP 0.880 0.885 0.890 0.895 0.900 0.905
+> AUROC
+> 0.8863 0.8907 0.9032
+> CCTP complements ESM2-650M
+
+Figure 2: Evidence isolating the contribution of counterfactual tuple pretraining. (A) Seed-level AUROC for the same supervised architecture without and with CTP on the official split; all five paired gains are positive. (B) Mean ± standard deviation over five seeds. Unlabeled-only CTP removes every labeled row from pretraining and uses 7,134 label-missing records. (C) Mean ± standard deviation over three seeds when ESM2-650M supplies the target and E3 representations inside the same role-conditioned PROTAC tuple predictor. The two training stages can be summarized as θpre = arg min θ Lpre (T ), followed by 
+
+θ⋆ = arg min  
+
+> θ
+
+Lsup (DL), θ initialized from θpre . (15) Unlike pseudo-label-based semi-supervised PROTAC degradation prediction [18], unlabeled records contribute exclusively through the tuple pretraining objective: they are used as recorded contexts, never as degradation-labeled examples. At inference time, DegradeQuery applies the fine-tuned model directly: ˆyi = I[ˆ pi ≥ δ], where I[·] is the indicator function and δ is a fixed decision threshold specified by the evaluation protocol. No teacher model, pseudo-labeling step, distillation procedure, or model ensemble is used. 
+
+## 4 Experiments 
+
+We evaluate whether counterfactual tuple pretraining (CTP) improves PROTAC-8K without pseudo-labeling, whether label-missing records alone account for the gain, whether CTP remains useful with a strong protein representation, and how performance changes under target–E3 group holdout, scaffold holdout, and target-wise few-shot adaptation. 
+
+4.1 Experimental Setup 
+
+We evaluate binary high/low PROTAC degradation prediction on the PROTAC-8K benchmark used in prior work [18]. The normalized dataset contains 8,636 molecule–target–E3 records, of which 1,502 are labeled and 7,134 are unlabeled. Molecule, target, and E3 identifiers are available for all records, so PROTAC-8K is label-sparse but tuple-rich enough for self-supervised tuple pretraining. All experiments are split-specific. Test or query rows are never used for tuple pretraining, supervised fine-tuning, model selection, or threshold tuning. In target–E3 group and scaffold holdouts, held-out records are excluded from both tuple pretraining and supervised training. For target–E3 group holdout, the sampler also rejects corrupted tuples whose target–E3 pair is held out, preventing held-out biological pairs from entering pretraining as negatives. In target-wise few-shot adaptation, support rows are used only for adaptation and query rows only for evaluation; neither is used during base pretraining or base supervised training. We compare DegradeQuery-Sup, trained only on labeled training records, with DegradeQuery-CTP, which first pretrains on train-side molecule–target–E3 tuples, including unlabeled records, and then fine-tunes on labeled records. CTP uses no pseudo-labels, teacher models, distillation, or ensembles. AUROC is the primary metric, accuracy is reported for benchmark compatibility, and threshold-dependent metrics use a fixed threshold of 0.5. Each table states its statistical unit: the new official-split reliability and unlabeled-only analyses use five paired seeds, the ESM2 and component analyses use three seeds, and the repeated target–E3 analysis uses ten independently constructed group holdouts. Metrics are reported on the 0–1 scale. 7Table 1: Official PROTAC-8K benchmark comparison. Prior baseline values use the official protocol reported by DegradeMaster; accuracy values originally reported as percentages are converted to the 0–1 scale. DegradeQuery-CTP uses unlabeled records through tuple pretraining without activity pseudo-labels, teacher models, distillation, or ensembles.                            
+
+> Method Unlabeled signal Accuracy AUROC DeepPROTACs None 0.5821 0.7107 DeepPROTACs Semi-supervised 0.5902 0.7171 PROTAC-STAN None 0.7934 0.7986 PROTAC-STAN Semi-supervised 0.7825 0.7896 DegradeMaster None 0.8141 0.8541 DegradeMaster Pseudo-labeling 0.8366 0.8825 DegradeQuery-Sup None 0.8133 0.8827 DegradeQuery-CTP Tuple pretraining 0.8500 0.9065
+
+Table 2: Controlled attribution on the official PROTAC-8K split. Values are mean ± standard deviation. All rows remain full PROTAC tuple predictors; in the ESM2 block, ESM2 supplies the target and E3 representations.                            
+
+> Protein representation Training AUROC Accuracy Original Sup ( n= 5 )0.8777 ±0.0031 0.7840 ±0.0072 Original Full CTP ( n= 5 )0.8996 ±0.0039 0.8233 ±0.0058 Original Unlabeled-only CTP ( n= 5 )0.9007 ±0.0032 0.8267 ±0.0097
+> Frozen ESM2-650M Sup ( n= 3 )0.8863 ±0.0010 0.7933 ±0.0067 ESM2-650M last-layer FT Sup ( n= 3 )0.8907 ±0.0034 0.8144 ±0.0150 Frozen ESM2-650M CTP ( n= 3 )0.9032 ±0.0020 0.8322 ±0.0107
+
+4.2 PROTAC-8K Benchmark 
+
+Table 1 compares DegradeQuery with prior baselines under the official PROTAC-8K protocol used by DegradeMaster [18]. Unlike DegradeMaster-Semi, which uses pseudo-labeling, DegradeQuery-CTP uses unlabeled records only as molecule–target–E3 tuple observations. CTP achieves the best accuracy and AUROC, improving over DegradeMaster-Semi by 0.0134 accuracy and 0.0240 AUROC, and over DegradeQuery-Sup by 0.0367 accuracy and 0.0238 AUROC. This supports the use of unlabeled PROTAC records as tuple-level supervision rather than merely as pseudo-label candidates. Figure 2 and Table 2 provide matched reliability and attribution analyses. Across five paired runs, every AUROC difference between CTP and Sup is positive; the mean paired gain is 0.0219 with a 95% confidence interval of [0.0136, 0.0303]. The same runs also improve area under the precision–recall curve (AUPRC), accuracy, and Matthews correlation coefficient (MCC), with paired confidence intervals excluding zero (Appendix A.4). 
+
+4.3 Isolating the Label-Missing Signal 
+
+We next remove every labeled row from the pretraining set while keeping the supervised fine-tuning rows and official test split fixed. This unlabeled-only variant pretrains on 7,134 label-missing records and zero labeled records. It reaches 0.9007 ±0.0032 AUROC, improving over Sup by 0.0230 with a paired 95% confidence interval of [0.0173, 0.0287]. Its difference from full CTP is 0.0011 [-0.0064, 0.0085], showing that the label-missing records alone recover the full downstream improvement within the uncertainty of these runs. We also replace the original protein features with ESM2-650M target and E3 representations inside the same DegradeQuery tuple predictor. Frozen ESM2 + CTP improves over the exactly matched frozen ESM2 + Sup configuration from 0.8863 to 0.9032 AUROC. It also exceeds the supervised reference that fine-tunes the final ESM2 layer together with the projection and prediction layers (0.8907). Thus, ESM2 supplies stronger component representations while CTP continues to provide a useful pretraining signal for the full molecule–target–E3 predictor. 84.4 Pretraining Ablation 
+
+We next compare the tuple objective with generic molecule-level self-supervision. Molecule-only self-supervised learning (SSL) is a meaningful baseline because graph and molecular contrastive learning have been effective for molecular representation learning [23, 24]. However, PROTAC degradation is conditional on target and E3 context, so molecular invariance alone cannot identify the biological setting in which a molecule acts as a degrader. Table 3 reports the ablation results. Molecule-only SSL improves over labeled-only training, while tuple-only pretraining gives the higher AUROC and AUPRC of the two individual components. Combining the objectives gives the highest AUROC, indicating that the tuple objective contributes beyond generic molecular consistency. Table 3: Component analysis on the PROTAC-8K split. Supplemental variants are averaged over three seeds; the submitted Sup value is included as the labeled-only reference.                
+
+> Pretraining AUROC AUPRC Accuracy Sup (submitted) 0.8827 0.8200 0.8133 Molecule-only SSL 0.8910 0.7947 0.8289
+> Tuple-only pretraining 0.8943 0.8432 0.8056 Full CTP 0.8991 0.8386 0.8256
+
+As a shortcut control, a molecule-ablated model using only target, E3, and assay-side features performs poorly, with AUROC near 0.55 and MCC near zero across three seeds. Thus, the gain is not explained by a target–E3 identity shortcut. We also vary the counterfactual construction and the main pretraining hyperparameters; the conclusion is stable across the tested policies and ranges (Appendix A.4). 
+
+4.5 Conditional Generalization and Few-Shot Adaptation 
+
+We finally test whether tuple pretraining remains useful when the degradation context changes. We evaluate repeated target–E3 group holdout, scaffold holdout, and target-wise few-shot adaptation, following the broader motivation of context-aware PROTAC and ternary-complex modeling [17–19]. Table 4 reports the results. Table 4: Selected generalization and target-wise few-shot adaptation results. The target–E3 rows average ten independently constructed group holdouts; other rows follow their stated three-seed protocols. Holdout rows evaluate distribution shifts in biological context or molecular scaffold. Few-shot rows use K positive and K negative support examples per held-out target; the remaining labeled rows for that target are used as query rows and are used only for evaluation. Bold indicates the better method within each setting and metric.                                                                    
+
+> Setting Method AUROC AUPRC MCC BalAcc Target–E3 group holdout Sup 0.6769 0.5964 0.2810 0.6235 Target–E3 group holdout CTP 0.7064 0.6110 0.2947 0.6362
+> Scaffold holdout Sup 0.8681 0.8236 0.5919 0.7884 Scaffold holdout CTP 0.8858 0.8481 0.6358 0.8112
+> Target-wise adaptation, K= 2 Sup 0.6686 0.6731 0.1263 0.5765 Target-wise adaptation, K= 2 CTP 0.6812 0.6847 0.3521 0.6867
+> Target-wise adaptation, K= 4 Sup 0.6673 0.6248 0.2681 0.6381 Target-wise adaptation, K= 4 CTP 0.7173 0.6692 0.3146 0.6700
+> Target-wise adaptation, K= 8 Sup 0.7790 0.7727 0.4196 0.7005 Target-wise adaptation, K= 8 CTP 0.7811 0.7976 0.4223 0.7200
+
+Target–E3 group holdout is the most severe biological-context shift: complete target–recruiter groups are assigned to test, excluded from pretraining and supervised training, and rejected by the counterfactual sampler. Across ten independently constructed 20% group holdouts, mean AUROC increases from 0.6769 to 0.7064, but the paired difference is heterogeneous: +0.0295 with a 95% confidence interval of [-0.0219, 0.0810], and five of ten splits have a positive AUROC difference. 9This diagnostic shows that CTP can help under biological-context shift while also identifying held-out context composition as an important source of uncertainty. Scaffold holdout tests chemical generalization by excluding held-out Bemis–Murcko scaffold groups from base pretraining and supervised training. CTP improves AUROC from 0.8681 to 0.8858 and MCC from 0.5919 to 0.6358, with positive gains across all reported metrics, indicating that it does not simply memorize frequent scaffolds. Target-wise few-shot adaptation evaluates initialization quality rather than proposing a general meta-learning algorithm. For each held-out target, we adapt on a balanced support set with K
+
+positive and K negative examples and evaluate on the remaining labeled query rows. Across K = 2 ,
+
+K = 4 , and K = 8 , CTP improves every reported metric; the largest fixed-threshold gain appears at K = 2 in MCC, increasing from 0.1263 to 0.3521. Because changing K changes the remaining query set, the three settings should be read as separate adaptation protocols rather than a monotonic learning curve. Overall, label-missing molecule–target–E3 records provide useful supervision beyond the main benchmark. The benefit is stable on the official split and remains positive in the reported scaffold and few-shot settings; target–E3 group holdouts show a positive mean AUROC difference together with substantial split-to-split variation. 
+
+## 5 Conclusion and Limitations 
+
+We introduced DegradeQuery, a tuple-conditioned framework that uses label-missing PROTAC records through counterfactual tuple pretraining rather than activity pseudo-labeling. Under the official PROTAC-8K split used by DegradeMaster, DegradeQuery achieves the highest reported AUROC and accuracy among the compared methods without teacher models, distillation, or ensem-bles. Five-seed paired evaluation, unlabeled-only pretraining, component analysis, and ESM2-650M integration jointly establish label-missing tuple context as a useful and reusable pretraining signal. This study remains retrospective and benchmark-limited. Recorded tuples may encode database, publication, and medicinal-chemistry selection biases, and sampled counterfactuals may include untested but viable combinations. A shuffled-pair control does not isolate the semantics of the observed target–E3 pairing as the unique source of the gain, while repeated target–E3 holdouts reveal substantial context-dependent variation. Cross-source evaluation is further complicated by compound and target overlap, incompatible endpoint conventions, and label shift. DegradeQuery should therefore be viewed as a data-driven context-aware predictor rather than a mechanism-aware model of ternary-complex geometry, ubiquitination, permeability, E3 expression, or cell-line-specific biology. Future work should combine harder biologically informed counterfactuals with harmonized external benchmarks and prospective validation. 10 References 
+
+[1] Kathleen M Sakamoto, Kyung B Kim, Akiko Kumagai, Frank Mercurio, Craig M Crews, and Raymond J Deshaies. Protacs: Chimeric molecules that target proteins to the skp1–cullin–f box complex for ubiquitination and degradation. Proceedings of the National Academy of Sciences ,98(15):8554–8559, 2001. [2] Ashton C Lai and Craig M Crews. Induced protein degradation: an emerging drug discovery paradigm. Nature reviews Drug discovery , 16(2):101–114, 2017. [3] George M Burslem and Craig M Crews. Proteolysis-targeting chimeras as therapeutics and tools for biological discovery. Cell , 181(1):102–114, 2020. [4] Miklós Békés, David R Langley, and Craig M Crews. Protac targeted protein degraders: the past is prologue. Nature reviews Drug discovery , 21(3):181–200, 2022. [5] Daniel P Bondeson, Alina Mares, Ian ED Smith, Eunhwa Ko, Sebastien Campos, Afjal H Miah, Katie E Mulholland, Natasha Routly, Dennis L Buckley, Jeffrey L Gustafson, et al. Catalytic in vivo protein knockdown by small-molecule protacs. Nature chemical biology , 11(8):611–617, 2015. [6] Georg E Winter, Dennis L Buckley, Joshiawa Paulk, Justin M Roberts, Amanda Souza, Sirano Dhe-Paganon, and James E Bradner. Phthalimide conjugation as a strategy for in vivo target protein degradation. Science , 348(6241):1376–1381, 2015. [7] Jing Lu, Yimin Qian, Martha Altieri, Hanqing Dong, Jing Wang, Kanak Raina, John Hines, James D Winkler, Andrew P Crew, Kevin Coleman, et al. Hijacking the e3 ubiquitin ligase cereblon to efficiently target brd4. Chemistry & biology , 22(6):755–763, 2015. [8] Matthieu Schapira, Matthew F Calabrese, Alex N Bullock, and Craig M Crews. Targeted protein degradation: expanding the toolbox. Nature reviews Drug discovery , 18(12):949–963, 2019. [9] Gaoqi Weng, Chao Shen, Dongsheng Cao, Junbo Gao, Xiaowu Dong, Qiaojun He, Bo Yang, Dan Li, Jian Wu, and Tingjun Hou. Protac-db: an online database of protacs. Nucleic acids research , 49(D1):D1381–D1387, 2021. [10] Gaoqi Weng, Xuanyan Cai, Dongsheng Cao, Hongyan Du, Chao Shen, Yafeng Deng, Qiaojun He, Bo Yang, Dan Li, and Tingjun Hou. Protac-db 2.0: an updated database of protacs. Nucleic acids research , 51(D1):D1367–D1372, 2023. [11] Hong Cai, Gengyuan Yao, Yulong Shi, Tianyi Zhang, and Yuanjia Hu. Protac-patentdb: A protac patent compound dataset. Scientific Data , 12(1):1840, 2025. [12] Jingxuan Ge, Shimeng Li, Gaoqi Weng, Huating Wang, Meijing Fang, Huiyong Sun, Yafeng Deng, Chang-Yu Hsieh, Dan Li, and Tingjun Hou. Protac-db 3.0: an updated database of protacs with extended pharmacokinetic parameters. Nucleic acids research , 53(D1):D1510–D1515, 2025. [13] Xiao Wang, Zhiyao Zhuang, Chengwei Zhang, Bowen Zhang, Wei Zhan, Yifan Wang, Zhaojuan Liu, Shanwen Yuan, Wenjia Niu, Qi He, et al. Molgluedb: an online database of molecular glues. Nucleic Acids Research , 54(D1):D1510–D1518, 2026. [14] Jintao Zhu, Yiyan Liao, Haoyu Lin, Juan Xie, Zhichao Deng, Jinyu Han, Zhen Zhang, Jinchuan Xiao, Zhiyao Wang, Shuaipeng Zhang, et al. Mgtbind: a comprehensive database of molecular glue ternary interactome. Nucleic Acids Research , 54(D1):D1500–D1509, 2026. [15] Fenglei Li, Qiaoyu Hu, Xianglei Zhang, Renhong Sun, Zhuanghua Liu, Sanan Wu, Siyuan Tian, Xinyue Ma, Zhizhuo Dai, Xiaobao Yang, et al. Deepprotacs is a deep learning-based targeted degradation predictor for protacs. Nature communications , 13(1):7133, 2022. [16] Stefano Ribes, Eva Nittinger, Christian Tyrchan, and Rocío Mercado. Modeling protac degra-dation activity with machine learning. Artificial Intelligence in the Life Sciences , 6:100104, 2024. 11 [17] Zhenglu Chen, Chunbin Gu, Shuoyan Tan, Xiaorui Wang, Yuquan Li, Mutian He, Ruiqiang Lu, Shijia Sun, Chang-Yu Hsieh, Xiaojun Yao, et al. Interpretable protac degradation prediction with structure-informed deep ternary attention framework. Advanced Science , 12(47):e08138, 2025. [18] Jie Liu, Michael J Roy, Luke Isbel, and Fuyi Li. Accurate protac-targeted degradation prediction with degrademaster. Bioinformatics , 41(Supplement_1):i342–i351, 2025. [19] Fanglei Xue, Meihan Zhang, Shuqi Li, Xinyu Gao, James A Wohlschlegel, Wenbing Huang, Yi Yang, and Weixian Deng. Se (3)-equivariant ternary complex prediction towards target protein degradation. Nature Communications , 16(1):5514, 2025. [20] Josh Abramson, Jonas Adler, Jack Dunger, Richard Evans, Tim Green, Alexander Pritzel, Olaf Ronneberger, Lindsay Willmore, Andrew J Ballard, Joshua Bambrick, et al. Accurate structure prediction of biomolecular interactions with alphafold 3. Nature , 630(8016):493–500, 2024. [21] Aaron van den Oord, Yazhe Li, and Oriol Vinyals. Representation learning with contrastive predictive coding. arXiv preprint arXiv:1807.03748 , 2018. [22] Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton. A simple framework for contrastive learning of visual representations. In International conference on machine learning , pages 1597–1607. PmLR, 2020. [23] Yuning You, Tianlong Chen, Yongduo Sui, Ting Chen, Zhangyang Wang, and Yang Shen. Graph contrastive learning with augmentations. Advances in neural information processing systems , 33:5812–5823, 2020. [24] Yuyang Wang, Jianren Wang, Zhonglin Cao, and Amir Barati Farimani. Molecular contrastive learning of representations via graph neural networks. Nature Machine Intelligence , 4(3): 279–287, 2022. [25] Megan Stanley, John F Bronskill, Krzysztof Maziarz, Hubert Misztela, Jessica Lanini, Marwin Segler, Nadine Schneider, and Marc Brockschmidt. Fs-mol: A few-shot learning dataset of molecules. In Thirty-fifth Conference on Neural Information Processing Systems Datasets and Benchmarks Track (Round 2) , 2021. [26] Yaqing Wang, Abulikemu Abuduweili, Quanming Yao, and Dejing Dou. Property-aware relation networks for few-shot molecular property prediction. Advances in Neural Information Processing Systems , 34:17441–17454, 2021. [27] Johannes Schimunek, Philipp Seidl, Lukas Friedrich, Daniel Kuhn, Friedrich Rippmann, Sepp Hochreiter, and Günter Klambauer. Context-enriched molecule representations improve few-shot drug discovery. arXiv preprint arXiv:2305.09481 , 2023. [28] Tsung-Yi Lin, Priya Goyal, Ross Girshick, Kaiming He, and Piotr Dollár. Focal loss for dense object detection. In Proceedings of the IEEE international conference on computer vision ,pages 2980–2988, 2017. 12 A Technical Appendices and Supplementary Material 
+
+A.1 Dataset, Labels, and Split Protocol Dataset summary. Table 5 summarizes the normalized PROTAC-8K data used in all experiments. The dataset is label-sparse but tuple-rich: only 1,502 of 8,636 records have binary degradation labels, whereas molecule, target, and E3 identifiers are available for every record. This property motivates the tuple-level pretraining objective used by DegradeQuery-CTP. Table 5: Summary of the normalized PROTAC-8K dataset.           
+
+> Item Count Total molecule–target–E3 records 8,636 Labeled records 1,502 Unlabeled records 7,134 Unique canonical SMILES 5,656 Unique targets 332 Unique E3 ligases 16 Unique target–E3 pairs 563 Rows with molecule, target, and E3 identifiers 8,636 Molecule–target–E3 identifier coverage 100%
+
+Binary label definition. We use the PROTAC-8K benchmark binary label without introducing any additional relabeling threshold. The label y = 1 denotes active/high-degradation and y = 0 denotes inactive/low-degradation under the benchmark preprocessing. The decision threshold δ = 0 .5 is used only to convert model probabilities into binary predictions for threshold-dependent metrics such as accuracy, F1, MCC, specificity, and balanced accuracy. Table 6: Class balance of the labeled official PROTAC-8K split used for supervised fine-tuning and benchmark evaluation.                 
+
+> Split Active/high (y= 1) Inactive/low (y= 0) Total Training labeled split 469 733 1,202 Test labeled split 108 192 300 Total labeled records 577 925 1,502
+
+Split-specific exclusion policy. All experiments are split-specific. Test or query rows are never used for tuple pretraining, supervised fine-tuning, model selection, or threshold tuning. For DegradeQuery-CTP, tuple pretraining is restricted to train-side molecule–target–E3 tuples only. For holdout ex-periments, held-out records are removed from both tuple pretraining and supervised training. For few-shot adaptation, support rows are used only for adaptation and query rows are used only for evaluation. 
+
+Leakage audit. Table 8 reports the leakage audit used for all split-specific experiments. There is no row-level, tuple-level, negative-sampling, query-set, model-selection, threshold-tuning, or pseudo-label leakage. In particular, exact test/query molecule–target–E3 tuples do not appear in the train-side pretraining tuple set, and the pretraining stage never sees exact test/query tuple identities. 
+
+A.2 Model and Pretraining Details Shared architecture across Sup and CTP. DegradeQuery-Sup and DegradeQuery-CTP use the same tuple-conditioned architecture, the same protein feature pipeline, the same molecular feature pipeline, the same supervised loss, the same labeled training split, the same model-selection rule, and the same fixed decision threshold. The only difference is that DegradeQuery-CTP initializes the encoder from counterfactual tuple pretraining before supervised fine-tuning, whereas DegradeQuery-Sup is trained only with labeled degradation data. 13 Table 7: Split-specific training and evaluation policy. “Train-side tuples” include labeled and unlabeled rows available within the corresponding training split. 
+
+Setting Tuple pretraining Supervised fine-tuning / adaptation Evaluation-only rows PROTAC-8K benchmark Train-side molecule– target–E3 tuples only Labeled training rows only Official test rows Target–E3 group holdout Train-side tuples excluding held-out target–E3 pairs Labeled training rows ex-cluding held-out target– E3 pairs Held-out target– E3 pair rows Scaffold holdout Train-side tuples excluding held-out scaffold groups Labeled training rows ex-cluding held-out scaffold groups Held-out scaffold rows Target-wise few-shot Base train-side tuples only; query rows excluded Balanced support rows with K positives and K
+
+negatives per held-out tar-get Remaining la-beled query rows for each held-out target 
+
+Table 8: Leakage audit for tuple-level pretraining and downstream evaluation. 
+
+Audit item Count Test/query rows used in tuple pretraining 0Test/query rows used in supervised fine-tuning 0Test/query rows used for model selection 0Test/query rows used for threshold tuning 0Exact test/query tuples present in train-side pretraining tuples 0Exact test/query tuple identities seen during pretraining 0Held-out target–E3 pairs sampled as negatives 0Observed train-side tuples sampled as counterfactual negatives 0Few-shot query rows used during adaptation 0Pseudo-labels assigned to unlabeled records 0Pseudo-labels assigned to test/query records 0
+
+Table 9: Model components used by DegradeQuery. 
+
+Component Description Molecule encoder fm Three residual message-passing layers over 15-dimensional atom features plus a 2,048-bit Morgan fingerprint (radius 2). Both branches are projected to 256 dimensions, summed, and layer-normalized. Protein encoder fp Maps 150 sequence features to 256 dimensions: amino-acid composi-tion, sequence-length and unknown-residue features, and 128 hashed di-/tri-peptide counts. The encoder is shared, while target and E3 embeddings remain separate. Tuple fusion module ϕθ Concatenates molecule, target, and E3 embeddings; their three pair-wise products; and the absolute target–E3 difference before projection. Assay-aware module ψθ Adds the available cell-line embedding for downstream prediction; assay context is not used by the tuple pretraining objective. Compatibility scoring head qθ Produces the tuple plausibility score sθ (m, t, e ) during counterfactual tuple pretraining. Supervised classifier Predicts the benchmark binary active/high versus inactive/low degra-dation label after fine-tuning. 
+
+Counterfactual tuple construction. For each observed train-side tuple u+ 
+
+> i
+
+= ( mi, t i, e i), the pretraining sampler constructs counterfactual tuples by replacing the target, the E3 ligase, or both. The mixed replacement setting uses all three mismatch types and corresponds to the full counterfactual tuple pretraining objective used by DegradeQuery-CTP. 14 Table 10: Counterfactual tuple construction used in tuple pretraining. 
+
+Tuple type Construction Observed tuple (mi, t i, e i) from the train-side tuple set. Target replacement (mi, ˜t, e i), where ˜t̸ = ti.E3 replacement (mi, t i, ˜e), where ˜e̸ = ei.Joint target–E3 replacement (mi, ˜t, ˜e), where ˜t̸ = ti and ˜e̸ = ei.Mixed replacement Union of target-only, E3-only, and joint target–E3 replacements. Sampler rejection rules Reject exact observed train-side tuples, exact test/query tuples, and held-out target–E3 pairs in the corresponding holdout setting. 
+
+No pseudo-labeling. Unlabeled records are used only through their observed molecule–target–E3 tuple structure. No degradation pseudo-label is assigned to any unlabeled record. No teacher model, distillation procedure, or ensemble is used in either pretraining or fine-tuning. Table 11: Counterfactual tuple pretraining configuration. 
+
+Item Value Optimizer AdamW Learning rate 3 × 10 −4
+
+Weight decay 1 × 10 −4
+
+Batch size 64 Pretraining epochs 60 Counterfactual samples per observed tuple 3Tuple temperature τtuple 0.1 Molecule temperature τmol 0.1 Tuple-loss coefficient λtuple 1.0 Molecule-loss coefficient λmol 0.1 Pretraining rows, full CTP Train-side labeled and label-missing records Pretraining rows, unlabeled-only CTP 7,134 label-missing records; zero labeled records 
+
+A.3 Fine-Tuning Configuration 
+
+Table 12 gives the supervised fine-tuning configuration used for both DegradeQuery-Sup and DegradeQuery-CTP. The class weights are computed automatically from the labeled training split class frequency. Table 12: Supervised fine-tuning configuration. 
+
+Item Value Optimizer AdamW Learning rate 1 × 10 −4
+
+Weight decay 1 × 10 −4
+
+Batch size 64 Fine-tuning epochs Up to 120 Focal loss γ 1.0 Class weights αy Auto; computed from the labeled training split class frequency. Offi-cial split: α1 = 0 .6098 , α0 = 0 .3902 .Model selection Train-side validation only; official test labels are excluded Decision threshold 0.5 Seeds Five for official reliability; three for component and ESM2 analyses 
+
+We will publicly release the complete training and evaluation code, configuration files, processed split files, fixed split definitions, and commands required to reproduce the reported results. 
+
+A.4 Supplementary Results Five-seed reliability and unlabeled-only control. Table 14 reports the complete official-split comparison used in Section 4.3. All three methods use the same labeled fine-tuning rows and test set. 15 Table 13: Reproducibility settings shared by the main experiments. 
+
+Item Setting Random seeds 1–5 for official reliability; 1–3 for component and ESM2 analyses Reported values Mean ± standard deviation; paired 95% confidence intervals where applicable Threshold-dependent metrics Fixed threshold 0.5 Calibration Raw probabilities; no post-hoc calibration Unlabeled usage in CTP Tuple pretraining only Unlabeled usage in Sup None Teacher models None Distillation None Model ensembles None Pseudo-labeling None Test/query participation in training None 
+
+Full CTP uses all available train-side tuples during pretraining, whereas unlabeled-only CTP removes every labeled row from pretraining. Table 14: Official-split results over five paired seeds. Values are mean ± standard deviation. Confi-dence intervals are for paired differences. Lower is better for Brier score and expected calibration error (ECE); higher is better otherwise.                                             
+
+> Metric Sup Full CTP Unlabeled only Accuracy 0.7840 ±.0072 0.8233 ±.0058 0.8267 ±.0097 AUROC 0.8777 ±.0031 0.8996 ±.0039 0.9007 ±.0032 AUPRC 0.7925 ±.0118 0.8403 ±.0059 0.8405 ±.0034 MCC 0.5555 ±.0143 0.6209 ±.0123 0.6330 ±.0209 Bal. accuracy 0.7863 ±.0072 0.8134 ±.0063 0.8220 ±.0109 Brier 0.1556 ±.0026 0.1361 ±.0043 0.1341 ±.0037 ECE 0.1253 ±.0098 0.1029 ±.0090 0.1024 ±.0115 Metric Unlabeled −Sup Unlabeled −Full Accuracy +.0427 [.0301, .0552] +.0033 [-.0122, .0188] AUROC +.0230 [.0173, .0287] +.0011 [-.0064, .0085] AUPRC +.0480 [.0320, .0640] +.0002 [-.0097, .0101] MCC +.0775 [.0492, .1057] +.0121 [-.0227, .0468] Bal. accuracy +.0358 [.0208, .0507] +.0087 [-.0100, .0273] Brier -.0215 [-.0261, -.0169] -.0019 [-.0104, .0065] ECE -.0229 [-.0394, -.0065] -.0005 [-.0125, .0114]
+
+Counterfactual construction. Table 15 compares six sampling policies under the same three-seed analysis. Every tested policy yields an AUROC between 0.8932 and 0.9088, so the conclusion does not depend on one precise replacement mixture. Table 15: Counterfactual-sampling analysis on the official split (three seeds). Mixed replacement draws target-only, E3-only, and joint replacements. 
+
+Sampling policy Accuracy AUROC AUPRC MCC ECE E3 only 0.8300 0.8971 0.8341 0.6421 0.1065 Frequency matched 0.8200 0.8932 0.8145 0.6201 0.1098 Full mixed 0.8378 0.9054 0.8492 0.6523 0.0918 Hard mixed 0.8267 0.8977 0.8240 0.6345 0.1008 Joint target–E3 only 0.8444 0.9086 0.8499 0.6677 0.1030 Target only 0.8289 0.9088 0.8396 0.6377 0.0954 
+
+Hyperparameter sensitivity. The principal result is stable over the tested tuple temperature, molecule temperature, and molecule-loss weight ranges (Table 16). Table 16: Pretraining sensitivity on the official split (three seeds per setting). The default setting is 
+
+τtuple = τmol = 0 .1 and λmol = 0 .1.
+
+Parameter Values Corresponding AUROC Range 
+
+τtuple 0.05 / 0.10 / 0.20 0.9017 / 0.8991 / 0.9010 0.0026 
+
+τmol 0.05 / 0.10 / 0.20 0.9011 / 0.8991 / 0.9001 0.0020 
+
+λmol 0.05 / 0.10 / 0.20 / 0.50 0.8994 / 0.8991 / 0.9041 / 0.9017 0.0050 
+
+16 ESM2-650M integration. For the frozen variants, mean-pooled ESM2-650M embeddings supply the target and E3 representations and remain fixed while the DegradeQuery tuple predictor is trained. The supervised fine-tuning reference unfreezes the final ESM2 layer and its final layer normalization, uses BF16, a physical batch size of 2 with 16 gradient-accumulation steps, a maximum sequence length of 512, AdamW with learning rate 10 −5, and up to 10 epochs. It has 21.45M trainable ESM2 parameters. All variants retain the degrader input and role-conditioned tuple fusion. Table 17: ESM2-650M comparison on the official split (three seeds, mean ± standard deviation).             
+
+> Tuple predictor Trainable ESM2 parameters AUROC Accuracy DegradeQuery-Sup, frozen ESM2 00.8863 ±0.0010 0.7933 ±0.0067 DegradeQuery-Sup, final-layer FT 21.45M 0.8907 ±0.0034 0.8144 ±0.0150 DegradeQuery-CTP, frozen ESM2 00.9032 ±0.0020 0.8322 ±0.0107
+
+Repeated target–E3 group holdouts. Each split holds out complete target–E3 groups until approx-imately 20% of labeled rows are assigned to test; those groups are excluded from both pretraining and supervised training. Table 18 shows substantial variability across the ten independently constructed splits. Table 18: Repeated target–E3 group holdout results over ten splits. The paired difference is CTP −
+
+Sup, except for Brier score and ECE where negative values favor CTP.                             
+
+> Metric Sup mean ±SD CTP mean ±SD Paired difference (95% CI) Accuracy 0.6777 ±0.0325 0.6717 ±0.0601 -0.0060 [-0.0400, 0.0280] AUROC 0.6769 ±0.0906 0.7064 ±0.1027 +0.0295 [-0.0219, 0.0810] AUPRC 0.5964 ±0.0915 0.6110 ±0.1191 +0.0146 [-0.0561, 0.0852] MCC 0.2810 ±0.0877 0.2947 ±0.1361 +0.0138 [-0.0580, 0.0855] Balanced accuracy 0.6235 ±0.0461 0.6362 ±0.0663 +0.0127 [-0.0239, 0.0494] Brier score 0.2826 ±0.0378 0.2725 ±0.0507 -0.0101 [-0.0432, 0.0230] ECE 0.2727 ±0.0351 0.2498 ±0.0504 -0.0228 [-0.0595, 0.0138]
+
+The CTP–Sup AUROC difference is positive in five of ten splits; the corresponding fractions are 40% for accuracy and AUPRC, 40% for MCC, and 50% for balanced accuracy. These data support a positive average AUROC trend without establishing uniform improvement over target–E3 contexts. 
+
+Relational-null control. To assess sensitivity to the exact observed target–E3 pairing, we shuffle target–E3 pair assignments during pretraining while preserving the marginal record structure. Table 19 shows no observed-tuple advantage over this control. The result narrows the interpretation: the current experiments identify an effective tuple-conditioned pretraining procedure, but do not isolate observed pair semantics as its unique source. Table 19: Relational-null control over three paired seeds. The difference is shuffled-pair − observed-tuple CTP.                   
+
+> Metric Observed tuples Shuffled target–E3 pairs Paired difference (95% CI) Accuracy 0.8256 ±0.0069 0.8411 ±0.0051 +0.0156 [-0.0135, 0.0446] AUROC 0.8991 ±0.0050 0.9021 ±0.0082 +0.0029 [-0.0258, 0.0317] AUPRC 0.8386 ±0.0071 0.8336 ±0.0052 -0.0050 [-0.0312, 0.0212] MCC 0.6251 ±0.0154 0.6693 ±0.0111 +0.0442 [-0.0165, 0.1049] ECE 0.1091 ±0.0036 0.0903 ±0.0059 -0.0188 [-0.0358, -0.0019]
+
+Calibration control. Temperature scaling is fitted exclusively on train-side calibration data; Ta-ble 20 reports ECE and negative log-likelihood (NLL). Scaling improves both models and narrows the calibration gap, while the control does not support a general claim that CTP is intrinsically better calibrated. 17 Table 20: Post-hoc temperature-scaling control over three seeds.             
+
+> Method Raw ECE Scaled ECE Raw NLL Scaled NLL Sup 0.0703 0.0626 0.4300 0.4237 CTP 0.0994 0.0772 0.4671 0.4357
+
+External-cohort and endpoint audit. The available PROTAC-Bench release incorporates PROTAC-DB 3.0 and shares 2,461 canonical SMILES and 156 targets with the PROTAC-8K re-sources, so it is not a source-independent external benchmark. Its released benchmark table contains no sample-level DC 50 or Dmax values, preventing matched re-binarization under alternative activity thresholds. After removing overlapping canonical SMILES, a 7,127-row cohort remains, but its endpoint conventions, source composition, and label distribution differ from PROTAC-8K. On this stress test, Sup and CTP obtain AUROCs of 0.4799 and 0.4574, respectively. We therefore treat this result as evidence of cross-source dataset shift and as motivation for a future deduplicated, endpoint-harmonized benchmark, rather than as an independent validation result. 
+
+A.5 Few-Shot Adaptation Protocol 
+
+Target-wise few-shot adaptation evaluates whether tuple pretraining provides a better initialization for target-conditioned degradation prediction under limited target-specific supervision. For each held-out target, the support set contains K positive and K negative labeled examples. The query set consists of the remaining labeled rows for that target and is used only for evaluation. The K = 2 , K = 4 , and 
+
+K = 8 settings are treated as separate adaptation protocols because the query set changes with K.Table 21: Target-wise few-shot adaptation protocol.             
+
+> Setting Positive support Negative support Query rows 2-shot 2 per held-out target 2 per held-out target Remaining labeled rows for the held-out target; evaluation only 4-shot 4 per held-out target 4 per held-out target Remaining labeled rows for the held-out target; evaluation only 8-shot 8 per held-out target 8 per held-out target Remaining labeled rows for the held-out target; evaluation only
+
+A.6 Evaluation Metrics 
+
+AUROC is the primary ranking metric. Accuracy is reported for compatibility with the PROTAC-8K benchmark, and AUPRC, MCC, balanced accuracy, and calibration-related metrics are used as secondary diagnostics. For threshold-dependent metrics, predictions are binarized using the fixed threshold δ = 0 .5:
+
+ˆyi = I[ˆ pi ≥ 0.5] . (16) Accuracy is computed as 
+
+Accuracy = TP + TN TP + TN + FP + FN . (17) Balanced accuracy is computed as the average of sensitivity and specificity: 
+
+BalAcc = 12
+
+ TP TP + FN + TN TN + FP 
+
+
+
+. (18) MCC is computed as 
+
+MCC = TPTN − FPFN 
+
+p(TP + FP)(TP + FN)(TN + FP)(TN + FN) . (19) 18 The Brier score is 
+
+Brier = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+(ˆ pi − yi)2. (20) The negative log-likelihood is 
+
+NLL = − 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+[yi log ˆ pi + (1 − yi) log(1 − ˆpi)] . (21) Expected calibration error is computed by partitioning predictions into confidence bins {I b}Bb=1 :
+
+ECE = 
+
+> B
+
+X
+
+> b=1
+
+|I b|
+
+n |acc( Ib) − conf( Ib)| . (22) 
+
+A.7 Result Reporting 
+
+The appendix reports the complete supplementary analyses summarized in the main text, including their statistical units, uncertainty estimates, and protocol boundaries. Tables 14–20 distinguish seed replication, independently constructed group holdouts, and post-hoc calibration controls. All results use the same label preprocessing and metric implementation; threshold-dependent metrics use the fixed threshold of 0.5 unless a table explicitly describes post-hoc calibration. 19

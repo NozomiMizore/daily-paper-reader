@@ -6,36 +6,38 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-11
-- 运行时间：2026-08-11 21:23:51 UTC
+- 最新运行日期：2026-08-12
+- 运行时间：2026-08-12 21:20:45 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：2
-- 速读区：2
+- 本次总论文数：6
+- 精读区：3
+- 速读区：3
 
 ### 今日简报（AI）
-今日聚焦4篇论文，核心围绕虚拟细胞与因果推断展开，其中2篇精读均获高分（最高9.0/10）。
-
-最值得关注“因果知识注入虚拟细胞”与“因果状态空间模型估计个体治疗效应”，两者共同指向用因果建模提升细胞与医学预测的可靠性。
-
-下一步可优先精读这2篇高分论文，理解因果框架如何嵌入虚拟细胞与纵向治疗效应估计，便于跟进前沿方法。
-- 详情：[/202608/11/README](/202608/11/README)
+今日共读6篇论文，其中3篇精读，重点关注AI+生物医药领域。最值得关注的是基于反事实元组的PROTAC降解预测框架（9.0分），以及结合RNA速度推断基因调控网络的方法（8.0分）。建议优先精读这两篇，理解其模型设计与应用场景；速读可按兴趣浏览不确定性建模相关文章。
+- 详情：[/202608/12/README](/202608/12/README)
 
 ### 精读区论文标签
-1. [Human-Guided Causal Knowledge Injection for Virtual Cells](/202608/11/2608.08430v1-human-guided-causal-knowledge-injection-for-virtual-cells)  
+1. [DegradeQuery: Counterfactual Tuple Pretraining for Context-Aware PROTAC Degradation Prediction](/202608/12/2608.10595v1-degradequery-counterfactual-tuple-pretraining-for-context-aware-protac-degradation-prediction)  
    标签：评分：9.0/10、query:virtual-cell
-   evidence：面向虚拟细胞的人类引导因果知识注入，提升可解释性
-2. [Causal State-Space Model for Causal Inference: Estimating Longitudinal Individual Treatment Effects](/202608/11/2608.08288v1-causal-state-space-model-for-causal-inference-estimating-longitudinal-individual-treatment-effects)  
+   evidence：通过反事实元组预训练预测PROTAC诱导的蛋白质降解，属于药物扰动响应预测
+2. [Decoding Gene Regulatory Networks from Single-Cell RNA Velocity](/202608/12/2608.09722v1-decoding-gene-regulatory-networks-from-single-cell-rna-velocity)  
    标签：评分：8.0/10、query:virtual-cell
-   evidence：用于估计纵向个体治疗效应的因果状态空间深度学习
+   evidence：从单细胞RNA速度重建基因调控网络，并证明受控扰动可恢复可辨识性，与扰动建模直接相关
+3. [FlowGRN+: Improving Gene Regulatory Network Inference by Spline Fitting and Manifold Projection in Conditional Flow Matching (Technical Report)](/202608/12/2608.10407v1-flowgrn-improving-gene-regulatory-network-inference-by-spline-fitting-and-manifold-projection-in-conditional-flow-matching-technical-report)  
+   标签：评分：8.0/10、query:virtual-cell
+   evidence：利用条件流匹配学习单细胞动态并推断基因调控网络，是虚拟细胞建模的关键技术
 
 ### 速读区论文标签
-1. [JUMP-lite: Compact, reproducible benchmarking of cell representations](/202608/11/2608.07632v1-jump-lite-compact-reproducible-benchmarking-of-cell-representations)  
+1. [Fisher8: Stabilizing Neural Heteroscedastic Regression via Output-Layer Fisher Geometry](/202608/12/2608.10374v1-fisher8-stabilizing-neural-heteroscedastic-regression-via-output-layer-fisher-geometry)  
+   标签：评分：7.0/10、query:virtual-cell
+   evidence：面向异方差回归的深度学习稳定化方法，适用于不确定性感知的扰动响应预测
+2. [FlowGRN: Scalable and Dropout-Robust Gene Regulatory Network Inference via Flow Matching-Based Trajectory Reconstruction (Technical Report)](/202608/12/2608.09798v1-flowgrn-scalable-and-dropout-robust-gene-regulatory-network-inference-via-flow-matching-based-trajectory-reconstruction-technical-report)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：基于扰动数据集的紧凑细胞表征基准，支持对扰动模型的系统评估
-2. [FlowGRN: Scalable and Dropout-Robust Gene Regulatory Network Inference via Flow Matching-Based Trajectory Reconstruction (Technical Report)](/202608/11/2608.09798v1-flowgrn-scalable-and-dropout-robust-gene-regulatory-network-inference-via-flow-matching-based-trajectory-reconstruction-technical-report)  
+   evidence：从单细胞RNA测序推断基因调控网络，是建模细胞行为和扰动响应的关键环节
+3. [Uncertainty-Aware Deep Learning for Genomics Applications: Insights from an Empirical Study](/202608/12/2608.11054v1-uncertainty-aware-deep-learning-for-genomics-applications-insights-from-an-empirical-study)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：利用流匹配进行单细胞轨迹与调控网络推断，是虚拟细胞建模的构建模块
+   evidence：深度学习方法在单细胞基因组学中的不确定性量化
 
 
 <div class="dpr-home-promo-card">
