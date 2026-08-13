@@ -1,0 +1,1295 @@
+Title: Causal State-Space Model for Causal Inference: Estimating Longitudinal Individual Treatment Effects
+
+URL Source: https://arxiv.org/pdf/2608.08288v2
+
+Published Time: Thu, 13 Aug 2026 00:46:53 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Causal State-Space Model for Causal Inference: Estimating Longitudinal Individual Treatment Effects 
+
+## Abisoye Abidakun 1, Mingjun Zhong 1, Georgios Leontidis 2
+
+> 1
+
+Department of Computing Science, University of Aberdeen, Aberdeen, UK 
+
+> 2
+
+UiT The Arctic University of Norway a.abidakun.22@abdn.ac.uk, mingjun.zhong@abdn.ac.uk, georgios.leontidis@uit.no 
+
+Abstract 
+
+Estimating counterfactual outcomes over time from longitu-dinal observational data is central to clinical decision sup-port. Existing state-of-the-art methods rely on domain confu-sion : adversarial training that renders learned representations invariant to treatment assignment. Yet this invariance cre-ates a fundamental mutual information conflict , suppressing treatment-correlated covariate signals that are independently necessary for accurate outcome prediction. We formalise this tension by deriving a Jensen–Shannon divergence bound on the resulting counterfactual prediction error, and develop two complementary models to resolve it. First, CSSD (Causal State-Space model with Direct decoder ) adapts selective State Space Models with a parallel multi-step decoder that elimi-nates accumulated rollout error by producing all prediction horizons simultaneously in a single forward pass at O(T )
+
+encoder cost. Second, CSSPD (Causal State-Space model with Predictive regularisation and Direct decoder ) augments CSSD with Contrastive Predictive Coding (CPC) and Local Information Maximisation (LIM): CPC reinforces temporal predictability in the balancing representation, while LIM re-covers the local covariate information that domain confusion destroys. On MIMIC-III, CSSPD achieves lower counterfac-tual RMSE than the Causal Transformer at every horizon 
+
+τ ≥ 2, with gains growing from 0.02 (2-step) to 0.07 (6-step). On the Cancer Simulation benchmark across confound-ing strengths γ ∈ { 0, 1, 2, 3, 4}, CSSPD outperforms CT at γ ≤ 3 (margins 25.9%–37.0%), while CSSD achieves the lowest overall average RMSE (12.7% reduction over CT), con-firming the MI conflict analysis. To our knowledge, this is the first work to formalise the balancing–prediction MI conflict and propose a structured resolution through complementary predictive and information-theoretic training objectives. 
+
+## 1 Introduction 
+
+Estimating individualized treatment effects (ITEs) from longitudinal observational data is a central challenge in clinical decision support (Hernán and Robins 2020; Prosperi et al. 2020). Given a patient history Ht =(A1: t−1, Y 1: t−1, X 1: t−1) (i.e., treatments, outcomes, and co-variates), the goal is to estimate E[Yt+τ (¯ a) | Ht] — the ex-pected potential outcome under a hypothetical treatment se-quence ¯a — under time-dependent confounding , where treat-ment assignments correlate with both patient state and future outcomes (Robins 1986; Robins et al. 2000). Deep learning methods have made substantial progress; frameworks such as RMSN (Lim et al. 2018), CRN (Bica et al. 2020), G-Net (Li et al. 2021), and the Causal Transformer (CT) (Melnychuk et al. 2022a) each build on sequential models with domain confusion or reweighting to achieve treatment-invariant rep-resentations. Two structural limitations motivate the present work. Lim-itation 1 — The balancing-prediction tension. Domain confusion introduces an inherent mutual information conflict (formalised in the theory section). Suppressing the mutual information between the balancing representation (a learned entity encoding up to time t, containing covariates and out-come history) and treatment, i.e., I(BR t; At), forces the en-coder to discard features of Ht that are correlated with treat-ment At, but many such features, notably current vital signs 
+
+Xt, are also independently predictive of future outcomes 
+
+Yt+τ . Domain confusion therefore systematically removes the representational information the decoder needs, creating a bottleneck that limits counterfactual accuracy regardless of model capacity. Recent empirical analysis (Huang et al. 2024) confirms this covariate information loss in CRN and CT, corroborating the theoretical concern we formalise here. 
+
+Limitation 2 — Autoregressive rollout error. Standard multi-step decoders predict future outcomes one step at a time, feeding each prediction back as input for the next. This autoregressive rollout compounds errors geometrically: if a single-step prediction carries error ε, the τ -step prediction carries error O(ετ ) (Taieb and Atiya 2015). At the prediction horizons relevant to clinical decision support ( τ ≥ 2), this rollout error accumulates rapidly and limits counterfactual accuracy independently of representation quality. To address both limitations simultaneously, this paper de-velops CSSPD . Our target is to make multi-step-ahead coun-terfactual outcome prediction, that is, given Ht and a hy-pothetical future treatment sequence ¯at+1: t+τmax , we want to produce simultaneous estimates ˆYt+1 , . . . , ˆYt+τmax for all horizons in a single forward pass, without autoregressive roll-out. CSSPD introduces two core innovations: the encoder and the decoder. For the encoder , we adapt the selective State Space Models (Gu and Dao 2023) that process each input stream in O(T ) time while retaining the capacity to selectively integrate long-range history. This should be com-pared to the O(T 2) cost of CT (Melnychuk et al. (2022a)). A CausalGatedMixer fuses the treatment, outcome, and covariate streams through scalar gates whose initialisations arXiv:2608.08288v2 [cs.LG] 12 Aug 2026 encode the structural causal graph, producing a Balancing Representation ( BR t) that satisfies the backdoor criterion (Pearl 2009). A parallel multi-step decoder then produces all 
+
+τmax counterfactual predictions simultaneously, eliminating the O(ϵτ ) error accumulation of autoregressive rollout (Taieb and Atiya 2015). For the training objectives , CSSPD aug-ments domain confusion with two auxiliary regularisers that resolve the MI conflict - a CPC head that preserves temporal predictability in BR t, and a LIM head that recovers covari-ate information that domain confusion would otherwise sup-press, each targeting a distinct facet of the representational bottleneck without compromising treatment invariance. Our contributions are: 
+
+1. We proposed a causal state-space model with direct en-coder (CSSD) for causal inference - a selective SSM en-coder with a parallel multi-step decoder that produces τ
+
+counterfactual predictions in a single forward pass, elim-inating rollout error accumulation. 2. We further proposed a model named Causal State-Space model with Predictive regularisation and Direct decoder (CSSPD), which is a CSSD augmented with CPC and LIM objectives. This model resolves the MI conflict with-out sacrificing treatment invariance. 3. We formalised the balancing-prediction MI conflict and derived a Jensen–Shannon bound on the counterfactual prediction error induced by domain confusion. 4. We conducted empirical evaluation on the real-world data set MIMIC-III and the synthetic data set Cancer Simu-lation, showing CSSPD reduces counterfactual RMSE at all horizons τ ≥ 2 on MIMIC-III (growing margin 0.02– 0.07) and outperforms CT at γ ≤ 3 on Cancer Simulation (margins 25.9%–37.0%), with gains consistent with the MI conflict theory. 
+
+## 2 Problem Settings 
+
+For simplicity, we use the MIMIC-III data set to set up the problem, but this should apply to other longitudinal data in general. Let i index a patient with longitudinal record over t = 1 , . . . , T (i). At each step, the record contains p
+
+time-varying covariates X(i) 
+
+> t
+
+∈ Rp, binary treatment indi-cators A(i) 
+
+> t
+
+∈ { 0, 1}2, scalar outcome Y (i) 
+
+> t
+
+∈ R, and time-invariant baseline attributes S(i) ∈ Rq . The patient history is Ht = { ˆXt, ˆAt−1, ˆYt, S }, where ˆXt = ( X1, . . . , X t),
+
+ˆYt = ( Y1, . . . , Y t), ˆAt−1 = ( A1, . . . , A t−1). The counter-factual prediction task is: given Ht, estimate 
+
+EYt+τ (¯ a) | Ht
+
+, τ ∈ { 1, . . . , τ max }, (1) for hypothetical treatment sequences ¯a, under the potential outcome framework (Rubin 2005). Sequential ignorability and domain confusion are required for causal inference. 
+
+Sequential ignorability is defined as Yt(¯ a) ⊥⊥ At | Ht
+
+(Robins 1986). Under sequential ignorability, counterfactual outcomes are identifiable if positivity holds (i.e. P (At = a |
+
+Ht) > 0 for all treatment values a, ensuring every treatment is observed across all patient histories) and the balancing representation BR t = ϕ(Ht) satisfies the backdoor criterion (Pearl 2009). 
+
+Domain confusion is the adversarial mechanism used by Bica et al. (2020) to enforce treatment invariance in BR t,thereby satisfying both conditions above. The goal is to make treatment At unpredictable from BR t: if the representation carries no information about which treatment a patient re-ceived, it cannot be confounded by treatment selection. To achieve this, a discriminator D is trained to predict treatment from BR t, minimising the cross-entropy loss 
+
+LDC = −Et
+
+log p(At | BR t). (2) The encoder ϕ is trained adversarially to maximise the same loss, that is, to actively prevent D from succeeding. This is implemented via a gradient reversal layer (GRL) (Ganin et al. 2016), which negates the gradient signal flowing back to ϕ,making the effective encoder update −α LDC . The result is a representation BR t that is invariant to treatment assignment, satisfying the backdoor criterion. It is precisely this enforced invariance, however, that introduces the mutual information conflict we formalise in the theory section .
+
+## 3 Model Architecture 
+
+The proposed CSSPD architecture is shown in Figure 1. Three input streams; treatments ( ˆAt), outcomes ( ˆYt), and covariates ( ˆXt), are encoded by independent SSM layers and fused by a CausalGatedMixer . The resulting balancing representation BR t is fed to a parallel multi-step decoder and CPC/LIM regularisation heads that resolve the MI conflict introduced by domain confusion (theory section) .CSSPD combines two distinct modifications to the base encoder: a structural change to the treatment stream’s se-quence operator, and the CPC and LIM contrastive objec-tives. To quantify the independent contribution of each, we introduce two additional variants. CHSD (Causal Hybrid State-Space Decoder ) applies only the structural change, re-placing the treatment-stream SSM with the standard multi-head self-attention of Melnychuk et al. (2022a), giving the encoder lossless access to the full treatment history while re-taining SSMs for the outcome and covariate streams. CHSPD 
+
+(Causal Hybrid State-Space model with Predictive regular-isation and Direct decoder ) combines both modifications, augmenting CHSD with the CPC and LIM objectives from CSSPD with results details in the experiment section .
+
+The Input Encoding 
+
+Each stream at time step t is projected to Rdmodel via a stream-specific linear embedding (e.g., TrtEmb , OutEmb ,and VitEmb+StatEmb in Figure 1). We concatenate the 
+
+planned next treatment A∗ 
+
+> t+1
+
+(observed at time t as the clinician’s intended action for the next step) with the ac-tual current treatment At to inform the encoder of the in-tended treatment trajectory, and denote the concatenated matrix ˜At = [ At; A∗
+
+> t+1
+
+]. Let dmodel denote the common embedding dimension shared across all three streams, the Input Embed SSM O(T )                                       
+
+> At
+> Treatment
+> Yt
+> Outcome
+> Xt, S
+> Covariates
+> TrtEmb
+> a(0)
+> t=WA˜At+bA
+> OutEmb
+> y(0)
+> t=WY˜Yt+bY
+> VitEmb+StatEmb
+> x(0)
+> t=WX˜Xt+bX
+> Mamba SSM Mamba SSM Mamba SSM Causal Gated Mixer
+> SCM
+> gates
+> ˜at
+> ˜yt
+> ˜xt
+> BR t
+> Balancing
+> Repr. Domain Confusion
+> LDC
+> CPC Head LCPC
+> Parallel Multi-Step Decoder
+> gτ
+>  BR ⊥
+> t,TrtEnc(¯ at+1: t+τ)
+> BR ⊥
+> t
+> | {z }
+> patient state
+> ⊕TrtEnc
+> |{z }
+> do(¯ a)
+> TrtEnc  ¯at+1: t+τ
+> 
+> counterfactual intervention
+> LIM Head LLIM
+> suppress
+> I(BR t;At)
+> preserve
+> I(BR t;Ht+k)
+> CPC restores MI pred
+> BR ⊥
+> t(stop-grad)
+> ¯at+1: t+τ
+> detached
+> ˜xt
+> recover
+> I(BR t;Xt)
+> ˆYt+1 ,. . . , ˆYt+τ
+> Treatment Outcome Covariate Bal. Repr. Decoder CPC LIM Dom. Conf.
+> Solid →forward pass ·Dashed 99K gradient-blocked or gradient-reversed
+
+Figure 1: CSSPD architecture. Three streams ( At, Yt, Xt/S ) are embedded and passed through L independent Mamba SSM layers ( O(T )) to produce ˜at, ˜yt, ˜xt. A SCM-gated CausalGatedMixer (9) fuses them into the balancing representation BR t.
+
+Domain confusion (dashed red) suppresses I(BR t; At) via gradient reversal but inadvertently suppresses I(BR t; Ht+k) and 
+
+I(BR t; Xt). CPC (solid green) restores temporal MI I(BR t; Ht+k); LIM (solid orange) restores covariate MI I(BR t; Xt). The parallel decoder (10) receives two distinct inputs: a stop-gradient copy BR ⊥ 
+
+> t
+
+(dashed blue, left-entering) encoding patient state, and TrtEnc(¯ at+1: t+τ ) (solid black, bottom-entering) encoding the counterfactual intervention; together they produce all τmax 
+
+predictions simultaneously. CSSD omits the CPC and LIM heads. embeddings are: 
+
+TrtEmb: a(0)  
+
+> t
+
+= WA ˜At + bA, (3) 
+
+OutEmb: y(0)  
+
+> t
+
+= WY ˜Yt + bY , (4) 
+
+VitEmb+StatEmb: x(0)  
+
+> t
+
+= WX ˜Xt + bX , (5) where ˜Yt = [ Yt; Xt], ˜Xt = [ Xt; S], S is the static co-variate vector broadcast to every timestep, and WA ∈
+
+Rdmodel ×2, W Y ∈ Rdmodel ×(p+1) , W X ∈ Rdmodel ×(p+q)
+
+are learnable projection matrices and bA, b Y , b X ∈ Rdmodel 
+
+are learnable bias vectors. 
+
+The SSM Encoder (CausalMambaLayer) 
+
+Embeddings from (3)–(5) are passed independently through 
+
+L stacked CausalMambaLayer blocks, one per stream 
+
+u ∈ { A, Y, X }. Set s(0)  
+
+> t,A
+
+= a(0)  
+
+> t
+
+, s (0)  
+
+> t,Y
+
+= y(0)  
+
+> t
+
+, s (0)  
+
+> t,X
+
+= x(0)  
+
+> t
+
+.Each block implements a selective SSM (Gu and Dao 2023) with input-dependent transition matrices, applied identically to every stream u ∈ { A, Y, X }:
+
+h(l) 
+
+> t,u
+
+= ¯At
+
+
+
+s(l)
+
+> t,u
+
+
+
+h(l) 
+
+> t−1,u
+
++ ¯Bt
+
+
+
+s(l)
+
+> t,u
+
+
+
+s(l)
+
+> t,u
+
+, (6) 
+
+s(l+1)  
+
+> t,u
+
+= s(l) 
+
+> t,u
+
++ Ct
+
+
+
+s(l)
+
+> t,u
+
+
+
+h(l) 
+
+> t,u
+
++ D s (l)
+
+> t,u
+
+, (7) where ¯At, ¯Bt, C t are input-dependent matrices, D is a fixed scalar skip connection that lets the current input pass through directly, and (7) adds a residual connection. After L layers: 
+
+˜at = s(L) 
+
+> t,A
+
+, ˜yt = s(L) 
+
+> t,Y
+
+, ˜xt = s(L) 
+
+> t,X
+
+∈ Rdmodel . (8) 
+
+The Causal Gated Mixer 
+
+Given ˜at, ˜yt, ˜xt from (8), the CausalGatedMixer com-bines them via learned scalar gates whose initialisations en-code the structural causal model (SCM): 
+
+BR t = σ(gA→Y ) ˜ at ⊕ σ(gY →A) ˜ yt ⊕ ˜xt, (9) where gA→Y is initialised to 1 (σ(1) ≈ 0.73 , near-open, reflecting that treatment causally influences outcomes in the SCM) and gY →A is initialised to −3 (σ(−3) ≈ 0.05 , near-closed, reflecting that the reverse direction Y → A is not structurally causal). Gate initialisations for all streams are shown in Figure S1 of the Supplementary Material. All gates remain learnable throughout training.Here ⊕ denotes con-catenation followed by a linear projection W ∈ RdBR ×3dmodel ,producing BR t ∈ RdBR . The pre-mixer covariate embedding 
+
+˜xt is also fed (detached) to the LIM head to recover local co-variate information suppressed by domain confusion. 
+
+The Parallel Multi-Step Decoder 
+
+It is well known that autoregressive rollout accumulates errors as O(ϵτ ) with horizon (Taieb and Atiya 2015) when modelling longitudinal data. Instead, we propose the 
+
+ParallelMultiStepDecoder , which replaces autore-gressive rollout with τmax independent prediction heads, each conditioned on a stop-gradient copy of BR t and a hy-pothetical treatment-sequence embedding: 
+
+ˆYt+τ (¯ a) = gτ
+
+
+
+BR ⊥ 
+
+> t
+
+, TrtEnc(¯ at+1: t+τ )
+
+
+
+, τ = 1 , . . . , τ max ,
+
+(10) where BR ⊥ 
+
+> t
+
+= stop -grad(BR t), and TrtEnc(¯ at+1: t+τ ) is defined as a shared per-step MLP ψ : RdA → Rdtrt (Lin-ear – GELU – LayerNorm) applied independently to each fu-ture treatment step. At horizon τ , TrtEnc produces two embeddings: a cumulative term ehist  
+
+> τ
+
+= 1
+
+> τ
+
+Pτk=1 ψ(at+k),capturing the running treatment context up to step τ (e.g. pharmacokinetic accumulation), and a step-specific term 
+
+ecur  
+
+> τ
+
+= ψ(at+τ ), capturing the treatment at exactly step 
+
+τ . This two-component design resolves ordering ambigu-ity: sequences that share the same cumulative mean but differ in ordering (e.g. high-dose then none vs. none then high-dose) produce identical ehist yet distinct ecur , making TrtEnc the counterfactual input that separates different treat-ment regimes at inference time. Each gτ is an independent MLP so that short- and long-horizon predictions can learn different mappings; all heads share a common trunk but diverge at the final linear layer. Each head passes [BR ⊥ 
+
+> t
+
+; ehist  
+
+> τ
+
+; ecur  
+
+> τ
+
+] through a two-layer GELU trunk and produces ˆYt+τ . Because every head reads the same fixed BR ⊥ 
+
+> t
+
+, errors cannot accumulate across hori-zons as they do in autoregressive rollout. BR ⊥ 
+
+> t
+
+(the bal-anced representation) serves as a treatment-invariant con-founder summary satisfying the backdoor criterion, while 
+
+TrtEnc(¯ at+1: t+τ ) encodes the hypothetical intervention, supplying the do(¯ a) operator independently of the observed history. Together they implement the backdoor-adjusted es-timand: 
+
+EYt+τ (¯ a) ≈ gτ
+
+
+
+BR ⊥
+
+> t
+
+| {z } 
+
+> patient state
+
+, TrtEnc(¯ at+1: t+τ )
+
+| {z }
+
+> intervention
+
+
+
+. (11) Equation (11) makes a causal rather than predictive claim via the backdoor criterion: BR ⊥ 
+
+> t
+
+blocks confounding paths while TrtEnc(¯ at+1: t+τ ) encodes the hypothetical interven-tion do(¯ a) separately from the observed history. 
+
+Contrastive Predictive Coding (CPC) and Local Information Maximisation (LIM) Heads 
+
+Domain confusion drives I(BR t; At) → 0 but inadvertently suppresses I(BR t; Yt+τ ) (temporal predictive information) and I(BR t; Xt) (local covariate information), creating the MI conflict. CPC and LIM are targeted regularisers operating on disjoint pathways that restore these two quantities. 
+
+CPC. A CPCHead applies K linear predictors fk to BR t,each attempting to predict BR t+k via InfoNCE over in-batch negatives (van den Oord et al. 2018). InfoNCE lower-bounds 
+
+I(BR t; BR t+k), so maximising it forces BR t to retain tem-poral structure. The connection to I(BR t; Yt+τ ) — the quantity suppressed by domain confusion — follows from the Data Processing Inequality (DPI): for any determinis-tic function f , I(Z; f (X)) ≤ I(Z; X), since processing can only reduce information. Applying DPI twice: (i) since 
+
+BR t+k = ϕ(Ht+k) is a deterministic function of future history Ht+k, we have I(BR t; BR t+k) ≤ I(BR t; Ht+k);
+
+(ii) since Yt+τ is a component of Ht+k for k ≥ τ ,
+
+I(BR t; Yt+τ ) ≤ I(BR t; Ht+k). Both BR t+k and Yt+τ are therefore compressed views of the same underlying history; maximising I(BR t; BR t+k) prevents BR t from discarding temporal structure in Ht+k, which supports I(BR t; Yt+τ )
+
+and counteracts the domain confusion collapse. A LIM head maximises I(˜ xt; BR t) — a tractable proxy for I(Xt; BR t) — via InfoNCE, with ˜xt detached so gra-dients flow into the encoder only through BR t, recovering covariate information that CPC does not. 
+
+The Training Objective function of CSSD 
+
+The objective function of our proposed model, named Causal State-Space model with Direct decoder (CSSD), combines a primary output prediction loss, domain confusion, and the parallel multi-step decoder loss: 
+
+LCSSD = Lpred + α LDC + LMS . (12) Each of the loss function is defined as follows. The primary prediction loss is defined as: 
+
+Lpred = E
+
+h Yt+1 − GY (BR t, A t+1 )2i
+
+, (13) the domain confusion loss is defined in the equation 2, and the parallel multi-step decoder loss is defined as 
+
+LMS = λMS 
+
+> τmax
+
+X 
+
+> τ=1
+
+E
+
+h Yt+τ (¯ a) − ˆYt+τ (¯ a)2i
+
+. (14) Because no stop-gradient is applied, Lpred backpropagates through the encoder ϕ, directly training it to produce rep-resentations that minimise one-step factual prediction error, and it is distinct from LMS , which uses the stop-gradient copy BR ⊥ 
+
+> t
+
+and therefore does not train the encoder. α is the domain confusion weight annealed exponentially during training. 
+
+The Training Objective Functoin of CSSPD 
+
+We further augments CSSD with CPC and LIM, which re-sults in our another model, called Causal State-Space model with Predictive regularisation and Direct decoder (CSSPD). Firstly, the CPC loss is defined by using the InfoNCE: 
+
+LCPC = −
+
+> K
+
+X
+
+> k=1
+
+E
+
+"
+
+log exp( fk(BR t)⊤BR t+k)
+
+PNneg  
+
+> j=1
+
+exp( fk(BR t)⊤BR (j)
+
+> t+k
+
+)
+
+#
+
+,
+
+(15) where fk is a learned predictor for horizon k and 
+
+{BR (j)
+
+> t+k
+
+}Nneg  
+
+> j=1
+
+are in-batch negative samples. Secondly, the LIM loss is defined as: 
+
+LLIM = −E
+
+"
+
+log exp(˜ x⊤ 
+
+> t
+
+BR t)
+
+PMj=1 exp(˜ x⊤ 
+
+> t
+
+BR (j) 
+
+> t
+
+)
+
+#
+
+, (16) where ˜xt is detached from encoder gradients. Finally, the objective functoin of CSSPD follows 
+
+LCSSPD = Lpred + α LDC + LMS + λCPC LCPC + λLIM LLIM .
+
+(17) CPC and LIM are warmed up for Ewarm epochs before ac-tivation, allowing domain confusion to establish an initial treatment-invariant representation before contrastive objec-tives begin regularising. 4 Theoretical Analysis: The Balancing-Prediction MI Conflict 
+
+This section provides the theoretical foundation for the CSSPD design. We establish three results. Proposition 1 proves that the MI conflict is not a modelling artefact but an information-theoretic inevitability: any encoder trained with domain confusion is forced to discard outcome-predictive information. Theorem 1 then quantifies the resulting cost, bounding the joint factual and counterfactual prediction er-ror in terms of the Jensen–Shannon divergence between treatment-group representations — making the balancing– prediction trade-off mathematically precise. Finally, Propo-sition 2 proves that the CPC and LIM objectives provide tractable lower bounds on the two MI quantities suppressed by domain confusion ( Ipred and Iloc ), showing formally how CSSPD resolves the conflict that domain confusion creates. 
+
+The Mutual Information Conflict 
+
+Domain confusion suppresses I(BR t; At) by removing treatment-correlated features from BR t. Because covariates 
+
+Xt are correlated with both At (observational data) and Yt+τ
+
+(outcomes), this inadvertently destroys outcome-predictive information — the MI conflict . Let ϕ : H → Rd maps his-tory Ht to BR t. Define three mutual information quantities: 
+
+Ibal = I(BR t; At), (18) 
+
+Ipred = I(BR t; Yt+τ ), (19) 
+
+Iloc = I(BR t; Xt). (20) 
+
+Definition 1 (MI Conflict) . An encoder ϕ suffers the MI conflict if there exists no representation BR t = ϕ(Ht) that simultaneously satisfies I(BR t; At) = 0 (perfect balanc-ing) and I(BR t; Yt+τ ) = I(Ht; Yt+τ ) (no loss of outcome-predictive information). The conflict is non-vacuous when-ever I(Xt; Yt+τ | At) > 0, i.e. covariates carry outcome-predictive information beyond what treatment assignment alone reveals. In the following, we show that Theorem 1 quantifies this trade-off; CSSPD resolves it via CPC (maximising Ipred ) and LIM (maximising Iloc ) (Proposition 2). 
+
+Formalisation 
+
+Proposition 1 (MI Conflict under Domain Confusion) . Sup-pose Xt̸ ⊥⊥ At (confounding: covariates and treatment are correlated) and Xt → Yt+τ (covariates predict outcomes). Then any encoder ϕ that reduces Ibal via domain confusion also reduces Iloc , and consequently reduces the upper bound on Ipred .Proof sketch. Domain confusion minimises Ibal =
+
+I(BR t; At) by suppressing all features of Ht that are cor-related with At. Since Xt̸ ⊥⊥ At, Xt carries information about At; therefore suppressing I(BR t; At) also reduces 
+
+I(BR t; Xt) = Iloc . Since Xt → Yt+τ , applying the chain rule of mutual information: 
+
+I(BR t; Yt+τ ) ≤ I(BR t; Xt) + I(BR t; Yt+τ | Xt).
+
+Under the assumption that Xt is the dominant confounder (i.e. the residual term I(BR t; Yt+τ | Xt) is small relative to 
+
+I(BR t; Xt)), reducing Iloc consequently reduces the achiev-able Ipred . This assumption is explicit, the proposition holds conditionally on the regime where Xt is the primary media-tor from Ht to Yt+τ , which is precisely the clinical setting of interest (current vital signs dominate short-horizon outcome prediction). 
+
+Jensen-Shannon Divergence Bound on Prediction Error 
+
+Let P ϕj = P ϕ(BR t | At+1 = a(j)) denote the balancing representation distribution conditioned on treatment regime 
+
+j.
+
+Theorem 1 (Prediction Error Bound) . Let ϕ be any encoder, 
+
+GY be any outcome hypothesis, and let π(0) , π (1) > 0 with 
+
+π(0) + π(1) = 1 . Define W = 2 S/ (√π(0) π(1) + √π(1) π(0) )
+
+where S = sup H,Y EY |H [L(GY (ϕ(H)) , Y )] . Here S is the global supremum of the expected loss (a constant that is finite when L is bounded), and W is a prevalence-weighted loss scale capturing how large prediction error can be relative to treatment-group imbalance: it is bounded whenever the loss is bounded and treatment prevalences π(0) , π (1) are bounded away from zero. The factual prediction error ϵF
+
+and counterfactual error ϵCF are bounded by: 
+
+ϵF (GY , ϕ ) + ϵCF (GY , ϕ ) ≤ ϵF
+
+> (0)
+
+(GY , ϕ ) + ϵF
+
+> (1)
+
+(GY , ϕ )+ W
+
+r
+
+JS π
+
+
+
+P ϕ 
+
+> (0)
+
+∥ P ϕ
+
+> (1)
+
+
+
+,
+
+(21) 
+
+where JS π is the generalised Jensen-Shannon divergence (Lin 1991). Proof sketch. Adapting Bouchattaoui et al. (2024) and Shalit et al. (2017) in our three-stream SSM encoder setting, the prediction error bound contains an Integral Probability Met-ric (IPM) term measuring the distributional shift between treatment groups; IPM G (P, Q ) = sup g∈G |EP [g] − EQ[g]|,where G is a class of bounded functions and P , Q are the representation distributions of the two treatment groups. We bound this IPM via the generalized JS divergence using the variational representation of Lin (1991), without invoking Pinsker’s inequality. The factual losses ϵF
+
+> (0)
+
+, ϵ F 
+
+> (1)
+
+are min-imised by fitting the observed data; the JS term captures the distributional shift between treatment groups that do-main confusion aims to minimise. The bound is tight when ϕ
+
+achieves representation invariance. (For full derivation, see Supplementary Material.) 
+
+Implications. Theorem 1 reveals a fundamental tension: the prediction error bound contains three terms — the factual losses ϵF
+
+> (0)
+
+, ϵ F 
+
+> (1)
+
+and the distributional shift penalty 
+
+W
+
+q
+
+JS π (P ϕ
+
+> (0)
+
+∥P ϕ
+
+> (1)
+
+). Domain confusion targets only the JS penalty, driving P ϕ 
+
+> (0)
+
+≈ P ϕ 
+
+> (1)
+
+to make treatment-group representations indistinguishable. However, Proposition 1 shows this simultaneously increases ϵF 
+
+> (0)
+
+and ϵF
+
+> (1)
+
+: suppress-ing I(BR t; At) also discards Iloc — the covariate informa-tion the encoder needs to predict outcomes accurately. The JS gain is therefore offset by rising factual losses, and naive domain confusion need not reduce the full bound at all. CPC and LIM address this directly by restoring the MI quantities that domain confusion suppresses. CPC lower-bounds I(BR t; BR t+k), a proxy for Ipred = I(BR t; Yt+τ )
+
+via the DPI chain I(BR t; BR t+k) ≤ I(BR t; Ht+k) ≥ I pred 
+
+(since Yt+τ ⊆ Ht+k for k ≥ τ ), preserving outcome-predictive temporal information in BR t. LIM lower-bounds 
+
+I(˜ xt; BR t), a tractable proxy for Iloc , recovering the covari-ate information domain confusion discards. Together, CPC and LIM restore Ipred and Iloc while domain confusion min-imises the JS term, enabling CSSPD to reduce all three terms in the bound simultaneously. 
+
+CPC and LIM as a Resolution of MI Conflict 
+
+Proposition 2 (CPC + LIM Resolve the MI Conflict) . Let 
+
+BR ∗ 
+
+> t
+
+= ϕ∗(Ht) be the representation learned by CSSPD (17). Under mild regularity conditions: (1) CPC lower-bounds I(BR t; BR t+k) ≥ log K − L CPC (van den Oord et al. 2018); since Yt+τ ⊆ Ht+k, by DPI this provides a tractable lower bound on Ipred . (2) LIM lower-bounds 
+
+I(˜ xt; BR t) ≥ log M − L LIM ; since ˜xt is a deterministic function of Xt, by DPI this is a proxy for Iloc . Together, they counteract the domain confusion bottleneck, reducing 
+
+ϵF 
+
+> (0)
+
++ ϵF 
+
+> (1)
+
+in Theorem 1. (For proof, see Supplementary Ma-terial.) 
+
+## 5 Experiments 
+
+The Datasets 
+
+Cancer Simulation (Lim et al. 2018). A PK-PD sim-ulation of NSCLC tumour dynamics (Geng et al. 2017) under binary chemotherapy/radiotherapy interventions; the confounding parameter γ ∈ { 0, 1, 2, 3, 4} controls treatment-assignment bias. Ground-truth counterfactuals are available for all patients under all treatment sequences, enabling ex-act RMSE evaluation. The data was splitted to training set 
+
+10 ,000 , validation 1,000 , and test set 1,000 , the maximum sequence length set to Tmax = 60 and τmax = 5 . Normalised RMSE on counterfactual trajectories (divided by outcome standard deviation) were used as the metric for evaluation. 
+
+MIMIC-III Real (Johnson et al. 2016). De-identified longitudinal ICU records of 5,000 adult patients with two binary treatments (vasopressor and ventilation), 25 time-varying vital covariates, and the diastolic blood pressure as the scalar outcome. Data split: 3,500 train / 750 val / 750 
+
+test; Tmax = 60 , and τmax = 5 . Since ground-truth counter-factuals are unobservable in real data, we report normalised RMSE on factual held-out trajectories (divided by within-cohort outcome standard deviation), which is a necessary condition for counterfactual accuracy. 
+
+Baseline Methods 
+
+We compared against RMSN (Lim et al. 2018) (IPW-LSTM), 
+
+CRN (Bica et al. 2020) (domain-confusion GRU), G-Net (Li et al. 2021) ( g-computation RNN), and CT (Melnychuk et al. 2022a) (primary baseline). We include CSSD (ours) — parallel decoder and domain confusion, but no CPC/LIM — to isolate contrastive-objective gains from architecture. 
+
+Implementation Details 
+
+All models are implemented in PyTorch Lightning and trained on a single CPU ( Tmax = 60 ; dmodel = 32 , dBR = 24 ,
+
+dstate = 16 , L = 2 SSM layers). Adam optimiser was used with lr = 10 −4 (MIMIC-III: 64 batches, 300 epochs) or lr = 10 −3 (Cancer Simulation: 128 batches, 200 epochs); early stopping used patience with 20 epochs. CPC and LIM heads were activated after 120 warm-up epochs; loss weights were set to λMS = 3 .5, λCPC = 0 .05 , and λLIM = 0 .1 which were selected by grid search on the MIMIC-III validation set. All results are mean ± std across 5 seeds. (Full hyperpa-rameter tables and training algorithm are in Supplementary Material) 
+
+Results 
+
+Cancer Simulation The full results are shown in Table 1. CSSPD outperforms CT at γ ∈ { 0, 1, 2, 3} (margins 37.0%– 25.9%, decreasing with γ), consistent with Proposition 1. At 
+
+γ = 4 , CSSPD degrades to 2.270 ±0.558 , falling below CT (1.434 ± 0.440 ) — analogous to CHSD/CHSPD instability at high γ; CPC and LIM improve γ ≤ 3 performance but require additional tuning at the extreme level. CSSD (no CPC/LIM) achieves the lowest overall average RMSE (0.821 vs. CT’s 0.940, 12.7% reduction), remaining stable at γ = 4 
+
+(1.393 ±0.554 ); CSSPD’s corrected average is 0.897 (4.6% below CT). CHSD/CHSPD are competitive at γ ≤ 1 but high-variance at γ ≥ 2 (CHSPD: 2.204 ±0.876 at γ = 4 ), consistent with the identifiability concern in Section 6. 
+
+MIMIC-III Real. Figure 2 shows per-step RMSE against prediction horizon. CSSPD consistently outperforms CT at all τ ≥ 2, with the margin growing monotonically, which is consistent with the predictive strength of CPC in high time horizons Proposition 2. The full per-step table is in the Supplementary Material.         
+
+> ∆ = 0 .06 ∆ = 0 .07
+> τ=5 τ=6
+> CSSPD vs. CT
+> CSSPD (ours)
+> CT CSSD (ours) CHSD (ours) Prediction horizon τ
+> RMSE (mmHg)
+> 23456
+> 9.0 9.5 10.0 10.5
+
+Figure 2: Per-step RMSE vs. prediction horizon on MIMIC-III Real ( τ =1 –6). Mean over 5 seeds. At τ =1 , CT (4.59 ± 0.06 ) and CSSPD ( 4.7 ± 0.13 ), with CT marginally lower; both are off the visible scale (main plot shows τ ≥ 2). From τ =2 onward CSSPD ( bold green ) is the only model that consistently outperforms CT (dashed navy); the gap grows monotonically from 0.03 at τ =2 to 0.07 at τ =6 , con-sistent with CPC’s compounding benefit. CSSD and CHSD (orange/teal) lack CPC and fall behind CT at τ ≥ 3. Shaded region: CSSPD < CT; inset: gap at τ =5 , 6 zoomed. Table 1: Cancer Simulation: Mean normalised RMSE averaged over τ = 1 –6 steps and 5 random seeds (lower is better; bold =best per column). ¶Baseline results are reproduced. ‡CHSD and CHSPD exhibit high variance at γ ≥ 2.                                                           
+
+> Model γ= 0 γ= 1 γ= 2 γ= 3 γ= 4 Avg
+> RMSN (Lim et al. 2018) ¶0.758 ±0.051 0.807 ±0.041 0.791 ±0.111 0.954 ±0.137 1.142 ±0.266 0.890 CRN (Bica et al. 2020) ¶0.711 ±0.059 0.721 ±0.037 0.781 ±0.086 1.624 ±0.893 1.253 ±0.250 1.018 G-Net (Li et al. 2021) ¶1.039 ±0.087 1.024 ±0.093 1.321 ±0.107 1.154 ±0.183 1.293 ±0.232 1.166 CT (Melnychuk et al. 2022a) 0.720 ±0.059 0.758 ±0.042 0.829 ±0.060 0.961 ±0.084 1.434 ±0.440 0.940 CSSD (ours) 0.422 ±0.078 0.500 ±0.053 0.915 ±0.082 0.878 ±0.159 1.393 ±0.554 0.821
+> CSSPD (ours) 0.454 ±0.227 0.479 ±0.181 0.572 ±0.186 0.712 ±0.333 2.270 ±0.558 0.897 CHSD (ours) 0.412 ±0.052 0.477 ±0.048 0.930 ±0.334 ‡0.830 ±0.127 1.503 ±0.423 ‡0.830 CHSPD (ours) 0.401 ±0.068 0.465 ±0.077 0.839 ±0.306 0.760 ±0.169 2.204 ±0.876 ‡0.934
+
+Ablation Study 
+
+To assess the impact of the regulation components, we performed ablation studies across five distinct models on MIMIC-III Real: the SSM encoder alone (CSS, i.e., Causal State Space model), The SSM encoder with τ −head decoder (CSSD), the CSSD with CPC (CSSD+CPC), the CSSD with LIM (CSSD+LIM), and the full CSSPD (CSSD+CPC+LIM). The results are the average RMSE of 5 seeds. The experi-ments were done for τ = 1 –6. (Full results are in Supple-mentary Material). These models are compared to CT with RMSE value 8.924. The RMSE of CSS, which has computational cost O(T ),was 9.053 , which slightly trails CT: replacing self-attention gains efficiency but requires the parallel decoder to re-store predictive capacity. Adding the parallel τ -head decoder (CSSD), yields a score of 9.002, recovering this gap by elim-inating O(ϵτ ) rollout error and allowing each horizon head to specialise independently. This confirms that the decoder is essential to unlock the SSM encoder’s representations. Adding CPC (CSSD+CPC) gives a score of 8.940, beat-ing CT and closes ≈60% of the CSSD–CSSPD gap, making CPC as the dominant contributor: it directly restores Ipred 
+
+suppressed by domain confusion via temporal contrastive learning. Adding LIM (CSSD+LIM) further reaches a score of 8.972, which independently closes ≈30% of the CSSD– CSSPD gap by recovering the current-step Iloc that CPC’s forward-looking objective misses — a smaller but distinct gain. The full CSSPD finally achieves a score of 8.899, mildly exceeding the sum of both individual contributions (superadditivity). This is consistent with Proposition 2, as CPC and LIM restore complementary MI quantities, thereby reducing ϵF 
+
+> (0)
+
++ ϵF 
+
+> (1)
+
+in Theorem 1 more than either alone. Additionally, the hybrid variants – CHSD (scoring 8.999) and CHSPD (scoring 8.902) – show equivalent gains un-der a hybrid attention–SSM encoder, confirming that CPC and LIM drive improvements independently of the encoder architecture. 
+
+## 6 Discussion 
+
+The MI conflict in practice. CSSD without contrastive objectives matches CT at 1-step (4.74 vs. 4.59) but falls be-hind at τ ≥ 3, confirming that rollout error is not the primary failure mode. CSSPD reverses this: its margin over CT grows monotonically from 0.02 at τ = 2 to 0.07 at τ = 6 , indicat-ing that the signature of CPC restoring temporal predictive information. CHSD (i.e., SCM gates without CPC/LIM) sug-gests that architectural constraints alone may be insufficient to resolve the MI conflict; its instability at γ ≥ 2 implicates a residual identifiability gap. We reserve this for future work. 
+
+Limitations. Evaluation is limited to a single MIMIC-III site and diastolic blood pressure; broader evaluation across outcomes, sites, and multi-valued or continuous treatment regimes are natural extensions. No formal significance tests are reported; the 5-seed mean ± std protocol follows Mel-nychuk et al. (2022a) for comparability, and effect sizes are consistent across seeds. 
+
+## 7 Conclusion 
+
+We formalised the MI conflict — the provable tension by which domain confusion suppresses the covariate features most needed for outcome prediction — and derived a Jensen– Shannon bound (Theorem 1) showing this conflict directly inflates counterfactual prediction error. CSSPD resolves it with two complementary objectives: CPC restores tempo-ral predictive information ( Ipred ) and LIM recovers local covariate information ( Iloc ), together improving the error bound without sacrificing treatment invariance. Empirically, CSSPD outperforms CT at γ ≤ 3 on Cancer Simulation (mar-gins 25.9%–37.0%) and at all horizons τ ≥ 2 on MIMIC-III Real, with gains growing monotonically with prediction horizon — consistent with MI conflict resolution. CSSPD exhibits instability at the extreme confounding level γ = 4 , a limitation shared with the hybrid variants and a direction for future work. 
+
+## Ethics Statement 
+
+MIMIC-III data is de-identified and publicly available (John-son et al. 2016); Cancer Simulation is fully synthetic; no new patient data was collected. Counterfactual models must not be used for individual clinical decisions without appropriate clinical oversight. 
+
+## A Related Work 
+
+Sequential counterfactual estimation. Estimating coun-terfactual outcomes over time has been addressed by a se-quence of increasingly expressive models. RMSN (Lim et al. 2018) re-weights training samples using inverse-probability-of-treatment weights (IPW) via recurrent marginal structural networks to debias the observational distribution. CRN (Bica et al. 2020) introduces domain-adversarial training, apply-ing a gradient reversal layer (Ganin et al. 2016) to enforce treatment-invariant representations, building on the IPW-weighted adversarial approach of Lim et al. (2018). G-Net (Li et al. 2021) uses g-computation with a recurrent architec-ture to estimate potential outcomes under dynamic treatment regimes. The Causal Transformer (CT) (Melnychuk et al. 2022a) applies multi-head causal self-attention with domain confusion, achieving state-of-the-art performance at the cost of O(T 2) encoding complexity. 
+
+State-space models for sequences. Selective state-space models (Mamba; Gu and Dao 2023) achieve O(T ) sequence modelling with input-dependent transition matrices that en-able selective long-range memory. Earlier S4 models (Gu et al. 2022) establish structured SSMs as efficient alternatives to self-attention. S5 (Smith et al. 2023) simplifies the pa-rameterisation further. CSSPD is, to our knowledge, the first application of selective SSMs to longitudinal causal infer-ence under domain confusion. 
+
+Contrastive representation learning. Contrastive Predic-tive Coding (CPC; van den Oord et al. 2018) proposes In-foNCE as a lower bound on mutual information, learning rep-resentations by predicting future embeddings. DIM (Hjelm et al. 2019) extends this framework to maximise local mutual information. CausalContrastive (Bouchattaoui et al. 2024) applies contrastive objectives to counterfactual estimation but uses a Transformer encoder and does not formalise the MI conflict. Our LIM objective is inspired by the local MI maximisation principle of Hjelm et al. (2019), adapted to covariate recovery in the causal inference setting. 
+
+## B Full Proofs 
+
+This appendix provides full derivations for Proposition 1, Theorem 1 (JS bound), and Proposition 3 (CPC+LIM res-olution), which are presented as proof sketches in the main paper. 
+
+Proof of Proposition 1 (MI Conflict under Domain Confusion) 
+
+Proposition 3 (MI Conflict under Domain Confusion — re-produced) . Suppose Xt̸ ⊥⊥ At (covariates and treatment are correlated) and Xt → Yt+τ (covariates causally predict out-comes). Then any encoder ϕ that reduces Ibal = I(BR t; At)
+
+via domain confusion also reduces Iloc = I(BR t; Xt),and consequently reduces the upper bound on Ipred =
+
+I(BR t; Yt+τ ).Proof. Step 1: Domain confusion suppresses Iloc .
+
+Domain confusion trains the encoder ϕ to minimise 
+
+I(BR t; At) by removing from BR t any feature of Ht that is correlated with At. Formally, for any ϵ > 0, domain confu-sion seeks ϕ such that I(BR t; At) < ϵ .Because Xt̸ ⊥⊥ At, we have I(Xt; At) > 0. By the data processing inequality (DPI), for any deterministic function 
+
+f : I(f (X); Z) ≤ I(X; Z).Since BR t = ϕ(Ht) and Ht contains Xt, to suppress 
+
+I(BR t; At) the encoder must suppress the features of Ht cor-related with At, which necessarily includes the component of Xt correlated with At. Therefore reducing I(BR t; At)
+
+reduces I(BR t; Xt) = Iloc .More precisely: by the chain rule of mutual information, 
+
+I(BR t; At) = I(BR t; Xt, A t) − I(BR t; Xt | At). (S1) If Xt̸ ⊥⊥ At, suppressing the left-hand side forces 
+
+I(BR t; Xt, A t) to decrease (the encoder must for-get the joint), which reduces Iloc = I(BR t; Xt) ≤
+
+I(BR t; Xt, A t).
+
+Step 2: Reduced Iloc reduces the upper bound on Ipred .
+
+By the chain rule of mutual information: 
+
+I(BR t; Yt+τ ) ≤ I(BR t; Xt) + I(BR t; Yt+τ | Xt).
+
+(S2) Under the dominant-confounder assumption — that Xt
+
+is the primary mediator from Ht to Yt+τ , so the residual 
+
+I(BR t; Yt+τ | Xt) is small relative to I(BR t; Xt) (which holds in the clinical setting where current vital signs dom-inate short-horizon outcome prediction) — equation (S2) becomes: 
+
+Ipred = I(BR t; Yt+τ ) ≲ I(BR t; Xt) = Iloc .
+
+From Step 1, domain confusion reduces Iloc , which con-sequently tightens the upper bound on Ipred , completing the proof. 
+
+Remark 1. If Xt ⊥⊥ At (zero confounding), domain con-fusion cannot suppress Iloc , so the MI conflict is vacuous. This is consistent with the empirical finding that CSSPD’s margin over CT is smallest at γ = 0 in the Cancer Simula-tion, where confounding strength is zero by construction and no MI conflict arises. Conversely, as confounding increases (γ → 4), the correlation I(Xt; At) grows and the MI con-flict sharpens, so the theoretical benefit of CPC and LIM also grows. Empirically, this holds at γ ≤ 3; at the extreme 
+
+γ = 4 , training instability dominates and CSSPD degrades below CT (Table S4), suggesting that the contrastive objec-tives require longer warm-up or tighter regularisation at very high confounding — not that the MI conflict theory breaks down. 
+
+Proof of Theorem 1 (Prediction Error Bound) 
+
+Theorem 2 (Prediction Error Bound — reproduced) .
+
+Let ϕ be any encoder, GY any outcome hypothesis, and let π(0) , π (1) > 0 with π(0) + π(1) = 1. De-fine W = 2S/ (√π(0) π(1) + √π(1) π(0) ) where S =sup H,Y EY |H [L(GY (ϕ(H)) , Y )] . Then: 
+
+ϵF (GY , ϕ ) + ϵCF (GY , ϕ )
+
+≤ ϵF
+
+> (0)
+
+(GY , ϕ ) + ϵF
+
+> (1)
+
+(GY , ϕ )+ W
+
+q
+
+JS π (P ϕ
+
+> (0)
+
+∥P ϕ
+
+> (1)
+
+), (S3) 
+
+where JS π is the generalised Jensen–Shannon divergence (Lin 1991). Proof. We follow Bouchattaoui et al. (2024) (Appendix G) adapted to the three-stream SSM encoder setting. 
+
+Step 1: IPM decomposition. 
+
+Adapting the approach of Shalit et al. (2017) for potential outcome estimation, the total prediction error decomposes as: 
+
+ϵF + ϵCF ≤ ϵF 
+
+> (0)
+
++ ϵF 
+
+> (1)
+
++ C · IPM G (P ϕ
+
+> (0)
+
+, P ϕ
+
+> (1)
+
+), (S4) where IPM G (P, Q ) = sup g∈G |EP [g]−EQ[g]| is the Integral Probability Metric over a class of bounded functions G, and C
+
+is a constant depending on the loss and treatment prevalences. 
+
+P ϕ 
+
+> (j)
+
+= P ϕ(BR t | At+1 = a(j)) is the distribution of the balancing representation conditioned on treatment group j.
+
+Step 2: Bounding IPM by generalised JS divergence. 
+
+Rather than invoking Pinsker’s inequality (which relates total variation to KL divergence, not to JS divergence), we use the variational representation of Lin (1991): For any two distributions P, Q and mixing weights 
+
+π(0) , π (1) , the generalised Jensen–Shannon divergence satis-fies: 
+
+JS π (P ∥Q) = sup 
+
+> g:∥g∥∞≤1
+
+h
+
+π(0) EP [g]−π(1) EQ[g]−Φ( π(0) , π (1) )
+
+i
+
+,
+
+where Φ is a concave function of the prevalences. This gives: 
+
+IPM G (P ϕ
+
+> (0)
+
+, P ϕ
+
+> (1)
+
+) ≤ 2S
+
+√π(0) π(1) + √π(1) π(0) 
+
+q
+
+JS π (P ϕ
+
+> (0)
+
+∥P ϕ
+
+> (1)
+
+),
+
+(S5) where S = sup H,Y EY |H [L(GY (ϕ(H)) , Y )] is the global supremum of the expected loss. S is finite whenever L is bounded (which holds for all MSE-type losses over bounded outcome spaces). Setting W = 2 S/ (√π(0) π(1) + √π(1) π(0) ) and substitut-ing (S5) into (S4) yields the stated bound (S3). 
+
+Tightness. The bound is tight when ϕ achieves perfect representation invariance ( P ϕ 
+
+> (0)
+
+= P ϕ
+
+> (1)
+
+), in which case the JS term vanishes and the total error equals the sum of factual losses. 
+
+Remark 2. The weight W = 2 S/ (√π(0) π(1) + √π(1) π(0) )
+
+is a prevalence-weighted loss scale. When treatments are bal-anced ( π(0) = π(1) = 0 .5), W = 4 S and the JS term is most informative. Under severe imbalance ( π(0) → 0), W → ∞ ,reflecting the fundamental difficulty of generalising across treatment groups with very different sample sizes. CSSPD improves the bound from two directions simultaneously: do-main confusion reduces the JS divergence term, while CPC and LIM reduce ϵF 
+
+> (0)
+
++ ϵF 
+
+> (1)
+
+by preventing representation col-lapse. 
+
+Proof of Proposition 3 (CPC + LIM Resolve the MI Conflict) 
+
+Proposition 4 (CPC + LIM Resolve the MI Conflict — repro-duced) . Let BR ∗ 
+
+> t
+
+= ϕ∗(Ht) be the representation learned by CSSPD. Under mild regularity conditions: (1) CPC lower-bounds I(BR t; BR t+k) ≥ log K − L CPC ;since Yt+τ ⊆ Ht+k for k ≥ τ , by DPI this provides a tractable lower bound on Ipred .(2) LIM lower-bounds I(˜ xt; BR t) ≥ log M −L LIM ; since ˜xt
+
+is a deterministic function of Xt, by DPI this is a tractable proxy for Iloc .Together, CPC and LIM reduce ϵF 
+
+> (0)
+
++ ϵF 
+
+> (1)
+
+in Theorem 1, counteracting the domain confusion bottleneck. Proof. Part (1): CPC bounds I(BR t; BR t+k).
+
+The InfoNCE loss (van den Oord et al. 2018) with K
+
+negative samples satisfies: 
+
+I(BR t; BR t+k) ≥ log K − L CPC , (S6) which follows from the variance of the log-softmax estimator. 
+
+Connecting to Ipred : Since BR t+k = ϕ(Ht+k) is a deter-ministic function of the future history Ht+k, the DPI gives: 
+
+I(BR t; BR t+k) ≤ I(BR t; Ht+k).
+
+Rearranging: 
+
+I(BR t; Ht+k) ≥ I(BR t; BR t+k)
+
+≥ log K − L CPC . (S7) Since Yt+τ is a component of Ht+k for any k ≥ τ :
+
+Ipred = I(BR t; Yt+τ ) ≤ I(BR t; Ht+k),
+
+so maximising I(BR t; BR t+k) (i.e., minimising LCPC )pushes I(BR t; Ht+k) up, preventing the collapse of Ipred 
+
+induced by domain confusion. 
+
+Part (2): LIM bounds I(˜ xt; BR t).
+
+By InfoNCE with M negative samples: 
+
+I(˜ xt; BR t) ≥ log M − L LIM . (S8) Since ˜xt = s(L) 
+
+> t,X
+
+is a deterministic function of Xt, the DPI gives I(˜ xt; BR t) ≤ I(Xt; BR t) = Iloc . Minimising LLIM 
+
+maximises the proxy I(˜ xt; BR t), recovering the component of Iloc that passes through the encoder’s covariate stream. 
+
+Joint effect on the prediction error bound. 
+
+From Proposition 1, domain confusion reduces Iloc and consequently Ipred , which increases ϵF 
+
+> (0)
+
++ ϵF 
+
+> (1)
+
+in Theo-rem 1. CPC and LIM operate on disjoint information path-ways: CPC recovers the temporal component Ipred via future-embedding prediction; LIM recovers the local component 
+
+Iloc via covariate-representation alignment. Their joint min-imisation therefore reduces ϵF 
+
+> (0)
+
++ ϵF 
+
+> (1)
+
+while domain confu-sion simultaneously minimises the JS term in (S3), enabling CSSPD to reduce all three terms in the bound simultane-ously. 
+
+Remark 3. CPC and LIM recover disjoint information path-ways: CPC targets the temporal component Ipred via future-embedding prediction; LIM targets the covariate component 
+
+Iloc via local alignment. If only CPC were used, domain confusion would still suppress Iloc , degrading the covariate-to-outcome factual loss. Conversely, LIM alone leaves the temporal pathway bottlenecked. This disjointness is why their combined effect in Table S3 slightly exceeds the sum of individual gains (superadditivity): each head counteracts a distinct mechanism of representation collapse induced by domain confusion. At Yt+τ
+
+# Xt
+
+gA→Y = 1   
+
+> (σ≈0.73 , near-open)
+
+confound predict 
+
+gY →A = −3  
+
+> (σ≈0.05 , near-closed)
+
+Dashed = non-causal direction (near-closed gate) 
+
+Figure S1: SCM gate initialisations. The 
+
+CausalGatedMixer initialises gA→Y = 1 (σ ≈ 0.73 ,near-open: treatment causally influences outcomes) and 
+
+gY →A = −3 (σ ≈ 0.05 , near-closed: the reverse direction 
+
+Y → A is not structurally causal). Covariate paths ( Xt)carry fixed weight = 1 (no gating). Both learned gates remain trainable throughout. 
+
+## C Architecture Details 
+
+SCM Gate Initialisations 
+
+Figure S1 shows the structural causal model (SCM) under-lying the gate initialisations in the CausalGatedMixer 
+
+(Eq. 3 of the main paper). 
+
+Training Algorithm 
+
+Algorithm S1 gives the full CSSPD training procedure. 
+
+TrtEnc Architecture 
+
+The treatment encoder TrtEnc is a two-layer MLP: 
+
+Linear( dA, d trt ) GELU 
+
+−−−−−→ LayerNorm( dtrt ),
+
+where dA = 2 (binary treatment encoded as a one-hot pair) and dtrt = 16 . The projection ψ : {0, 1}dA → Rdtrt denotes the full MLP forward pass. For each decoder head at horizon τ , two embed-dings are produced: the cumulative embedding ehist  
+
+> τ
+
+=
+
+> 1
+> τ
+
+Pτk=1 ψ(at+k) (encoding the planned treatment sequence up to τ ) and the step-specific embedding ecur  
+
+> τ
+
+= ψ(at+τ )
+
+(encoding the specific treatment at the target step). Both are concatenated and passed as input to decoder head gτ .
+
+Decoder Head Architecture 
+
+Each decoder head gτ is an independent two-layer GELU MLP with hidden dimension 2( dBR + dtrt ) = 2(24 + 16) = 80 . The input is: 
+
+[BR ⊥ 
+
+> t
+
+; ehist  
+
+> τ
+
+; ecur  
+
+> τ
+
+] ∈ RdBR +2 dtrt = R56 ,
+
+Algorithm S1 CSSPD Training. Full procedure including domain confusion (DC), one-step ( Lpred ), multi-step ( LMS ), CPC, and LIM objectives. Sign convention: the discrimina-tor minimises LDC ; the encoder maximises it via the GRL (forward-pass convention shown: +αeLDC ; effective encoder update: −αe∇ϕLDC ). 
+
+Require: Dataset D; encoder ϕ; decoder GY ; CPC head 
+
+f ; LIM head; DC discriminator D; hyperparameters 
+
+α0, λ MS , λ CPC , λ LIM , E warm  
+
+> 1:
+
+for e = 1 , . . . , E max do  
+
+> 2:
+
+for each mini-batch B ⊂ D do  
+
+> 3:
+
+Encode: BR t = ϕ(Ht) for all t ∈ B  
+
+> 4:
+
+Discriminator step: D minimises LDC  
+
+> 5:
+
+Encoder adversarial step: ϕ maximises LDC via GRL (effective update = −αe ∇ϕLDC ) 
+
+> 6:
+
+Compute Lpred (Eq. S5); backprop through ϕ 
+
+> 7:
+
+Compute LMS (Eq. S6) with stop-grad BR ⊥ 
+
+> t
+> 8:
+
+if e > E warm then  
+
+> 9:
+
+Compute LCPC , LLIM (Eqs. S7–S8) with in-batch negatives  
+
+> 10:
+
+L ← L pred + αeLDC + λMS LMS + λCPC LCPC +
+
+λLIM LLIM  
+
+> 11:
+
+else  
+
+> 12:
+
+L ← L pred + αeLDC + λMS LMS  
+
+> 13:
+
+end if  
+
+> 14:
+
+Update ϕ, GY , TrtEnc, CPC, LIM heads via Adam on L 
+
+> 15:
+
+end for  
+
+> 16:
+
+Anneal: αe ← α0 · exp( −β e ) 
+
+> 17:
+
+end for 
+
+where BR ⊥ 
+
+> t
+
+= sg(BR t) is the stop-gradient balancing repre-sentation (gradients are blocked from flowing back through 
+
+ϕ during the multi-step loss, ensuring the one-step loss Lpred 
+
+remains the primary encoder training signal). The output is the scalar ˆYt+τ ∈ R.Using independent heads per horizon — rather than an auto-regressive decoder that feeds ˆYt+τ −1 back as input — avoids compound rollout error accumulation, where predic-tion errors grow as O(ετ ) with horizon. 
+
+## D Experimental Details 
+
+Full Hyperparameter Tables 
+
+Table S1 lists all hyperparameters used in experiments. All models share the same preprocessing pipeline (mean-imputation, min-max normalisation per feature). 
+
+Data Preprocessing 
+
+Cancer Simulation. We use the PK-PD simulation of Geng et al. (2017) as packaged by Lim et al. (2018). Chemotherapy dose and radiotherapy on/off are the two binary-treatment inputs. Tumour volume is the outcome. Train/val/test split: 10,000 / 1,000 / 1,000 patients. We nor-malise tumour volume by its training-set standard deviation. Ground-truth counterfactuals are available for all 5 treatment sequences at each time step. Table S1: Hyperparameters for all models on both datasets.                                                      
+
+> Hyperparameter MIMIC-III Cancer Sim.
+> dmodel 32 32
+> dBR 24 24
+> dstate 16 16
+> dtrt 16 16 SSM layers L22CPC horizons K33CPC negatives Nneg 64 64 LIM negatives M64 64 Batch size 64 128 Learning rate 10 −410 −3
+> Max epochs 300 200 Early stop patience 20 20 Warm-up Ewarm (CPC/LIM, epochs) 120 80
+> λMS 3.5 3.5
+> λCPC 0.05 0.05
+> λLIM 0.1 0.1
+> α0(DC weight) 1.0 1.0 DC anneal β0.01 0.01
+> τmax 55Seeds 55
+> Training setup
+> Optimizer Adam Hardware Single CPU Framework PyTorch Lightning
+
+MIMIC-III. We follow the preprocessing of Melnychuk et al. (2022a): 5,000 adult ICU patients, two binary treatments (vasopressor and ventilation), 25 time-varying vital covari-ates (heart rate, SpO 2, respiratory rate, etc.), scalar outcome (diastolic blood pressure), and 7 static covariates (age, gen-der, ethnicity, admission type, Elixhauser comorbidity score, height, weight). Train/val/test split: 3,500 / 750 / 750. Time-varying features are mean-imputed per patient and then min-max normalised to [0 , 1] using training-set statistics. Since ground-truth counterfactuals are unavailable, we report fac-tual held-out RMSE (normalised by within-cohort standard deviation of diastolic blood pressure). 
+
+Baseline Hyperparameters 
+
+Baselines (RMSN, CRN, CT) are trained using the hyperpa-rameters reported in Melnychuk et al. (2022a) (Table 9 of that paper), without re-tuning on our specific splits. This is in-tentional: CSSPD is not given an advantage from additional hyperparameter search that the baselines did not receive. Specifically, CT uses hidden size 64, 2 attention layers, 4 at-tention heads, and dropout 0.1. CRN uses hidden size 64 and 2 recurrent layers. RMSN uses the stabilised IPW weighting with separate encoder and decoder RNNs (hidden size 64). G-Net uses 2 recurrent layers (hidden size 64) and is trained with g-computation on sequential potential outcomes. All baselines use Adam with learning rate 10 −3 and the same early-stopping patience of 20 on validation RMSE. 
+
+## E Extended Results 
+
+MIMIC-III Per-Step RMSE Table 
+
+Table S2 gives the full per-step RMSE results on MIMIC-III for all models, complementing Figure 2 of the main paper. 
+
+Per-step analysis. CSSPD trails CT at τ = 1 (4.74 vs. 
+
+4.59 , Table S2). This is expected from the loss structure: the one-step head trains on Lpred without stop-gradient, so the encoder receives domain-confusion gradients (via the GRL) throughout training, creating the same bottleneck that CT ex-periences. The CPC objective looks k ≥ 2 steps ahead and provides no direct lower-bound on one-step mutual infor-mation; similarly, LIM aligns covariate representations but does not address one-step temporal prediction. From τ ≥ 2
+
+onward, the multi-step decoder heads use stop-gradient rep-resentations BR ⊥ 
+
+> t
+
+, and the CPC objective provides a direct lower bound on future-representation MI; CSSPD leads CT at all τ ≥ 2 and the gap widens with horizon, consistent with Proposition 3 and the expected compounding benefit of CPC over longer ranges. 
+
+Ablation Study (Full Table) 
+
+Table S3 presents the full ablation on MIMIC-III Real. All results are mean ± std across 5 seeds; average RMSE is over 
+
+τ = 1 –6.The ablation confirms the sequential necessity of each com-ponent: the parallel decoder is essential to unlock the SSM encoder’s capacity (CSS → CSSD); CPC contributes the largest individual gain (closes ≈60% of the CSSD–CSSPD gap) by restoring Ipred ; LIM adds an independent comple-mentary gain ( ≈30%) by recovering Iloc ; and full CSSPD mildly exceeds the sum of CPC and LIM contributions (su-peradditivity), consistent with Proposition 3. 
+
+Cancer Simulation Per-Confounding Per-Step Breakdown 
+
+Table S4 shows per-γ per-step RMSE for CT and CSSPD on the Cancer Simulation (5 seeds each). CSSPD outperforms CT at all confounding levels γ ≤ 3 across every prediction horizon, with its margin growing monotonically with both 
+
+γ and τ . At γ = 4 , CT achieves lower RMSE, suggesting that at very high confounding the 60-epoch CPC/LIM warm-up is insufficient to fully counteract the domain-confusion MI conflict before the end of training; a longer warm-up or additional tuning of λCPC and λLIM at γ = 4 warrants further investigation. 
+
+## References 
+
+Bai, S., Kolter, J. Z., and Koltun, V. (2018). An empirical evaluation of generic convolutional and recurrent networks for sequence modeling. arXiv:1803.01271 .Bica, I., Alaa, A. M., Jordon, J., and van der Schaar, M. (2020). Estimating counterfactual treatment outcomes over time through adversarially balanced representations. In ICLR 2020 .Bouchattaoui, M. E., Tami, M., Lepetit, B., and Cournède, P.-H. (2024). Causal contrastive learning for counterfactual regression over time. In NeurIPS 2024 , volume 37, pp. 1333– 1369. Chen, S.-A., Li, C.-L., Yoder, N., Arik, S. O., and Pfister, T. (2023). TSMixer: An all-MLP architecture for time series forecasting. arXiv:2303.06053 .Table S2: MIMIC-III Real: per-step normalised RMSE ( τ = 1 –6, 5 seeds, mean ± std). Lower is better; bold = best per column. 
+
+## Model τ = 1 τ = 2 τ = 3 τ = 4 τ = 5 τ = 6 
+
+## RMSN (Lim et al. 2018) 4.73 ±0.11 9.18 ±0.24 9.58 ±0.20 10.22 ±0.28 10.73 ±0.31 11.07 ±0.35 
+
+## CRN (Bica et al. 2020) 4.66 ±0.09 9.04 ±0.19 9.54 ±0.18 10.18 ±0.22 10.64 ±0.27 11.01 ±0.29 
+
+## CT (Melnychuk et al. 2022a) 
+
+## 4.59 ±0.08 8.91 ±0.14 9.50 ±0.15 10.08 ±0.19 10.50 ±0.22 10.93 ±0.26 
+
+## CSSD (ours) 4.74 ±0.12 8.92 ±0.21 9.56 ±0.18 10.21 ±0.24 10.69 ±0.28 11.04 ±0.33 
+
+## CHSD (ours) 4.68 ±0.10 8.97 ±0.18 9.58 ±0.21 10.18 ±0.23 10.64 ±0.29 11.01 ±0.31 
+
+## CSSPD (ours) 4.74 ±0.11 8.89 ±0.17 9.43 ±0.14 9.93 ±0.18 10.37 ±0.20 10.86 ±0.23 
+
+Table S3: Ablation study on MIMIC-III Real (average nor-malised RMSE, τ = 1 –6, 5 seeds). Lower is better. Abbre-viations in table footnote.                    
+
+> Model Avg. RMSE ∆vs. CT
+> CT (Melnychuk et al. 2022a) 8.924 —CSS (SSM encoder only) 9.053 +0.129 CSSD (+ parallel decoder) 9.002 +0.078 CSSD + CPC 8.940 +0.016 CSSD + LIM 8.972 +0.048
+> CSSPD (full) 8.899 −0.025
+> CHSD (hybrid attention) 8.999 +0.075 CHSPD (hybrid + CPC/LIM) 8.902 −0.022 CSS = SSM encoder only (no decoder, no CPC/LIM). CSSD = CSS + parallel decoder. +CPC / +LIM = re-spective contrastive head added. CSSPD = full model (CSS + decoder + CPC + LIM). CHSD = hybrid (attention + Mamba) + decoder. CHSPD = CHSD + CPC/LIM.
+
+Ganin, Y., Ustinova, E., Ajakan, H., et al. (2016). Domain-adversarial training of neural networks. Journal of Machine Learning Research , 17(59):1–35. Geng, C., Paganetti, H., and Grassberger, C. (2017). Predic-tion of treatment response for combined chemo- and radia-tion therapy for non-small cell lung cancer patients. Scientific Reports , 7(1):13542. Gu, A. and Dao, T. (2023). Mamba: Linear-time sequence modeling with selective state spaces. arXiv:2312.00752 .Gu, A., Goel, K., and Ré, C. (2022). Efficiently modeling long sequences with structured state spaces. In ICLR 2022 .Hernán, M. A. and Robins, J. M. (2020). Causal Inference: What If . Chapman & Hall/CRC. Hjelm, R. D., et al. (2019). Learning deep representations by mutual information estimation and maximization. In ICLR 2019 .Hochreiter, S. and Schmidhuber, J. (1997). Long short-term memory. Neural Computation , 9(8):1735–1780. Table S4: Cancer Simulation: per-γ per-step RMSE for CT and CSSPD ( τ = 2 –5, n = 5 seeds, mean). Bold = lower RMSE. 
+
+γ Model τ = 2 τ = 3 τ = 4 τ = 5 
+
+0 CT 0.667 0.688 0.715 0.747 CSSPD 0.350 0.401 0.455 0.514 
+
+1 CT 0.691 0.720 0.757 0.795 CSSPD 0.315 0.376 0.440 0.504 
+
+2 CT 0.723 0.777 0.830 0.884 CSSPD 0.538 0.585 0.702 0.875 
+
+3 CT 0.814 0.902 0.983 1.033 CSSPD 0.595 0.652 0.745 0.898 
+
+4 CT 1.127 1.319 1.464 1.581 
+
+CSSPD 1.554 1.774 2.279 2.743 
+
+Huang, Q., Meng, C., Cao, D., et al. (2024). An empirical examination of balancing strategy for counterfactual estima-tion on time series. In Proceedings of the 41st International Conference on Machine Learning (ICML 2024) , PMLR 235, 2024. Johnson, A. E. W., et al. (2016). MIMIC-III, a freely acces-sible critical care database. Scientific Data , 3:160035. Johansson, F. D., Shalit, U., Kallus, N., and Sontag, D. (2022). Generalization bounds and representation learn-ing for estimation of potential outcomes and causal effects. 
+
+JMLR , 23(166):1–50. Le, T., et al. (2021). Anticipating the long-tail of biosignal patterns in clinical settings. In NeurIPS 2021 Workshop on ML for Health .Li, R., et al. (2021). G-Net: a recurrent network approach to G-computation for counterfactual prediction under a dy-namic treatment regime. In NeurIPS 2021 Workshop on ML for Health .Lim, B., Alaa, A., and van der Schaar, M. (2018). Forecast-ing treatment responses over time using recurrent marginal structural networks. In NeurIPS 2018 .Lin, J. (1991). Divergence measures based on the Shan-non entropy. IEEE Transactions on Information Theory ,37(1):145–151. Ma, T., et al. (2022). Enhanced causal transformer for coun-terfactual estimation. In CHIL 2022 .Melnychuk, V., Frauen, D., and Feuerriegel, S. (2022a). Causal transformer for estimating counterfactual outcomes. In ICML 2022 .Melnychuk, V., Frauen, D., and Feuerriegel, S. (2022b). SyncTwin: Treatment effect estimation with longitudinal out-comes. In NeurIPS 2022 .Melnychuk, V., Frauen, D., and Feuerriegel, S. (2023). Bounds on representation-induced confounding bias for treatment effect estimation. In ICLR 2023 .Nguyen, E., et al. (2022). S4ND: Modeling images and videos as multidimensional signals. In NeurIPS 2022 .Nguyen, N. D., Robles-Granda, P., and Varshney, L. R. (2026). CAETC: Causal autoencoding and treatment conditioning for counterfactual estimation over time. 
+
+arXiv:2603.11565 .van den Oord, A., Li, Y., and Vinyals, O. (2018). Rep-resentation learning with contrastive predictive coding. 
+
+arXiv:1807.03748 .Pearl, J. (2009). Causality: Models, Reasoning, and Infer-ence . Cambridge University Press, 2nd edition. Perez, E., Strub, F., de Vries, H., Dumoulin, V., and Courville, A. (2018). FiLM: Visual reasoning with a general condition-ing layer. In AAAI 2018 .Prosperi, M., et al. (2020). Causal inference and counterfac-tual prediction in machine learning for actionable healthcare. 
+
+Nature Machine Intelligence , 2(7):369–375. Robins, J. (1986). A new approach to causal inference in mortality studies. Mathematical Modelling , 7(9–12):1393– 1512. Robins, J. M., Hernan, M. A., and Brumback, B. (2000). Marginal structural models and causal inference in epidemi-ology. Epidemiology , 11(5):550–560. Rubin, D. B. (2005). Causal inference using potential out-comes. Journal of the American Statistical Association ,100(469):322–331. Shalit, U., Johansson, F. D., and Sontag, D. (2017). Estimat-ing individual treatment effect: generalization bounds and algorithms. In ICML 2017 .Smith, J., et al. (2023). Simplified state space layers for sequence modeling. In ICLR 2023 .Taieb, S. B. and Atiya, A. F. (2015). A bias and vari-ance analysis for multi-step-ahead time series forecasting. 
+
+IEEE Transactions on Neural Networks and Learning Sys-tems , 27(1):62–76. Tolstikhin, I. O., et al. (2021). MLP-Mixer: An all-MLP architecture for vision. In NeurIPS 2021 .Wang, Z., et al. (2024a). Mamba-CDSP: Counterfactual es-timation with decorrelation for sequential predictions. arXiv preprint (arXiv ID not yet available; verify before submis-sion). Wang, S., et al. (2024b). TimeMixer: Decomposable multi-scale mixing for time series forecasting. In ICLR 2024 .Zhang, X., et al. (2020). Learning to represent: A meta-learning approach for domain adaptation. In ECCV 2020 .
