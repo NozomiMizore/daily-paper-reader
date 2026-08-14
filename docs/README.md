@@ -6,32 +6,35 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-13
-- 运行时间：2026-08-13 21:27:05 UTC
+- 最新运行日期：2026-08-14
+- 运行时间：2026-08-14 21:05:05 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：2
-- 速读区：2
+- 本次总论文数：5
+- 精读区：1
+- 速读区：4
 
 ### 今日简报（AI）
-今日精读2篇、速读2篇，重点覆盖AI抗癌药物响应建模与个体治疗因果推断。最值得关注的是精读9.0分的药物响应大模型，以及8.0分的因果状态空间模型。建议普通读者优先了解AI在癌症用药预测中的潜力，暂不需深入方法细节。
-- 详情：[/202608/13/README](/202608/13/README)
+今日筛选5篇论文，精读1篇、速读4篇，聚焦药物筛选与基因组学。最值得关注的是精读的《ScreenShot》基础模型，用于少样本组合药物筛选，评分8.0。建议后续可重点探索该模型在药物组合预测中的实际应用。
+- 详情：[/202608/14/README](/202608/14/README)
 
 ### 精读区论文标签
-1. [Large-scale AI-Ready Data for Anti-Cancer Drug Response Modeling](/202608/13/2608.11444v1-large-scale-ai-ready-data-for-anti-cancer-drug-response-modeling)  
-   标签：评分：9.0/10、query:virtual-cell
-   evidence：抗癌药物反应预测数据与基准评测，用于扰动响应建模
-2. [Causal State-Space Model for Causal Inference: Estimating Longitudinal Individual Treatment Effects](/202608/13/2608.08288v2-causal-state-space-model-for-causal-inference-estimating-longitudinal-individual-treatment-effects)  
+1. [ScreenShot: A Foundation Model for Few-Shot Combination Drug Screening](/202608/14/2608.12219v1-screenshot-a-foundation-model-for-few-shot-combination-drug-screening)  
    标签：评分：8.0/10、query:virtual-cell
-   evidence：用于治疗效果反事实结果预测的深度学习状态空间模型
+   evidence：面向药物组合筛选的深度学习基础模型，直接预测药物扰动响应
 
 ### 速读区论文标签
-1. [A transport-only null model for apparent heterogeneity in diffusively dosed organoid arrays](/202608/13/2608.08411v1-a-transport-only-null-model-for-apparent-heterogeneity-in-diffusively-dosed-organoid-arrays)  
+1. [bioMoR: Biology-Guided Mixture-of-Recursions for Effective Genomic Learning](/202608/14/2608.06727v2-biomor-biology-guided-mixture-of-recursions-for-effective-genomic-learning)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：类器官阵列药物给药效应的转运零模型
-2. [Two-Step MV-DeepONet: Probabilistic Operator Learning for Uncertainty Propagation Driven by Random Input Fields](/202608/13/2608.09071v1-two-step-mv-deeponet-probabilistic-operator-learning-for-uncertainty-propagation-driven-by-random-input-fields)  
+   evidence：面向基因与通路级学习的生物知识引导图感知Transformer，可支撑虚拟细胞建模
+2. [Topology Inference for Immune System Networks by Using Cell Amount Data](/202608/14/2608.07403v1-topology-inference-for-immune-system-networks-by-using-cell-amount-data)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：概率算子学习，基于随机输入场预测输出响应
+   evidence：利用细胞清除扰动实验和细胞数量数据推断免疫细胞相互作用拓扑
+3. [Hit Selection Using SSMD-Based Machine Learning Performance Metrics in High-Throughput Screening Assays](/202608/14/2608.07609v1-hit-selection-using-ssmd-based-machine-learning-performance-metrics-in-high-throughput-screening-assays)  
+   标签：评分：6.0/10、query:virtual-cell
+   evidence：提出用于高通量筛选命中选择的评估指标，可直接用于扰动响应预测的性能评价。
+4. [Novel Knowledge-Guided Generative Methods for Synthetic Transcriptomic Data](/202608/14/2608.13256v1-novel-knowledge-guided-generative-methods-for-synthetic-transcriptomic-data)  
+   标签：评分：6.0/10、query:virtual-cell
+   evidence：知识引导的合成转录组数据生成方法，可为扰动响应建模提供数据增强
 
 
 <div class="dpr-home-promo-card">
