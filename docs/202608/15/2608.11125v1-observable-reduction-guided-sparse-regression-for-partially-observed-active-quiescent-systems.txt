@@ -1,0 +1,1635 @@
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION FOR
+PARTIALLY OBSERVED ACTIVE-QUIESCENT SYSTEMS
+KYLE C. NGUYEN∗AND KEVIN B. FLORES†
+Abstract. Active-quiescent switching occurs in biological populations where growth acts through
+a proliferative active state while cells may reversibly enter a nonproliferative quiescent state. Ex-
+periments often observe only part of this process, including direct or sparsely sampled active-state
+marker observations, aggregate-only population measurements, and aggregate measurements supple-
+mented by sparse active-state marker data.
+These cases arise, for example, when only a limited
+marker panel is available, when active-state fluorescence requires fixation or endpoint assays such as
+flow cytometry, or when experiments report only total cell number, optical density, tumor burden, or
+aggregate fluorescence. Such observation choices complicate sparse regression-based equation learn-
+ing methods, including sparse identification of nonlinear dynamics (SINDy), because the measured
+variable need not satisfy the same equation as the hidden active-quiescent system. A library chosen
+for the wrong observable may therefore fit a trajectory while losing mechanistic interpretability or
+transferability.
+We study this issue in a two-compartment ordinary differential equation model.
+We call the
+elimination of hidden states observable reduction, meaning the differential equation satisfied by the
+measured variable after unobserved compartments have been removed. We derive these reductions
+for several biologically relevant and commonly used functional forms for growth, and use them to
+construct observation-specific sparse-regression libraries. Using computationally generated data, we
+compare these structured libraries with SINDy in its common polynomial-library form. In the exam-
+ples studied here, polynomial libraries can match training trajectories while failing coefficient-relation
+and transfer checks. Libraries derived from the active or aggregate observable reductions recover
+interpretable coefficient maps when the observed regime is informative.
+These results show that
+interpretable equation learning for hidden-compartment systems requires matching the regression
+target and candidate library to the observation process.
+Relevance to Life Sciences. Active-quiescent switching is common in biological populations whose
+cells, organisms, or subpopulations move between proliferative and nonproliferative states, including
+dormant, resting, or phenotypically inactive states. Experiments often do not observe all compart-
+ments directly. Instead, they may measure active-state markers, total population counts, optical
+density, tumor burden, or aggregate fluorescence. This work shows how such partial or aggregate ob-
+servations change the equation that should be learned from data and develops an observable-reduction
+workflow for interpretable sparse regression in quiescent biological models.
+Mathematical Content.
+The paper studies sparse-regression library construction for partially
+and aggregately observed active-quiescent ODE systems. For each observation map, we derive the
+scalar observable reduction that determines the appropriate regression target and candidate library.
+Active-state observations lead to second-order observable equations with coefficient-to-parameter re-
+lations, while aggregate observations lead to inverse-dependent or implicit reductions with branch
+and conditioning constraints. These reductions are specialized to power-law, Hill-type, and polyno-
+mial growth laws to identify when sparse regression can recover mechanistic parameters and when
+low-residual fits are nonidentifiable or nontransferable.
+Key words. active-quiescent switching, SINDy, sparse regression, partial observability, hidden
+compartments, structural identifiability, observable reductions
+AMS subject classifications. 92B05, 92C17, 34A55, 37N25, 62F10, 65D15
+1. Introduction. Many biological populations contain subpopulations that dif-
+fer in proliferative status. At the single-cell or subpopulation level, cells can actively
+cycle and divide, withdraw into a reversible quiescent or dormant state, and later
+re-enter proliferation when environmental, developmental, or therapeutic conditions
+∗Center for Research in Scientific Computation and Department of Mathematics, North Carolina
+State University, Raleigh, North Carolina, USA. Corresponding author: kcnguye2@ncsu.edu.
+†Center for Research in Scientific Computation and Department of Mathematics, North Carolina
+State University, Raleigh, North Carolina, USA. kbflores@ncsu.edu.
+1
+This manuscript is for review purposes only.
+arXiv:2608.11125v1  [math.DS]  11 Aug 2026
+
+
+2
+K. C. NGUYEN AND K. B. FLORES
+change [26, 12]. This behavior appears across several biological systems. Active and
+quiescent adult stem-cell populations can coexist within tissues [12]. Naive T cells
+are maintained in quiescence and exit quiescence after antigen and costimulatory sig-
+nals before clonal expansion [5]. Bacterial persister cells can switch between normal
+growth and a slow-growing drug-tolerant phenotype [2, 11]. Quiescent cancer cells can
+evade therapies that primarily target cycling cells and later re-enter proliferation to
+contribute to recurrence [13]. These biological observations motivate active-quiescent
+compartment models, by which we mean models that partition a population into a
+proliferative active compartment and a nonproliferative quiescent compartment, with
+transitions into and out of quiescence. Variants of this active-quiescent structure have
+been used to model quiescent phases in mathematical biology, microbial persistence,
+stem-cell renewal, immune activation, and tumor response to antimitotic therapy
+[7, 11, 10]. In these models, growth acts primarily through the active compartment,
+while the quiescent compartment stores cells that may later return to the active state
+and may be hidden or only indirectly observed. This distinction is biologically im-
+portant because changes in switching can alter the apparent growth of the measured
+population without changing the intrinsic proliferation law of active cells. For exam-
+ple, chemotherapy may reduce proliferating tumor cells while sparing quiescent cells,
+changing the observed tumor trajectory. Conversely, reactivation of quiescent stem,
+immune, microbial, or cancer subpopulations can produce apparent population ex-
+pansion even if the active-state growth law is unchanged. Thus, observed population
+dynamics reflect both proliferation within the active state and movement between
+active and quiescent states on experimentally relevant time scales.
+The measurements available in applications rarely reveal every compartment of
+the model. In cell-population experiments, active-state information may come from
+proliferation or cell-cycle markers such as Ki-67, BrdU/EdU incorporation, FUCCI re-
+porters, phospho-histone H3 staining, or other marker panels measured by microscopy
+or flow cytometry [23, 22, 21].
+These measurements may be sparse in time when
+marker panels are limited, when cells must be fixed or destructively processed, or
+when active-state assays are combined with separate population-level readouts. Other
+experiments provide primarily aggregate measurements, such as total nuclei counts,
+confluence, optical density, viable biomass, aggregate fluorescence, or tumor volume.
+Such readouts are common in microbial growth and persistence studies, cell-culture as-
+says, and tumor growth experiments, including models with quiescent or drug-tolerant
+compartments [2, 11, 10, 3]. These measurements combine active and quiescent states
+and therefore do not directly reveal the compartment in which growth occurs. Thus
+the observable determines which differential equation is available to the data after
+hidden variables have been eliminated.
+The focus of this work is to analyze how active-quiescent structure and partial
+biological observation affect regression-based equation learning.
+Sparse regression
+methods such as SINDy and PDE-FIND infer parsimonious differential models by
+selecting a small number of active terms from a prescribed candidate library [4, 20].
+Recent work has addressed partial observation using higher-derivative dictionaries,
+encoder-based hidden-state reconstruction, delay-coordinate autoencoders, and sparse
+data assimilation [24, 14, 1, 19]. These methods show that hidden variables are a
+central difficulty in equation discovery.
+Here we take a complementary, construc-
+tive viewpoint: observable reduction can be used to derive the equation satisfied by
+the measured signal and to translate that equation into a sparse-regression target,
+candidate library, and coefficient diagnostics. Active-marker and aggregate readouts
+enter because they generally induce different observable reductions, so the same hid-
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+3
+den active-quiescent mechanism may require different sparse-regression libraries. The
+goal is therefore to use observable reduction to guide sparse regression toward mech-
+anistically interpretable fits instead of relying on a generic library in the measured
+variables.
+This dependence creates a structural difficulty in hidden compartment biological
+systems. In the standard SINDy formulation, time series measurements are assembled
+into a data matrix X, derivative data are assembled into ˙X, and one seeks a sparse
+coefficient matrix Ξ satisfying
+˙X = Θ(X)Ξ,
+where Θ(X) is a library of candidate nonlinear functions evaluated on the measured
+state. If the full active-quiescent state x were observed, this framework would suggest
+constructing X from measurements of the full state, and fitting a sparse model for
+the vector field in the full state space. In many biological experiments, however, not
+all state variables are observable. The available data may contain only an active-
+state marker, an aggregate population measurement, or sparse marker measurements
+combined with aggregate readouts. In such cases, SINDy cannot be applied directly
+to the full active-quiescent state. A library built only from the observed variables
+may still fit the measured trajectory, but it might not recover the hidden switching
+structure, the active growth law, or a mechanism that transfers across experimental
+regimes.
+We refer to the differential equation obtained after eliminating hidden states as
+the observable reduction. In the two compartment setting studied here, this reduction
+gives an equation for the observable state y of the form
+¨y = g(y, ˙y).
+The function g depends on which state is observed. For an active-state observable, the
+hidden quiescent variable can often be eliminated to obtain a closed equation involving
+only the active state and its derivatives [7]. In this case, the observable reduction can
+preserve a direct relationship between discovered coefficients and the switching and
+growth parameters. For an aggregate observable, the measured state combines active
+and quiescent populations. The reduction then requires reconstructing the hidden
+active state from the aggregate growth relation. Consequently, two datasets generated
+by the same hidden active and quiescent model can require different discovery libraries
+because they correspond to different observed states.
+In this work, we show that sparse regression for hidden-state systems should begin
+with the equation satisfied by the measured quantity. For active-quiescent models, this
+means deriving the scalar observable reduction before choosing a candidate library. A
+flexible library may reproduce one observed trajectory with small residual error while
+producing coefficients that do not map to switching or growth parameters, violate
+the active-quiescent reduction, or fail outside the training regime. We therefore use
+observable reduction as a structural check on both the selected terms and the fitted
+coefficients. We investigate this idea for nonlinear active-quiescent ODE models with
+active growth and linear switching between active and quiescent states. We consider
+two observation maps: direct observation of the active state and observation of the
+aggregate population. For each map, we derive the corresponding scalar observable re-
+duction and specialize it to power-law, Hill-type, and polynomial active growth. These
+growth laws produce different sparse-regression and identifiability issues. Power-law
+growth gives structured libraries with explicit coefficient-to-parameter maps. Hill-type
+growth introduces shape parameters whose practical identifiability depends on the ob-
+This manuscript is for review purposes only.
+
+
+4
+K. C. NGUYEN AND K. B. FLORES
+served dynamical regime. Polynomial growth produces coefficient-pairing constraints
+under active observation and inverse branch ambiguity under aggregate observation.
+Our contributions are as follows. First, we derive scalar observable reductions for
+active-state and aggregate observations of nonlinear active-quiescent ODE models.
+The active-state reduction builds on existing active-quiescent reduction results [7].
+The aggregate-state reduction identifies the inverse reconstruction, branch-selection,
+and conditioning issues introduced by population-level measurements. Second, we
+apply the observable reductions to common biological growth laws, including power-
+law, Hill-type, and polynomial active growth. This gives observation-specific libraries,
+coefficient maps, and consistency diagnostics. Third, we use synthetic computational
+benchmarks to compare the reduction-guided libraries with polynomial SINDy surro-
+gates and to identify failures caused by partial or aggregate observation. These failures
+include low-residual but noninterpretable fits, transfer failure, branch ambiguity, and
+regime-dependent nonidentifiability.
+2. Active-Quiescent Model and Observation Maps. In this section, we de-
+scribe a two-compartment active-quiescent model with two scalar observation maps:
+active-state observation and aggregate population observation. The same hidden dy-
+namics induce different scalar equations depending on which quantity is measured.
+2.1. Hidden active-quiescent dynamics. We consider the active and quies-
+cent ODE model [7]
+˙v = f(v) −γ2v + γ1w,
+(2.1a)
+˙w = −γ1w + γ2v.
+(2.1b)
+Here v(t) denotes the active population, w(t) denotes the quiescent population, and
+f(v) is the intrinsic active growth law. The parameter γ2 ≥0 is the active to quiescent
+switching rate, and γ1 ≥0 is the quiescent to active switching rate. Growth acts only
+through the active compartment, while switching redistributes mass between the two
+compartments. Thus net population growth is controlled by the active state through
+f(v). This identity is central for aggregate observations because u = v + w satisfies
+(2.2)
+˙u = f(v).
+An aggregate measurement therefore depends on the hidden active state even when
+only the total population is observed.
+The two switching rates have distinct dynamical roles. Increasing γ2 transfers
+active mass into the quiescent compartment and can slow the apparent growth of
+the active population. Increasing γ1 transfers quiescent mass back into the active
+compartment and can restore growth by feeding the proliferative state. When both
+rates are positive, switching is reversible. When one rate is zero, the model reduces
+to a one-way transition.
+We do not impose a specific form for f(v) at this stage. The reductions below
+first treat f as a general nonlinear active growth law and then specialize to power-
+law, Hill-type, and polynomial growth in Section 5.
+This separation is important
+because the hidden model specifies where growth occurs, while the analytic form of f
+determines the nonlinear terms that appear in the scalar observable equation.
+2.2. Observation maps. The hidden model (2.1) is first order in the two-
+dimensional state x(t) = (v(t), w(t))T , but the measured variable is not always the
+full state. We represent a scalar measurement by an observation map
+(2.3)
+y(t) = P(x(t)) = P(v(t), w(t)).
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+5
+This notation allows for general nonlinear measurement processes. In the main anal-
+ysis, we focus on two linear observation maps of the form
+(2.4)
+y(t) = Cx(t),
+C ∈R1×2.
+Active-state observation corresponds to
+Cact = (1, 0),
+y(t) = Cactx(t) = v(t),
+while aggregate population observation corresponds to
+Cagg = (1, 1),
+y(t) = Caggx(t) = v(t) + w(t) = u(t).
+The first linear map represents active-state measurements, such as active markers, cell-
+cycle indicators, proliferating cell counts, or reporter signals associated with active
+growth. The second represents aggregate measurements, such as total population size,
+cell density, optical density, fluorescence intensity, viable biomass, or tumor burden.
+Under active observation, the measured variable is one component of the hidden state,
+so the quiescent variable can be eliminated from the active equation. Under aggregate
+observation, the measured variable combines active and quiescent states, so the active
+state must be reconstructed from ˙u = f(v). If f has a locally admissible inverse branch
+F, then
+(2.5)
+v = F( ˙u),
+f(F( ˙u)) = ˙u.
+For nonlinear f, this inverse relation may be local, multivalued, or valid only in
+restricted dynamical regimes.
+Figure 1 summarizes the hidden model and the two observation maps. The corre-
+sponding scalar sparse-regression targets are stated in Section 4, with full derivations
+given in Appendix A.
+2.3. Synthetic cell-population measurement example. Consider a compu-
+tationally generated cell-population experiment in which cells occupy either an active
+proliferative state or a quiescent nonproliferative state. The hidden variables are the
+active population v(t) and the quiescent population w(t). Active cells grow according
+to f(v), switch to quiescence at rate γ2, and return from quiescence at rate γ1. An
+active-state marker, such as a proliferation reporter, cell-cycle marker, or active-state
+fluorescence signal, gives a measurement close to y(t) = v(t). A total-population read-
+out, such as nuclei count, confluence, optical density, viable biomass, tumor burden,
+or aggregate fluorescence, gives a measurement close to y(t) = u(t) = v(t) + w(t).
+Although both measurements come from the same hidden active-quiescent mecha-
+nism, they lead to different scalar regression targets. Active-state observation gives
+the second-order active observable reduction. Aggregate observation instead requires
+reconstructing the hidden active state from ˙u = f(v).
+The measurement process
+therefore determines the regression target before sparse regression is applied. Table 1
+summarizes the corresponding observables, regression targets, and diagnostics.
+3. Sparse Identification of Nonlinear Dynamics. Sparse identification of
+nonlinear dynamics (SINDy) assumes that an observed vector field can be represented
+as a sparse expansion in prescribed candidate functions [4, 9, 18]. Let {θj}p
+j=1 be a
+library of candidate nonlinear functions. For a measured trajectory x(t) ∈Rd, SINDy
+seeks sparse coefficients ξji such that
+˙xi(t) ≈
+p
+X
+j=1
+ξjiθj(x(t)),
+i = 1, . . . , d.
+This manuscript is for review purposes only.
+
+
+6
+K. C. NGUYEN AND K. B. FLORES
+Fig. 1: Conceptual active-quiescent model, observation maps, and aggregate inverse
+branches. A) Active growth f(v) occurs only in the active compartment, with switch-
+ing between active and quiescent states. Active observation measures y = v and leads
+to a closed observable reduction for the measured active state. Aggregate observation
+measures y = u = v + w, so the hidden active state must be reconstructed from the
+aggregate growth relation ˙u = f(v). B) The same measured value of ˙u can intersect
+a nonmonotone growth curve at more than one positive value of v. In that case, the
+inverse reconstruction is branch dependent, and aggregate data alone do not deter-
+mine which active state generated the observed growth.
+Biological
+measure-
+ment
+Observable
+Regression target
+Primary diagnostic
+Active marker or pro-
+liferation reporter
+y = v
+second-order active re-
+duction
+coefficient maps and
+coefficient pairing
+Total
+nuclei,
+conflu-
+ence, OD, biomass, tu-
+mor burden, or aggre-
+gate fluorescence
+y = u = v + w
+aggregate
+inverse
+or
+implicit reduction
+positive branch count
+and inverse condition-
+ing
+Sparse
+active-marker
+measurements
+plus
+aggregate readout
+u(t), v(ti)
+aggregate
+reduction
+with active-state con-
+straints
+branch resolution and
+parameter constraints
+Perturbed
+aggregate
+readout
+upert(t)
+shared
+mechanism
+across conditions
+transfer or perturba-
+tion prediction error
+Table 1: Biological interpretation of observation maps. Different biological measure-
+ment protocols correspond to different mathematical observables, sparse-regression
+targets, and identifiability diagnostics.
+At sampled times tm, this gives the matrix regression problem
+˙X ≈Θ(X)Ξ,
+where Θ(X)mj = θj(x(tm)) and Ξ = (ξji). More generally, the sparse regression step
+does not require the left hand side to be a first derivative of the full state. One may
+choose the regression target from the differential equation available for the measured
+quantity. In standard first-order SINDy, this target is ˙X. A major issue in biological
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+7
+applications is that not all state variables are observable. In many experiments, the
+available data contain only a subset of states or aggregate quantities. The sparse
+regression problem is therefore coupled to the observation process. A library built
+only from the observed variables may fit the data well while missing hidden switching
+dynamics, the active growth law, or a mechanism that transfers across regimes. In
+addition, choosing a library with correlated functions can lead to ill-conditioning and
+model misidentification, especially when biological trajectories sample a restricted
+region of state space [6]. In an observable-reduction setting, hidden states are first
+eliminated, and the resulting scalar equation may instead use the second derivative
+of the observable as the regression target.
+Thus a reduced equation of the form
+¨y = g(y, ˙y) leads to a sparse regression problem in which samples of ¨y are fit using
+candidate functions built from y and ˙y.
+4. Observable Reductions. The observable reduction is the second-order deriva-
+tive equation satisfied by the measured variable after hidden states have been elimi-
+nated. These reductions provide the regression targets and guide the library construc-
+tion used in the following sections. The derivations are described in Appendix A.
+4.1. Active-state observable reduction. Assume f ∈C1 and γ1 > 0.
+If
+y = v, then the active state satisfies the closed second-order equation
+(4.1)
+¨v =
+ f ′(v) −γ1 −γ2
+
+˙v + γ1f(v).
+Thus active observation does not lead to a first-order scalar equation in general. The
+hidden quiescent compartment appears through the acceleration term and through
+the switching parameters γ1 and γ2. For sparse regression, the appropriate target is
+therefore a second-order model [7] of the form
+(4.2)
+¨v = Θ(v, ˙v)ξ.
+The candidate library should contain the terms generated by f(v), by f′(v)˙v, and by
+the linear damping term ˙v.
+The assumption γ1 > 0 is used when eliminating w from the active equation.
+If γ1 = 0, quiescent cells do not return to the active compartment and the active
+equation is already first-order closed:
+˙v = f(v) −γ2v.
+In that one-way switching case, a first-order active-state regression target may be
+appropriate. Thus the regression target depends on both the observation map and
+whether switching is reversible.
+The active reduction is relatively favorable for mechanistic interpretation. When
+the correct growth family is used, the coefficients of (4.1) can often be mapped back
+to switching rates and growth parameters. This is the basis for the coefficient-to-
+parameter maps and consistency diagnostics developed in Section 5.
+4.2. Aggregate-state observable reduction. If y = u, then the aggregate
+variable satisfies (2.2). The measured aggregate growth rate is therefore the active
+growth law evaluated at the hidden active state. The corresponding differential alge-
+braic reduction is
+¨u = f ′(v) [ ˙u + γ1u −(γ1 + γ2)v] .
+(4.3)
+This manuscript is for review purposes only.
+
+
+8
+K. C. NGUYEN AND K. B. FLORES
+If f has a locally admissible inverse branch F, then v = F( ˙u) and the aggregate
+variable satisfies the explicit scalar equation
+(4.4)
+¨u = f ′(F( ˙u)) [ ˙u + γ1u −(γ1 + γ2)F( ˙u)] .
+Unlike the active reduction, the aggregate reduction depends on the inverse structure
+of f. If f is not one-to-one on the biological domain, then different positive active
+states may produce the same value of ˙u.
+The aggregate equation is then branch
+dependent. This branch dependence is illustrated schematically in Figure 1B, where
+a single measured value of ˙u can intersect the growth curve at one or multiple positive
+active states.
+For sparse regression, aggregate observation is therefore more restrictive than ac-
+tive observation. A standard library in (u, ˙u) is appropriate only when the inverse
+branch can be represented explicitly and stably. Otherwise, the discovery problem is
+better treated with an implicit or nonlinear formulation based on (4.3). This distinc-
+tion is central for the aggregate Hill and aggregate polynomial cases below.
+5. Observable-Reduction-Guided Sparse-Regression Libraries. We fo-
+cus on the observation-specific libraries used in the numerical experiments.
+Sub-
+stituting the power-law, Hill-type, and polynomial growth laws into the active and
+aggregate reductions gives the corresponding regression targets, candidate libraries,
+coefficient maps, and structural diagnostics. The detailed algebraic substitutions are
+described in Appendix B.
+5.1. Power-law growth. Let
+(5.1)
+f(v) = avn,
+a > 0,
+n > 0.
+For active observation, the second-order equation is
+(5.2)
+¨v = anvn−1 ˙v −(γ1 + γ2)˙v + γ1avn.
+For known n, the active observable library is
+(5.3)
+Lact
+power =
+
+vn−1 ˙v, ˙v, vn	
+.
+If
+¨v = c1vn−1 ˙v + c2 ˙v + c3vn,
+then the mechanistic parameters are recovered from
+(5.4)
+a = c1
+n ,
+γ1 = nc3
+c1
+,
+γ2 = −c2 −γ1.
+This coefficient-to-parameter map is conditional on the assumed power-law growth
+family and on the exponent n being known or correctly selected.
+It also requires
+that the corresponding library terms are present and that the coefficient c1 = an is
+nonzero and reliably estimated. If the selected exponent is incorrect, a sparse fit may
+still have a small residual on a restricted trajectory, but the resulting coefficients no
+longer have the stated mechanistic interpretation.
+For aggregate observation, the second-order equation is
+(5.5)
+¨u = na1/n( ˙u)(2n−1)/n + nγ1a1/nu( ˙u)(n−1)/n −n(γ1 + γ2) ˙u.
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+9
+The aggregate power-law reduction uses the positive inverse branch v = ( ˙u/a)1/n. For
+non-integer n, this real-valued branch requires ˙u > 0, corresponding to positive active
+growth on the observed trajectory. Therefore the aggregate power-law library is valid
+on trajectory regions where the observed aggregate derivative remains positive and
+the positive active-state branch is biologically admissible. For known n, the aggregate
+observable library is
+(5.6)
+Lagg
+power =
+n
+( ˙u)(2n−1)/n, u( ˙u)(n−1)/n, ˙u
+o
+.
+If
+¨u = c1( ˙u)(2n−1)/n + c2u( ˙u)(n−1)/n + c3 ˙u,
+then
+(5.7)
+a =
+c1
+n
+n
+,
+γ1 = c2
+c1
+,
+γ2 = −c3
+n −γ1.
+5.2. Hill-type growth. Let
+(5.8)
+f(v) =
+avn
+Kn + vn ,
+a > 0,
+K > 0,
+n > 0.
+For active observation, the second-order equation is
+(5.9)
+¨v =
+
+an
+Knvn−1
+(Kn + vn)2 −(γ1 + γ2)
+
+˙v + γ1a
+vn
+Kn + vn .
+For known (n, K), the active Hill library contains the three functions
+(5.10)
+Dn,K(v, ˙v) =
+Knvn−1
+(Kn + vn)2 ˙v,
+Gn,K(v) =
+vn
+Kn + vn ,
+˙v.
+The corresponding coefficients satisfy cD = an, cG = γ1a, and c ˙v = −(γ1 + γ2). Thus
+the active Hill problem is linear in the coefficients once the shape parameters (n, K)
+are fixed.
+For aggregate observation, the inverse relation is valid on the positive biological
+domain when
+(5.11)
+0 < ˙u < a.
+On this admissible range, the hidden active state can be written as
+(5.12)
+v = K
+
+˙u
+a −˙u
+1/n
+.
+The aggregate Hill target can then be written as
+(5.13)
+¨u = n ˙u(a −˙u)
+av
+[ ˙u + γ1u −(γ1 + γ2)v] ,
+v = K
+
+˙u
+a −˙u
+1/n
+.
+This is not an ordinary linear SINDy problem in a fixed library because the inverse
+reconstruction depends on unknown parameters. The aggregate Hill case therefore
+This manuscript is for review purposes only.
+
+
+10
+K. C. NGUYEN AND K. B. FLORES
+requires nonlinear search or an implicit formulation together with the biological con-
+straint 0 < ˙u < a. In particular, admissibility is parameter dependent. A candidate
+value of a is valid only if 0 < ˙u(t) < a for all time points used in the fit. Candi-
+date parameter sets violating this inequality do not define a positive real active-state
+reconstruction and should be excluded or penalized.
+The Hill law also gives practical identifiability regimes. If vn ≪Kn, then f(v) ≈
+(a/Kn)vn, so data mainly identify the lumped ratio a/Kn. If vn ≫Kn, then f(v) ≈a
+and f ′(v) ≈0, so K has little influence on the observed dynamics. Reliable separation
+of a, K, and n requires trajectories that sample the transition region v ≈K.
+5.3. Polynomial growth. Let
+(5.14)
+f(v) =
+p
+X
+j=m
+ajvj,
+1 ≤m ≤p,
+ap̸ = 0.
+For active observation, the second-order equation is
+(5.15)
+¨v =
+p
+X
+j=m
+jajvj−1 ˙v −(γ1 + γ2)˙v + γ1
+p
+X
+j=m
+ajvj.
+The active polynomial library is
+(5.16)
+Lact
+poly =
+
+vm−1 ˙v, . . . , vp−1 ˙v, ˙v, vm, . . . , vp	
+.
+The key structural feature is coefficient pairing. The coefficient of vj−1 ˙v is jaj, while
+the coefficient of vj is γ1aj. Therefore, whenever aj̸ = 0 and both coefficients are
+estimated,
+(5.17)
+γ1 = j
+coefficient of vj
+coefficient of vj−1 ˙v .
+Consistency of (5.17) across multiple degrees is a structural signature of hidden active
+and quiescent dynamics. It tests whether the fitted polynomial acceleration obeys the
+coefficient relations imposed by eliminating the hidden quiescent state.
+For aggregate observation, the polynomial reduction is most naturally retained in
+differential algebraic form
+˙u =
+p
+X
+j=m
+ajvj,
+(5.18a)
+¨u =
+
+
+p
+X
+j=m
+jajvj−1
+
+[ ˙u + γ1u −(γ1 + γ2)v] .
+(5.18b)
+Recovering v requires solving
+(5.19)
+p
+X
+j=m
+ajvj −˙u = 0.
+If this equation has a unique positive real solution over the observed range, then
+the hidden active state can be reconstructed on that biological branch, assuming the
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+11
+Table 2: Observable-reduction libraries and coefficient relations.
+Growth law
+Observation
+Library terms
+Identifiable relations
+Power avn
+y = v
+vn−1 ˙v, ˙v, vn
+a = c1/n, γ1 = nc3/c1,
+γ2 = −c2 −γ1
+Power avn
+y = u
+˙u(2n−1)/n, u ˙u(n−1)/n, ˙u
+a = (c1/n)n, γ1 = c2/c1,
+γ2 = −c3/n −γ1
+Hill
+y = v
+Dn,K(v, ˙v), ˙v, Gn,K(v)
+Linear coefficients after fix-
+ing n, K
+Hill
+y = u
+Implicit or inverse terms in-
+volving v = K( ˙u/(a−˙u))1/n
+Nonlinear
+parameter
+search. Valid for 0 < ˙u < a
+Polynomial
+y = v
+vj−1 ˙v, ˙v, vj
+γ1
+=
+j c(vj)/c(vj−1 ˙v)
+across degrees
+Polynomial
+y = u
+Positive branch of f(v) = ˙u
+Unique positive branch re-
+quired for aggregate identi-
+fiability
+polynomial growth law and its coefficients are known. If two or more positive roots
+exist for the same value of ˙u, aggregate data alone cannot determine which active state
+generated the observation. Near f ′(v) = 0, the inverse branch becomes ill-conditioned
+because dv/d ˙u = 1/f ′(v). This branch-reconstruction condition should not be inter-
+preted as full structural identifiability of all unknown coefficients in f and switching
+rates γ1, γ2. Parameter identifiability additionally requires enough independent in-
+formation in the reconstructed branch and aggregate equation to determine those
+unknowns.
+5.4. Observable-reduction-induced general library construction for ac-
+tive observable. The power-law, Hill, and polynomial libraries above are controlled
+benchmarks that test recovery when a growth family is specified. More generally, the
+active observable reduction supplies a construction rule for a dictionary of candidate
+growth atoms: each candidate ϕ(v) contributes the pair ϕ(v) and ϕ′(v)˙v, together with
+the shared damping column ˙v. We therefore use the duplicate-free 26-term library
+(5.20)
+Lact = {˙v} ∪{v, v2, v3, v4} ∪{2v ˙v, 3v2 ˙v, 4v3 ˙v}
+∪
+
+Gn,K(v), G′
+n,K(v)˙v : n ∈{1, 2, 3}, K ∈{0.5, 1, 2}
+	
+,
+where
+(5.21)
+Gn,K(v) =
+vn
+Kn + vn ,
+G′
+n,K(v)˙v =
+nKnvn−1
+(Kn + vn)2 ˙v.
+Integer power-law active libraries are nested in the polynomial block because an
+atom vn induces both vn and nvn−1 ˙v. In particular, the controlled power-law case
+with n = 2 is represented by v2 and 2v ˙v together with the shared ˙v term.
+The
+controlled polynomial case with maximum degree p = 3 is also contained in the
+candidate polynomial block with p = 4. Therefore the 26-term dictionary contains
+the controlled power-law, polynomial, and Hill active-observable libraries.
+Table 2 provides a summary for the observable-reduction libraries and coefficients
+relations.
+This manuscript is for review purposes only.
+
+
+12
+K. C. NGUYEN AND K. B. FLORES
+6. Numerical Methods. We generated synthetic trajectories from (2.1) and
+fitted candidate sparse-regression models using the targets and libraries derived above.
+We then evaluated each fit using the regression targets, scoring metrics, and validation
+checks described below.
+6.1. Regression strategies. The regression strategy depends on the observa-
+tion map. For active observations, we compare three approaches. The first fits a naive
+first-order polynomial model for ˙v, even though reversible active-quiescent switching
+generally does not produce a closed first-order equation for v. The second fits ¨v with
+a generic polynomial library in (v, ˙v). The third fits ¨v with the 26-term library in-
+duced by the active observable reduction. This dictionary contains polynomial atoms
+and candidate Hill atoms together with their derivative-coupled partners. It therefore
+tests whether the growth structure can be selected without assuming a known growth
+family.
+These approaches answer different questions. The first-order fit tests whether a
+trajectory-dependent surrogate can reproduce ˙v. The generic second-order fit tests
+whether a flexible polynomial basis can reproduce the correct acceleration target. The
+26-term fit additionally tests support recovery and permits the selected coefficients
+to be interpreted using the growth-specific maps in Section 5. For aggregate observa-
+tions, the inverse dependence of the observable reduction prevents one common fixed
+dictionary from playing the same role. We therefore retain growth-specific inverse or
+nonlinear procedures for the aggregate power-law and aggregate Hill cases.
+Residual error is reported for all fits, but it is not treated as evidence of mechanism
+recovery by itself.
+A low-residual model may target the wrong derivative, select
+terms without a valid coefficient map, violate active-quiescent coefficient relations, or
+fail when evaluated in another dynamical regime. We therefore interpret residuals
+together with selected support, recovered parameters, coefficient-pairing consistency,
+and transfer error.
+6.2. Synthetic data generation and implementation details. Synthetic
+trajectories were generated from (2.1). The simulator stores v, w, u and the deriva-
+tives ˙v, ˙u, ¨v, ¨u computed from the model and observable reductions. The present ex-
+periments use exact synthetic trajectories and model-evaluated derivatives by design.
+Our goal is to isolate structural failures caused by partial and aggregate observation
+from errors caused by finite sampling, derivative estimation, or measurement noise.
+These experiments therefore provide a best-case identifiability benchmark for the ob-
+servation protocol. Robustness to noise is a separate practical-identifiability question
+that we leave to future extensions using weak and implicit formulations. Matched
+active and aggregate controlled benchmarks use the same underlying growth choices:
+the power-law exponent is n = 2, the polynomial maximum degree is p = 3, and the
+Hill truth is a = 1.5, K = 1, and n = 2.
+6.3. Scoring, validation, and reproducibility. For a chosen library Θ, the
+regression problem is
+(6.1)
+min
+ξ
+∥z −Θξ∥2
+2 + λ∥ξ∥2
+2
+followed by coefficient thresholding,
+where z is the target derivative. For the first-order derivative equations, z is either ˙v or
+˙u. For the second-order derivative equations, z is either ¨v or ¨u. Before sparse regres-
+sion, each library column is normalized to unit Euclidean norm. If Θ = [Θ1, . . . , Θp],
+we fit with scaled columns eΘj = Θj/∥Θj∥2, with zero-norm columns left unchanged.
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+13
+Thresholding is performed in physical coefficient units, and the final coefficients are
+transformed back by bξj = eξj/∥Θj∥2. All coefficient-to-parameter maps are therefore
+applied to unscaled coefficients. The reported residual is
+(6.2)
+R = ∥z −Θξ∥2
+∥z∥2
+.
+Residual error measures agreement with the observable regression target, but it does
+not by itself establish mechanistic recovery.
+For Hill-type growth, transfer across
+regimes is evaluated with relative target or prediction errors, for example ∥z(s) −
+bz(s)∥2/∥z(s)∥2 for a model trained in one regime and tested in regime s. For active
+polynomial recovery, we report the degree-wise consistency estimates
+bγ1,j = j
+bc(vj)
+bc(vj−1 ˙v).
+We summarize the spread of these degree-wise estimates using a normalized pairing-
+consistency score over the degrees for which both paired coefficients are selected and
+reliably nonzero. This score should be interpreted together with coefficient magnitudes
+and support recovery, since ratios involving very small denominator coefficients can
+be unstable. For aggregate polynomial recovery, we diagnose the number of positive
+roots of f(v) −˙u over the observed range and the conditioning factor |1/f′(v)|. The
+root count diagnoses nonuniqueness of the aggregate inverse problem, while |1/f′(v)|
+diagnoses local numerical sensitivity of active-state reconstruction. A trajectory can
+therefore have a unique positive branch but still be practically unreliable if |f′(v)| is
+small along the observed range.
+7. Results.
+7.1. Active observations.
+7.1.1. Power-law recovery. For active-state observation with f(v) = 0.8v2,
+the hidden quiescent state is eliminated only after differentiating the observed active
+state. The correct regression target is therefore the second-order equation (5.2), not a
+closed first-order law for v. The naive first-order polynomial fit approximates ˙v along
+the sampled trajectory. Differentiating that surrogate gives the implied acceleration
+shown in Figure 2A, but its larger acceleration error confirms that fitting ˙v does not
+recover the active observable equation.
+The generic second-order polynomial library and the 26-term library both contain
+the three terms required by the n = 2 observable reduction.
+Consequently, both
+recover the acceleration to numerical precision in this noise-free benchmark. Table 3
+compares the true observable equation with the fitted equations. We found that the
+26-term library selects the coherent support {2v ˙v, ˙v, v2}, which maps back to the
+correct switching parameters shown in Figure 2B.
+7.1.2. Polynomial coefficient pairing. The polynomial benchmark is more
+informative than the power-law case because the observable reduction predicts both
+the support and repeated coefficient relations. For f(v) = 0.08v2 −0.01v3, the true
+acceleration contains the derivative-coupled terms 0.16v ˙v and −0.03v2 ˙v, the damping
+term −0.65˙v, and the growth terms 0.032v2 and −0.004v3.
+The naive first-order
+polynomial again fits a different target. The full recovered first-order and second-
+order polynomial equations are reported in Table 4. The generic second-order library
+reproduces the acceleration equation because the true terms lie inside its polynomial
+basis.
+This manuscript is for review purposes only.
+
+
+14
+K. C. NGUYEN AND K. B. FLORES
+Fig. 2: Active power-law recovery from y = v.
+Panel A compares the recovered
+accelerations and relative errors. Panel B reports parameter recovery and the selected
+26-term-library support.
+Model
+Equation
+True observable
+¨v = 1.6 v ˙v −0.65 ˙v + 0.32 v2
+Naive first order
+˙v = 0.122 −0.799 v + 3.43 v2 −22.4 v3 + 106 v4 −160 v5
+Naive second order
+¨v = 1.6 v ˙v −0.65 ˙v + 0.32 v2
+General 26-term library
+¨v = 1.6 v ˙v −0.65 ˙v + 0.32 v2
+Table 3: Equation comparison for active power-law recovery.
+The 26-term library selects ˙v, v2, v3, 2v ˙v, and 3v2 ˙v.
+Figure 3B shows that
+the recovered observable-equation coefficients coincide with the true values. Their
+agreement in Figure 3C is the mechanistic consistency check. Combining the common
+estimate bγ1 = 0.4 with the coefficient of ˙v gives bγ2 = 0.65 −0.4 = 0.25. Figure 3D
+shows that this recovery is also achieved with a residual near numerical precision.
+7.1.3. Hill growth and transfer. The Hill benchmark separates interpolation
+on one trajectory from recovery of a transferable growth mechanism. The models are
+trained on the early-growth trajectory, where the Hill law locally resembles a power
+law.
+A polynomial surrogate can therefore achieve a small training error without
+containing the rational saturation structure needed in the transition and saturated
+regimes. For compact notation, define
+Gn,K(v) =
+vn
+Kn + vn ,
+Dn,K(v, ˙v) = G′
+n,K(v)˙v.
+Figure 4 should therefore be read as a transfer test. The naive first-order and second-
+order polynomial models are evaluated using the equations fitted on the early regime.
+Their errors increase sharply when the trajectory moves through the Hill transition or
+into saturation. The 26-term library instead selects D2,1(v, ˙v), ˙v, and G2,1(v), giving
+the recovered equation
+¨v = 1.5D2,1(v, ˙v) −0.65˙v + 0.6G2,1(v).
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+15
+Fig. 3: Active polynomial recovery with the 26-term observable-reduction library.
+Panel A compares acceleration predictions. Panel B compares recovered and true co-
+efficients. Panel C shows the degree-wise pairing estimates. Panel D reports residuals
+and selected support.
+Model
+Equation
+True observable
+¨v = 0.16 v ˙v −0.03 v2 ˙v −0.65 ˙v + 0.032 v2 −0.004 v3
+Naive first-order polynomial
+library
+˙v = 6.39 −29.8 v + 51.5 v2 −39.8 v3 + 12.4 v4 −0.708 v5
+Naive
+second-order
+polyno-
+mial library
+¨v = 0.16 v ˙v −0.03 v2 ˙v −0.65 ˙v + 0.032 v2 −0.004 v3
+General 26-term library
+¨v = 0.16 v ˙v −0.03 v2 ˙v −0.65 ˙v + 0.032 v2 −0.004 v3
+Table 4: Equation comparison for active polynomial recovery. The table reports the
+full recovered first-order and second-order polynomial equations. Coefficients removed
+by thresholding are zero and are omitted.
+The selected indices identify bn = 2 and bK = 1. The derivative-coupled coefficient
+gives ba = 1.5, the ratio 0.6/1.5 gives bγ1 = 0.4, and the damping coefficient gives
+bγ2 = 0.65−0.4 = 0.25. Table 5 compares this equation with the polynomial surrogates.
+The transfer residual remains near numerical precision in all three regimes, showing
+that the selected Hill atoms recover the mechanism instead of only an early-regime
+approximation.
+7.2. Aggregate observations.
+This manuscript is for review purposes only.
+
+
+16
+K. C. NGUYEN AND K. B. FLORES
+Model
+Equation
+Diagnostic
+True observable
+¨v = 1.5D2,1(v, ˙v) −0.65 ˙v + 0.6G2,1(v)
+a = 1.5,
+K
+=
+1, n = 2
+Naive first order
+˙v = −17.4 + 1.429 × 103 v −4.680 × 104 v2
++ 7.643 × 105 v3 −6.224 × 106 v4 + 2.022 × 107 v5
+Degree 5 polyno-
+mial surrogate
+Naive second or-
+der
+¨v = −0.65 ˙v + 0.6 v2 + 3 v ˙v
++ 0.00185 ˙v2 −4.352 × 10−4 v3 −2.865 × 10−4 v2 ˙v
+−0.127 v ˙v2 −0.102 ˙v3 −0.592 v4
+−6 v3 ˙v + 1.77 v2 ˙v2 + 3.67 v ˙v3
++ 0.645 ˙v4
+13-term
+polyno-
+mial surrogate
+General
+26-term
+library
+¨v = 1.5D2,1(v, ˙v) −0.65 ˙v + 0.6G2,1(v)
+Selected
+G2,1, D2,1, ˙v
+Table 5: Equation comparison for active Hill recovery and transfer.
+Fig. 4: Active Hill transfer comparison across early, transition, and saturated regimes.
+Panels A, B, and C compare recovered accelerations with the truth. Panel D reports
+relative transfer errors.
+7.2.1. Power-law inverse recovery. For aggregate observations, the measured
+variable is u = v + w as opposed to the active state itself. In the power-law case,
+reconstructing v from ˙u = f(v) introduces the fractional powers of ˙u in (5.5). Poly-
+nomial libraries in u or (u, ˙u) can approximate the observed window, but they do not
+contain this inverse-dependent structure. The structured aggregate library recovers
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+17
+Fig. 5: Aggregate power-law recovery from y = u = v + w. The correct observable
+library contains fractional powers of ˙u, whereas blind polynomial libraries in u or
+(u, ˙u) are not mechanistically aligned with the aggregate reduction.
+Model
+Equation
+True observable
+¨u = 1.789 ( ˙u)3/2 + 0.716 u( ˙u)1/2 −1.3 ˙u
+Naive first order
+˙u = −1.22 × 104 + 1.96 × 105 u −1.26 × 106 u2
++ 4.07 × 106 u3 −6.56 × 106 u4 + 4.23 × 106 u5
+Naive second order
+¨u = −2.997 + 123.847 u −650.972 ˙u
+−645.986 u2 + 4.87 × 103 u ˙u −1.54 × 103 ( ˙u)2
++ 884.961 u3 −8.96 × 103 u2 ˙u + 8.73 × 103 u( ˙u)2
++ 1.37 × 104 ( ˙u)3
+n-search SINDy (n =
+2)
+¨u = 1.789 ( ˙u)3/2 + 0.716 u( ˙u)1/2 −1.3 ˙u
+Table 6: Equation comparison for aggregate power-law recovery. The rows distinguish
+the first-order aggregate surrogate, the generic second-order polynomial surrogate,
+and the structured aggregate n-search equation.
+the fractional-power equation and the associated switching parameters, whereas the
+polynomial rows in Table 6 should be interpreted as trajectory-level surrogates.
+7.2.2. Hill nonlinear recovery. For aggregate Hill growth, the inverse map
+v = K
+
+˙u
+a −˙u
+1/n
+depends on unknown parameters, so there is no fixed linear library to fit first and
+interpret later. Instead, the problem becomes a nonlinear search with the biological
+constraint 0 < ˙u < a. Starting from observations of u(t), we estimate ˙u(t) and ¨u(t),
+reconstruct the hidden active state through the inverse Hill map, and then compare
+the two sides of the reduced observable equation. In other words, the fit is performed
+by matching the observed left-hand side ¨u(t) to the model-predicted right-hand side
+of the aggregate Hill reduction while searching over a, K, n, γ1, and γ2.
+In Appendix C and Figure 6, we show why this is important in practice. The
+This manuscript is for review purposes only.
+
+
+18
+K. C. NGUYEN AND K. B. FLORES
+Initial guess
+Residual R
+Parameter error Eparam
+Admissible 0 < ˙u < a
+Comment
+(1.2, 0.8, 1.6, 0.3, 0.2)
+4.963 × 106
+2.012 × 10−1
+no
+inverse constraint fails
+(2, 1.5, 2.5, 0.6, 0.5)
+5.181 × 10−4
+1.354 × 10−1
+yes
+admissible fit
+(1.55, 1, 2, 0.4, 0.25)
+2.810 × 10−13
+1.402 × 10−12
+yes
+admissible fit
+Table 7: Aggregate-Hill nonlinear search diagnostics for the synthetic benchmark.
+nonlinear search is sensitive to initialization even with synthetic noise-free data. In
+Table 7, one initialization violates the inverse constraint, one gives an admissible
+but less accurate fit, and the initialization near the true parameters recovers the
+benchmark values to numerical precision.
+Table 7 separates the residual, parameter error, and admissibility check for each
+nonlinear aggregate-Hill initialization. This demonstrates when a low residual is ac-
+companied by biologically admissible parameters and when the inverse constraint
+fails.
+Fig. 6: Aggregate Hill nonlinear least-squares fits from different initial guesses. A)
+compares the observed left-hand side ¨u(t) with the right-hand side predicted by the
+recovered aggregate Hill equation.
+The best fit tracks the observed curve closely,
+while poorer initial guesses can lead to visibly worse or inadmissible solutions. B)
+compares the recovered parameter vectors against the true values a = 1.5, K = 1,
+n = 2, γ1 = 0.4, and γ2 = 0.25. C) reports the relative residual for each initial guess,
+showing the strong sensitivity of the nonlinear search to initialization. The initial
+guesses were (1.2, 0.8, 1.6, 0.3, 0.2), (2, 1.5, 2.5, 0.6, 0.5), and (1.55, 1, 2, 0.4, 0.25).
+7.2.3. Polynomial branch ambiguity. The aggregate polynomial case shows
+a different limitation: even if the model form is correct, the hidden active state may
+not be uniquely recoverable from the aggregate data. The equation f(v) = ˙u can
+have one positive root, several positive roots, or none at all over a given range. When
+there is more than one admissible positive root, the same measured aggregate growth
+rate can correspond to different hidden active states.
+The aggregate polynomial case gives two pre-regression diagnostics: branch unique-
+ness and inverse conditioning. In the monotone case shown in Figure 7A, each ad-
+missible value of ˙u corresponds to one positive active state, so the inverse branch is
+unique. In the nonmonotone case shown in Figure 7B, the same observed value of ˙u
+can correspond to several positive active states. The root count in Figure 7C shows
+this ambiguity directly. A count of one means that the active state can be recon-
+structed uniquely from aggregate data, while a count greater than one means that
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+19
+Fig. 7: Aggregate polynomial branch ambiguity. Panel A shows a monotone polyno-
+mial with a unique positive inverse branch. Panel B shows a nonmonotone polynomial
+for which a single q = ˙u can correspond to multiple positive active states. Panel C
+counts positive roots as q varies. Panel D reports the minimum |f ′(v)| over admissible
+roots, highlighting regions where inverse reconstruction is ill-conditioned.
+aggregate data alone do not determine the hidden active state.
+Uniqueness is separate from numerical stability. Even when the positive branch
+is unique, recovering v from ˙u can be unstable if the graph of f is nearly flat. If a
+local inverse branch exists, we may write v = F( ˙u), and the inverse function theorem
+gives
+dF
+d ˙u =
+1
+f ′(F( ˙u)).
+So, when |f ′(v)| is small, a small perturbation in ˙u can produce a large change in the
+reconstructed active state. Figure 7D reports the minimum |f ′(v)| along admissible
+positive roots. Large values indicate stable inversion, while values near zero signal ill
+conditioning. Aggregate polynomial discovery can therefore fail before sparse regres-
+sion is attempted, either because the positive inverse branch is nonunique or because
+the unique branch is too ill-conditioned to use reliably.
+8. Discussion. In this work, we show that partial observability changes the
+equation available for sparse regression before any algorithm is applied.
+The hid-
+den active-quiescent model is first-order in (v, w), but active observation produces a
+second-order scalar equation and aggregate observation produces an inverse-dependent
+or branch-dependent scalar equation. This distinction is mathematical, but its prac-
+tical consequence is biological. The same underlying active-quiescent mechanism can
+This manuscript is for review purposes only.
+
+
+20
+K. C. NGUYEN AND K. B. FLORES
+require different data-driven regression libraries depending on whether an experiment
+measures active markers or aggregate population readouts.
+For biological sparse regression, the active-observation results show that an observable-
+reduction dictionary can cover several growth families without fitting them one at
+a time.
+The 26-term library contains polynomial atoms, integer power-law atoms
+through the polynomial block, and nine Hill atom pairs. It recovers the controlled
+power-law, polynomial, and Hill observable equations with the expected sparse sup-
+ports and coefficient maps. The naive polynomial baselines can interpolate restricted
+trajectories, but they do not provide the same growth-family identification or transfer
+behavior.
+The growth-specific derivations are important because they translate selected
+terms and coefficients into mechanistic parameters. Sparse regression supplies support
+selection within the reduction-induced dictionary, while the coefficient maps determine
+whether the selected support is consistent with active-quiescent switching.
+Direct
+parametric fitting remains available when a growth family is known in advance.
+Standard SINDy emphasizes sparse selection from a candidate library. Related
+partial-observation approaches use delay embeddings, learned coordinates, or data
+assimilation to recover closed-form dynamics when not all state variables are measured
+[1, 19]. The present work is complementary because it derives the scalar observable
+equation induced by a specified biological observation map before constructing the
+sparse-regression library. [18, 17]. SINDy-PI and implicit sparse regression are natural
+for aggregate Hill and polynomial cases [8, 15], where inverse or implicit relations arise.
+We intentionally use noise-free synthetic trajectories in our present study to sep-
+arate structural limitations imposed by the biological observation process from statis-
+tical limitations caused by finite sampling, measurement noise, and derivative estima-
+tion. The resulting analysis therefore represents a best-case biological measurement
+scenario: failures such as incorrect observable targets, coefficient inconsistency, branch
+ambiguity, nonidentifiability, and lack of transfer persist even under exact observations
+and cannot be resolved by adding experimental noise. Conversely, successful recov-
+ery in this idealized setting identifies observation protocols and dynamical regimes
+that are appropriate candidates for subsequent evaluation under realistic noise and
+sampling conditions. Structural identifiability and observability provide the language
+[25, 16] for determining when hidden variables and mechanistic parameters can, in
+principle, be recovered from output data, whereas weak SINDy and related integral
+formulations are natural next steps for assessing practical recovery when derivative
+information must be inferred from noisy or sparsely sampled measurements. Thus,
+our results suggest that structural observability and branch-admissibility requirements
+should be established before noise-robust estimation is attempted.
+The observable reductions also provide observation-design guidance. Active-state
+measurements are most favorable when the goal is mechanism recovery because the
+active observable reduction contains coefficient relations that can be mapped back to
+switching and growth parameters for selected growth families. Aggregate measure-
+ments are common experimentally, but they require reconstructing the hidden active
+state through ˙u = f(v).
+They therefore require branch-admissibility and inverse-
+conditioning diagnostics in addition to residual fit. Hill-type growth illustrates the
+role of informative regimes. Early-growth data mainly constrain the lumped ratio
+a/Kn, while saturated data are weakly informative because f(v) ≈a and f′(v) ≈0.
+Transition-region data near v ≈K are more informative for separating a, K, and
+n. Polynomial aggregate reductions show when aggregate data alone are insufficient,
+because multiple positive roots of f(v) = ˙u can produce the same observed aggre-
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+21
+gate growth rate. These examples suggest that sparse active-state markers, multiple
+initial conditions, replicate trajectories, and perturbations should be viewed as de-
+sign tools for making observable-reduction-guided sparse regression mechanistically
+interpretable. This observation-design issue is related to library-conditioning effects
+in biological equation learning, where restricted trajectory sampling and correlated
+candidate functions can make sparse recovery unstable even when the correct terms
+are present in the library [6].
+Together, these results motivate a practical workflow for observable-reduction-
+guided equation learning. One should first specify the observation map and derive
+the differential equation satisfied by the measured quantity. The candidate library can
+then be constructed from that reduction, with coefficient relations, branch uniqueness,
+and inverse conditioning used as structural diagnostics where appropriate. Finally,
+the recovered model should be evaluated beyond the training regime to distinguish
+mechanistic recovery from trajectory-specific interpolation.
+Our analysis identifies several directions for future research. For active-state ob-
+servations, the 26-term dictionary relaxes exact growth-family specification, but only
+over a finite set of candidate functions; broader and adaptively constructed libraries
+remain to be developed. Extending the same strategy to aggregate observations is
+more challenging because the corresponding reductions are inverse-dependent or im-
+plicit and may require explicit branch selection. Further work should also address
+PDE models, spatially resolved observations, and stochastic switching to determine
+how far the dependence of equation learning on the observation map extends beyond
+the ODE setting. Robustness under realistic sampling and measurement noise should
+be studied using weak or implicit sparse-regression methods that avoid direct high-
+order derivative estimation. Finally, resolving branch ambiguity in aggregate polyno-
+mial models will require either additional measurements, such as sparse active-state
+markers, or experimentally justified constraints on the admissible growth law.
+9. Conclusion. For partially observed active-quiescent systems, the hidden two-
+state dynamics and the differential equation satisfied by the measured signal are gener-
+ally not the same. Eliminating the unobserved compartment changes both the appro-
+priate regression target and the structure of the candidate library. Under active-state
+observation, the resulting second-order scalar equation contains coefficient relations
+that can be used to identify growth-law structure, recover switching parameters, and
+test mechanistic consistency. Under aggregate observation, the reduction is more re-
+strictive because the hidden active state must be reconstructed through the growth
+law, introducing inverse dependence, branch ambiguity, and conditioning constraints.
+These results show that a sparse-regression model should not be interpreted from
+its residual or selected terms. Mechanistic interpretation requires first incorporating
+the biological observation map into the regression target, library construction, and
+validation diagnostics.
+Appendix A. Derivations of the Observable Reductions.
+This appendix gives the algebraic steps leading to the active and aggregate ob-
+servable reductions used in Section 4.
+A.1. Active-state reduction. Assume γ1 > 0 and y = v. Solving (2.1a) for
+the hidden quiescent state gives
+(A.1)
+w = ˙v −f(v) + γ2v
+γ1
+.
+This manuscript is for review purposes only.
+
+
+22
+K. C. NGUYEN AND K. B. FLORES
+Differentiating (2.1a) gives
+(A.2)
+¨v = f ′(v)˙v −γ2 ˙v + γ1 ˙w.
+Using (2.1b), we have
+(A.3)
+γ1 ˙w = −γ2
+1w + γ1γ2v.
+Substituting (A.1) into (A.3) gives
+(A.4)
+γ1 ˙w = −γ1 ˙v + γ1f(v) −γ1γ2v + γ1γ2v.
+Therefore
+(A.5)
+¨v =
+ f ′(v) −γ1 −γ2
+
+˙v + γ1f(v).
+which is (4.1).
+A.2. Aggregate-state reduction. Let u = v + w. Adding (2.1a) and (2.1b)
+gives
+(A.6)
+˙u = f(v).
+Since w = u −v, the active equation becomes
+(A.7)
+˙v = f(v) −γ2v + γ1(u −v).
+Using ˙u = f(v), this can be written as
+(A.8)
+˙v = ˙u + γ1u −(γ1 + γ2)v.
+Differentiating (A.6) gives
+(A.9)
+¨u = f ′(v)˙v.
+Substituting (A.8) into (A.9) gives the differential algebraic aggregate reduction
+˙u = f(v),
+(A.10a)
+¨u = f ′(v) [ ˙u + γ1u −(γ1 + γ2)v] .
+(A.10b)
+If f has a locally admissible inverse branch F, then v = F( ˙u). Substitution into
+(A.10) gives
+(A.11)
+¨u = f ′(F( ˙u)) [ ˙u + γ1u −(γ1 + γ2)F( ˙u)] ,
+which is (4.4).
+Appendix B. Derivations for Observation-Specific Libraries.
+This appendix records the substitutions used to obtain the growth law specific
+libraries in Section 5.
+The main text keeps the final targets and coefficient maps
+because those are the objects used for sparse regression.
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+23
+B.1. Power-law growth. For f(v) = avn, we have f ′(v) = anvn−1. Substitu-
+tion into the active reduction (4.1) gives
+(B.1)
+¨v = anvn−1 ˙v −(γ1 + γ2)˙v + γ1avn.
+This is the target (5.2). Matching coefficients in
+¨v = c1vn−1 ˙v + c2 ˙v + c3vn
+gives c1 = an, c2 = −(γ1 + γ2), and c3 = γ1a, which yields (5.4).
+For aggregate observation, ˙u = avn gives
+(B.2)
+v =
+ ˙u
+a
+1/n
+.
+Also,
+(B.3)
+f ′(v) = anvn−1 = na1/n ˙u(n−1)/n.
+Substituting (B.2) and (B.3) into (4.4) gives
+¨u = na1/n ˙u(n−1)/n
+"
+˙u + γ1u −(γ1 + γ2)
+ ˙u
+a
+1/n#
+(B.4)
+= na1/n ˙u(2n−1)/n + nγ1a1/nu ˙u(n−1)/n −n(γ1 + γ2) ˙u.
+(B.5)
+This is (5.5). Matching coefficients gives c1 = na1/n, c2 = nγ1a1/n, and c3 = −n(γ1 +
+γ2), which yields (5.7).
+B.2. Hill-type growth. For
+f(v) =
+avn
+Kn + vn ,
+the derivative is
+(B.6)
+f ′(v) = anKnvn−1
+(Kn + vn)2 .
+Substituting (B.6) into (4.1) gives the active Hill target (5.9). For fixed (n, K), the
+terms in (5.9) split into the atoms Dn,K(v, ˙v), ˙v, and Gn,K(v) defined in (5.10).
+Coefficient matching gives cD = an, cG = γ1a, and c ˙v = −(γ1 + γ2).
+For aggregate observation, solving
+˙u =
+avn
+Kn + vn
+for v > 0 gives
+(B.7)
+v = K
+
+˙u
+a −˙u
+1/n
+,
+0 < ˙u < a.
+Using ˙u = f(v), the derivative can also be written as
+(B.8)
+f ′(v) = n ˙u(a −˙u)
+av
+.
+Substitution of (B.7) and (B.8) into (4.4) gives the aggregate Hill target (5.13). Be-
+cause a, K, and n enter the inverse reconstruction, this target is nonlinear in the
+unknown parameters.
+This manuscript is for review purposes only.
+
+
+24
+K. C. NGUYEN AND K. B. FLORES
+B.3. Polynomial growth. For
+f(v) =
+p
+X
+j=m
+ajvj,
+we have
+(B.9)
+f ′(v) =
+p
+X
+j=m
+jajvj−1.
+Substitution into (4.1) gives
+(B.10)
+¨v =
+p
+X
+j=m
+jajvj−1 ˙v −(γ1 + γ2)˙v + γ1
+p
+X
+j=m
+ajvj.
+which is (5.15).
+The coefficient of vj−1 ˙v is jaj, and the coefficient of vj is γ1aj.
+Eliminating aj gives the degree-wise estimate (5.17).
+For aggregate observation, substituting the polynomial law into (4.3) gives
+˙u =
+p
+X
+j=m
+ajvj,
+(B.11a)
+¨u =
+
+
+p
+X
+j=m
+jajvj−1
+
+[ ˙u + γ1u −(γ1 + γ2)v] .
+(B.11b)
+Recovering the hidden active state requires solving
+(B.12)
+p
+X
+j=m
+ajvj −˙u = 0.
+The positive branch conditions and conditioning of this reconstruction are discussed
+in Appendix D.
+Appendix C. Aggregate Hill Nonlinear Search.
+The aggregate Hill case is not an ordinary linear SINDy problem because the
+inverse
+v = K
+
+˙u
+a −˙u
+1/n
+depends on the unknown parameter a. For a candidate parameter vector
+θ = (a, K, n, γ1, γ2),
+the strong-form residual is
+(C.1)
+R(t; θ) = ¨u(t) −n ˙u(t)
+ a −˙u(t)
+
+a v(t; θ)
+[ ˙u(t) + γ1u(t) −(γ1 + γ2)v(t; θ)] ,
+with v(t; θ) = K( ˙u(t)/(a −˙u(t)))1/n. Invalid parameter values are penalized when
+a ≤0, K ≤0, n ≤0, γi < 0, or when 0 < ˙u(t) < a fails. The nonlinear least-squares
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+25
+problem can be sensitive to initial guesses because a controls both the inverse and the
+prefactor in (C.1).
+Appendix D. Positive Branches for Aggregate Polynomial Reductions.
+For aggregate observations, the first reduced equation is
+˙u = f(v).
+When f is polynomial,
+f(v) =
+p
+X
+j=m
+ajvj,
+recovering the hidden active state requires solving
+p
+X
+j=m
+ajvj −˙u = 0.
+Although this degree p equation may have complex or negative roots, biological ad-
+missibility requires v > 0 for positive population densities. Therefore the relevant
+root set is
+A( ˙u) = {v > 0 : f(v) = ˙u}.
+If |A( ˙u)| = 1 over the observed range, then the aggregate data determine a unique
+positive branch v = ϕ( ˙u). If |A( ˙u)| ≥2, there is biological branch ambiguity. At least
+two positive active states generate the same aggregate growth rate. If |A( ˙u)| = 0, the
+observation is inconsistent with the assumed polynomial law on the positive domain,
+possibly because of model mismatch or derivative-estimation error.
+Local regularity is separate from uniqueness. If f ′(ϕ( ˙u))̸ = 0, then the inverse
+function theorem gives a smooth local branch and
+dϕ
+d ˙u =
+1
+f ′(ϕ( ˙u)).
+Thus reconstruction is ill-conditioned when f′ is close to zero. For aggregate poly-
+nomial sparse regression, branch reconstruction requires a unique positive branch,
+while stable reconstruction requires that branch to remain away from critical points.
+Thus positive-branch uniqueness is a reconstruction condition, while stable use of that
+branch also requires the inverse to be well conditioned over the observed range.
+Appendix E. Mathematical Background: Hidden States, Observable
+Reduction, and Sparse Regression.
+E.1. Hidden states and observable reduction. Many biological systems
+contain distinct subpopulations whose internal states cannot all be measured experi-
+mentally. In the active-quiescent model considered here, the full state is
+x(t) =
+v(t)
+w(t)
+
+,
+where v(t) denotes the actively proliferating population and w(t) denotes the quiescent
+population.
+Although cells may switch between these states, growth occurs only
+through the active compartment. An experiment generally records an observable
+y(t) = P(x(t)),
+This manuscript is for review purposes only.
+
+
+26
+K. C. NGUYEN AND K. B. FLORES
+instead of the complete state x(t). For example, a proliferation marker may approxi-
+mately measure only the active population,
+y(t) = v(t),
+whereas total cell number, optical density, tumor burden, or aggregate fluorescence
+may measure the combined population
+y(t) = u(t) = v(t) + w(t).
+Thus, partial observation measures one component of the system, while aggregate
+observation combines multiple biological states into a single measured quantity.
+Differential equations provide a mechanistic description of how a biological sys-
+tem changes over time by relating its current state to its rate of change. A differential
+equation relates the time derivative of the observable, such as ˙y(t), to terms on the
+right hand side that represent the biological mechanisms influencing how the system’s
+variables change over time. The unobserved state can still influence the evolution
+of the observable, so the measured quantity generally does not satisfy the same dif-
+ferential equation as the full hidden system. Observable reduction is the process of
+eliminating the hidden variables to derive an equation involving only the measured
+quantity and its time derivatives. For active-state observation, eliminating w(t) typi-
+cally produces a differential equation with second order time derivatives of the form
+¨v = gact(v, ˙v).
+For aggregate observation, the identity
+˙u = f(v)
+shows that the hidden active population must instead be reconstructed from the
+observed aggregate growth rate. When an admissible inverse branch F exists, this
+reconstruction takes the form
+v = F( ˙u),
+leading to an aggregate observable equation
+¨u = gagg(u, ˙u).
+The form of the reduced equation therefore depends on what the experiment measures,
+even when the underlying biological mechanism is unchanged.
+For further reading on hidden-state models, partial observations, observable reduction,
+and identifiability, see [24, 14, 1, 19, 25, 16].
+E.2. Equation learning and sparse regression. The goal of equation learn-
+ing is to infer a mathematical model directly from time-series data. Instead of as-
+suming a single equation in advance, the method begins with a collection of plausible
+mathematical terms, called a library, and determines a parsimonious subset that best
+explains the observed dynamics. For a measured variable y(t), a candidate library
+might be written as
+Θ(y) =
+1
+y
+y2
+y3
+· · ·
+.
+More specialized libraries may include interaction terms, derivatives, fractional pow-
+ers, or saturating functions suggested by the underlying biology. The goal of equation
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+27
+learning is automated model selection, i.e., to identify a model that uses as few terms
+as possible among the library to reproduce the measured dynamics.
+Sparse Identification of Nonlinear Dynamics, or SINDy, expresses this idea as a
+regression problem. Given measurements y(ti) and an estimated regression target
+z(ti), the candidate functions are evaluated at the sampled data to form a matrix Θ,
+and SINDy seeks a sparse coefficient vector ξ satisfying
+z ≈Θξ.
+In standard first-order SINDy, z = ˙y.
+For a partially observed system, however,
+observable reduction may show that the appropriate target is instead z = ¨y, with a
+library constructed from y and ˙y:
+¨y ≈Θ(y, ˙y)ξ.
+Sparsity means that most entries of ξ are zero, leaving only a small number of selected
+terms. A low regression error alone does not guarantee that the selected equation rep-
+resents the biological mechanism because an overly flexible or incorrectly constructed
+library may reproduce one trajectory while failing to recover meaningful parameters
+or predict a new experimental regime. The regression target and candidate library
+should therefore be derived from the observable available in the experiment.
+For further reading on SINDy, sparse equation learning, implicit formulations, and
+biological applications, see [4, 15, 8, 18, 9].
+Declarations.
+Authorship and contributorship. KBF conceived the study. KCN and KBF de-
+signed the research. KCN performed the analysis and generated the results. KCN
+and KBF interpreted the results.
+KBF procured funding for the research.
+KCN
+drafted the initial manuscript, and all authors reviewed, edited, and approved the
+final manuscript.
+Conflicts of interest. The authors declare that they have no conflict of interest.
+Data and code availability. The data and code used to support the findings of
+this study is available in the project GitHub repository:
+https://github.com/kcnguyen3191/quiescent-eql.git
+Funding. KBF was funded in part by the National Science Foundation under
+grant numbers DMS-2327836, DMS-2342344, and DMS-2424748, and by the National
+Institute of Allergy and Infectious Diseases of the National Institutes of Health under
+grant number 1U54AI191253-01.
+REFERENCES
+[1] J. Bakarji, K. Champion, J. N. Kutz, and S. L. Brunton, Discovering governing equations
+from partial measurements with deep delay autoencoders, Proceedings of the Royal Society
+A, 479 (2023), p. 20230422, https://doi.org/10.1098/rspa.2023.0422.
+[2] N. Q. Balaban, J. Merrin, R. Chait, L. Kowalik, and S. Leibler, Bacterial persistence as
+a phenotypic switch, Science, 305 (2004), pp. 1622–1625, https://doi.org/10.1126/science.
+1099390.
+[3] J. A. Brown, Y. Yonekubo, N. Hanson, A. Sastre-Perona, A. Basin, J. A. Rytlewski,
+I. Dolgalev, S. Meehan, A. Tsirigos, S. Beronja, and M. Schober, TGF-β-induced
+quiescence mediates chemoresistance of tumor-propagating cells in squamous cell carci-
+noma, Cell Stem Cell, 21 (2017), pp. 650–664.e8, https://doi.org/10.1016/j.stem.2017.10.
+001.
+[4] S. L. Brunton, J. L. Proctor, and J. N. Kutz, Discovering governing equations from data by
+sparse identification of nonlinear dynamical systems, Proceedings of the National Academy
+of Sciences, 113 (2016), pp. 3932–3937, https://doi.org/10.1073/pnas.1517384113.
+This manuscript is for review purposes only.
+
+
+28
+K. C. NGUYEN AND K. B. FLORES
+[5] N. M. Chapman and H. Chi, Hallmarks of t-cell exit from quiescence, Cancer Immunology
+Research, 6 (2018), pp. 502–508, https://doi.org/10.1158/2326-6066.CIR-17-0605.
+[6] Y. Feng, N. M. Mangan, and M. Jayadharan, Ill-conditioning in dictionary-based dynamic-
+equation learning: A systems biology case study, arXiv preprint arXiv:2603.11330, (2026),
+https://arxiv.org/abs/2603.11330.
+[7] K. P. Hadeler and T. Hillen, Biological modeling with quiescent phases, in Mathematical
+Biology, American Mathematical Society, 2008. [Bibliographic details to be verified before
+submission.].
+[8] K. Kaheman, J. N. Kutz, and S. L. Brunton, SINDy-PI: A robust algorithm for parallel
+implicit sparse identification of nonlinear dynamics, Proceedings of the Royal Society A,
+476 (2020), p. 20200279, https://doi.org/10.1098/rspa.2020.0279.
+[9] A. A. Kaptanoglu, B. M. de Silva, U. Fasel, K. Kaheman, A. J. Goldschmidt, J. L.
+Callaham, C. B. Delahunt, Z. G. Nicolaou, K. Champion, J.-C. Loiseau, J. N. Kutz,
+and S. L. Brunton, PySINDy: A comprehensive Python package for robust sparse system
+identification, Journal of Open Source Software, 7 (2022), p. 3994, https://doi.org/10.
+21105/joss.03994.
+[10] F. Kozusko, M. Bourdeau, Z. Bajzer, and D. Dingli, A microenvironment based model of
+antimitotic therapy of gompertzian tumor growth, Bulletin of Mathematical Biology, 69
+(2007), pp. 1691–1708, https://doi.org/10.1007/s11538-006-9186-5.
+[11] E. Kussell, R. Kishony, N. Q. Balaban, and S. Leibler, Bacterial persistence: A model of
+survival in changing environments, Genetics, 169 (2005), pp. 1807–1814, https://doi.org/
+10.1534/genetics.104.035352.
+[12] L. Li and H. Clevers, Coexistence of quiescent and active adult stem cells in mammals,
+Science, 327 (2010), pp. 542–545, https://doi.org/10.1126/science.1180794.
+[13] E. Lindell, L. Zhong, and X. Zhang, Quiescent cancer cells—a potential therapeutic target
+to overcome tumor resistance and relapse, International Journal of Molecular Sciences, 24
+(2023), p. 3762, https://doi.org/10.3390/ijms24043762.
+[14] P. Y. Lu, J. Ari˜no Bernad, and M. Soljaˇci´c, Discovering sparse interpretable dynamics
+from partial observations, Communications Physics, 5 (2022), p. 206, https://doi.org/10.
+1038/s42005-022-00987-z.
+[15] N. M. Mangan, S. L. Brunton, J. L. Proctor, and J. N. Kutz, Inferring biological networks
+by sparse identification of nonlinear dynamics, IEEE Transactions on Molecular, Biological
+and Multi-Scale Communications, 2 (2016), pp. 52–63, https://doi.org/10.1109/TMBMC.
+2016.2633265.
+[16] G. Massonis, J. R. Banga, and A. F. Villaverde, Distilling identifiable and interpretable
+dynamic models from biological data, PLOS Computational Biology, 19 (2023), p. e1011539,
+https://doi.org/10.1371/journal.pcbi.1011539.
+[17] D. A. Messenger and D. M. Bortz, Weak SINDy for partial differential equations, Journal of
+Computational Physics, 443 (2021), p. 110525, https://doi.org/10.1016/j.jcp.2021.110525.
+[18] D. A. Messenger and D. M. Bortz, Weak SINDy: Galerkin-based data-driven model se-
+lection, Multiscale Modeling & Simulation, 19 (2021), pp. 1474–1497, https://doi.org/10.
+1137/20M1343166.
+[19] H. Ribera, S. Shirman, A. V. Nguyen, and N. M. Mangan, Model selection of chaotic
+systems from data with hidden variables using sparse data assimilation, Chaos, 32 (2022),
+p. 063101, https://doi.org/10.1063/5.0066066.
+[20] S. H. Rudy, S. L. Brunton, J. L. Proctor, and J. N. Kutz, Data-driven discovery of partial
+differential equations, Science Advances, 3 (2017), p. e1602614, https://doi.org/10.1126/
+sciadv.1602614.
+[21] A. Sakaue-Sawano, H. Kurokawa, T. Morimura, A. Hanyu, H. Hama, H. Osawa, S. Kashi-
+wagi, K. Fukami, T. Miyata, H. Miyoshi, T. Imamura, M. Ogawa, H. Masai, and
+A. Miyawaki, Visualizing spatiotemporal dynamics of multicellular cell-cycle progression,
+Cell, 132 (2008), pp. 487–498, https://doi.org/10.1016/j.cell.2007.12.033.
+[22] A. Salic and T. J. Mitchison, A chemical method for fast and sensitive detection of DNA
+synthesis in vivo, Proceedings of the National Academy of Sciences, 105 (2008), pp. 2415–
+2420, https://doi.org/10.1073/pnas.0712168105.
+[23] T. Scholzen and J. Gerdes, The ki-67 protein:
+From the known and the unknown,
+Journal of Cellular Physiology, 182 (2000), pp. 311–322, https://doi.org/10.1002/(SICI)
+1097-4652(200003)182:3⟨311::AID-JCP1⟩3.0.CO;2-9.
+[24] A. Somacal, Y. Barrera, L. Boechi, M. Jonckheere, V. Lefieux, D. Picard, and E. Smu-
+cler, Uncovering differential equations from data with hidden variables, Physical Review
+E, 105 (2022), p. 054209, https://doi.org/10.1103/PhysRevE.105.054209.
+[25] A. F. Villaverde, Observability and structural identifiability of nonlinear biological systems,
+This manuscript is for review purposes only.
+
+
+OBSERVABLE-REDUCTION-GUIDED SPARSE REGRESSION
+29
+Complexity, 2019 (2019), p. 8497093, https://doi.org/10.1155/2019/8497093.
+[26] G. Yao, Modelling mammalian cellular quiescence, Interface Focus, 4 (2014), p. 20130074,
+https://doi.org/10.1098/rsfs.2013.0074.
+This manuscript is for review purposes only.

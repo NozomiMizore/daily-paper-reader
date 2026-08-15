@@ -6,35 +6,32 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-14
-- 运行时间：2026-08-14 21:05:05 UTC
+- 最新运行日期：2026-08-15
+- 运行时间：2026-08-15 20:37:21 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：1
-- 速读区：4
+- 本次总论文数：3
+- 精读区：0
+- 速读区：3
 
 ### 今日简报（AI）
-今日筛选5篇论文，精读1篇、速读4篇，聚焦药物筛选与基因组学。最值得关注的是精读的《ScreenShot》基础模型，用于少样本组合药物筛选，评分8.0。建议后续可重点探索该模型在药物组合预测中的实际应用。
-- 详情：[/202608/14/README](/202608/14/README)
+今日速读3篇论文，均聚焦动态系统建模与因果推断，暂无精读。  
+最值得关注方向：血凝块生长的潜在神经微分方程预测，以及部分观测系统的稀疏回归方法。  
+建议普通读者优先浏览血凝块预测一文，其应用场景更贴近临床可解释性。
+- 详情：[/202608/15/README](/202608/15/README)
 
 ### 精读区论文标签
-1. [ScreenShot: A Foundation Model for Few-Shot Combination Drug Screening](/202608/14/2608.12219v1-screenshot-a-foundation-model-for-few-shot-combination-drug-screening)  
-   标签：评分：8.0/10、query:virtual-cell
-   evidence：面向药物组合筛选的深度学习基础模型，直接预测药物扰动响应
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [bioMoR: Biology-Guided Mixture-of-Recursions for Effective Genomic Learning](/202608/14/2608.06727v2-biomor-biology-guided-mixture-of-recursions-for-effective-genomic-learning)  
+1. [Predicting blood clot growth from sparse post-onset measurements with latent neural differential equations](/202608/15/2608.08165v1-predicting-blood-clot-growth-from-sparse-post-onset-measurements-with-latent-neural-differential-equations)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：面向基因与通路级学习的生物知识引导图感知Transformer，可支撑虚拟细胞建模
-2. [Topology Inference for Immune System Networks by Using Cell Amount Data](/202608/14/2608.07403v1-topology-inference-for-immune-system-networks-by-using-cell-amount-data)  
+   evidence：潜变量神经微分方程从稀疏测量预测生物学动态，可迁移用于扰动响应建模
+2. [Observable-Reduction-Guided Sparse Regression for Partially Observed Active-Quiescent Systems](/202608/15/2608.11125v1-observable-reduction-guided-sparse-regression-for-partially-observed-active-quiescent-systems)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：利用细胞清除扰动实验和细胞数量数据推断免疫细胞相互作用拓扑
-3. [Hit Selection Using SSMD-Based Machine Learning Performance Metrics in High-Throughput Screening Assays](/202608/14/2608.07609v1-hit-selection-using-ssmd-based-machine-learning-performance-metrics-in-high-throughput-screening-assays)  
+   evidence：部分观测的活跃-静止细胞群体动态的稀疏回归建模
+3. [Causal inference for group-contaminated structured outcomes: observable quotients, lossless reduction and exact randomization inference](/202608/15/2608.11954v1-causal-inference-for-group-contaminated-structured-outcomes-observable-quotients-lossless-reduction-and-exact-randomization-inference)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：提出用于高通量筛选命中选择的评估指标，可直接用于扰动响应预测的性能评价。
-4. [Novel Knowledge-Guided Generative Methods for Synthetic Transcriptomic Data](/202608/14/2608.13256v1-novel-knowledge-guided-generative-methods-for-synthetic-transcriptomic-data)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：知识引导的合成转录组数据生成方法，可为扰动响应建模提供数据增强
+   evidence：处理结构化潜在结果下变换的因果推断与随机化推断
 
 
 <div class="dpr-home-promo-card">

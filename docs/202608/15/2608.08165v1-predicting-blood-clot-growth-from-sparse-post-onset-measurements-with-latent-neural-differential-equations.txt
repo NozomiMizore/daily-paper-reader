@@ -1,0 +1,1298 @@
+Predicting blood clot growth from sparse post-onset measurements
+with latent neural differential equations
+Lennon J. Shikhman1,2, Ying Qian3, and He Li∗3
+1School of Interactive Computing, Georgia Institute of Technology, Atlanta, GA 30332
+2Department of Mathematics and Systems Engineering, Florida Institute of Technology,
+Melbourne, FL 32901
+3School of Chemical, Materials and Biomedical Engineering, University of Georgia, Athens,
+GA 30605
+Abstract
+Background and Objective. Computational models of blood clotting have improved our
+understanding of the mechanism underlying thrombus formation, but their clinical application
+remains limited because many model inputs are difficult to measure in clinical practice, and
+patient-specific data are often sparse.
+Method. Herein, we present a computational framework based on latent neural differential
+equations that infers unknown model parameters from sparse measurements and forecasts the
+progression of thrombosis.
+We demonstrate the effectiveness of the framework using data
+generated from a multiphysics blood-clotting model in which clot growth is governed by the
+integrated coagulation cascade and diffusion processes. Four measurable biochemical inputs, x =
+(Fibrinogen, Factor IX, Factor VIII, Factor V), together with sparse clot-size early observations,
+are used to infer the tissue-factor parameter σTF and predict subsequent clot growth.
+Results. We compare seven probabilistic methods: stochastic neural ordinary differential
+equations (SNODE), stochastic neural functional differential equations (SNFDE), a latent
+neural-process baseline, a monotone probabilistic deep ensemble, empirical trajectory retrieval,
+PCA–ridge Gaussian posterior, and Gompertz-curve retrieval. Our results show that SNODE
+achieved the best performance in inferring the unknown inputs and forecasting the future clot
+growth trajectories. SNFDE performed similarly and consistently outperformed other non-
+differential models. The accuracy of model predictions improved as more observations became
+available, whereas longer forecasting horizons increased uncertainty and decreased prediction
+accuracy.
+Conclusion. Altogether, our study demonstrates that latent neural differential equations
+effectively combine parameter inference and clot-growth forecasting from sparse measurements,
+providing a promising foundation for personalized thrombosis modeling in clinical practice.
+1
+Introduction
+Hemostasis prevents blood loss after vascular injury through a coordinated cascade involving
+platelet activation, thrombin generation, fibrin polymerization, anticoagulant regulation, and clot
+stabilization [1–3]. Disturbances can produce bleeding, thrombosis, or abnormal spatial propagation
+of coagulation [4–6]. In the last three decades, many mechanistic thrombosis models have been
+∗Corresponding author: he.li3@uga.edu
+1
+arXiv:2608.08165v1  [cs.LG]  8 Aug 2026
+
+
+developed to study these regimes, ranging from spatially homogeneous ODE systems to reaction–
+advection–diffusion models that resolve transport, surface reactions, protein C regulation, fibrin
+formation, and spatial localization [7–9]. ODE models, devised to replicate thrombin and fibrin
+generation assays, operate on the premise that biochemical reactions can be represented by kinetic
+equations derived from experimental data [10–16]. These models primarily focus on temporal
+changes, illustrating how concentrations of coagulation factors evolve over time under conditions of
+spatial uniformity. In contrast, PDE models are employed to simulate thrombus growth, taking into
+consideration both unstirred systems and blood flow conditions [9, 17–23]. These spatio-temporal
+models play a crucial role in comprehending clot growth as they account for spatial variations in
+concentration and can integrate blood flow velocity, often via a convection term, thereby providing
+deeper insights into the dynamics of clot formation and growth.
+Computational models of blood clotting have been widely used to improve our understanding of
+the mechanisms underlying thrombus formation under a variety of physiological and pathological
+conditions. However, the direct application of these models in clinical settings remains challenging.
+First, their high computational cost can make repeated model evaluations prohibitively expensive,
+limiting their use for sensitivity analysis, uncertainty quantification, parameter inference, and
+real-time forecasting [24, 25]. Second, many model inputs are difficult or impossible to measure
+routinely in clinical practice. Third, the computational model must be able to incorporate sparse,
+noisy, and often incomplete patient-specific data when generating predictions. In recent years,
+machine-learning surrogates have been applied to amortize computational cost by learning simulator
+input–output behavior from an offline corpus, with many applications in computational biology
+and biomedicine [26–34]. Biologically-informed neural networks and physics-informed coagulation
+models also show that mechanistic structure can guide learning from sparse biological observations
+and support inverse parameter estimation in blood-coagulation systems [35, 36].
+Although machine-learning surrogates and biologically informed neural networks have shown
+promise for translating computational blood-clotting models into clinical applications, several
+challenges remain, limiting their practical deployment. First, coagulation models often involve
+many coupled biochemical reactions, transport processes, feedback loops, and surface-mediated
+interactions that span multiple spatial and temporal scales [37, 38]. As a result, inverse inference
+problems are frequently high-dimensional, non-identifiable, and computationally expensive. Second,
+although biologically informed neural networks can leverage mechanistic constraints to improve
+parameter estimation, training such models with large systems of differential equations can become
+increasingly difficult. Another limitation is that many existing machine-learning surrogates are
+designed primarily for forward prediction and do not explicitly quantify predictive uncertainty.
+To enhance the translation of computational models of thrombosis into clinical practice, we
+present a computational framework based on latent neural differential equations that can estimate
+model inputs and parameters from sparse observations and then forecast clot-size trajectories.
+Neural ODEs generate continuous-time trajectories by integrating a learned vector field [39], and
+latent ODEs add stochastic latent variables for irregularly observed time series [40]. Neural delay
+differential equations further allow derivatives to depend on history windows [41]. This is relevant
+to blood clot applications because scalar clot size is a projection of a higher-dimensional biochemical
+and spatial state; projecting unresolved variables can induce memory effects in reduced dynamics,
+as formalized by Mori–Zwanzig theory [42, 43]. We therefore test a Markovian stochastic neural
+ordinary differential equation (SNODE) with a history-aware stochastic neural functional differential
+equation (SNFDE). Both models are designed to act as structured generative priors over admissible
+clot-growth trajectories rather than as unconstrained curve regressors.
+We demonstrate the effectiveness of the proposed framework using synthetic data generated from
+multi-physics coagulation model of Panteleev et al. [9], which describes clot formation initiated by
+2
+
+
+tissue-factor-expressing cells through a coupled coagulation reaction–diffusion system. We assume
+one of the mechanistic inputs, tissue-factor surface density (σTF), is unknown and only sparse
+early observations are available, and the target is a predictive distribution over future trajectories
+[44]. The clot simulator is parameterized by σTF, which is hard to measure in a clinical setting,
+and four coagulation-factor concentrations can be easily measured from blood samples. When
+making predictions for growth trajectories of the clots, Fibrinogen(Fg), factorIX, factorVIII and
+factorV, are treated as known, while σTF is unknown. Sparse post-onset clot-size observations made
+from 0 to 30 minutes are used to infer σTF and propagate that uncertainty into a 30–60 minute
+clot-growth forecast. Specifically, we perform the following four tasks. First, we formulate an inverse
+forecasting task in which σTF is inferred jointly with future clot growth from four known biochemical
+inputs and sparse post-onset observations. Second, we evaluate SNODE and SNFDE against five
+uncertainty-aware baselines under a common top-K posterior aggregation framework: namely,
+conditional neural-process-style modeling [45], deep ensembles [46], empirical nearest-neighbor
+retrieval [47], PCA–ridge Gaussian regression [48, 49], and Gompertz growth-curve retrieval [50].
+Third, we calibrate uncertainty using validation data only and report results over 10 independent
+retraining seeds. Fourth, we analyze sensitivity of the model performance to observation count,
+forecast horizon, and uncertainty calibration. These studies evaluate not only predictive accuracy
+but also each model class’s ability to provide reliable uncertainty quantification in a biologically
+motivated sparse inverse problem.
+2
+Materials and methods
+2.1
+Mechanistic clot-growth dataset
+The dataset was generated from the spatial coagulation model of Panteleev et al. [9], which describes
+clot formation initiated by tissue-factor-expressing cells through a coupled coagulation reaction–
+diffusion system. The model was developed in the context of experimental studies of coagulation
+propagation, hemophilia-associated factor deficiencies, and spatial localization of thrombin and
+clot growth [4–6]. Each simulation was summarized by a scalar clot-size trajectory and the five-
+dimensional parameter vector
+θ = (σTF, Fg, IX, VIII, V) ∈R5.
+(1)
+The parameter ranges selected with their physiological ranges for generating the synthetic clot
+growth curves are listed in Table 1. The corpus illustrated in Fig. 1 contains 1,000 trajectories
+evaluated at 121 time points spanning approximately 0–60 minutes.
+Table 1. Ranges of the five mechanistic inputs used to generate the trajectory corpus. Values are
+given in the native units of the simulator implementation.
+σTF
+Fg
+IX
+VIII
+V
+Minimum
+100
+4860 nM
+49.00 nM
+0.36 nM
+11.43 nM
+Maximum
+10000
+10310 nM
+130.91 nM
+1.04 nM
+28.57 nM
+For each seed of the final experiment, the 1,000 trajectories were randomly partitioned into
+800 training, 100 validation, and 100 test cases. All neural models were retrained from scratch
+for each seed. The non-neural baselines were also refit using the seed-specific training split. Input
+parameters were standardized with training-set statistics, time was linearly mapped to [0, 1], and
+3
+
+
+clot size was normalized by the maximum clot size in the training set. The validation and test sets
+were never used in model fitting.
+Figure 1. The 1000 trajectories of clot growth generated from the spatial coagulation model of
+Panteleev et al. [9] by varying five different inputs within their physiologically relevant ranges.
+2.2
+Inverse forecasting workflow
+When making the prediction of the clot growth trajectories, we assume that only the four-dimensional
+biochemical vector
+x = (Fg, IX, VIII, V)
+(2)
+is known, while σTF is unknown. For the held-out case i, we observe a sparse set of clot-size
+measurements
+Oi = {(ti,j, ui(ti,j))}m
+j=1
+(3)
+selected from the eligible pre-30-minute post-onset set
+Oeligible
+i
+= {(tj, ui(tj)) : tj < 30 min, ui(tj) > 10−6}.
+(4)
+The positivity threshold excludes the long pre-growth phase where clot size remains numerically
+zero. Observation counts were varied over
+m ∈{1, 2, 3, 4, 6, 8, 12, 16}.
+(5)
+The main setting used m = 4 observations. The forecast target was the hidden future interval
+Tfuture = {t : 30 ≤t ≤60 min}.
+(6)
+For every model, the task is to infer a posterior distribution over σTF and a predictive distribution
+over ui(t) for t ∈Tfuture. The sparse observations are used only through the candidate-scoring
+objective. The true σTF and the future 30–60 minute trajectory are used only for evaluation. The
+inverse forecasting workflow is summarized in Fig. 2. A simulator-generated dataset of 1,000
+clot-growth trajectories is split into training, validation, and test sets. Surrogate models are trained
+on the training set, while uncertainty-calibration parameters are estimated on the validation set.
+4
+
+
+Simulator corpus
+1,000 complete
+clot-growth
+trajectories
+Seed-specific split
+800 train
+100 val / 100 test
+Fit models
+SNODE, SNFDE,
+and five baselines
+Calibrate UQ
+validation-only
+cu and cσ
+Known inputs
+(Fg, IX, VIII, V)
+and early ob-
+servations
+Search σTF
+128 candidate
+tissue-factor values
+Generate
+candidates
+pairs ( ˆ
+σTFk, ˆuk(t))
+from each model
+Aggregate
+posterior
+top-K weighting
+trajectory and σTF
+Held-out evaluation only
+future error, final-time error, AUC er-
+ror, σTF error, and empirical coverage
+Figure 2. Inverse forecasting workflow. Training, validation, and test trajectories are disjoint
+within each seed. When making predictions, only the four-dimensional biochemical vector and
+sparse pre-30-minute post-onset clot-size observations are treated as known. Candidate values of
+σTF are combined with the four known factors to generate candidate future trajectories. Candidate
+pairs are scored against the sparse observations, calibrated with validation-only uncertainty factors,
+and aggregated into a posterior over both σTF and future clot growth.
+Given known coagulation-factor levels and early clot-growth observations, the framework searches
+over candidate σTF values and generates corresponding future trajectory predictions. Candidate
+predictions are aggregated using posterior top-K weighting to infer both the latent tissue-factor
+concentration and the future clot-growth trajectory. Performance is evaluated on the held-out test
+set using trajectory, AUC, final-time, tissue-factor estimation, and uncertainty-coverage metrics.
+2.3
+Candidate generation, scoring, and calibration
+All seven methods were evaluated through a common candidate aggregation pipeline. For each
+held-out case, we constructed a linear grid of 128 candidate σTF values spanning the training range
+[100, 104]. The resulting grid spacing is ∆σTF = 10000−100
+127
+≈78. Each method then generated a
+finite set of candidate pairs
+{( ˆ
+σTFi,k, ˆui,k(t))}Mi
+k=1,
+(7)
+where the source of the candidates depended on the type of the applied model. SNODE and
+SNFDE generated parameter-conditioned latent rollouts. The latent neural processes and PCA–
+ridge baselines sampled trajectory candidates over the same σTF grid. The deep ensemble sampled
+monotone trajectories over the grid from each ensemble member. The empirical and Gompertz
+baselines supplied candidate curves retrieved from training-library trajectories or fitted parametric
+curves.
+Candidates were scored by agreement with the sparse observations,
+Sobs
+i,k =
+X
+(tj,yi,j)∈Oi
+ ˆui,k(tj) −yi,j
+σobs
+2
+,
+σobs = 0.02.
+(8)
+The observation scale σobs sets the tolerance for mismatch between a candidate trajectory and the
+sparse measured clot sizes on the normalized trajectory scale. We used σobs = 0.02, corresponding
+to a 2% normalized clot-size discrepancy. This makes candidate selection sensitive to meaningful
+5
+
+
+observation mismatch while avoiding an effectively hard interpolation constraint on a small number
+of sparse observations.
+For SNODE and SNFDE, this observation score was augmented with a latent-prior penalty,
+Si,k = Sobs
+i,k + λz
+dz
+X
+ℓ=1
+(zi,k,ℓ−µi,ℓ)2
+exp(log vi,ℓ) + ε,
+λz = 0.05,
+(9)
+where (µi, log vi) are the prior statistics for the candidate parameter vector. This term discourages
+trajectories generated from latent samples that are unlikely under the learned conditional prior.
+The weight λz = 0.05 makes this a weak regularizer: the sparse observations remain the dominant
+source of candidate selection, while implausible latent outliers are downweighted. For empirical and
+Gompertz retrieval, an additional squared distance in standardized known-parameter space was
+used in place of the latent-prior penalty.
+The top K = 30 candidates were retained and assigned likelihood-style weights
+wi,k =
+exp[−Si,k/(2Tw)]
+PK
+r=1 exp[−Si,r/(2Tw)]
+,
+Tw = 2.
+(10)
+The temperature Tw controls how sharply the retained candidates are weighted. Smaller values
+concentrate posterior mass on the best-scoring candidates, whereas larger values average over a
+broader set of plausible candidates. We used Tw = 2 to avoid collapsing the posterior onto a single
+best candidate when the sparse observations do not uniquely identify σTF. The constants σobs,
+λz, and Tw were fixed across all seeds and methods before test evaluation; they are scoring and
+aggregation parameters, not learned model weights.
+These weights defined the posterior mean trajectory and posterior mean tissue-factor estimate,
+¯ui(t) =
+K
+X
+k=1
+wi,kˆui,k(t),
+¯
+σTFi =
+K
+X
+k=1
+wi,k ˆ
+σTFi,k,
+(11)
+as well as their weighted posterior variances. Thus, the predictive uncertainty in clot size reflects
+both uncertainty about the unknown σTF value and uncertainty over future trajectories conditional
+on plausible σTF values.
+Uncertainty calibration was performed on the validation split only. For each seed and each
+model, 20 randomized validation schedules were generated and used to estimate one calibration
+factor for trajectory uncertainty and one calibration factor for σTF uncertainty. The factor 1.64 is
+the standard normal quantile for an approximate central 90% interval. Because the raw weighted
+posterior standard deviations are not guaranteed to be calibrated, they are first multiplied by
+validation-derived scale factors before forming the final 90% bands,
+¯ui(t) ± 1.64 cusu,i(t),
+¯
+σTFi ± 1.64 cσsσ,i.
+(12)
+Because calibration factors were chosen before test evaluation, empirical coverage on the test set
+measures out-of-sample reliability rather than test-set tuning.
+2.4
+Stochastic neural ordinary differential equation (SNODE)
+SNODE is a conditional latent-variable trajectory generator. During forward training, it models
+complete clot-growth trajectories conditioned on the full five-dimensional simulator input,
+θ = (σTF, Fg, IX, VIII, V),
+(13)
+6
+
+
+through an eight-dimensional trajectory-level latent variable,
+z ∼pϕ(z | θ) = N(µϕ(θ), diag(vϕ(θ))) .
+(14)
+The complete input vector θ is used during forward training because each simulator-generated
+training trajectory is associated with a known simulator value of σTF. During inverse evaluation,
+however, the true σTF is not observed. The model still requires a five-dimensional input, so σTF is
+supplied as a candidate value rather than as known test information.
+Given (θ, z), the normalized clot-size trajectory is generated by integrating a learned ordinary
+differential equation,
+du
+dt = Fϕ(u, t, θ, z).
+(15)
+The vector field is parameterized to enforce biological admissibility. Specifically, the learned growth
+rate is written as a product of positive neural factors,
+Fϕ(u, t, θ, z) = softplus(rϕ(u, t, θ, z)) softplus(Kϕ(θ, z) −u) ,
+(16)
+where rϕ is a learned rate network and Kϕ is a learned capacity-like map. The softplus factors
+make the instantaneous increment nonnegative on the normalized trajectory scale. Thus, generated
+trajectories are constrained to be nonnegative and nondecreasing, matching the expected clot-growth
+direction and preventing biologically inadmissible negative clot sizes.
+Training uses a conditional variational objective, following the variational autoencoder framework
+[51]. A full-trajectory encoder defines
+qϕ(z | θ, u0:T ),
+(17)
+while the parameter network defines the prior pϕ(z | θ). The reconstruction objective combines
+full-trajectory error, terminal error, increment error, and future-area error, and is regularized by a
+KL divergence between the trajectory encoder and the conditional prior,
+LSNODE = Ltraj + βDKL[qϕ(z | θ, u0:T )∥pϕ(z | θ)] .
+(18)
+The KL weight is warmed up during training so that the model first learns accurate monotone
+trajectories and then aligns the full-trajectory posterior with the parameter-conditioned prior.
+This is important for the inverse task, because at test time, the full trajectory is unavailable and
+candidates must be sampled from the prior.
+During inverse evaluation, σTF is not supplied as a known input. Instead, for each held-out case
+we combine the known four-dimensional vector
+xi = (Fgi, IXi, VIIIi, Vi)
+(19)
+with each candidate value
+ˆ
+σTFq from the 128-point search grid to form a candidate complete input,
+ˆθi,q = ( ˆ
+σTFq, Fgi, IXi, VIIIi, Vi).
+(20)
+Thus, σTF remains an input to the forward model, but only through candidate values
+ˆ
+σTFq that are
+tested against the sparse observations. The true σTF is withheld and used only for evaluating the
+inferred posterior estimate.
+For each candidate ˆθi,q, SNODE samples latent variables from pϕ(z | ˆθi,q) and integrates Eq.
+(15) to generate candidate clot-growth trajectories. In the main experiment, this gives
+128 candidate σTF values × 32 latent samples per value = 4096
+(21)
+candidate trajectories per held-out case. These candidates are then scored against the sparse
+post-onset observations and aggregated using the common top-K posterior procedure described in
+Section 2.3.
+7
+
+
+2.5
+Stochastic neural functional differential equation (SNFDE)
+SNFDE uses the same conditional latent-variable structure as SNODE but replaces the Markovian
+vector field with a history-dependent growth law. The motivation is that the mechanistic coagulation
+simulator evolves in a high-dimensional biochemical and spatial state, while the observed clot size
+is a scalar projection of that state. After projection, the scalar process need not be Markovian.
+Two trajectories can have the same current clot size but differ in thrombin amplification, fibrin
+accumulation, or proximity to saturation. In reduced dynamical systems, such unresolved variables
+commonly appear as memory effects [42, 43]. Neural delay and functional differential equations
+provide one way to parameterize such memory dependence [41].
+SNFDE therefore models the normalized clot-size derivative as a function of the current state
+and a finite generated history [52],
+du(t)
+dt
+= Gϕ
+ θ, z, t, u(t), u(t −τ1), . . . , u(t −τ7)
+
+,
+(22)
+where ν denotes the generated clot-size history. The delay taps correspond to 1, 2, 4, 8, 16, 32, and
+60 grid steps, spanning approximately 0.5 to 30 minutes. These taps allow the model to distinguish
+whether a clot of a given current size is still accelerating, approaching a plateau, or following a
+delayed low-growth pattern. As in SNODE, the growth law is parameterized through positive neural
+factors so that generated trajectories remain nonnegative and nondecreasing. Thus, SNFDE adds
+memory while preserving the same biological admissibility constraint.
+Training again uses a conditional variational objective with an eight-dimensional latent variable.
+The prior pϕ(z | θ) is conditioned on the full simulator input during forward training, and a
+full-trajectory encoder defines qϕ(z | θ, u0:T ). The loss combines trajectory reconstruction, terminal
+accuracy, increment accuracy, AUC accuracy, and a KL penalty, aligning the encoder posterior with
+the conditional prior. The history-dependent decoder is trained on complete trajectories so that its
+delay taps are generated from its own rollout history rather than from future information.
+At inverse-evaluation time, SNFDE is used in the same unknown σTF candidate-search pro-
+cedure as SNODE. Each candidate tissue-factor value
+ˆ
+σTFq is combined with the known factors
+(Fg, IX, VIII, V) to form ˆθi,q. Latent variables are sampled from the conditional prior, and Eq. (22)
+is rolled forward to produce candidate trajectories. The model generates 4,096 candidate trajectories
+per test case in the main experiment. Candidate pairs ( ˆ
+σTFq, ˆui,k) are then scored only by agreement
+with the sparse pre-30-minute observations and by the latent-prior regularization term. The true
+σTF and the hidden 30–60 minute future trajectory are not used during candidate scoring.
+2.6
+Baseline models
+We compared SNODE and SNFDE against five baselines designed to cover neural, nonparametric,
+low-rank statistical, and parametric growth-curve alternatives.
+1. Latent neural process (Latent NP). A context-conditioned latent model based on the
+conditional neural-process paradigm [45]. It maps the known biochemical inputs and sparse
+observations to a stochastic trajectory decoder.
+2. Deep ensemble. Five monotone probabilistic networks trained independently by negative
+log likelihood, following the deep-ensemble approach to predictive uncertainty [46]. Candidate
+trajectories are sampled from the member-wise predictive increment distributions.
+3. Empirical library retrieval. The 800 training trajectories define an empirical prior. Can-
+didates are ranked by sparse-observation agreement and parameter similarity, in the spirit of
+nearest-neighbor nonparametric regression [47].
+8
+
+
+4. PCA–ridge Gaussian posterior. Training trajectories are projected to a low-dimensional
+PCA basis [48]. Ridge regression [49] maps the sparse context to a Gaussian posterior over PCA
+coefficients.
+5. Gompertz retrieval. Each training trajectory is represented by a fitted Gompertz growth
+curve [50] and retrieved through the common scoring mechanism.
+All methods used the same four known inputs, the same sparse observations, the same σTF search
+range, and followed the same top-K aggregation protocol.
+2.7
+Experimental protocol and evaluation metrics
+The main experiment was run with 10 independent seeds. In each seed, all models were retrained or
+refit from scratch on the seed-specific training split, calibrated on the validation split, and evaluated
+on the held-out test split. For the main setting, we used m = 4 sparse observations. For the
+observation-count sensitivity experiment, each valid test case was evaluated under 200 independently
+sampled schedules for each m ∈{1, 2, 3, 4, 6, 8, 12, 16}. These 200 schedules were used only for the
+observation-count sensitivity curves, not for the main Tables 2 and 3.
+Let Ifuture = {j : tj ∈Tfuture} denote the discrete future-time indices and let nF = |Ifuture|. For
+test case i, let ui(tj) be the true clot-size trajectory, ¯ui(tj) the posterior mean prediction, su,i(tj)
+the weighted posterior standard deviation,
+¯
+σTFi the posterior mean tissue-factor estimate, and sσ,i
+the weighted posterior standard deviation for σTF. The calibrated 90% predictive bands are
+Lu
+i,j = ¯ui(tj) −1.64 cusu,i(tj),
+Uu
+i,j = ¯ui(tj) + 1.64 cusu,i(tj),
+(23)
+and
+Lσ
+i =
+¯
+σTFi −1.64 cσsσ,i,
+Uσ
+i =
+¯
+σTFi + 1.64 cσsσ,i.
+(24)
+The constants cu and cσ are estimated on the validation split only.
+For each valid test case, future relative L2 error is defined as
+E(i)
+L2 =
+P
+j∈Ifuture[¯ui(tj) −ui(tj)]21/2
+P
+j∈Ifuture ui(tj)2
+1/2
++ ε
+.
+(25)
+Future MAE is
+E(i)
+MAE,future = 1
+nF
+X
+j∈Ifuture
+|¯ui(tj) −ui(tj)|.
+(26)
+Final-time MAE is the absolute error at the last simulated time point,
+E(i)
+MAE,final = |¯ui(tT ) −ui(tT )|.
+(27)
+Relative AUC error compares the area under the predicted and true future trajectories,
+E(i)
+AUC = |AUCTfuture(¯ui) −AUCTfuture(ui)|
+|AUCTfuture(ui)| + ε
+,
+(28)
+where the AUC is computed over the discrete 30–60 minute future window by numerical quadrature.
+Empirical 90% future trajectory-band coverage is the fraction of future trajectory points lying
+inside the calibrated predictive band,
+C(i)
+future = 1
+nF
+X
+j∈Ifuture
+1
+
+Lu
+i,j ≤ui(tj) ≤Uu
+i,j
+	
+.
+(29)
+9
+
+
+The reported future 90% coverage is the average of C(i)
+future over valid held-out test cases.
+For tissue-factor inference, let Itest denote the valid held-out test cases and let Ntest = |Itest|.
+We report
+Eσ,MAE =
+1
+Ntest
+X
+i∈Itest
+| ¯
+σTFi −σTFi| ,
+(30)
+and
+Eσ,RMSE =
+"
+1
+Ntest
+X
+i∈Itest
+( ¯
+σTFi −σTFi)2
+#1/2
+.
+(31)
+The empirical 90% σTF coverage is
+Cσ =
+1
+Ntest
+X
+i∈Itest
+1[Lσ
+i ≤σTFi ≤Uσ
+i ] .
+(32)
+All metrics in Tables 2 and 3 are computed on the held-out test split, using valid test cases with
+eligible post-onset observations. For each seed, metrics are first averaged over the valid test cases.
+The reported 95% confidence intervals in Tables 2 and 3 are normal-approximation intervals across
+the 10 independent seed-level metrics,
+¯E ± 1.96 SEM,
+SEM = sE
+√
+10,
+(33)
+where sE is the sample standard deviation across the 10 seed-level values. These table confidence
+intervals quantify variability across retraining/split seeds; they are distinct from the top-K posterior
+predictive bands and from the 200-schedule observation-count sensitivity analysis. Sensitivity curves
+show the mean over seeds of the within-seed schedule-averaged metrics. Runtime was recorded for
+each seed-level run.
+2.8
+Runtime and reproducibility
+The sequential runtime was 8.82 GPU-hours, with a mean runtime of 52.9 minutes per seed. The
+shortest seed required 44.5 minutes, and the longest required 59.4 minutes. Each seed used a distinct
+split manifest, seed-specific model cache, from-scratch retraining, validation-only calibration, and a
+held-out test evaluation. The final summaries, therefore, reflect both split variability and training
+variability rather than a single favorable checkpoint.
+3
+Results
+3.1
+SNODE and SNFDE outperform other models when informed by four
+observations
+Table 2 summarizes performance in the main inverse forecasting setting, where only four clot-size
+observations collected before 30 minutes are available to infer σTF and predict the future clot-growth
+trajectory. Across all three error metrics, SNODE achieved the best mean performance, attaining
+the lowest future relative L2 error (1.40 × 10−2), final-time MAE (1.95 × 10−2), and σTF MAE
+(162.8). SNFDE was consistently competitive, with confidence intervals that largely overlapped
+those of SNODE, indicating that both latent neural differential equation models provide similarly
+strong performance. In contrast, the non-differential baselines exhibited noticeably larger errors.
+Among these methods, Latent NP was the strongest competitor, although its future trajectory error
+10
+
+
+0
+20
+40
+60
+0
+1
+2
+3
+Time (min)
+Clot size
+Good case 24: SNODE
+0
+20
+40
+60
+0
+0.1
+0.2
+Time (min)
+Difficult case 85: SNODE
+0
+20
+40
+60
+0
+1
+2
+3
+Time (min)
+Clot size
+Good case 24: SNFDE
+0
+20
+40
+60
+0
+0.1
+0.2
+Time (min)
+Difficult case 85: SNFDE
+Figure 3. Representative inverse forecasts obtained from the two neural differential equation
+models. Top: a good SNODE case and a difficult SNODE case. Bottom: a good SNFDE case
+and a difficult SNFDE case. Solid blue curves denote the true trajectory, blue markers denote
+observed pre-30-minute post-onset measurements, dashed orange curves denote posterior means,
+orange shaded regions denote 90% predictive bands, and dotted vertical lines mark the forecast
+start time.
+11
+
+
+Table 2. Performance of the seven tested models based on four observations across 10 independent
+retraining seeds. Values are means with 95% CI. Lower is better for error metrics.
+Method
+Future rel. L2
+Final MAE
+σTF MAE
+Future 90% cov.
+SNODE
+0.01397
+[0.01214, 0.01580]
+0.01947
+[0.01796, 0.02098]
+162.8
+[139.9, 185.7]
+0.907
+[0.894, 0.920]
+SNFDE
+0.01460
+[0.01278, 0.01641]
+0.02069
+[0.01833, 0.02304]
+169.4
+[158.6, 180.1]
+0.900
+[0.887, 0.913]
+Latent NP
+0.01667
+[0.01505, 0.01829]
+0.02652
+[0.02487, 0.02817]
+206.7
+[188.2, 225.2]
+0.905
+[0.882, 0.928]
+Deep ensemble
+0.02402
+[0.01836, 0.02968]
+0.04367
+[0.03550, 0.05185]
+402.1
+[373.1, 431.1]
+0.914
+[0.891, 0.938]
+Library
+0.04797
+[0.04276, 0.05319]
+0.07891
+[0.07354, 0.08428]
+605.7
+[560.9, 650.6]
+0.900
+[0.881, 0.919]
+PCA–ridge GP
+0.06413
+[0.06058, 0.06769]
+0.12428
+[0.11691, 0.13166]
+1377.0
+[1307.8, 1446.2]
+0.913
+[0.904, 0.923]
+Gompertz
+0.15650
+[0.15117, 0.16182]
+0.32630
+[0.30627, 0.34633]
+1138.5
+[1059.5, 1217.6]
+0.913
+[0.897, 0.929]
+remained approximately 19% higher than SNODE and its parameter estimation error increased
+to 206.7. It is noted that the resolution at which σTF can be recovered is 78, which could result
+in its large MAE. In addition, another potential cause is practical non-identifiability. For fixed
+(Fg, IX, VIII, V) and sparse early clot-size observations, multiple σTF values can generate very
+similar clot-growth trajectories. Therefore, σTF error can remain relatively large even when future
+clot-growth prediction error is small.
+The remaining approaches showed substantially weaker performance, with the deep ensemble,
+library retrieval, PCA–ridge GP, and Gompertz models exhibiting progressively larger forecasting
+and parameter-estimation errors. Table 3 further shows that the same ranking persisted across other
+metrics. SNODE achieved the best future MAE and σTF RMSE, whereas SNFDE achieved the best
+AUC relative error. The latent neural-process baseline was the strongest non-differential method
+but remained behind the two neural differential equation models. The deep ensemble achieved
+reasonable coverage but larger error, indicating that uncertainty quality alone was not sufficient for
+accurate inverse forecasting.
+Notably, all methods achieved future 90% coverage values close to the nominal target of 0.90,
+indicating generally well-calibrated uncertainty estimates. However, similar coverage does not
+imply similar predictive quality. Several baseline methods attained near-nominal coverage despite
+substantially larger errors, suggesting that their uncertainty intervals were sufficiently wide to contain
+the true trajectories. By comparison, SNODE and SNFDE simultaneously achieved low prediction
+error and near-nominal coverage, demonstrating a more favorable balance between accuracy and
+uncertainty quantification. These findings support the use of latent neural differential equations as
+effective generative priors for inverse clot-growth forecasting from sparse observations.
+Figure 3 provides representative inverse forecasting examples for the SNODE and SNFDE,
+illustrating both a favorable prediction scenario and a more challenging case. In the good case (Case
+24), both SNODE and SNFDE accurately recover the latent clot-growth trajectory from only four
+pre-30-minute observations. The posterior mean closely overlaps the true trajectory throughout the
+forecast interval, and the predictive uncertainty remains narrow, indicating high confidence and
+accurate identification of the underlying latent state. On the other hand, another case (Case 85)
+highlights the challenges associated with sparse observations and weak identifiability. Although
+both models fit the observed measurements before 30 minutes, the posterior mean underestimates
+the subsequent growth trajectory and predicts an earlier plateau than the ground truth. In addition,
+both models produce a broader predictive band than Case 24, reflecting greater uncertainty about
+12
+
+
+the future trajectory.
+Table 3. Secondary main-setting metrics across 10 independent retraining seeds for the seven
+tested models. Values are reported as mean with 95% CI.
+Method
+Fut. MAE
+AUC err.
+σTF RMSE
+σTF 90% cov.
+SNODE
+0.01362
+[0.01279, 0.01445]
+0.01340
+[0.01120, 0.01560]
+274.7
+[228.5, 320.9]
+0.897
+[0.870, 0.923]
+SNFDE
+0.01481
+[0.01403, 0.01560]
+0.01317
+[0.01108, 0.01527]
+281.0
+[251.5, 310.4]
+0.902
+[0.887, 0.916]
+Latent NP
+0.01660
+[0.01581, 0.01738]
+0.01718
+[0.01526, 0.01910]
+297.0
+[267.8, 326.3]
+0.902
+[0.877, 0.926]
+Deep ensemble
+0.02326
+[0.01794, 0.02859]
+0.03039
+[0.01977, 0.04101]
+555.3
+[511.3, 599.4]
+0.895
+[0.876, 0.913]
+Library
+0.04152
+[0.03857, 0.04446]
+0.03323
+[0.03093, 0.03554]
+917.0
+[837.9, 996.2]
+0.920
+[0.892, 0.948]
+PCA–ridge GP
+0.06513
+[0.06157, 0.06869]
+0.07597
+[0.06965, 0.08229]
+1688.2
+[1587.7, 1788.8]
+0.910
+[0.891, 0.928]
+Gompertz
+0.15138
+[0.14311, 0.15965]
+0.09684
+[0.09274, 0.10094]
+1663.6
+[1540.5, 1786.7]
+0.914
+[0.892, 0.936]
+3.2
+Impact of number of observations on the prediction performance
+Figure 4 examines how the number of available post-onset observations influences both future
+trajectory forecasting accuracy and inference of the latent tissue-factor parameter σTF . Across
+all methods, performance generally improves as more observations become available, indicating
+that additional measurements provide stronger constraints on the inverse problem. However, the
+magnitude of improvement differs substantially among models. For future clot-growth forecasting
+(left panel), SNODE and SNFDE achieve the lowest errors across the entire range of observation
+counts, and thus the improvement due to the increased number of observations is modest. Latent
+NP exhibits a similar but slightly weaker trend, while the deep ensemble and library methods
+begin with substantially larger errors and benefit more noticeably from additional observations. In
+particular, the library method shows the largest reduction in future relative L2 error as observation
+count increases, indicating that retrieval-based approaches rely heavily on observation density to
+identify suitable candidate trajectories. A similar pattern is observed for σTF inference (right panel).
+The neural differential equation models again achieve the lowest parameter estimation errors, with
+SNODE consistently performing best and SNFDE’s performance remaining highly close. Latent
+NP shows a moderate decrease in error before reaching a relatively stable level, whereas the deep
+ensemble and library methods remain substantially less accurate even when larger numbers of
+observations are available.
+3.3
+Impact of observation count on uncertainty coverage
+Figure 5 presents how the number of observations influences the predictions of future trajectories
+and σTF. The horizontal dotted line denotes the nominal 90% coverage level, while the shaded
+regions represent the 95% confidence intervals computed from ten independent training seeds.
+Overall, increasing the number of observations leads to a gradual reduction in the uncertainty
+intervals for most methods. SNODE, SNFDE, Latent NP, and the Library approach all exhibit
+declining coverage, with Latent NP showing the steepest deterioration, falling well below 0.85 by
+16 observations in both panels. It is noted that although additional observations provide more
+information and reduce predictive uncertainty, they may produce sharper posterior distributions
+13
+
+
+1 2 3 4
+6
+8
+12
+16
+2
+4
+6
+8
+·10−2
+Number of observations
+Future relative L2
+1 2 3 4
+6
+8
+12
+16
+200
+400
+600
+800
+Number of observations
+σTF MAE
+SNODE
+SNFDE
+Latent NP
+Deep ensemble
+Library
+Figure 4.
+The impact of observation count on the model performance.
+Curves show seed-
+averaged metrics, where each seed metric is averaged over 200 randomized observation schedules.
+Shaded regions denote 95% confidence intervals across 10 independent retraining seeds. Additional
+observations generally improve both future trajectory accuracy and σTF inference.
+that may become overconfident if uncertainty is not properly calibrated. Consequently, several
+methods deviate progressively from the desired 90% coverage as the observation count increases.
+3.4
+Prediction error increased with forecasting horizon
+Fig. 6 compares the evolution of pointwise prediction error over the forecasting horizon using both
+the relative L2 error and MAE. The results are averaged across multiple random seeds to evaluate
+the robustness and long-term predictive performance of each model. As expected, both the relative
+L2 error and MAE increase with forecasting time for all models. This trend reflects the accumulation
+of prediction errors as the forecast horizon extends, since small inaccuracies in the learned dynamics
+propagate and amplify over time. Nevertheless, the rate of error growth differs considerably among
+the seven examined models. SNODE and SNFDE consistently achieve the lowest prediction errors
+throughout the entire 30–60 minute forecasting interval. Their relative L2 errors remain below
+approximately 2 × 10−2 at the longest prediction horizon, while the corresponding MAE values
+remain close to 2 × 10−2. The gradual increase in error indicates that both methods effectively
+capture the underlying temporal dynamics and maintain stable long-term predictions. The Latent
+NP exhibits intermediate performance. Although its prediction error is comparable to SNODE and
+SNFDE at shorter forecasting horizons, the error increases more rapidly beyond approximately 45
+minutes. The Deep Ensemble approach produces larger prediction errors throughout the forecasting
+interval. Although ensemble averaging generally improves robustness, the accumulated forecasting
+error increases steadily with time, resulting in noticeably higher relative L2 error and MAE than the
+neural differential equation-based methods. The Library baseline exhibits the poorest performance,
+with prediction errors increasing almost linearly as the forecasting horizon extends.
+14
+
+
+1 2 3 4
+6
+8
+12
+16
+0.75
+0.8
+0.85
+0.9
+0.95
+Number of observations
+Future 90% coverage
+1 2 3 4
+6
+8
+12
+16
+0.75
+0.8
+0.85
+0.9
+0.95
+Number of observations
+σTF 90% coverage
+SNODE
+SNFDE
+Latent NP
+Deep ensemble
+Library
+Target
+Figure 5. Impact of observation count on the prediction uncertainty. Curves show seed-averaged
+coverage, and shaded regions denote 95% confidence intervals across 10 independent retraining seeds.
+The horizontal dotted line marks the nominal 90% level. Future trajectory coverage is near nominal
+at the main four-observation setting but decreases for several methods as observation count grows
+and posterior distributions sharpen.
+3.5
+Predictive clot size spread reflects both parameter and trajectory uncertainty
+The uncertainty bands for clot size combine two sources of uncertainty, uncertainty in the inferred
+σTF value and residual trajectory uncertainty conditional on plausible σTF values. Consequently,
+the magnitude of σTF uncertainty does not necessarily correlate with clot-size uncertainty. Different
+σTF values can generate similar future trajectories in some parts of parameter space, while a fixed
+inferred σTF can still permit several plausible latent growth curves. In the main four-observation
+setting, future 90% coverage was close to nominal for the leading models: 0.907 for SNODE,
+0.900 for SNFDE, and 0.905 for Latent NP. The deep ensemble and PCA–ridge GP were slightly
+conservative, while the empirical library sat almost exactly on target. The same pattern held for
+σTF uncertainty, where SNODE, SNFDE, and Latent NP all achieved means 90% coverage near 0.90.
+The validation-derived trajectory calibration factors were larger for the neural differential equation
+models than for the deep ensemble and library baselines, indicating that the raw top-K posterior
+spread from the NDE candidates was sharper and required validation rescaling. In contrast, the
+Gompertz baseline required a much larger trajectory calibration factor and still had substantially
+larger point error, indicating structural mismatch rather than merely miscalibration.
+4
+Discussion
+The primary objective of this study is to develop a computational framework that allows the
+efficient inference of unknown model inputs and parameters of blood clotting models from sparse
+observational data. By combining data-driven inference with physics-based modeling, the framework
+will enable accurate prediction of blood clot growth trajectories together with quantitative estimates
+of predictive uncertainty. Our empirical result demonstrated that approaches based on the latent
+neural differential equation models provided the best inverse forecasts among the tested models.
+Across 10 independent retraining seeds, SNODE attained the lowest mean future trajectory error,
+15
+
+
+30
+35
+40
+45
+50
+55
+60
+2
+4
+6
+·10−2
+Time (min)
+Pointwise relative L2
+30
+35
+40
+45
+50
+55
+60
+2
+4
+6
+8
+·10−2
+Time (min)
+Pointwise MAE
+SNODE
+SNFDE
+Latent NP
+Deep ensemble
+Library
+Figure 6. The pointwise future error increases with forecasting horizon. Values are cross-seed
+means. Every method degrades over time, but SNODE and SNFDE maintain the lowest pointwise
+error throughout the 30–60 minute interval.
+the lowest parameter inference error, and the lowest σTF MAE. SNFDE was consistently competitive
+and substantially outperformed the non-differential baselines. The strongest non-differential method,
+Latent NP, was close enough to be informative but still separated from the two neural differential
+equation models. This supports the use of structured continuous-time generative priors for sparse
+inverse clot forecasting.
+The discrepancy in model performance summarized in Tables 2 and 3 likely stems from the
+limited availability of early observations, which renders the inverse problem weakly identifiable.
+Consequently, multiple candidate functions can fit the observed data, resulting in non-unique
+parameter estimates and increased predictive uncertainty. This limitation is particularly relevant
+for learned scientific surrogates, whose robustness can vary substantially across governing systems,
+parameter regimes, and deployment shifts even when in-distribution accuracy is strong [53]. SNODE
+and SNFDE perform particularly well in these scenarios because they do not search over arbitrary
+function spaces. Instead, they place prior probability mass on monotone, nonnegative trajectories
+conditioned on mechanistic inputs and use sparse observations to identify plausible latent rollouts.
+Although the empirical library is also biologically grounded, it is restricted to a finite set of training
+trajectories and therefore requires a larger number of observations to reliably identify similar
+candidates. PCA–ridge regression provides a broad low-dimensional Gaussian posterior; however,
+its linear coefficient model is unable to capture the nonlinear dependence of future clot growth on
+σTF . In contrast, the Gompertz model imposes a simple sigmoidal growth pattern and consequently
+performs poorly when simulator trajectories deviate from this parametric form.
+The observation-sensitivity study shown in Fig. 4 demonstrates that the number of available
+post-onset measurements can substantially affect model performance in predicting both σtf and
+future clot growth. All methods exhibited improved performance as the number of observations
+increased from one to four, and most continued to improve with additional observations. However,
+the rate of improvement varied across methods. The leading neural differential equation models
+showed only moderate gains because their learned priors already captured much of the simulator-
+generated growth manifold. In contrast, the retrieval- and ensemble-based baselines benefited more
+substantially from additional observations, as they rely more heavily on observed data to identify
+plausible candidate trajectories. These results support the interpretation that the NDE prior
+provides informative constraints even before any observations are available, whereas the baseline
+16
+
+
+methods depend more directly on observation density to achieve accurate inference and prediction.
+We also investigated how predictive performance changes as the forecast horizon increases. Even
+when the inverse inference step successfully recovers the latent forcing trajectory, forecast error
+inevitably accumulates as predictions extend further into the future. This behavior is expected in
+nonlinear dynamical systems [54], where small discrepancies in the inferred σTF , latent growth state,
+or initial trajectory phase can amplify over time and lead to increasingly divergent future trajectories.
+As a result, uncertainties that are negligible over short forecasting windows become more pronounced
+at longer horizons. As illustrated in Fig. 6, all methods exhibited some degree of performance
+degradation as the forecast window extended. However, the rate of error accumulation differed
+substantially across models. More generally, temporal-composition inconsistencies in learned physical
+evolution models can reveal long-horizon rollout failures that are not apparent from short-horizon
+prediction error alone [55]. In particular, SNODE and SNFDE accumulated error more slowly
+than the non-differential baselines, indicating greater robustness to long-range forecasting. This
+result suggests that the learned continuous-time dynamics in these models can preserve biologically
+plausible growth trajectories over extended unobserved intervals and better capture the underlying
+system evolution beyond the observed data.
+Several limitations of the current study should be acknowledged. First, the proposed inference
+framework was evaluated using synthetic observations generated from a computational model.
+Further validation using realistic clinical data will be necessary to assess the framework’s practical
+performance. Second, the framework has been tested only on a single computational model of
+clot growth. Consequently, the reported results do not guarantee comparable performance across
+other mechanistic models or physiological systems. Nevertheless, the proposed approach is largely
+model-agnostic and data-driven. As long as a computational model can generate representative
+simulation data that is validated by the clinical observations, the neural ODE inference model can be
+trained to learn the relationship between observations and latent inputs. This flexibility ensures that
+the framework can be adapted to a broad range of blood-clotting models beyond the specific model
+considered here. Finally, the current evaluation focuses on inferring a single unknown biochemical
+input, σTF , while treating the remaining four biochemical inputs as known. This simplified setting
+was chosen to isolate the performance of the proposed methodology. However, the framework is
+readily extensible to more complex scenarios involving multiple unknown inputs and uncertain
+model parameters. By increasing the dimensionality of the inference network output, the method
+can be trained to jointly estimate several latent forcing functions and model parameters, enabling a
+more comprehensive characterization of uncertainty in complex biological systems.
+5
+Conclusion
+In this study, we developed and evaluated a computational framework that integrates latent neural
+differential equations with mechanistic blood clotting models to infer unknown model inputs from
+sparse observations and forecast future clot growth trajectories with quantified uncertainty. Through
+extensive experiments on a multiphysics clotting simulator, we demonstrated that neural differential
+equation approaches, particularly SNODE and SNFDE, consistently achieved the most accurate
+inverse forecasts and parameter estimates across a range of observation numbers and forecasting
+horizons. The results highlight the importance of incorporating structured continuous-time dynamics
+into the inference process, especially when observations are limited and the inverse problem is
+weakly identifiable. Furthermore, the observation-sensitivity and horizon analyses showed that these
+models can effectively leverage sparse early measurements while maintaining greater robustness to
+long-range forecasting than non-differential baselines. Collectively, these findings suggest that latent
+17
+
+
+neural differential equations provide a powerful mechanism for combining mechanistic knowledge
+with data-driven learning, enabling reliable estimation of unobserved biological states and future
+disease progression. As computational models continue to mature and patient-specific data become
+increasingly available, the proposed framework offers a promising pathway toward personalized
+thrombosis modeling and clinically actionable prediction tools.
+18
+
+
+Data and code availability
+Code and data sufficient to reproduce the experiments and regenerate the manuscript tables and
+figures will be released in a public repository upon publication.
+Funding
+This work was supported by National Institute of Health grants R21HL168507, R01GM163243 and
+NSF SCH Award Number: 2406212.
+Acknowledgments
+Computational Resources.
+The authors acknowledge Dell Technologies for computational
+resources that supported this study. Experiments were conducted on a Dell Pro Max T2 workstation
+equipped with an Intel Core Ultra 9 285K processor, 128 GB of DDR5 ECC memory, and an
+NVIDIA RTX PRO 6000 Blackwell GPU.
+Author contributions
+L.J.S.: methodology, software, validation, formal analysis, visualization, writing–original draft,
+and writing–review and editing. Y.Q.: conceptualization, methodology, investigation, and writing–
+review and editing. H.L.: conceptualization, resources, supervision, project administration, and
+writing–review and editing.
+Competing interests
+The authors declare no competing interests.
+References
+[1] Versteeg HH, Heemskerk JWM, Levi M, Reitsma PH. New Fundamentals in Hemostasis.
+Physiological Reviews. 2013;93(1):327–358. doi:10.1152/physrev.00016.2011.
+[2] Palta S, Saroa R, Palta A. Overview of the Coagulation System. Indian Journal of Anaesthesia.
+2014;58(5):515–523. doi:10.4103/0019-5049.144643.
+[3] Furie B, Furie BC. Mechanisms of Thrombus Formation. The New England Journal of Medicine.
+2008;359(9):938–949. doi:10.1056/NEJMra0801082.
+[4] Cawthern KM, van ’t Veer C, Lock JB, DiLorenzo ME, Branda RF, Mann KG.
+Blood
+Coagulation in Hemophilia A and Hemophilia C. Blood. 1998;91(12):4581–4592.
+[5] Ovanesov MV, Krasotkina JV, Ul’yanova LI, Abushinova KV, Plyushch OP, Domogatskii SP,
+et al. Hemophilia A and B are associated with abnormal spatial dynamics of clot growth.
+Biochimica et Biophysica Acta – General Subjects. 2002;1572(1):45–57. doi:10.1016/S0304-
+4165(02)00278-7.
+19
+
+
+[6] Ovanesov MV, Ananyeva NM, Panteleev MA, Ataullakhanov FI, Saenko EL.
+Initiation
+and Propagation of Coagulation from Tissue Factor-Bearing Cell Monolayers to Plasma:
+Initiator Cells Do Not Regulate Spatial Growth Rate. Journal of Thrombosis and Haemostasis.
+2005;3(2):321–331. doi:10.1111/j.1538-7836.2005.01128.x.
+[7] Leiderman K, Fogelson A. An Overview of Mathematical Modeling of Thrombus Formation
+under Flow. Thrombosis Research. 2014;133:S12–S14. doi:10.1016/j.thromres.2014.03.005.
+[8] Anand M, Panteleev MA, Ataullakhanov FI.
+Computational Models of Hemosta-
+sis:
+Degrees of Complexity.
+Applications in Engineering Science. 2022;10:100103.
+doi:10.1016/j.apples.2022.100103.
+[9] Panteleev MA, Ovanesov MV, Kireev DA, Shibeko AM, Sinauridze EI, Ananyeva NM,
+et al.
+Spatial Propagation and Localization of Blood Coagulation Are Regulated by In-
+trinsic and Protein C Pathways, Respectively. Biophysical Journal. 2006;90(5):1489–1500.
+doi:10.1529/biophysj.105.069062.
+[10] Kuharsky AL, Fogelson AL. Surface-mediated control of blood coagulation: the role of binding
+site densities and platelet deposition. Biophysical Journal. 2001;80(3):1050–1074.
+[11] Fogelson AL, Tania N. Coagulation under flow: the influence of flow-mediated transport on
+the initiation and inhibition of coagulation. Pathophysiology of Haemostasis and Thrombosis.
+2005;34(2-3):91–108.
+[12] Bungay SD, Gentry PA, Gentry RD. A mathematical model of lipid-mediated thrombin
+generation. Mathematical Medicine and Biology. 2003;20(1):105–129.
+[13] Chatterjee MS, Purvis JE, Brass LF, Diamond SL. Pairwise agonist scanning predicts cellular
+signaling responses to combinatorial stimuli. Nature Biotechnology. 2010;28(7):727–732.
+[14] Hockin MF, Jones KC, Everse SJ, Mann KG. A model for the stoichiometric regulation of
+blood coagulation. Journal of Biological Chemistry. 2002;277(21):18322–18333.
+[15] Beltrami E, Jesty J. Mathematical analysis of activation thresholds in enzyme-catalyzed positive
+feedbacks: application to the feedbacks of blood coagulation. Proceedings of the National
+Academy of Sciences. 1995;92(19):8744–8748.
+[16] Dashkevich N, Ovanesov M, Balandina A, Karamzin S, Shestakov P, Soshitova N, et al. Throm-
+bin activity propagates in space during blood coagulation as an excitation wave. Biophysical
+Journal. 2012;103(10):2233–2240.
+[17] Zarnitsina V, Pokhilko A, Ataullakhanov F. A mathematical model for the spatio-temporal
+dynamics of intrinsic pathway of blood coagulation. I. The model description. Thrombosis
+Research. 1996;84(4):225–236.
+[18] Leiderman K, Fogelson AL. Grow with the flow: a spatial–temporal model of platelet deposition
+and blood coagulation under flow. Mathematical medicine and biology: a journal of the IMA.
+2011;28(1):47–84.
+[19] Leiderman K, Fogelson AL. The influence of hindered transport on the development of platelet
+thrombi under flow. Bulletin of mathematical biology. 2013;75(8):1255–1283.
+20
+
+
+[20] Bouchnita A. Mathematical Modelling of Blood Coagulation and Thrombus Formation under
+Flow in Normal and Pathological Conditions [PhD thesis]. Universit´e de Lyon; 2017.
+[21] Bouchnita A, Yadav K, Llored JP, Gurovich A, Volpert V. Thrombin Generation Thresholds
+for Coagulation Initiation under Flow. Axioms. 2023;12(9):873.
+[22] Bouchnita A, Terekhov K, Nony P, Vassilevski Y, Volpert V. A mathematical model to quantify
+the effects of platelet count, shear rate, and injury size on the initiation of blood coagulation
+under venous flow conditions. PloS one. 2020;15(7):e0235392.
+[23] Bouchnita A, Volpert V. A multiscale model of platelet-fibrin thrombus growth in the flow.
+Computers & Fluids. 2019;184:10–20.
+[24] Guerrero-Hurtado M, Garcia-Villalba M, Gonzalo A, Martinez-Legazpi P, Kahn AM, McVeigh E,
+et al. Efficient multi-fidelity computation of blood coagulation under flow. PLOS Computational
+Biology. 2023;19(10):e1011583. doi:10.1371/journal.pcbi.1011583.
+[25] Gherman IM, Abdallah ZS, Pang W, Gorochowski TE, Grierson CS, Marucci L. Bridging the gap
+between mechanistic biological models and machine learning surrogates. PLOS Computational
+Biology. 2023;19(4):e1010988. doi:10.1371/journal.pcbi.1010988.
+[26] Yuhn C, Oshima M, Chen Y, Hayakawa M, Yamada S. Uncertainty quantification in cerebral
+circulation simulations focusing on the collateral flow: Surrogate model approach with machine
+learning. PLOS Computational Biology. 2022;18(7):e1009996. doi:10.1371/journal.pcbi.1009996.
+[27] Comlekoglu T, Toledo-Marin JQ, Comlekoglu T, DeSimone DW, Peirce SM, Fox G, et al.
+Surrogate modeling of Cellular-Potts agent-based models as a segmentation task using the
+U-Net neural network architecture.
+PLOS Computational Biology. 2025;21(11):e1013626.
+doi:10.1371/journal.pcbi.1013626.
+[28] Deng Y, Kong Y, Wang X, Li H. Recent Advances in Modeling and Prediction of Blood Glucose
+in Type 1 Diabetes. Delaware Journal of Public Health. 2026;12(1):46.
+[29] Chen Q, Li H, Zheng X. A deep neural network for operator learning enhanced by attention
+and gating mechanisms for long-time forecasting of tumor growth. Engineering with Computers.
+2025;41(1):423–533.
+[30] Daneker M, Cai S, Qian Y, Myzelev E, Kumbhat A, Li H, et al. Transfer learning on physics-
+informed neural networks for tracking the hemodynamics in the evolving false lumen of dissected
+aorta. Nexus. 2024;1(2).
+[31] Deng Y, Li H. Deep learning for few-shot white blood cell image classification and feature learn-
+ing. Computer Methods in Biomechanics and Biomedical Engineering: Imaging & Visualization.
+2023;11(6):2081–2091.
+[32] Gao Q, Lin H, Qian J, Liu X, Cai S, Li H, et al. A deep learning model for efficient end-to-end
+stratification of thrombotic risk in left atrial appendage. Engineering Applications of Artificial
+Intelligence. 2023;126:107187.
+[33] Chen Q, Ye Q, Zhang W, Li H, Zheng X. TGM-Nets: A deep learning framework for enhanced
+forecasting of tumor growth by integrating imaging and modeling. Engineering Applications of
+Artificial Intelligence. 2023;126:106867.
+21
+
+
+[34] Zhang Q, Sampani K, Xu M, Cai S, Deng Y, Li H, et al. AOSLO-net: a deep learning-based
+method for automatic segmentation of retinal microaneurysms from adaptive optics scanning
+laser ophthalmoscopy images. Translational vision science & technology. 2022;11(8):7–7.
+[35] Lagergren JH, Nardini JT, Baker RE, Simpson MJ, Flores KB. Biologically-Informed Neural
+Networks Guide Mechanistic Modeling from Sparse Experimental Data. PLOS Computational
+Biology. 2020;16(12):e1008462. doi:10.1371/journal.pcbi.1008462.
+[36] Qian Y, Zhu G, Zhang Z, Modepalli S, Zheng Y, Zheng X, et al. Coagulo-Net: Enhancing the
+mathematical modeling of blood coagulation using physics-informed neural networks. Neural
+Networks. 2024;180:106732. doi:10.1016/j.neunet.2024.106732.
+[37] Butenas S, Mann KG. Blood coagulation. Biochemistry (Moscow). 2002;67(1):3–12.
+[38] Tanaka KA, Key NS, Levy JH. Blood coagulation: hemostasis and thrombin regulation.
+Anesthesia & Analgesia. 2009;108(5):1433–1446.
+[39] Chen RTQ, Rubanova Y, Bettencourt J, Duvenaud D. Neural ordinary differential equations.
+In: Advances in Neural Information Processing Systems. vol. 31; 2018.
+[40] Rubanova Y, Chen RTQ, Duvenaud D. Latent ordinary differential equations for irregularly-
+sampled time series. In: Advances in Neural Information Processing Systems. vol. 32; 2019.
+[41] Zhu Q, Guo Y, Lin W.
+Neural Delay Differential Equations.
+In: International Confer-
+ence on Learning Representations; 2021.Available from: https://openreview.net/forum?
+id=Q1jmmQz72M2.
+[42] Chorin AJ, Hald OH, Kupferman R. Optimal prediction and the Mori–Zwanzig representation of
+irreversible processes. Proceedings of the National Academy of Sciences. 2000;97(7):2968–2973.
+doi:10.1073/pnas.97.7.2968.
+[43] Gouasmi A, Parish EJ, Duraisamy K. A priori estimation of memory effects in reduced-order
+models of nonlinear systems using the Mori–Zwanzig formalism. Proceedings of the Royal
+Society A. 2017;473(2205):20170385. doi:10.1098/rspa.2017.0385.
+[44] Stuart AM. Inverse problems: A Bayesian perspective. Acta Numerica. 2010;19:451–559.
+doi:10.1017/S0962492910000061.
+[45] Garnelo M, Rosenbaum D, Maddison C, Ramalho T, Saxton D, Shanahan M, et al. Conditional
+neural processes. In: Proceedings of the 35th International Conference on Machine Learning.
+vol. 80 of Proceedings of Machine Learning Research; 2018. p. 1704–1713.
+[46] Lakshminarayanan B, Pritzel A, Blundell C.
+Simple and scalable predictive uncertainty
+estimation using deep ensembles. In: Advances in Neural Information Processing Systems.
+vol. 30; 2017.
+[47] Altman NS. An Introduction to Kernel and Nearest-Neighbor Nonparametric Regression. The
+American Statistician. 1992;46(3):175–185. doi:10.1080/00031305.1992.10475879.
+[48] Jolliffe IT. Principal Component Analysis. 2nd ed. New York: Springer; 2002.
+[49] Hoerl AE, Kennard RW. Ridge regression: Biased estimation for nonorthogonal problems.
+Technometrics. 1970;12(1):55–67. doi:10.1080/00401706.1970.10488634.
+22
+
+
+[50] Gompertz B. On the Nature of the Function Expressive of the Law of Human Mortality, and
+on a New Mode of Determining the Value of Life Contingencies. Philosophical Transactions of
+the Royal Society of London. 1825;115:513–583. doi:10.1098/rstl.1825.0026.
+[51] Kingma DP, Welling M. Auto-Encoding Variational Bayes; 2022. Available from: https:
+//arxiv.org/abs/1312.6114.
+[52] Hale JK, Verduyn Lunel SM. Introduction to Functional Differential Equations. vol. 99 of
+Applied Mathematical Sciences. 1st ed. New York, NY: Springer; 1993.
+[53] Shikhman L. Diagnosing Failure Modes of Neural Operators Across Diverse PDE Families.
+Transactions on Machine Learning Research. 2026;.
+[54] Strogatz SH. Nonlinear Dynamics and Chaos: With Applications to Physics, Biology, Chemistry,
+and Engineering. 2nd ed. CRC Press; 2015.
+[55] Shikhman LJ. Semigroup Consistency as a Diagnostic for Learned Physics Simulators. In:
+ICML 2026 Workshop on AI for Physics; 2026.Available from: https://openreview.net/
+forum?id=MeAFOZnrvM.
+23
