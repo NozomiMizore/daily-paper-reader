@@ -6,32 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-15
-- 运行时间：2026-08-15 20:37:21 UTC
+- 最新运行日期：2026-08-16
+- 运行时间：2026-08-16 20:16:53 UTC
 - 运行状态：成功
-- 本次总论文数：3
+- 本次总论文数：1
 - 精读区：0
-- 速读区：3
+- 速读区：1
 
 ### 今日简报（AI）
-今日速读3篇论文，均聚焦动态系统建模与因果推断，暂无精读。  
-最值得关注方向：血凝块生长的潜在神经微分方程预测，以及部分观测系统的稀疏回归方法。  
-建议普通读者优先浏览血凝块预测一文，其应用场景更贴近临床可解释性。
-- 详情：[/202608/15/README](/202608/15/README)
+今日仅速读1篇论文，无精读，整体工作量较轻。  
+值得关注的方向：局部保形预测在个体因果效应估计中的应用，评分7.0/10。  
+建议后续可围绕该主题精读原文，并联系统计推断与因果推断的基础方法。
+- 详情：[/202608/16/README](/202608/16/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Predicting blood clot growth from sparse post-onset measurements with latent neural differential equations](/202608/15/2608.08165v1-predicting-blood-clot-growth-from-sparse-post-onset-measurements-with-latent-neural-differential-equations)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：潜变量神经微分方程从稀疏测量预测生物学动态，可迁移用于扰动响应建模
-2. [Observable-Reduction-Guided Sparse Regression for Partially Observed Active-Quiescent Systems](/202608/15/2608.11125v1-observable-reduction-guided-sparse-regression-for-partially-observed-active-quiescent-systems)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：部分观测的活跃-静止细胞群体动态的稀疏回归建模
-3. [Causal inference for group-contaminated structured outcomes: observable quotients, lossless reduction and exact randomization inference](/202608/15/2608.11954v1-causal-inference-for-group-contaminated-structured-outcomes-observable-quotients-lossless-reduction-and-exact-randomization-inference)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：处理结构化潜在结果下变换的因果推断与随机化推断
+1. [Local conformal prediction for individual causal effects](/202608/16/2608.09612v1-local-conformal-prediction-for-individual-causal-effects)  
+   标签：评分：7.0/10、query:virtual-cell
+   evidence：为个体因果效应提供有限样本有效的共形预测区间
 
 
 <div class="dpr-home-promo-card">
