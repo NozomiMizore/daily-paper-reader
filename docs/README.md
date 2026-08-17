@@ -6,26 +6,27 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-16
-- 运行时间：2026-08-16 20:16:53 UTC
+- 最新运行日期：2026-08-17
+- 运行时间：2026-08-17 20:36:10 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：0
-- 速读区：1
+- 本次总论文数：2
+- 精读区：2
+- 速读区：0
 
 ### 今日简报（AI）
-今日仅速读1篇论文，无精读，整体工作量较轻。  
-值得关注的方向：局部保形预测在个体因果效应估计中的应用，评分7.0/10。  
-建议后续可围绕该主题精读原文，并联系统计推断与因果推断的基础方法。
-- 详情：[/202608/16/README](/202608/16/README)
+今日精读2篇论文，聚焦细胞表型预测与分布值结果的生成式推断。最值得关注的是条件神经最优传输在分子结构到细胞表型预测中的应用，以及生成式推断对分布型结果的新解法。建议从这两篇入手，学习如何用最优传输和生成模型处理高维生物与统计推断问题。
+- 详情：[/202608/17/README](/202608/17/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [Conditional Neural Optimal Transport for Predicting Cellular Phenotypes from Molecular Structure](/202608/17/2608.14293v1-conditional-neural-optimal-transport-for-predicting-cellular-phenotypes-from-molecular-structure)  
+   标签：评分：9.0/10、query:virtual-cell
+   evidence：从分子结构预测化学扰动下的细胞表型响应
+2. [Generation-Powered Inference for Distribution-Valued Outcomes](/202608/17/2608.14542v1-generation-powered-inference-for-distribution-valued-outcomes)  
+   标签：评分：8.0/10、query:virtual-cell
+   evidence：提出统计框架以改进使用生成模型预测遗传扰动细胞响应时的推断
 
 ### 速读区论文标签
-1. [Local conformal prediction for individual causal effects](/202608/16/2608.09612v1-local-conformal-prediction-for-individual-causal-effects)  
-   标签：评分：7.0/10、query:virtual-cell
-   evidence：为个体因果效应提供有限样本有效的共形预测区间
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
