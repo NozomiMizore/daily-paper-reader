@@ -1,0 +1,497 @@
+Title: CytoBERT: A Foundation Model for Cytometry Data
+
+URL Source: https://arxiv.org/pdf/2608.14414v1
+
+Published Time: Mon, 17 Aug 2026 00:58:57 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+## CytoBERT: A Foundation Model for Cytometry Data 
+
+Syed Abdul Haseeb Qadri 1, Bjarne C. Hiller 1, Felix Blanke 2, Vanja Sophie Cangalovic 2, Kutalmış Coşkun 2, Amin Mirzaei 2, Tom Siegl 1, Sebastian Bader 1, Thomas Kirste 1, and Martin Becker 1,2,3 
+
+> 1
+
+University of Rostock, Rostock, Germany  
+
+> 2
+
+Marburg University, Marburg, Germany  
+
+> 3
+
+Hessian Center for Artificial Intelligence, Darmstadt, Germany 
+
+Abstract. Cytometry measures the complex characteristics of single cells (e.g., counts and protein expression of immune cells) and is widely used across immunological research and clinical settings. However, cy-tometry data is highly heterogeneous and unstandardized due to exper-imental protocols and the choice of measured features. While machine learning methods hold the potential to gain deeper insights into cell bi-ology, these challenges make them difficult to apply and transfer across studies. Recent advances in foundation models can alleviate these issues, but corresponding approaches are still scarce in this field. To address this, we provide CytoBERT, a publicly available, open-source, open-weight foundation model for single-cell cytometry data with variable marker panels. CytoBERT is pretrained in a self-supervised manner on a large-scale cytometry corpus (15 human datasets with heterogeneous marker panels and more than 50 million cells) curated through marker standard-ization, enabling it to learn transferable inter-marker relationships within cells. Fine-tuning CytoBERT for sample-level classification demonstrates that transfer learning across heterogeneous cytometry datasets is feasi-ble, providing a starting point for scalable, generalizable cytometry anal-ysis. Code is available at GitHub. 
+
+Keywords: cytometry · foundation models · self-supervised learning 
+
+1 Introduction 
+
+Single-cell cytometry is widely used in immunology and clinical research for immunophenotyping, disease detection, and treatment-response analysis [10,19]. It measures the expression of 5–50 protein markers at single-cell resolution. Thus, each cytometry sample can be viewed as a cell-by-marker matrix, where rows correspond to individual cells and columns correspond to measured markers. Despite its broad applications, cytometry data remain difficult to integrate across studies [17]. Depending on the study objective and laboratory, different sets of markers, known as marker panels, are measured [11]. In addition, even the same biological marker may be associated with different detection channels, metal arXiv:2608.14414v1 [cs.LG] 14 Aug 2026 2 S. A. H. Qadri et al. 
+
+isotope tags, and naming conventions [14,16,11]. As a result, marker panels and marker annotations are generally not standardized across datasets, making it challenging to train models that can transfer knowledge across studies [11]. Traditional cytometry analysis is commonly performed using manual gat-ing [14], where bounding boxes are drawn around cell populations in a hierarchy of bivariate dot plots [14]. Gated populations are then summarized per sample us-ing population abundances and marker-expression intensities, which can be sta-tistically associated with phenotypes or compared between clinical groups [15]. Although widely used, manual gating is laborious, subjective, time-consuming, and difficult to scale as the number of measured markers increases. Machine-learning and deep-learning methods have been proposed to automate cytometry analysis, but most are dataset-specific, assume a fixed marker panel, require labeled training data, and must be retrained for each new study or task [11,8]. To overcome these limitations, we introduce CytoBERT, a Transformer-based foundation model for cytometry data inspired by the recently proposed Im-muneFM framework [8]. Unlike ImmuneFM, we provide implementation details and make code and data available. CytoBERT processes each cell independently as a sequence of marker-expression tokens and is pretrained with a self-supervised masked expression prediction objective to learn marker co-expression patterns within cells. We extend this approach with a shared vocabulary of 220 distinct markers and evaluate the pretrained model for transfer learning across hetero-geneous cytometry datasets. The model can then be fine-tuned for downstream tasks such as sample-level disease classification. 
+
+2 Related Work 
+
+Sample classification in cytometry. Several methods have been proposed for cytometry-based sample classification. Classical approaches such as CITRUS [5], FloReMi [21], and CytoDx [12] extract cluster- or marker-level features from single-cell data for sample-level prediction. Deep-learning methods, including CellCNN [4], CytoSet [23], and CytoCoSet [6], learn sample representations di-rectly from single-cell data using convolutional or permutation-invariant archi-tectures. However, these methods are typically supervised and dataset-specific, assume a fixed marker panel, and require retraining for each new dataset or task. 
+
+Foundation models for single-cell data. Foundation models have gained attention in single-cell transcriptomics, e.g., scBERT [22], scGPT [7], scFoundation [9], Geneformer [20], CellFM [24], and GeneMamba [18], learning reusable represen-tations from large-scale RNA-seq datasets. However, these methods target tran-scriptomics, where genes provide a stable feature vocabulary across datasets. Cytometry is more heterogeneous because studies measure different subsets of protein markers and often lack standardized marker annotations. Existing cy-tometry foundation models remain limited: CyMAE [13] assumes a fixed marker panel (MDIPA) and is evaluated only on COVID studies, while ImmuneFM [8] addresses variable-panel cytometry but does not provide a publicly available CytoBERT: A Foundation Model for Cytometry Data 3
+
+implementation. CytoBERT addresses this gap by learning transferable marker-expression representations from standardized cytometry datasets with variable marker panels and evaluating them for downstream sample-level classification. 
+
+3 Method 
+
+The core of CytoBERT is a Transformer encoder parametrized by θ and pre-trained using masked expression modeling. Each cell is represented as a sequence of tokens encoding marker–expression pairs. Let mj ∈ { 1, . . . , M } denote the marker index of token j, where M = 220 is the number of distinct markers. CytoBERT learns a marker embedding function Em : {1, . . . , M } → Rd, with 
+
+d = 128 . Expression values are transformed using arsinh( x/ 5) , MinMax-scaled per marker across the pretraining corpus, and discretized into B = 10 equal-width expression bins. Let bj ∈ { 1, . . . , B } denote the corresponding bin index. CytoBERT learns a bin embedding function Eb : {1, . . . , B } → Rd. The final token embedding, hj , is given by 
+
+hj = Em(mj ) + Eb(bj ).
+
+Thus, each input token hj combines marker identity and discretized expression information, enabling CytoBERT to process cells with variable marker panels. 
+
+3.1 Self-Supervised Pretraining 
+
+During pretraining, a subset of measured marker positions is randomly selected for masking. For this, the expression-bin embedding is replaced by a special 
+
+[MASK] embedding, while the marker identity remains visible. This forces the model to infer the missing expression state of a known marker from the remaining marker-expression context within the same cell. Since zero-valued expressions dominate cytometry data and are often less informative, masking is applied only to non-zero marker-expression positions. A detailed overview of the framework is provided in supplementary material Figure 4. Following Transformer-based single-cell models such as scBERT [22] and scGPT [7], a learnable classification token is prepended to the input sequence. During pretraining, the masked-bin prediction objective is applied to marker-token representations, while the classification token is retained for downstream fine-tuning as a compact cell-level representation: 
+
+Hin = [ hCLS , h1, . . . , hL], H = Transformer( Hin ).
+
+The output H0 corresponds to the classification token used during downstream fine-tuning, while Hj denotes the contextualized representation of marker po-sition j used for masked-bin prediction. A linear prediction head maps masked marker representations to logits over expression bins, 
+
+zj = WH j + b, zj ∈ RB .4 S. A. H. Qadri et al. 
+
+The logits define a conditional probability distribution over expression bins at masked marker position j,
+
+pθ (Bj = b | mj , {mi, b i}i / ∈Ω ) = softmax( zj )b,
+
+where the variable Bj corresponds to the expression-bin label at position j,and Ω is the set of masked positions. The pretraining objective minimizes cross-entropy over masked positions only: 
+
+Lpretrain = − 1
+
+|Ω|
+
+X
+
+> j∈Ω
+
+log pθ (Bj = bj | mj , {mi, b i}i / ∈Ω ).
+
+By reconstructing masked bins from the remaining measured markers, Cyto-BERT learns contextual inter-marker relationships within individual cells. 
+
+3.2 Fine-Tuning for Sample Classification 
+
+After pretraining, CytoBERT is fine-tuned end-to-end for supervised sample-level classification. Since labels are defined at the sample or patient level, cell-level representations must be aggregated into a sample-level embedding. For a sample containing K cells, each cell k is processed independently by the pre-trained encoder, and the classification-token output is used as the cell embed-ding: ck = H(k)0 . Cell embeddings are then aggregated using mean pooling, 
+
+s = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+ck,
+
+where s ∈ Rd is the sample representation. This representation is passed to a task-specific, two-layer MLP classification head. During fine-tuning, both the pretrained encoder and the classification head are optimized jointly using cross-entropy loss. In the main experiments, we sample K = 512 cells per sample and evaluate performance using ROC-AUC. 
+
+4 Results & Analysis 
+
+4.1 Experimental Setup Pretraining setup. CytoBERT is pretrained on a curated CyTOF corpus consisting of approximately 50 million cells from 15 out of 18 curated datasets. During pretraining, 25% of eligible non-zero marker-expression bins are masked in each epoch. The Transformer encoder uses hidden dimension d = 128 , 6 layers, 8 attention heads, and 10 expression bins, and is optimized with Adam for 50 epochs. These hyperparameters are primarily motivated by ImmuneFM [8], the closest related cytometry foundation-model setting. A detailed overview of the markers across all datasets is provided in Supplementary Fig. 5. CytoBERT: A Foundation Model for Cytometry Data 5
+
+Fine-tuning setup. For downstream evaluation, we fine-tune CytoBERT on sample classification tasks across seven CyTOF datasets from ImmPort. Since a single sample or file may contain a large number of cells, we randomly select 512 cells without replacement from each file to create a smaller subset/subsample. To reduce sampling variability, multiple independent subsamples are generated from each sample and classified independently. Class imbalance is handled by oversampling minority classes at the sample level. 
+
+Evaluation. We compare pretrained CytoBERT with logistic regression, Cy-toSet, and a randomly initialized CytoBERT model without pretrained weights (from scratch). Logistic regression uses marker expression values averaged across all cells in each subsample. CytoSet and CytoBERT both use a mean-pooling layer for sample-level aggregation. CytoSet uses a supervised, permutation-invariant architecture. Since logistic regression and CytoSet require fixed input dimension-ality, they use only markers shared across all samples. CytoBERT is evaluated using its native variable-marker representation. Models are evaluated with 3-fold cross-validation. When subject identifiers are available, we use grouped splits to prevent subsamples from the same subject from appearing in both training and test folds. Performance is reported using ROC-AUC, with macro-averaged one-vs-rest ROC-AUC for multi-class tasks. Table 1: Downstream CyTOF datasets. “Subjects” and “Samples” denote unique patients and sample files.                                 
+
+> Dataset Subjects Samples Disease/condition In pretrain?
+> SDY788 20 126 Transplant Yes SDY997 54 259 Autoimmune No SDY1535 50 100 HIV diagnosis Yes SDY1708 74 146 COVID severity No SDY1733 49 99 Liver cancer stage No SDY2011 113 185 COVID diagnosis Yes SDY2015 36 107 Peanut allergy Yes
+
+4.2 Results on Downstream Datasets 
+
+Subject-level prediction results are reported in Fig. 1. Under grouped subject splitting, CytoBERT fine-tuning achieves the best average ranking across down-stream datasets (Fig. 3). Compared with CytoBERT trained from scratch, this suggests that self-supervised pretraining provides a useful initialization for sam-ple classification. The greatest improvements are observed on SDY1708 and SDY997, indicating transfer to datasets not seen during pretraining. 6 S. A. H. Qadri et al. 
+
+We evaluate CytoBERT on some datasets included in pretraining (Tab. 1). However, pretraining uses only marker-expression values and no sample labels, avoiding label leakage. In addition, the clearest gains are observed on truly held-out datasets, such as SDY1708 and SDY997. Because SDY788 has few subjects, its grouped-split performance is weakest. Unlike prior evaluations using ungrouped splits [23,8], we report the main results under grouped subject splitting. This prevents samples from the same subject from appearing in both training and test folds, providing a more realistic estimate of generalization to unseen subjects. A comparison with ungrouped splitting is provided in Supplementary Figs. 2 and 3. 
+
+Grouped Subject Split SDY1535 SDY1708 SDY1733 SDY2011 SDY2015 SDY788 SDY997    
+
+> Dataset
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> ROC-AUC
+> Logistic CytoSet CytoFM Scratch CytoFM Fine-tune
+
+Fig. 1: Sample classification results under grouped subject splitting. ROC-AUC is shown on the y-axis. The Friedman test found no significant differences between models ( p = 0 .093 ), although CytoBERT achieved the best average rank. 
+
+5 Conclusion 
+
+We presented CytoBERT, an open-source, open-weight foundation model for variable-panel single-cell cytometry data. By standardizing markers across cy-tometry datasets and self-supervised pretraining, CytoBERT can be fine-tuned for downstream sample classification. Across the evaluated datasets, CytoBERT achieves the best average ranking under grouped subject splitting, suggesting that pretraining improves subject classification performance. Although differ-ences to supervised baselines are not statistically significant, the results indicate the potential of foundation-model-style pretraining for cytometry. Our code and trained weights are publicly available to support reproducibility and future work. 
+
+Acknowledgments. This work has been funded by the ERDF (TBI-1-143-W-043), by the BMBF (01IS22077, 01ED2507) and DFG (CRC 1713: 534829736). CytoBERT: A Foundation Model for Cytometry Data 7
+
+References 
+
+1. Cytobert - code (2026). https://doi.org/10.5281/zenodo.21299708 
+
+2. Cytobert - data (2026). https://doi.org/10.5281/zenodo.21291131 
+
+3. Cytobert - docker (2026). https://doi.org/10.5281/zenodo.21298697 
+
+4. Arvaniti, E., Claassen, M.: Sensitive detection of rare disease-associated cell subsets via representation learning. Nature Communications 8, 14825 (2017). https://do i.org/10.1038/ncomms14825 
+
+5. Bruggner, R.V., Bodenmiller, B., Dill, D.L., Tibshirani, R.J., Nolan, G.P.: Au-tomated identification of stratifying signatures in cellular subpopulations. Pro-ceedings of the National Academy of Sciences 111 (26), E2770–E2777 (2014). 
+
+https://doi.org/10.1073/pnas.1408792111 
+
+6. Chen, C.J., Yi, H., Stanley, N.: Conditional similarity triplets enable covariate-informed representations of single-cell data. BMC Bioinformatics 26 (1), 45 (2025). 
+
+https://doi.org/10.1186/s12859-025-06069-5 
+
+7. Cui, H., Wang, C., Maan, H., Pang, K., Luo, F., Duan, N., Wang, B.: scgpt: toward building a foundation model for single-cell multi-omics using generative ai. Nature Methods 21 , 1470–1480 (2024). https://doi.org/10.1038/s41592-024-02201-0 
+
+8. Ding, S., Bhattacharya, S., Butte, A.J.: Immunefm: Pre-training foundation model from cytometry data for immunology research (2025). https://doi.org/10.110 1/2025.07.09.664020 , https://www.biorxiv.org/content/10.1101/2025.07. 09.664020v1 
+
+9. Hao, M., Gong, J., Zeng, X., Liu, C., Guo, Y., Cheng, X., Wang, T., Ma, J., Zhang, X., Song, L.: Large-scale foundation model on single-cell transcriptomics. Nature Methods 21 , 1481–1491 (2024). https://doi.org/10.1038/s41592-024-02305-7 
+
+10. Hartmann, F.J., Babdor, J., Gherardini, P.F., Amir, E.a.D., Jones, K., Sahaf, B., Marquez, D.M., Krutzik, P., O’Donnell, E., Sigal, N., Maecker, H.T., Davis, M.M., Nolan, G.P., Bendall, S.C.: Comprehensive immune monitoring of clinical trials to advance human immunotherapy. Cell Reports 28 (3), 819–831.e4 (2019). 
+
+https://doi.org/10.1016/j.celrep.2019.06.049 
+
+11. Hu, Z., Bhattacharya, S., Butte, A.J.: Application of machine learning for cytom-etry data. Frontiers in Immunology 12 , 787574 (2022). https://doi.org/10.338 9/fimmu.2021.787574 
+
+12. Hu, Z., Glicksberg, B.S., Butte, A.J.: Robust prediction of clinical outcomes using cytometry data. Bioinformatics 35 (7), 1197–1203 (2019). https://doi.org/10.1 093/bioinformatics/bty768 
+
+13. Kim, J., Ionita, M., Lee, M., McKeague, M.L., Pattekar, A., Painter, M.M., Wagenaar, J., et al.: Cytometry masked autoencoder: An accurate and inter-pretable automated immunophenotyper. Cell Reports Medicine 5(11), 101808 (2024). https://doi.org/10.1016/j.xcrm.2024.101808 
+
+14. Liu, P., Liu, S., Fang, Y., Xue, X., Zou, J., Tseng, G., Konnikova, L.: Recent ad-vances in computer-assisted algorithms for cell subtype identification of cytometry data. Frontiers in Cell and Developmental Biology Volume 8 - 2020 (2020). http s://doi.org/10.3389/fcell.2020.00234 , https://www.frontiersin.org/jour nals/cell-and-developmental-biology/articles/10.3389/fcell.2020.00234 
+
+15. Nowicka, M., Krieg, C., Crowell, H.L., Weber, L.M., Hartmann, F.J., Guglietta, S., Becher, B., Levesque, M.P., Robinson, M.D.: Cytof workflow: differential discovery in high-throughput high-dimensional cytometry datasets. F1000Research 6, 748 (2017). https://doi.org/10.12688/f1000research.11622.3 8 S. A. H. Qadri et al. 16. Overton, J.A., Vita, R., Dunn, P., Burel, J.G., Bukhari, S.A.C., Cheung, K.H., Kleinstein, S.H., Diehl, A.D., Peters, B.: Reporting and connecting cell type names and gating definitions through ontologies. BMC Bioinformatics 20 (5), 182 (2019). 
+
+https://doi.org/10.1186/s12859-019-2725-5 , https://doi.org/10.1186/s1 2859-019-2725-5 
+
+17. Pedersen, C.B., Dam, S.H., Barnkob, M.B., Leipold, M.D., Purroy, N., Rassenti, L.Z., Kipps, T.J., Nguyen, J., Lederer, J.A., Gohil, S.H., et al.: cycombine allows for robust integration of single-cell cytometry datasets within and across technologies. Nature Communications 13 (1), 1698 (2022) 18. Qi, C., Fang, H., Jiang, S., Song, X., Hu, T., Zhi, W.: Genemamba: An efficient and effective foundation model on single cell data. arXiv (2026) 19. Robinson, J.P., Ostafe, R., Iyengar, S.N., Rajwa, B., Fischer, R.: Flow cytometry: The next revolution. Cells 12 (14) (2023). https://doi.org/10.3390/cells12141 875 , https://www.mdpi.com/2073-4409/12/14/1875 
+
+20. Theodoris, C.V., Xiao, L., Chopra, A., Chaffin, M.D., Al Sayed, Z.R., Hill, M.C., Mantineo, H., Brydon, E.M., Zeng, Z., Liu, X.S., Ellinor, P.T.: Transfer learning enables predictions in network biology. Nature 618 , 616–624 (2023). https://do i.org/10.1038/s41586-023-06139-9 
+
+21. Van Gassen, S., Vens, C., Dhaene, T., Lambrecht, B.N., Saeys, Y.: FloReMi: Flow density survival regression using minimal feature redundancy. Cytometry Part A 
+
+89 (1), 22–29 (2016). https://doi.org/10.1002/cyto.a.22734 
+
+22. Yang, F., Wang, W., Wang, F., Davis, C., Gershman, S.J., et al.: scbert as a large-scale pretrained deep language model for cell type annotation of single-cell rna-seq data. Nature Machine Intelligence 4, 852–866 (2022). https://doi.org/10.1038/ s42256-022-00534-z 
+
+23. Yi, H., Stanley, N.: CytoSet: predicting clinical outcomes via set-modeling of cy-tometry data. In: Proceedings of the 12th ACM International Conference on Bioin-formatics, Computational Biology, and Health Informatics (ACM-BCB). pp. 1–8 (2021). https://doi.org/10.1145/3459930.3469529 
+
+24. Zeng, Y., Xie, J., Shangguan, N., Wei, Z., Li, W., Yu, W., Yang, Y., et al.: Cellfm: a large-scale foundation model pre-trained on transcriptomics of 100 million human cells. Nature Communications 16 , 4679 (2025). https://doi.org/10.1038/s414 67-025-59926-5 CytoBERT: A Foundation Model for Cytometry Data 9
+
+A Data and Code Availability 
+
+A general overview of information about this manuscript is available at https: //bckrlab.org/p/cytobert . Code is available at https://github.com/b ckrlab/cytobert . To ensure long-term reproducibility and accessibility of the results, we additionally provide a code snapshot [1], data artifacts [2], as well as a Docker image [3]. This publication uses data provided by ImmPort. The pre-training dataset contains pre-processed data from the following ImmPort datasets: 
+
+– SDY207: Cytometry by time-of-flight shows combinatorial cytokine expres-sion and virus-specific cell niches within a continuum of CD8+ T cell phe-notypes 
+
+– SDY461: Monitoring of tissue-specific immune responses in man to naturally occurring pathogens using mass cytometric monitoring 
+
+– SDY515: Monozygotic and Dizygotic Twin Pair T-Cell Responses to In-fluenza Vaccination SLVP018 2010 
+
+– SDY788: Immune Profiles to Predict Response to Desensitization Therapy in Highly HLA-Sensitized Kidney Transplant Candidates 
+
+– SDY997: AMP Lupus Network Project: Molecular Characterization of Lupus Nephritis and Correlation with Response to Therapy 
+
+– SDY998: AMP Rheumatoid Arthritis Phase 1 
+
+– SDY1479: Plasmablast response to inactivated and live attenuated influenza vaccines (TIV3/TIV3 ID) in 2014 
+
+– SDY1535: TIGIT is upregulated by HIV-1 infection and marks a highly functional adaptive and mature subset of natural killer cells 
+
+– SDY1708: Broad dysregulation of innate immunity and hematopoiesis dis-tinguishes mild from severe COVID-19 
+
+– SDY1733: Single-Cell immune signature for detecting early-stage HCC and early assessing PD-1 immunotherapy efficacy 
+
+– SDY1773: Human plasmacytoid dendritic cells mount a distinct antiviral response to virus-infected cells 
+
+– SDY2011: A shift in lung macrophage composition is associated with COVID-19 severity and recovery 
+
+– SDY2015: Mass cytometry analysis of PBMCs from peanut-sensitized toler-ant and clinically allergic infants 
+
+– SDY2189: Systems vaccinology of the BNT162b2 mRNA vaccine in humans 
+
+– SDY2471: U19 CCHI_Project 1. The Role of CD4 Memory Phenotype, Memory, and Effector T Cells in 
+
+– SDY2497: Effects of Aging on Primary and Secondary Vaccine Responses in a 15-Year Longitudinal Cohort 
+
+– SDY2739: Clinical Immunity to Malaria Involves Epigenetic Reprogramming of Innate Immune Cells 
+
+– SDY2823: The Sound Life Project Healthy Adult Immunotypes 10 S. A. H. Qadri et al. 
+
+B Results under Grouped and Ungrouped Splitting 
+
+A performance comparison in terms of ROC-AUC across models and datasets is shown in Figure 2. A substantial drop in performance is observed under grouped subject splitting, particularly for the SDY788 dataset. This suggests that un-grouped sample-level splitting may allow models to exploit subject-specific pat-terns rather than disease-specific signals, leading to overly optimistic perfor-mance estimates. Therefore, grouped subject splitting provides a more appro-priate evaluation setting for sample-level classification. 
+
+Ungrouped Subject Split 0.0 0.2 0.4 0.6 0.8 1.0 
+
+> ROC-AUC
+
+Grouped Subject Split SDY1535 SDY1708 SDY1733 SDY2011 SDY2015 SDY788 SDY997    
+
+> Dataset
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> ROC-AUC
+> Logistic CytoSet CytoFM Scratch CytoFM Fine-tune
+
+Fig. 2: Sample-level classification performance across CyTOF datasets under un-grouped splitting (top) and grouped subject splitting (bottom). The y-axis re-ports ROC-AUC. Grouped subject splitting ensures that samples from the same subject do not appear in both training and test folds. 
+
+C Comparison of Model Rankings 
+
+On average, CytoBERT achieves the best rank under both splitting strategies, as shown in the critical difference diagrams below. Models connected by a horizon-CytoBERT: A Foundation Model for Cytometry Data 11 
+
+tal line are not significantly different. Evaluation on additional datasets would provide a more robust comparison of model performance. 
+
+Ungrouped Subject Split 1.5 2.0 2.5 3.0 3.5 CytoBERT Fine-tune (1.4) CytoSet (2) (3.9) CytoBERT Scratch (2.7) Logistic 
+
+Grouped Subject Split 1.50 1.75 2.00 2.25 2.50 2.75 3.00 3.25 CytoBERT Fine-tune (1.6) Logistic (2.4) (3.3) CytoBERT Scratch (2.7) CytoSet 
+
+Fig. 3: Critical difference diagrams comparing average model ranks across CyTOF datasets under ungrouped splitting (top) and grouped subject split-ting (bottom). Lower rank indicates better average performance. Table 2: Mean ROC-AUC of different models across downstream datasets. 
+
+Dataset Logistic CytoSet CytoBERT Scratch CytoBERT 
+
+SDY1708 0.560 0.568 0.556 0.723 
+
+SDY1733 0.918 0.932 0.937 0.932 SDY997 0.593 0.575 0.631 0.721 
+
+SDY2015 0.730 0.705 0.692 0.753 
+
+SDY1535 0.692 0.712 0.555 0.770 
+
+SDY788 0.487 0.412 0.123 0.246 SDY2011 0.816 0.789 0.640 0.805 
+
+D Overview of CytoBERT 
+
+Figure 4 shows an overview of the full CytoBERT pipeline, and Figure 5 shows the shared marker vocabulary across all 18 datasets used. 12 S. A. H. Qadri et al. 144Nd_CD19 
+
+> 145Nd_CD4
+> 146Nd_CD8
+> HLA_DR
+> CD27(Pr141)Dd
+> CD19
+> CD4
+> CD8
+> CD27
+
+Cell 1 
+
+Cell 2 
+
+Cell 1 
+
+Cell 2 
+
+Dataset A 
+
+Dataset D 
+
+Dataset-speci fi c
+
+Standardization 
+
+Repeated 
+
+> CD19
+> CD27
+> CD3
+> CD4
+> CD44
+> CD8
+> CD8a
+> CD44a
+> HLADR
+
+Dataset A 
+
+Dataset B 
+
+Dataset C 
+
+Heterogenous Marker Panels Across Datasets 
+
+Samples of 
+
+patients/subjects 
+
+Cell 1 
+
+Cell 2 
+
+Cell N 
+
+Cell N 
+
+Cell N 
+
+Data 
+
+download 
+
+> HLADR
+
+Shared Marker 
+
+Vocabulary 
+
+Marker 
+
+Standardization 
+
+(a) Dataset curation and preprocessing, including marker harmonization, transforma-tion, scaling, and expression binning. Neural Network 
+
+> Bin Classi fi er
+> Transformer Encoder
+
++
+
+Marker 1 
+
+Marker M 
+
+Marker 1 
+
+Marker M 
+
+Marker 1 
+
+Marker M 
+
+Marker 1 
+
+Marker M 
+
+Marker 1 
+
+Marker M 
+
+Bin 1 
+
+Bin N 
+
+Emb 1 
+
+Emb k 
+
+Emb 1 
+
+Emb k 
+
+Emb 1 
+
+Emb k 
+
+Cell  Cell  Cell  Cell 
+
+Cross Entropy Reconstruction Error 
+
+Learnable 
+
+bin embeddings 
+
+Learnable 
+
+marker embeddings 
+
+Masking & 
+
+Embedding 
+
+Embedded Cell 
+
+Preprocessed & 
+
+Discretized Cells 
+
+Learning 
+
+Representations  Reconstructed 
+
+Cell 
+
+(b) Self-supervised pretraining of CytoBERT for a single cell Neural Network 
+
+> Classi fi cation Head
+> Pre-trained
+> Transformer
+
+Cell 1 
+
+Cell 2 
+
+> Pooling
+
+Loss 
+
+Emb 1 
+
+Emb k 
+
+Emb 1 
+
+Emb k 
+
+Extracting cell 
+
+embedding 
+
+Fine-tuning 
+
+Sample 
+
+Sample 
+
+embedding 
+
+Cell N 
+
+Marker 1 
+
+Marker M 
+
+Marker 1 
+
+Marker M 
+
+CLS token 
+
+CLS toKen 
+
+Control 
+
+Case 1 
+
+Case N 
+
+Predicting labels 
+
+(c) Fine-tuning the pretrained encoder for downstream sample-level classification. 
+
+Fig. 4: Overview of the CytoBERT pipeline, consisting of dataset curation and preprocessing, self-supervised masked expression-bin pretraining, and supervised fine-tuning for sample-level classification. CytoBERT: A Foundation Model for Cytometry Data 13 GDTCR IL6 CD61 NKp46 CCR4 CXCL10 MIP1b gammaH2AXRme1 CD38 IL17 CD71 CD127 Siglec8 Bcl2 CD302 pSTAT6 NKG2A CCR9 TCRab CD3 Siglec7 CD66b p24 CD116 FPR1 TLR4 CD68 CCR6 CD177 IgG CLA CD21 CD94 TCRVd2 CD33 CD95 CD45RA IFNa2b IL13R CD73 CD49b TACI CXCR5 CD64 SDY1479 SDY1535 SDY1708 SDY1733 SDY1773 SDY2011 SDY2015 SDY207 SDY2189 SDY2471 SDY2497 SDY2739 SDY2823 SDY461 SDY515 SDY788 SDY997 SDY998 
+
+Marker Coverage Across Datasets 
+
+> CD40L pSTAT5 CTLA4 IL10 Casp3 KIR3DL1 pSTAT1 CD158e1 CD115 PDL1 ICOS CD123 CD10 CD304 TNF CD27 CD303 B7H6 IFNg CD22 IkBa NKG2C KLRG1 CD294 CRACC Perforin IgM CD13 CCR10 CD15 CD11c CD169 CD48 CD83 IL8 CD2 DR45 NKG2D CD39 CD163 GzmB CD40 NKp30 CD11a
+
+SDY1479 SDY1535 SDY1708 SDY1733 SDY1773 SDY2011 SDY2015 SDY207 SDY2189 SDY2471 SDY2497 SDY2739 SDY2823 SDY461 SDY515 SDY788 SDY997 SDY998 
+
+> IL3Ra MS4A3 Tbet 12G10 9EG7 CD4 CD18 IgD CXCR3 CD56 CD49a IL4 CD69 CD155 Eomes PDL2 CD111 IL2 CXCR1 CD14 CCL4 pS6 Psel_Ig BAFFR CD11b ICAM1 pCREB TLR7 Arg1 CD138 CXCR4 KIR2DL5 FASL KIR2DL3 CX3CR1 CCL3 PD1 Ki67 TCRVa72 NKp80 FasR TCRgd LILRB1 CD307d
+
+SDY1479 SDY1535 SDY1708 SDY1733 SDY1773 SDY2011 SDY2015 SDY207 SDY2189 SDY2471 SDY2497 SDY2739 SDY2823 SDY461 SDY515 SDY788 SDY997 SDY998 
+
+> MICB CD29 CD172ab IL1b CD161 DNAM1 CD112 LAG3 KIR2DS4 CD45 CD16 PANHLA CD19 CD62L LLT1 CD170 IL29 IgA Act1 ILT2 CD206 GMCSF TIGIT MIP1a TLR9 CD1c CD43 CD141 BCMA CD96 CD57 CD45RO TCRVd1 TLR2 CD54 BTLA CCR2 CD25 pPLCg2 FoxP3 CCR7 LFA3 CD314 Syk
+
+SDY1479 SDY1535 SDY1708 SDY1733 SDY1773 SDY2011 SDY2015 SDY207 SDY2189 SDY2471 SDY2497 SDY2739 SDY2823 SDY461 SDY515 SDY788 SDY997 SDY998 
+
+> GPR15 NTBA ULBP1 CD28 CD207 CD88 CD1d MuCD45 pSTAT3 MICA CD24 CD1a CD5 CD107 CD23 KIR2DS2 pERK12 SIRPab Siglec9 FceRI CD158b KIR2DL1 Tim3 2B4 CD20 IL7Ra FcRg IRF8 CD80 CD7 CXCL13 CD49d TLR6 CD34 CXCR6 pp38 CD103 Siglec10 CD31 CD86 CCR3 CD58 NKp44 CD8
+
+Markers 
+
+SDY1479 SDY1535 SDY1708 SDY1733 SDY1773 SDY2011 SDY2015 SDY207 SDY2189 SDY2471 SDY2497 SDY2739 SDY2823 SDY461 SDY515 SDY788 SDY997 SDY998 Datasets 
+
+Fig. 5: Shared marker vocabulary across all CyTOF datasets used in the project, consisting of 220 unique biomarker in total. Black = marker measured/available
