@@ -1,0 +1,25 @@
+---
+title: RNA velocity in growing cells
+title_zh: 生长细胞中的RNA速度
+authors: "Shah, V., Ming, H., Cleary, B."
+date: 2026-08-20
+pdf: "https://www.biorxiv.org/content/10.64898/2025.12.18.695252v2.full.pdf"
+tags: ["query:virtual-cell"]
+score: 7.0
+evidence: 单细胞转录轨迹建模，支持虚拟细胞状态预测
+tldr: RNA velocity方法有望推断细胞转录状态的时间演化，但现有框架忽略了细胞生长这一基本事实。在生长群体中，RNA等生物量持续积累，导致稳态速度为正，与常规估计假设相悖。模拟实验表明，忽略生长会引发系统性误差，现有数据中也存在相应伪影。将细胞生长显式纳入模型，不仅能消除偏差，还可带来新的生物学洞见。
+source: biorxiv
+selection_source: fresh_fetch
+figures_json: "[{\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 1679, \"height\": 1287, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-002.webp\", \"caption\": \"\", \"page\": 0, \"index\": 2, \"width\": 1570, \"height\": 1426, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-003.webp\", \"caption\": \"\", \"page\": 0, \"index\": 3, \"width\": 1540, \"height\": 1681, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-004.webp\", \"caption\": \"\", \"page\": 0, \"index\": 4, \"width\": 1691, \"height\": 952, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-005.webp\", \"caption\": \"\", \"page\": 0, \"index\": 5, \"width\": 995, \"height\": 2347, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-006.webp\", \"caption\": \"\", \"page\": 0, \"index\": 6, \"width\": 1676, \"height\": 867, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-007.webp\", \"caption\": \"\", \"page\": 0, \"index\": 7, \"width\": 1567, \"height\": 2101, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-008.webp\", \"caption\": \"\", \"page\": 0, \"index\": 8, \"width\": 1605, \"height\": 1630, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-009.webp\", \"caption\": \"\", \"page\": 0, \"index\": 9, \"width\": 1717, \"height\": 952, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-010.webp\", \"caption\": \"\", \"page\": 0, \"index\": 10, \"width\": 1097, \"height\": 2154, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-011.webp\", \"caption\": \"\", \"page\": 0, \"index\": 11, \"width\": 1677, \"height\": 874, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-012.webp\", \"caption\": \"\", \"page\": 0, \"index\": 12, \"width\": 1673, \"height\": 1766, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-013.webp\", \"caption\": \"\", \"page\": 0, \"index\": 13, \"width\": 1713, \"height\": 1737, \"label\": \"Figure\"}, {\"url\": \"assets/figures/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/fig-014.webp\", \"caption\": \"\", \"page\": 0, \"index\": 14, \"width\": 1578, \"height\": 1182, \"label\": \"Figure\"}]"
+tables_json: "[{\"url\": \"assets/tables/biorxiv/biorxiv-10-64898-2025-12-18-695252-v2/table-001.webp\", \"caption\": \"\", \"page\": 0, \"index\": 1, \"width\": 1735, \"height\": 730, \"label\": \"Table\"}]"
+motivation: RNA velocity方法预测细胞轨迹时未考虑生长，而生长导致速度估计与真实动态产生系统性偏差。
+method: 通过模拟生长细胞的转录动态，并分析现有单细胞数据，检验忽略生长对速度估计的影响。
+result: 发现系统性误差和伪影，证明生长是RNA velocity框架中不可忽略的关键因素。
+conclusion: 明确纳入细胞生长可修正速度估计，并揭示新的生物学机制。
+---
+
+## 摘要
+单细胞“RNA速度”方法的最终承诺令人信服：原则上，人们可以预测每个细胞的转录状态并绘制长期表达轨迹。虽然对现有方法局限性的讨论一直在持续且充分，但共识性框架未能考虑细胞动力学的一个基本方面：生长。在生长群体中，生物量（包括RNA和其他大分子）持续积累。这意味着一个稳态速度（以生产和降解的定义）为正，这与速度的传统估计、解释和使用相悖。在这里，我们研究了在RNA速度框架中忽略细胞生长的后果。我们在生长细胞的模拟中展示了系统性误差，并在现有数据中展示了这些伪影的证据。最后，我们指明了前进方向，并强调显式考虑细胞生长可能带来新的生物学见解。
+
+## Abstract
+The ultimate promise of single cell "RNA velocity" methods is compelling: in principle, one can project forward the transcriptional state of each cell and map long-term expression trajectories. While there has been robust and ongoing articulation of limitations of existing methods, consensus frameworks fail to account for a fundamental aspect of cellular dynamics: growth. In a growing population, biomass (including RNA and other macromolecules) is constantly accumulating. This implies a homeostatic velocity (defined in the terms of production and degradation) that is positive, which is at odds with the conventional estimation, interpretation, and uses of velocity. Here, we investigate the consequences of omitting cell growth from the RNA velocity framework. We demonstrate systematic errors that arise in simulations of growing cells and show evidence for these artifacts in existing data. Finally, we point the way forward and highlight that explicitly accounting for cell growth can lead to new biological insights.
