@@ -6,32 +6,40 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-24
-- 运行时间：2026-08-24 20:47:20 UTC
+- 最新运行日期：2026-08-25
+- 运行时间：2026-08-25 20:54:46 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：1
+- 本次总论文数：6
+- 精读区：3
 - 速读区：3
 
 ### 今日简报（AI）
-今日精读1篇、速读3篇，聚焦药物反应预测与生物信息学前沿方法。最值得关注的是评分9.0的《PerturbRx》，其通过条件潜变量转移建模患者药物反应；速读中RNA速度分析、轨迹推断与JEPA世界模型亦具参考价值。建议普通读者优先精读PerturbRx，并速览RNA velocity以理解细胞状态动态变化。
-- 详情：[/202608/24/README](/202608/24/README)
+今日精选6篇论文，聚焦单细胞扰动预测与生物机制解析，其中两篇高质量工作登顶精读榜单。  
+最值得关注的是《DeMixPert》与《PertMind》：前者用高斯混合建模提升OOD扰动预测，后者借强化学习激发大模型在细胞数据上的涌现推理能力。  
+若想快速入门，可从精读榜单起步，再按兴趣延伸至轨迹推断或转录调控等方向。
+- 详情：[/202608/25/README](/202608/25/README)
 
 ### 精读区论文标签
-1. [PerturbRx: Learning Treatment-Conditioned Latent Transitions for Patient Drug Response Prediction](/202608/24/2608.21349v1-perturbrx-learning-treatment-conditioned-latent-transitions-for-patient-drug-response-prediction)  
+1. [DeMixPert: Decomposed Response Modeling with Gaussian Mixtures for OOD Single-Cell Perturbation Prediction](/202608/25/2608.23114v1-demixpert-decomposed-response-modeling-with-gaussian-mixtures-for-ood-single-cell-perturbation-prediction)  
+   标签：评分：10.0/10、query:virtual-cell
+   evidence：预测未见过遗传扰动的转录组响应，单细胞水平
+2. [PertMind: Eliciting Emergent Biological Reasoning in LLM via Reinforcement Learning on Cellular Perturbation Data](/202608/25/2608.16419v2-pertmind-eliciting-emergent-biological-reasoning-in-llm-via-reinforcement-learning-on-cellular-perturbation-data)  
    标签：评分：9.0/10、query:virtual-cell
-   evidence：基于单细胞群体的治疗条件潜转移实现患者药物反应预测
+   evidence：以细胞扰动图谱为环境，用强化学习训练扰动反应预测模型。
+3. [MorphoCLIP: Text-Supervised Contrastive Learning for Perturbation Matching in Cell Painting Images](/202608/25/2608.22690v1-morphoclip-text-supervised-contrastive-learning-for-perturbation-matching-in-cell-painting-images)  
+   标签：评分：8.0/10、query:virtual-cell
+   evidence：用深度学习对比模型将细胞绘画图谱与化合物和基因扰动的文本描述关联，实现扰动匹配与响应刻画
 
 ### 速读区论文标签
-1. [RNA velocity in growing cells](/202608/24/biorxiv-10-64898-2025-12-18-695252-v2-rna-velocity-in-growing-cells)  
-   标签：评分：7.0/10、query:virtual-cell
-   evidence：单细胞转录轨迹建模，支持虚拟细胞状态预测
-2. [Orthogonal JEPA: Factorized Predictive States for Latent World Models](/202608/24/2608.20065v1-orthogonal-jepa-factorized-predictive-states-for-latent-world-models)  
+1. [TracingFlow: A Simulation-Free Trajectory Inference Framework Based on Second-Order Dynamics](/202608/25/2608.21070v1-tracingflow-a-simulation-free-trajectory-inference-framework-based-on-second-order-dynamics)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：因子化预测潜状态的世界建模方法，可迁移用于虚拟细胞建模
-3. [TracingFlow: A Simulation-Free Trajectory Inference Framework Based on Second-Order Dynamics](/202608/24/2608.21070v1-tracingflow-a-simulation-free-trajectory-inference-framework-based-on-second-order-dynamics)  
+   evidence：用于单细胞轨迹推断的二阶无模拟流匹配
+2. [Mol-JEPA: A multimodal Joint Embedding Predictive Architecture for Molecules](/202608/25/2608.22642v1-mol-jepa-a-multimodal-joint-embedding-predictive-architecture-for-molecules)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：二阶流匹配轨迹推断，可应用于扰动后延迟细胞响应建模
+   evidence：结合细胞表型的多模态分子表示深度学习；支持药物扰动响应建模
+3. [BARe-seq enables high-throughput dissection of cis-regulatory control of transcriptional bursting](/202608/25/biorxiv-10-64898-2026-08-19-745405-v1-bare-seq-enables-high-throughput-dissection-of-cis-regulatory-control-of-transcriptional-bursting)  
+   标签：评分：6.0/10、query:virtual-cell
+   evidence：通量序列扰动与等位基因分辨的转录读出
 
 
 <div class="dpr-home-promo-card">
