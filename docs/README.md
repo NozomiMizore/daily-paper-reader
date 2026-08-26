@@ -6,40 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-25
-- 运行时间：2026-08-25 20:54:46 UTC
+- 最新运行日期：2026-08-26
+- 运行时间：2026-08-26 22:10:50 UTC
 - 运行状态：成功
-- 本次总论文数：6
-- 精读区：3
-- 速读区：3
+- 本次总论文数：2
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-今日精选6篇论文，聚焦单细胞扰动预测与生物机制解析，其中两篇高质量工作登顶精读榜单。  
-最值得关注的是《DeMixPert》与《PertMind》：前者用高斯混合建模提升OOD扰动预测，后者借强化学习激发大模型在细胞数据上的涌现推理能力。  
-若想快速入门，可从精读榜单起步，再按兴趣延伸至轨迹推断或转录调控等方向。
-- 详情：[/202608/25/README](/202608/25/README)
+今日速读2篇论文，均获6.0分，暂无精读。  
+值得关注：随机反应网络多参数扰动敏感性方法，以及伪批量条件扩散模型用于批量到单细胞RNA测序生成。  
+建议下一步精读其中一篇，深入验证方法适用性与数据效果。
+- 详情：[/202608/26/README](/202608/26/README)
 
 ### 精读区论文标签
-1. [DeMixPert: Decomposed Response Modeling with Gaussian Mixtures for OOD Single-Cell Perturbation Prediction](/202608/25/2608.23114v1-demixpert-decomposed-response-modeling-with-gaussian-mixtures-for-ood-single-cell-perturbation-prediction)  
-   标签：评分：10.0/10、query:virtual-cell
-   evidence：预测未见过遗传扰动的转录组响应，单细胞水平
-2. [PertMind: Eliciting Emergent Biological Reasoning in LLM via Reinforcement Learning on Cellular Perturbation Data](/202608/25/2608.16419v2-pertmind-eliciting-emergent-biological-reasoning-in-llm-via-reinforcement-learning-on-cellular-perturbation-data)  
-   标签：评分：9.0/10、query:virtual-cell
-   evidence：以细胞扰动图谱为环境，用强化学习训练扰动反应预测模型。
-3. [MorphoCLIP: Text-Supervised Contrastive Learning for Perturbation Matching in Cell Painting Images](/202608/25/2608.22690v1-morphoclip-text-supervised-contrastive-learning-for-perturbation-matching-in-cell-painting-images)  
-   标签：评分：8.0/10、query:virtual-cell
-   evidence：用深度学习对比模型将细胞绘画图谱与化合物和基因扰动的文本描述关联，实现扰动匹配与响应刻画
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [TracingFlow: A Simulation-Free Trajectory Inference Framework Based on Second-Order Dynamics](/202608/25/2608.21070v1-tracingflow-a-simulation-free-trajectory-inference-framework-based-on-second-order-dynamics)  
+1. [A general-purpose sensitivity method for multiple simultaneous parameter perturbations in stochastic reaction networks](/202608/26/2608.22627v1-a-general-purpose-sensitivity-method-for-multiple-simultaneous-parameter-perturbations-in-stochastic-reaction-networks)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：用于单细胞轨迹推断的二阶无模拟流匹配
-2. [Mol-JEPA: A multimodal Joint Embedding Predictive Architecture for Molecules](/202608/25/2608.22642v1-mol-jepa-a-multimodal-joint-embedding-predictive-architecture-for-molecules)  
+   evidence：随机反应网络中多参数扰动敏感性估计的通用方法
+2. [bulk2scDiff: A Pseudobulk-Conditioned Diffusion Model for Bulk-to-Single-Cell RNASeq Generation](/202608/26/biorxiv-10-64898-2026-08-20-745960-v1-bulk2scdiff-a-pseudobulk-conditioned-diffusion-model-for-bulk-to-single-cell-rnaseq-generation)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：结合细胞表型的多模态分子表示深度学习；支持药物扰动响应建模
-3. [BARe-seq enables high-throughput dissection of cis-regulatory control of transcriptional bursting](/202608/25/biorxiv-10-64898-2026-08-19-745405-v1-bare-seq-enables-high-throughput-dissection-of-cis-regulatory-control-of-transcriptional-bursting)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：通量序列扰动与等位基因分辨的转录读出
+   evidence：提出伪批量条件扩散模型生成单细胞RNA-seq，支持从批量数据推断虚拟细胞状态。
 
 
 <div class="dpr-home-promo-card">
