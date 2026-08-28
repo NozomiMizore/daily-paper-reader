@@ -6,29 +6,27 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-26
-- 运行时间：2026-08-26 22:10:50 UTC
+- 最新运行日期：2026-08-28
+- 运行时间：2026-08-28 03:57:32 UTC
 - 运行状态：成功
 - 本次总论文数：2
 - 精读区：0
 - 速读区：2
 
 ### 今日简报（AI）
-今日速读2篇论文，均获6.0分，暂无精读。  
-值得关注：随机反应网络多参数扰动敏感性方法，以及伪批量条件扩散模型用于批量到单细胞RNA测序生成。  
-建议下一步精读其中一篇，深入验证方法适用性与数据效果。
-- 详情：[/202608/26/README](/202608/26/README)
+今日速读2篇论文，聚焦蛋白质建模与基因编辑两大前沿方向。其中《RegimeFormer》提出全局扰动蛋白质大模型（7.0分），《Scarless conditional sgRNAs》则实现无疤痕、时间可控的CRISPR编辑（7.0分），均值得关注。建议普通读者优先了解CRISPR新方法，因其更贴近基因治疗的实际应用。
+- 详情：[/202608/28/README](/202608/28/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [A general-purpose sensitivity method for multiple simultaneous parameter perturbations in stochastic reaction networks](/202608/26/2608.22627v1-a-general-purpose-sensitivity-method-for-multiple-simultaneous-parameter-perturbations-in-stochastic-reaction-networks)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：随机反应网络中多参数扰动敏感性估计的通用方法
-2. [bulk2scDiff: A Pseudobulk-Conditioned Diffusion Model for Bulk-to-Single-Cell RNASeq Generation](/202608/26/biorxiv-10-64898-2026-08-20-745960-v1-bulk2scdiff-a-pseudobulk-conditioned-diffusion-model-for-bulk-to-single-cell-rnaseq-generation)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：提出伪批量条件扩散模型生成单细胞RNA-seq，支持从批量数据推断虚拟细胞状态。
+1. [RegimeFormer: A Large Protein Model of Global Perturbation Regimes](/202608/28/2608.26586v1-regimeformer-a-large-protein-model-of-global-perturbation-regimes)  
+   标签：评分：7.0/10、query:virtual-cell
+   evidence：大规模蛋白质扰动模型，跨物种预测突变响应
+2. [Scarless conditional sgRNAs via endogenous mascRNA processing enable rapid and temporally controlled genome editing](/202608/28/biorxiv-10-64898-2026-08-20-745814-v1-scarless-conditional-sgrnas-via-endogenous-mascrna-processing-enable-rapid-and-temporally-controlled-genome-editing)  
+   标签：评分：7.0/10、query:virtual-cell
+   evidence：时间可控sgRNA扰动工具，改进混合扰动筛选以生成响应数据
 
 
 <div class="dpr-home-promo-card">
