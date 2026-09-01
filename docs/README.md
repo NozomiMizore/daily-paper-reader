@@ -6,26 +6,27 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-31
-- 运行时间：2026-09-01 00:24:55 UTC
+- 最新运行日期：2026-09-01
+- 运行时间：2026-09-01 22:48:48 UTC
 - 运行状态：成功
 - 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-今日精读1篇、速读1篇，聚焦RNA产量优化与高通量筛选预测方向。最值得关注的是《Optimizing RNA yield using deep neural networks...》，用深度神经网络结合大规模平行筛选显著提升RNA产量，建议可参考其“模型+筛选”闭环思路来设计实验。若时间有限，速读内容可仅了解“可定量性预测”如何辅助剂量反应实验排序。
-- 详情：[/202608/31/README](/202608/31/README)
+今日速读2篇论文，聚焦蛋白质表征与肿瘤微环境两大AI生物方向。其中《Beyond Tokens》探讨蛋白质表征中的高阶上位性，《Learning Interpretable》则建模泛癌细胞状态与微环境关联，均值得一读。建议先浏览这两篇6分工作的核心图与结论，快速把握方法思路。
+- 详情：[/202609/01/README](/202609/01/README)
 
 ### 精读区论文标签
-1. [Optimizing RNA yield using deep neural networks coupled to massively parallel screening](/202608/31/2608.23722v1-optimizing-rna-yield-using-deep-neural-networks-coupled-to-massively-parallel-screening)  
-   标签：评分：8.0/10、query:virtual-cell
-   evidence：深度学习的序列-表型预测，类似扰动响应预测。
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Predicting Quantifiability from Primary Screens to Prioritize Dose-Response Profiling](/202608/31/2608.26538v1-predicting-quantifiability-from-primary-screens-to-prioritize-dose-response-profiling)  
+1. [Beyond Tokens: Probing Higher-Order Epistasis in Learned Protein Representations](/202609/01/2608.24953v1-beyond-tokens-probing-higher-order-epistasis-in-learned-protein-representations)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：从初筛预测后续剂量-反应的可定量性，直接支持扰动响应排序
+   evidence：探究蛋白质适应度景观中的突变效应与上位效应，与遗传扰动建模相关
+2. [Learning Interpretable Tumor Microenvironment Representations by Fitting Pan-Cancer Cell State-Niche Correlation](/202609/01/2608.26208v1-learning-interpretable-tumor-microenvironment-representations-by-fitting-pan-cancer-cell-state-niche-correlation)  
+   标签：评分：6.0/10、query:virtual-cell
+   evidence：基于单细胞与空间转录组的肿瘤微环境表征学习，支持虚拟细胞建模
 
 
 <div class="dpr-home-promo-card">
