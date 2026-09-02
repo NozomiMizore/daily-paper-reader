@@ -6,27 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-01
-- 运行时间：2026-09-01 22:48:48 UTC
+- 最新运行日期：2026-09-02
+- 运行时间：2026-09-02 23:08:34 UTC
 - 运行状态：成功
-- 本次总论文数：2
-- 精读区：0
-- 速读区：2
+- 本次总论文数：1
+- 精读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-今日速读2篇论文，聚焦蛋白质表征与肿瘤微环境两大AI生物方向。其中《Beyond Tokens》探讨蛋白质表征中的高阶上位性，《Learning Interpretable》则建模泛癌细胞状态与微环境关联，均值得一读。建议先浏览这两篇6分工作的核心图与结论，快速把握方法思路。
-- 详情：[/202609/01/README](/202609/01/README)
+今日精读1篇满分论文，聚焦单细胞扰动预测中的群体级联合分布建模。  
+最值得关注的是论文提出的PopPert方法，面向群体水平进行联合分布建模。  
+建议对单细胞建模拟合感兴趣的读者，优先精读该文了解PopPert的建模思路。
+- 详情：[/202609/02/README](/202609/02/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [PopPert: Population-level Joint-Distribution Modeling for Single-Cell Perturbation Prediction](/202609/02/2609.01357v1-poppert-population-level-joint-distribution-modeling-for-single-cell-perturbation-prediction)  
+   标签：评分：10.0/10、query:virtual-cell
+   evidence：直接面向单细胞扰动预测的群体级联合分布建模方法
 
 ### 速读区论文标签
-1. [Beyond Tokens: Probing Higher-Order Epistasis in Learned Protein Representations](/202609/01/2608.24953v1-beyond-tokens-probing-higher-order-epistasis-in-learned-protein-representations)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：探究蛋白质适应度景观中的突变效应与上位效应，与遗传扰动建模相关
-2. [Learning Interpretable Tumor Microenvironment Representations by Fitting Pan-Cancer Cell State-Niche Correlation](/202609/01/2608.26208v1-learning-interpretable-tumor-microenvironment-representations-by-fitting-pan-cancer-cell-state-niche-correlation)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：基于单细胞与空间转录组的肿瘤微环境表征学习，支持虚拟细胞建模
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
