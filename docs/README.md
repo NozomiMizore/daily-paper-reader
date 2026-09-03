@@ -6,23 +6,19 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-02
-- 运行时间：2026-09-02 23:08:34 UTC
+- 最新运行日期：2026-09-03
+- 运行时间：2026-09-03 21:43:51 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：1
+- 本次总论文数：0
+- 精读区：0
 - 速读区：0
 
 ### 今日简报（AI）
-今日精读1篇满分论文，聚焦单细胞扰动预测中的群体级联合分布建模。  
-最值得关注的是论文提出的PopPert方法，面向群体水平进行联合分布建模。  
-建议对单细胞建模拟合感兴趣的读者，优先精读该文了解PopPert的建模思路。
-- 详情：[/202609/02/README](/202609/02/README)
+> 今日无新推荐，系统未产出可展示论文。
+- 详情：[/202609/03/README](/202609/03/README)
 
 ### 精读区论文标签
-1. [PopPert: Population-level Joint-Distribution Modeling for Single-Cell Perturbation Prediction](/202609/02/2609.01357v1-poppert-population-level-joint-distribution-modeling-for-single-cell-perturbation-prediction)  
-   标签：评分：10.0/10、query:virtual-cell
-   evidence：直接面向单细胞扰动预测的群体级联合分布建模方法
+- 本次无精读推荐。
 
 ### 速读区论文标签
 - 本次无速读推荐。
