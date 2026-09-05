@@ -6,24 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-04
-- 运行时间：2026-09-04 22:41:42 UTC
+- 最新运行日期：2026-09-05
+- 运行时间：2026-09-05 22:04:23 UTC
 - 运行状态：成功
 - 本次总论文数：1
 - 精读区：0
 - 速读区：1
 
 ### 今日简报（AI）
-今日速读1篇论文，聚焦亚细胞分辨率的单细胞嵌入学习；该研究结合转录组、蛋白质结构与定位信息，值得关注多模态数据整合方向；建议普通读者优先了解方法如何提升细胞类型识别精度。
-- 详情：[/202609/04/README](/202609/04/README)
+今日仅速读1篇单细胞批次整合论文，未做精读。  
+最值得关注的是“Confounder-Aware Feature Correction”思路，分数6.0/10，针对批次效应中的混杂因子进行特征校正。  
+若时间有限，可先浏览该文方法框架，后续再深入验证其在实际数据集上的效果。
+- 详情：[/202609/05/README](/202609/05/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Subcellularly Resolved Single-Cell Embedding Learning with Transcriptomic data, Protein Structure and Localization Information](/202609/04/2609.02344v1-subcellularly-resolved-single-cell-embedding-learning-with-transcriptomic-data-protein-structure-and-localization-information)  
+1. [Confounder-Aware Feature Correction for Single-Cell Batch Integration](/202609/05/2608.28849v1-confounder-aware-feature-correction-for-single-cell-batch-integration)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：学习亚细胞分辨的单细胞嵌入，为虚拟细胞模型提供细胞状态表示
+   evidence：校正单细胞表达中与真实信号混杂的批次效应，是单细胞扰动研究的重要前提。
 
 
 <div class="dpr-home-promo-card">

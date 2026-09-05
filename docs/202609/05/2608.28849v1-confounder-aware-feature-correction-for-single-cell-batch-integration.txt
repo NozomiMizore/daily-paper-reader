@@ -1,0 +1,292 @@
+Title: Confounder-Aware Feature Correction for Single-Cell Batch Integration
+
+URL Source: https://arxiv.org/pdf/2608.28849v1
+
+Published Time: Tue, 01 Sep 2026 00:14:08 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Confounder-Aware Feature Correction for Single-Cell Batch Integration 
+
+Calvin McCarter 
+
+mccarter.calvin@gmail.com 
+
+## Abstract 
+
+Batch integration is a central preprocessing step in single-cell genomics, where datasets collected across experiments, donors, and protocols must be combined despite pervasive technical batch effects. The leading integration methods produce a shared low-dimensional embedding, which discards the corrected gene-expression values that downstream differential-expression, biomarker, and other analyses depend on. The feature-space (expression-correcting) methods that do preserve genes typically align the marginal expression distributions of batches and thereby risk erasing genuine biological variation whenever cell-type composition differs across batches—i.e. whenever batch effect and biological signal are confounded .We recast single-cell batch integration as confounded domain adaptation and apply ConDo, a method that matches conditional expression distributions given the cell-type annotation rather than marginal distributions. To extend ConDo’s pairwise source-to-target adapter to the many-batch setting, we introduce an agglomerative compatibility-graph integrator: batches are nodes connected when they share a cell type, and we greedily merge each best-scoring neighbor into a growing reference by fitting one ConDo adapter. On the Open Problems Batch Integration Benchmark, ConDo is the strongest feature-space integrator, ranking first among feature methods on five of six datasets. Furthermore, it is competitive with or better than deep embedding methods on the overall score, ranking first across all methods on four of six datasets while returning corrected expression rather than an opaque embedding. 
+
+## 1 Introduction 
+
+Single-cell RNA sequencing (scRNA-seq) atlases are now routinely assembled from many exper-iments spanning donors, tissues, laboratories, and chemistries. Combining these data requires correcting “batch effects”: technical differences that shift the measured expression of otherwise identical cells [Leek et al., 2010]. The difficulty is that batch effects are rarely the only thing that differs between batches. Different experiments also sample different mixtures of cell types and states, so the observed shift between two batches mixes a technical component (to be removed) with a biological component (to be preserved). When these two are statistically entangled we say batch and biology are confounded , and naive alignment that forces two batches to look identical will discard real biological structure along with the technical artifact. Integration methods differ in what they return, and this determines what they can support downstream. The dominant family of methods sidesteps the confounding problem by returning a shared low-dimensional embedding in which batches overlap, most notably Harmony [Korsunsky et al., 2019], scVI [Lopez et al., 2018], scANVI [Xu et al., 2021], scPoli [De Donno et al., 2023], and recent foundation models [Cui et al., 2024, Theodoris et al., 2023, Rosen et al., 2023]. These outputs serve visualization, clustering, and label transfer, but their coordinates are not gene expression: they cannot support marker discovery, co-expression analysis, gene-set scoring, or the many per-gene pipelines and pretrained models that expect a cell-by-gene matrix. Latent-variable models can decode to gene 
+
+> Preprint. arXiv:2608.28849v1 [q-bio.GN] 28 Aug 2026
+
+space [Boyeau et al., 2019], but the result is a model-generated quantity inheriting the decoder’s parametric assumptions rather than a corrected measurement. This consideration, together with the confounding problem above, gives four criteria for a batch correction method. It should (i) return a corrected expression matrix rather than an embedding; (ii) target an estimand stated in advance, so that its behavior under confounding follows from the target rather than from hyperparameter tuning; (iii) apply uniformly to every cell, including those whose type is unknown; and (iv) identify that target from the data at hand, without requiring a control arm that atlas-scale collections lack. No existing method satisfies all four. Feature-space methods do return a matrix, but most demand the wrong alignment. The classical approach aligns each gene’s marginal distribution across batches, shifting and scaling toward a per-batch consensus [Johnson et al., 2007, Ritchie et al., 2015, Shaham et al., 2017]. Confounding makes this untenable: if batch A is enriched for a cell type that batch B lacks, the two marginals ought to differ, and forcing them to coincide removes that compositional difference. Adversarial and penalty-based autoencoders acknowledge the danger and add a countervailing term, trading a batch-mixing penalty against reconstruction loss [Wang et al., 2021, Shree et al., 2023]. This improves matters in practice but not in principle. Reconstruction is not biology preservation; it resists all movement of the data equally, and cannot distinguish a genuine biological difference from a technical artifact the model happens to fit poorly. Two objectives, each incorrect in isolation, are balanced in the hope that their errors offset. Another set of feature-space methods avoids marginal alignment by working locally. Mutual nearest neighbor (MNN) correction pairs cells across batches and derives cell-specific corrections from the paired residuals [Haghverdi et al., 2018]; Scanorama extends this to partially overlapping collections [Hie et al., 2019], Seurat’s anchors follow a related strategy [Stuart et al., 2019], and SCALEX learns a batch-free encoder [Xiong et al., 2022]. These methods were designed with confounding in mind and explicitly relax the equal-composition assumption: a population present in one batch and absent from another is left uncorrected rather than forcibly aligned. Their limitation is different in kind. Each is defined by a procedure rather than an estimand: the correction is whatever the matching and averaging steps produce, with no population quantity of which it is an estimate. This is criterion (ii) failing in a different way from the marginal methods: not a wrong target but none at all. The conditions under which a mutual pair reflects the same biological state, rather than the nearest available substitute for an absent one, are neither stated nor checkable from the data, so behavior under confounding can only be assessed empirically, case by case. Results also depend on various hyperparameters, none of which carries an interpretation in terms of biological or technical variation. Another family brings biology into the correction itself. ComBat admits a design matrix of covariates to be preserved, and scANVI [Xu et al., 2021] and scGen [Lotfollahi et al., 2019] use cell-type labels to constrain what is aligned. However, while conditioning is a fruitful avenue for addressing confounding, the manner of conditioning matters. When a label enters as a covariate of the correction, the fitted transformation becomes cell-type-dependent, giving each stratum its own map from batch A to batch B. We regard this as the wrong object to estimate. For example, when differences in sequencing depth act on the assay, the natural model of its effect is a single transformation applied to every cell irrespective of type; if a batch effect genuinely acts differently across cell types, the batches are not comparable in a way that any correction repairs, and the correct response is to decline to combine batches rather than to fit a more flexible map. Per-stratum maps also multiply free parameters and overfit the rare types where cells are scarce, and they violate criterion (iii) outright. CellANOVA [Zhang et al., 2025] satisfies criteria (i)–(iii) and is the closest existing method to what the criteria describe. It defines batch effect as the variation remaining between control samples after conditioning on latent cell state, estimates a batch subspace from a designated pool of control samples, and projects that subspace out of every cell, returning a corrected expression matrix. Its identification, however, comes from experimental design: the analyst must nominate control samples known a priori to be free of the differences the study is about. Such designs exist in controlled case–control and longitudinal studies, but not in the atlas setting described at the outset, where data are assembled post hoc from independently conducted experiments with no common control arm; thus criterion (iv) is not met. We instead start from the observation that nothing in the conditional formulation requires the correc-tion itself to depend on the label. A method could instead use labels only to identify a single shared transformation, by requiring that it match the conditional distributions of expression given cell type; 2once identified on labeled cells, that transformation would apply to every cell, regardless of labeling. This is precisely the setting addressed by Confounded Domain Adaptation (ConDo) [McCarter, 2024]. ConDo learns a feature-space transformation that matches the conditional distribution of features given a confounder, rather than the marginal distribution of features. In the typical single-cell scenario, the confounder is the cell-type annotation: ConDo aligns the expression of cells of the same cell type across batches, while leaving compositional differences between cell types intact. ConDo can also accommodate multiple cell annotations and even quantitative annotations by fitting conditional generative models of expression given biological confounders, but in this work we focus on using the standard cell-type annotations. ConDo as originally formulated is a pairwise adapter: it maps one source domain onto one target domain. Single-cell integration usually involves tens of batches with partially overlapping cell-type compositions, so a pairwise adapter does not directly apply. Our main methodological contribution is an agglomerative compatibility-graph integrator that lifts ConDo to the many-batch setting. We build a graph whose nodes are batches and whose edges connect batches that share at least one cell type; starting from the batch whose cells are best resolved by type, we repeatedly select the highest-scoring batch adjacent to the current integrated pool and fit a single ConDo adapter mapping it onto that pool, growing the reference at every step. This guarantees that every adapter is fit between batches with overlapping cell types (so the conditional matching is well posed) and that later batches are aligned to a large, diverse reference rather than a single small batch. On the Open Problems Batch Integration Benchmark [Luecken et al., 2025], we show that ConDo is the strongest feature-space integrator—first among feature methods on five of six atlases—and is competitive with or better than state-of-the-art deep embedding methods on the overall SCIB score, while uniquely returning corrected expression (Section 4). We further show that ConDo is robust to missing cell-type labels: excluding unlabeled cells from the fit preserves the corrected output across all six atlases even when most labels are withheld (Section 4.5). Because cell-type annotation is a required field of the benchmark’s method input (Section 4.1), ConDo is, like scANVI, a label-aware integrator; we make this distinction explicit throughout and compare most directly against scANVI. Code is provided at https://github.com/calvinmccarter/condo-adapter .
+
+## 2 Background 
+
+2.1 Confounded shift and ConDo 
+
+We summarize the parts of ConDo [McCarter, 2024] needed here. Let X be feature (expression) space and Z a confounder space; a domain is a joint distribution over X × Z , and we have a source 
+
+DS and target DT with marginals DX , DZ . ConDo addresses confounded shift : both marginals may differ across domains ( DXS̸ = DXT , DZS̸ = DZT ), but there exists a feature-space map g : XT → X S
+
+matching the conditionals, 
+
+DS (X | Z = z) = DT
+
+ g(X) | Z = z ∀z. (1) Crucially g takes features only—not z—so it applies to cells whose confounder is unknown and yields general-purpose corrected features; this distinguishes ConDo from ComBat, whose per-confounder term requires z at correction time. ConDo fits g by minimizing the expected conditional divergence under a prior ˆDZ 
+
+> ×
+
+over the confounder, 
+
+min  
+
+> g
+
+Ez∼ ˆDZ
+
+> ×
+
+d
+
+
+
+DT (x | Z = z), DS (g(x) | Z = z)
+
+
+
+, (2) where ˆDZ 
+
+> ×
+
+estimates the product of the source and target confounder distributions, weighting con-founder values well supported in both domains (so both conditionals are reliably estimable). For a categorical confounder this is just a normalized product of per-value source and target frequencies. Conditional-distribution matching across domains has been studied in the domain adaptation literature as generalized label shift and target/conditional shift [Tachet des Combes et al., 2020, Zhang et al., 2013], but those methods reweight samples or optimize a single downstream label rather than producing reusable corrected features as does ConDo. 32.2 Restricting the transformation 
+
+We restrict g to be linear, g(x) = Ax + b, in two forms that encode different assumptions about the batch effect. Location-scale takes A = diag( a), correcting each gene by its own shift and scale, 
+
+[g(x)] i = aixi + bi (as ComBat does), and assumes the technical effect acts per gene. Affine takes 
+
+A dense, letting the correction mix genes to undo effects that rotate or shear the expression space (e.g. a protocol change re-weighting co-expressed gene programs), at the cost of O(d2) parameters. These are not a quality/speed tradeoff but two distinct modeling choices. The appropriate choice depends on the technical effect in a given dataset (Section 4.4); The location-scale option may also be preferred in certain scenarios, due to its interpretability, its preservation of correlation structure, or its guarantee that the post-correction expression value for a gene is solely determined by the pre-correction expression value for that gene. 
+
+2.3 The conditional MMD objective 
+
+We take d in Eq. (2) to be the squared maximum mean discrepancy [Gretton et al., 2012] under a characteristic kernel kX (RBF). At a confounder value z, with g(x) = Ax + b,
+
+MMD 2 z = Ex,x′∼D T (·| z)kX (x, x′) − 2 Ex∼D T (·| z) 
+
+> y∼D S(·| z)
+
+kX
+
+ x, Ay + b
+
++ Ey,y′∼D S (·| z)kX
+
+ Ay + b, Ay ′ + b. (3) We minimize Ez∼ ˆDZ
+
+> ×
+
+MMD 2(z) by stochastic gradient descent with AdamW [Loshchilov et al., 2017] optimizer. Because the cell-type confounder is categorical, sampling from D·(x | Z = z) is trivial: we draw cells of type z from the relevant batch. 
+
+## 3 Method 
+
+3.1 ConDo for a pair of batches 
+
+Given two batches with normalized expression x and cell-type labels, we treat one as source DS and one as target DT , set the confounder Z to the cell-type label, and fit g(x) = Ax + b by minimizing the conditional-MMD objective of Eq. (3) under the product-prior weighting over shared cell types. The fitted g maps source cells onto the target’s expression distribution cell-type by cell-type : cells of a type present in both batches are aligned, while the relative abundances of cell types are untouched, so a cell type abundant in one batch and rare in the other is not artificially equalized. Algorithm hyperparameters (such as batch size and AdamW parameters) follow the ConDo defaults, with the same hyperparameters used across all experiments. 
+
+3.2 Agglomerative compatibility-graph integration 
+
+A real dataset has B batches, not necessarily two; the final result depends on the order in which pairwise adaptation is applied, so the ordering must be chosen carefully. Furthermore, not every pair of batches shares cell types, and fitting an adapter between two batches with no shared cell type is ill posed, because the product prior of Eq. (2) has empty support. We address both issues with an agglomerative integrator (Figure 1). 
+
+Compatibility graph. We build an undirected graph G with one node per batch and an edge between two batches iff their cell-type sets intersect. Edges mark exactly the pairs for which a ConDo adapter is well posed. We assume G has a single connected component, which holds for the atlas datasets we consider since their batches almost always share common cell types. 
+
+Seed and scoring. We score each batch by the silhouette coefficient [Rousseeuw, 1987] of its cell-type labels on the precomputed PCA—a label-aware measure of how cleanly cell types separate within that batch, computable before any integration. The seed (initial reference) is the highest-scoring batch, so integration is anchored to the batch whose biology is internally best resolved. 4B1     
+
+> B2B3
+> B4
+> B5
+> B6
+> merge score low high
+> (a) compatibility graph seed = arg max cell-type silhouette gene 1 gene 2 (b) match per cell type
+> (target, source →adapted)
+
+Figure 1: (a) The agglomerative integrator seeds at the batch with the highest within-batch cell-type silhouette and greedily merges the best-scoring graph neighbor of the current pool, fitting one ConDo adapter per merge. Indices give the merge order. Blue nodes are batches already in the reference pool ( B1, thickly outlined, is the seed); green nodes are unmerged batches, shaded by merge score (darker = higher). Only batches adjacent to the pool are eligible, so B3 is merged next even though the dashed B6 scores highest: B6 shares no edge with the pool and is merged last, becoming eligible only once B5 is absorbed. (b) Each adapter matches source to target conditional on cell type , so a cell type present in only one batch (here the lower-left cluster) is aligned without forcing the batches’ marginal distributions to coincide. 
+
+Greedy growth. We maintain a target pool, initialized to the seed batch. At each step, we consider all batches adjacent in G to any batch already in the pool, pick the highest-scoring such batch, fit one ConDo adapter mapping that batch (source) onto the current pool (target) conditioned on cell type, replace the batch’s cells with their adapted values, and add it to the pool. We repeat until no adjacent batch remains. Because the pool grows, later batches are aligned to an increasingly cell-type-diverse reference, rather than every batch being adapted to a single (possibly small) batch. Appendix A.3 ablates the scoring rule, showing that ConDo’s performance is robust to sensible merge orders. 
+
+## 4 Experiments 
+
+4.1 Setup 
+
+Table 1: Benchmark datasets in the Open Problems Batch Integration Benchmark. Cell and batch counts are approximate. Dataset Cells Batches Organism / tissue 
+
+DKD 39k 11 human kidney (diabetic kidney disease) 
+
+GTEx 209k 16 human, GTEx multi-tissue 
+
+ImmuneCell 330k 12 human immune cells 
+
+MousePancreas 302k 56 mouse pancreas 
+
+Hypomap 385k 24 mouse hypothalamus 
+
+TabulaSapiens 483k 29 human, multi-organ We use six human and mouse atlases from the Open Problems Batch Integration Benchmark [Luecken et al., 2025] (Table 1), ranging from 39k to 483k cells and 11 to 56 batches. Each method receives the normalized expression matrix, per-cell batch and cell_type annotations, and a precomputed 50-dimensional PCA; cell_type is a required input field of the benchmark. ConDo and scANVI use the cell-type annotation; the other baselines (ComBat, Harmony, scVI, Scanorama, SCALEX, fastMNN, LIGER, scGPT, Geneformer, and others) use only batch . We run two ConDo variants, MMD-affine and MMD-location-scale, on the normalized expression (feature output). We evaluate on the Open Problems Batch Integration Benchmark (OPBIB), the maintained successor to the Single-Cell Integration Benchmark (SCIB) benchmark [Luecken et al., 2022], following its evaluation exactly: feature outputs are PCA-reduced to a 50-D embedding on which the SCIB metrics are computed, matched to the official per-metric scripts. The metrics split into bio-conservation (cell-type ASW, NMI, ARI, isolated-label ASW/F1, cLISI, HVG overlap, cell-cycle conservation) and 
+
+batch-correction (batch ASW, graph connectivity, PCR, iLISI, kBET). Each metric is min-max scaled 5across the full method pool (including the no-integration, shuffle, and oracle controls that anchor the scale) before averaging, and the overall score is 0.6 bio + 0 .4 batch. Our numbers use a development snapshot of the benchmark’s public baselines (the six-atlas cellxgene_census generation; the later v2.0.0 release additionally scores cell-cycle conservation on all six atlases). Three SCIB metrics are not uniformly available in this snapshot: cell-cycle conservation (computed on only three atlases), isolated-label F1 (undefined on DKD ), and kBET (missing for many method–dataset pairs). Following the SCIB methodology we drop such non-uniform metrics. We report two leaderboards. The feature leaderboard compares only expression-correcting methods, on the largest metric set they share (10 metrics including HVG overlap, cell-type ASW, and PCR, which embedding methods structurally lack). The all-methods leaderboard compares every method— feature and embedding—on the 7 metrics common to both. Because location-scale and affine encode different assumptions, we also report a best-of-two configuration that selects, per dataset, whichever transform scores higher; we discuss how this selection can be made in practice in Section 4.4. 
+
+4.2 ConDo is the strongest feature-space integrator 
+
+Table 2 compares ConDo against the other expression-correcting methods. The best-of-two ConDo configuration ranks first among feature methods on five of the six atlases, trailing only ComBat on 
+
+GTEx . Averaged across datasets, ConDo attains mean rank 1.17 versus ComBat’s 1.83 within the two-method full-coverage pool; its mean shortfall from the best feature method per dataset is only 1.0
+
+overall-score point, versus ComBat’s 5.3 (Scanorama, SCALEX, and MNN-based methods are far behind). The gap is concentrated in bio-conservation, consistent with the hypothesis that conditioning on cell type preserves biological structure that marginal alignment removes. Table 2: Feature-space methods: overall SCIB score per dataset (higher is better), feature leaderboard (10-metric feature set, which adds HVG overlap, cell-type ASW, and PCR to the 7 metrics of Table 3; scores are therefore not directly comparable across the two tables). Bold marks the best feature method per dataset. ConDo (best-of-two) is first on 5/6 datasets. Dashes mark methods that failed to produce a scoreable output on a dataset.                                                       
+
+> Method DKD GTEx Hypomap Immune Mouse TabSap
+> ConDo (best-of-two) 0.815 0.646 0.715 0.807 0.781 0.702
+> ConDo affine 0.815 0.646 0.715 0.794 0.670 0.702 ConDo location-scale 0.805 0.555 0.679 0.807 0.781 0.516 ComBat 0.764 0.705 0.613 0.734 0.720 0.673 SCALEX 0.623 0.532 0.518 0.554 –0.549 MNN 0.681 –––––Scanorama 0.323 0.199 0.204 0.131 0.252 –mnnpy 0.320 –––––
+
+Table 3: All methods, overall SCIB score per dataset (all-methods leaderboard, 7 metrics common to feature and embedding methods; not directly comparable to the 10-metric Table 2). Bold marks the best method per dataset; ∗ marks label-aware methods (ConDo, scANVI). ConDo returns corrected expression; the embedding methods do not.                                                                                          
+
+> Method type DKD GTEx Hypomap Immune Mouse TabSap
+> ConDo (best-of-two) feat ∗0.830 0.695 0.612 0.760 0.770 0.667
+> ConDo affine 0.830 0.695 0.612 0.760 0.701 0.667 ConDo location-scale 0.787 0.602 0.539 0.750 0.770 0.528 scANVI emb ∗0.801 0.742 0.499 0.766 0.763 0.633 scVI emb. 0.781 0.697 0.550 0.716 0.765 0.606 Harmony emb. 0.797 0.663 0.518 0.722 0.745 0.583 fastMNN emb. 0.780 0.651 0.544 0.711 0.726 0.602 scGPT emb. 0.738 0.666 –0.642 –0.600 ComBat feat. 0.746 0.640 0.539 0.625 0.694 0.570 SCALEX feat. 0.702 0.574 0.510 0.598 –0.531 Scanorama feat. 0.433 0.293 0.205 0.248 0.192 –Geneformer emb. 0.013 0.186 –0.044 –0.268
+
+60 5 10 15 20     
+
+> ConDo scANVI scVI Harmony-py Harmony fastMNN ComBat LIGER Composite Bio Batch lower is better
+> Mean improvability
+> 02468
+> lower is better
+> Mean rank
+
+Figure 2: Aggregate performance on the all-methods leaderboard across the six atlases, for the eight methods with full coverage (methods ordered by composite rank, ConDo best-of-two at top). Left: mean improvability (mean per-dataset gap to the best method, ×100 ); right: mean rank. Lower is better for both. Bars are the composite score and its bio-conservation and batch-correction sub-scores. LIGER and Harmony-py are the pyliger and harmonypy implementations. 
+
+4.3 ConDo is competitive with deep embedding methods 
+
+Table 3 places ConDo against all integration methods, including deep embedding models, on the metric set common to feature and embedding methods. Despite returning corrected expression rather than an optimized embedding, best-of-two ConDo ranks first across all methods on four of six atlases ( DKD , Hypomap , MousePancreas , TabulaSapiens ), second on ImmuneCell (behind scANVI), and third on GTEx (behind scANVI and scVI). Its most natural comparator is scANVI, the other label-aware method: ConDo exceeds scANVI on four of the six datasets, trailing it only on GTEx 
+
+and (by 0.006 ) on ImmuneCell —all while producing a corrected gene-expression matrix that an embedding cannot. Unsupervised deep methods (scVI, Harmony) and foundation models (scGPT, Geneformer) are generally outperformed. To better evaluate overall method performance, we further aggregate over the per-dataset scores. For each method, we compute its mean rank among all methods, and also its mean improvability , i.e. the per-dataset gap to the best method ( ×100 ). The resulting metrics in Figure 2 confirms the pattern: over the eight methods with full six-atlas coverage, best-of-two ConDo has the best mean composite rank ( 1.50 ) and improvability ( 0.89 ). Its lead is overwhelming on bio-conservation, while it enjoys strong but not leading batch-correction performance. 
+
+4.4 Affine and location-scale capture different batch effects 
+
+The two transforms are complementary rather than redundant (Table 2). Full-affine correction, because it can undo batch effects that mix co-expressed genes, is generally stronger empirically, winning or tying on four of six datasets. Location-scale is decisively better on ImmuneCell and 
+
+MousePancreas , where the technical effect is closer to a per-gene shift-and-scale and the extra O(d2)
+
+affine parameters add variance without bias reduction. The best-of-two envelope, which selects the better transform per dataset, is first among feature methods on five of six datasets. Selecting the transform does not require ground-truth labels: because there are only two options, the choice can be made with the same SCIB-style diagnostics the benchmark already reports (e.g. preferring the transform with better batch mixing at equal bio-conservation), or by held-out cells, at the cost of one extra fit. We report the oracle best-of-two to characterize the achievable envelope; in deployment the per-dataset winner can be recovered by this inexpensive two-way model selection. 70.00 0.25 0.50 0.75 1.00     
+
+> Fraction of cell-type labels hidden
+> 0.6 0.7 0.8 0.9 1.0
+> Composite (relative to 0% dropout)
+> Affine
+> Dataset
+> DKD GTEx Immune Mouse panc. HypoMap Tabula Sapiens
+> 0.00 0.25 0.50 0.75 1.00
+> Fraction of cell-type labels hidden
+> Location-scale
+> Unlabeled handling Excluded from fit "Unknown" bucket Unlabeled handling Excluded from fit "Unknown" bucket
+
+Figure 3: Robustness to missing cell-type labels. Each curve is the overall composite relative to the fully-labeled fit as a fraction of cell-type labels is hidden, for the affine (left) and location-scale (right) transforms; color marks how the now-unlabeled cells are handled (excluded from the fit vs. pooled into one “unknown” bucket) and marker marks the atlas. Excluding unlabeled cells stays within a few percent of baseline for both transforms on all six atlases (and is undefined at 100% , where no labeled cells remain to fit); only the affine transform with the “unknown” bucket degrades substantially. 
+
+4.5 Robustness to missing cell-type labels 
+
+ConDo conditions on cell-type labels, which the benchmark provides but which in deployment would come from imperfect per-batch clustering, leaving some cells unlabeled or low-confidence. We test how ConDo degrades as labels are withheld: on each atlas we hide the cell-type label of a fraction of cells and refit, evaluating two ways of handling the now-unlabeled cells. First, we exclude them from the conditional-MMD fit, using only the remaining labeled cells; the unlabeled cells they are still corrected by the fitted map, since g takes features only and so applies to every cell (criterion (iii)). Second, we pool them into a single “unknown” pseudo-type ( bucket ); note that at 100% of labels hidden, this becomes equivalent to matching marginal distributions with MMD. In both cases, for merge ordering, we use the batch-silhouette criterion, which does not itself depend on cell-type labels. Figure 3 plots the resulting composite score relative to the fully-labeled baseline for each dataset. We first observe that excluding unlabeled cells is strikingly robust: across all six atlases and both transforms, hiding up to 75% of labels keeps the composite within about 4% of its fully-labeled value, because the fit simply proceeds on the labeled remainder while g still corrects the rest. Additionally, we see that location-scale is robust under either handling. The practical recipe is therefore to exclude low-confidence cells, under which ConDo tolerates the loss of most of its labels. 
+
+## 5 Conclusion 
+
+We recast single-cell batch integration as confounded domain adaptation and lift ConDo to the many-batch setting via an agglomerative compatibility-graph integrator. On the Open Problems benchmark, our proposed approach is the best feature-space integrator and competitive with deep embedding methods, while uniquely returning corrected expression. The results suggest the embedding-versus-feature tradeoff is less forced than commonly assumed: a label-aware feature method that respects confounding can match or exceed deep embedding methods while returning corrected expressions. 
+
+Limitations. ConDo requires per-cell annotations. In the benchmark these are a provided input, making ConDo comparable to scANVI but not to fully unsupervised methods; in practice they would come from per-batch clustering and annotation, though ConDo tolerates hiding most of these labels. The compatibility graph assumes a single connected component, which need not hold in general. The transformation is linear, so strongly nonlinear batch effects are only partially corrected. 
+
+Future Work. Natural extensions include automatic transform selection, nonlinear conditional matching, and handling compatibility graphs with multiple connected components. 8References 
+
+Pierre Boyeau, Romain Lopez, Jeffrey Regier, Adam Gayoso, Michael I Jordan, and Nir Yosef. Deep generative models for detecting differential expression in single cells. bioRxiv , page 794289, 2019. Haotian Cui, Chloe Wang, Hassaan Maan, Kuan Pang, Fengning Luo, Nan Duan, and Bo Wang. scgpt: toward building a foundation model for single-cell multi-omics using generative ai. Nature Methods , 21:1470–1480, 2024. Carlo De Donno, Soroor Hediyeh-Zadeh, Amir Ali Moinfar, Marco Wagenstetter, Luke Zappia, Mohammad Lotfollahi, and Fabian J Theis. Population-level integration of single-cell datasets enables multi-scale analysis across samples. Nature methods , 20(11):1683–1692, 2023. Arthur Gretton, Karsten M Borgwardt, Malte J Rasch, Bernhard Schölkopf, and Alexander Smola. A kernel two-sample test. Journal of Machine Learning Research , 13(25):723–773, 2012. Laleh Haghverdi, Aaron TL Lun, Michael D Morgan, and John C Marioni. Batch effects in single-cell rna-sequencing data are corrected by matching mutual nearest neighbors. Nature Biotechnology ,36(5):421–427, 2018. Brian Hie, Bryan Bryson, and Bonnie Berger. Efficient integration of heterogeneous single-cell transcriptomes using scanorama. Nature Biotechnology , 37(6):685–691, 2019. W Evan Johnson, Cheng Li, and Ariel Rabinovic. Adjusting batch effects in microarray expression data using empirical bayes methods. Biostatistics , 8(1):118–127, 2007. Ilya Korsunsky, Nghia Millard, Jean Fan, Kamil Slowikowski, Fan Zhang, Kevin Wei, Yuriy Baglaenko, Michael Brenner, Po-ru Loh, and Soumya Raychaudhuri. Fast, sensitive and ac-curate integration of single-cell data with harmony. Nature Methods , 16(12):1289–1296, 2019. Jeffrey T Leek, Robert B Scharpf, Héctor Corrada Bravo, David Simcha, Benjamin Langmead, W Evan Johnson, Donald Geman, Keith Baggerly, and Rafael A Irizarry. Tackling the widespread and critical impact of batch effects in high-throughput data. Nature Reviews Genetics , 11(10): 733–739, 2010. Romain Lopez, Jeffrey Regier, Michael B Cole, Michael I Jordan, and Nir Yosef. Deep generative modeling for single-cell transcriptomics. Nature Methods , 15(12):1053–1058, 2018. Ilya Loshchilov, Frank Hutter, et al. Fixing weight decay regularization in adam. arXiv preprint arXiv:1711.05101 , 5(5):5, 2017. Mohammad Lotfollahi, F Alexander Wolf, and Fabian J Theis. scgen predicts single-cell perturbation responses. Nature methods , 16(8):715–721, 2019. Malte D Luecken, Maren Büttner, Kridsadakorn Chaichoompu, Anna Danese, Marta Interlandi, Michaela F Müller, Daniel C Strobl, Luke Zappia, Martin Dugas, Maria Colomé-Tatché, and Fabian J Theis. Benchmarking atlas-level data integration in single-cell genomics. Nature Methods ,19(1):41–50, 2022. Malte D Luecken, Scott Gigante, Daniel B Burkhardt, Robrecht Cannoodt, Daniel C Strobl, Nikolay S Markov, Luke Zappia, et al. Defining and benchmarking open problems in single-cell analysis. 
+
+Nature Biotechnology , 43(7):1035–1040, 2025. Calvin McCarter. Towards backwards-compatible data with confounded domain adaptation. Trans-actions on Machine Learning Research , 2024. ISSN 2835-8856. URL https://openreview. net/forum?id=GSp2WC7q0r .Matthew E Ritchie, Belinda Phipson, DI Wu, Yifang Hu, Charity W Law, Wei Shi, and Gordon K Smyth. limma powers differential expression analyses for rna-sequencing and microarray studies. 
+
+Nucleic acids research , 43(7):e47–e47, 2015. Yanay Rosen, Yusuf Roohani, Ayush Agarwal, Leon Samotorcan, Tabula Sapiens Consortium, Stephen R Quake, and Jure Leskovec. Universal cell embeddings: A foundation model for cell biology. bioRxiv , 2023. 9Peter J Rousseeuw. Silhouettes: a graphical aid to the interpretation and validation of cluster analysis. 
+
+Journal of computational and applied mathematics , 20:53–65, 1987. Uri Shaham, Kelly P Stanton, Jun Zhao, Huamin Li, Khadir Raddassi, Ruth Montgomery, and Yuval Kluger. Removal of batch effects using distribution-matching residual networks. Bioinformatics ,33(16):2539–2546, 2017. Ajita Shree, Musale Krushna Pavan, and Hamim Zafar. scdreamer for atlas-level integration of single-cell datasets using deep generative model paired with adversarial classifier. Nature Communications ,14(1):7781, 2023. Tim Stuart, Andrew Butler, Paul Hoffman, Christoph Hafemeister, Efthymia Papalexi, William M Mauck, Yuhan Hao, Marlon Stoeckius, Peter Smibert, and Rahul Satija. Comprehensive integration of single-cell data. cell , 177(7):1888–1902, 2019. Remi Tachet des Combes, Han Zhao, Yu-Xiang Wang, and Geoffrey J Gordon. Domain adapta-tion with conditional distribution matching and generalized label shift. In Advances in Neural Information Processing Systems , volume 33, pages 19276–19289, 2020. Christina V Theodoris, Ling Xiao, Anant Chopra, Mark D Chaffin, Zeina R Al Sayed, Matthew C Hill, Helene Mantineo, Elizabeth M Brydon, Zexian Zeng, X Shirley Liu, and Patrick T Ellinor. Transfer learning enables predictions in network biology. Nature , 618(7965):616–624, 2023. Dongfang Wang, Siyu Hou, Lei Zhang, Xiliang Wang, Baolin Liu, and Zemin Zhang. imap: integration of multiple single-cell datasets by adversarial paired transfer networks. Genome biology , 22(1):63, 2021. Lei Xiong, Kang Tian, Yuzhe Li, Weixi Ning, Xin Gao, and Qiangfeng Cliff Zhang. Online single-cell data integration through projecting heterogeneous datasets into a common cell-embedding space. 
+
+Nature Communications , 13(1):6118, 2022. Chenling Xu, Romain Lopez, Edouard Mehlman, Jeffrey Regier, Michael I Jordan, and Nir Yosef. Probabilistic harmonization and annotation of single-cell transcriptomics data with deep generative models. Molecular Systems Biology , 17(1):e9620, 2021. Kun Zhang, Bernhard Schölkopf, Krikamol Muandet, and Zhikun Wang. Domain adaptation under target and conditional shift. In International Conference on Machine Learning , pages 819–827, 2013. Zhaojun Zhang, Divij Mathew, Tristan L Lim, Kaishu Mason, Clara Morral Martinez, Sijia Huang, E John Wherry, Katalin Susztak, Andy J Minn, Zongming Ma, et al. Recovery of biological signals lost in single-cell batch integration with cellanova. Nature Biotechnology , 43(11):1861–1877, 2025. 10 A Appendix 
+
+A.1 SCIB metric definitions 
+
+Table 4 briefly describes the thirteen SCIB metrics [Luecken et al., 2022] used by the Open Problems Batch Integration Benchmark and combined into the bio-conservation, batch-correction, and overall scores of Section 4.1. All metrics are computed on the 50-D embedding (a precomputed PCA for embedding methods, or a PCA of the corrected expression for feature methods), min-max scaled across the full method pool, and averaged within each group; the overall score is 0.6 bio + 0 .4 batch. Table 4: The thirteen SCIB metrics grouped by score. Bio-conservation rewards preserving biological (cell-type) structure; batch-correction rewards mixing cells across batches. Higher is better for all (after scaling). Cell-cycle conservation, isolated-label F1, and kBET are excluded from our scored sets (Section 4.1).               
+
+> Metric Description
+> Bio-conservation
+> Cell-type ASW Average silhouette width of cells grouped by cell-type label: how well cell types separate in the embedding. NMI Normalized mutual information between graph-based (Leiden) clusters and cell-type labels. ARI Adjusted Rand index between the same clusters and cell-type labels. Isolated-label ASW Silhouette width restricted to cell types present in few batches, testing whether rare/isolated labels are preserved. Isolated-label F1 F1 of recovering isolated-label cells by clustering, a second view of rare-label preservation. cLISI Cell-type local inverse Simpson’s index: neighborhoods should be homogeneous in cell type (not mixed). HVG overlap Overlap of highly variable genes before vs. after integration, penalizing loss of biological signal (feature output only). Cell-cycle conservation Retention of cell-cycle-score variance after integration.
+> Batch-correction
+> Batch ASW Silhouette width of cells grouped by batch, rescaled so that well-mixed (low-silhouette) batches score high. Graph connectivity Whether cells of the same type form a connected kNN subgraph across batches. PCR Principal-component regression: reduction in the variance explained by batch after integration. iLISI Integration local inverse Simpson’s index: neighborhoods should be well mixed across batches. kBET k-nearest-neighbor batch-effect test: local batch composition should match the global composition.
+
+A.2 Bio-conservation and batch-correction decomposition 
+
+Tables 5 and 6 decompose the feature-leaderboard overall score (Table 2) into its bio-conservation and batch-correction components (the SCIB sub-scores that the 0.6 bio + 0 .4 batch composite averages). As in the main tables, each ConDo variant is scored within its own method pool. Two patterns stand out. First, ConDo’s advantage over ComBat is concentrated in bio-conservation : ConDo attains the highest bio score on five of six datasets, often by a wide margin (e.g. Hypomap 0.753 vs. 0.524 ,
+
+MousePancreas 0.858 vs. 0.692 ), whereas the two methods are much closer on batch correction, where ComBat is sometimes ahead. This is the expected signature of conditioning on cell type: it preserves biological structure rather than buying batch mixing at its expense. Second, the affine and location-scale variants differ mainly in how they trade bio against batch : location-scale raises batch mixing on some datasets (e.g. DKD 0.786 vs. affine 0.714 ) but can sacrifice bio-conservation badly on others ( TabulaSapiens bio 0.623 vs. affine 0.805 ), explaining why neither transform dominates and why selecting between them per dataset helps. Tables 7 and 8 give the same decomposition for the all-methods leaderboard (Table 3), where ConDo is scored against the embedding methods on the 7 shared metrics. The picture is consistent with the feature comparison: ConDo’s edge is in bio-conservation —best-of-two ConDo has the top bio score 11 Table 5: Bio-conservation sub-score per dataset (feature leaderboard; higher is better). Bold marks the best method per dataset.                               
+
+> Method DKD GTEx Hypomap Immune Mouse TabSap ConDo (best-of-two) 0.883 0.698 0.753 0.860 0.858 0.805
+> ConDo affine 0.883 0.698 0.753 0.879 0.736 0.805 ConDo loc.-scale 0.818 0.664 0.777 0.860 0.858 0.623 ComBat 0.773 0.798 0.524 0.805 0.692 0.774
+
+Table 6: Batch-correction sub-score per dataset (feature leaderboard; higher is better). Bold marks the best method per dataset.                               
+
+> Method DKD GTEx Hypomap Immune Mouse TabSap ConDo (best-of-two) 0.714 0.568 0.658 0.727 0.666 0.548
+> ConDo affine 0.714 0.568 0.658 0.668 0.571 0.548 ConDo loc.-scale 0.786 0.391 0.532 0.727 0.666 0.356 ComBat 0.749 0.565 0.747 0.629 0.763 0.520
+
+on DKD and Hypomap and is within 0.003 of scANVI on MousePancreas —while on batch-correction 
+
+the embedding methods, which optimize an embedding directly for mixing, are often ahead. The affine/location-scale split again reflects a bio-versus-batch tradeoff (e.g. on ImmuneCell location-scale buys the best batch score, 0.790 , at some cost to bio). Table 7: Bio-conservation sub-score per dataset (all-methods leaderboard; higher is better). Bold 
+
+marks the best method per dataset; ∗ marks label-aware methods.                                                                                          
+
+> Method type DKD GTEx Hypomap Immune Mouse TabSap ConDo (best-of-two) feat ∗0.842 0.686 0.751 0.750 0.820 0.655 ConDo affine 0.842 0.686 0.751 0.750 0.761 0.655 ConDo location-scale 0.753 0.585 0.557 0.723 0.820 0.519 scANVI emb ∗0.769 0.797 0.484 0.796 0.823 0.671
+> scVI emb. 0.737 0.723 0.512 0.713 0.807 0.622 Harmony emb. 0.758 0.641 0.531 0.689 0.791 0.562 fastMNN emb. 0.765 0.654 0.519 0.674 0.746 0.580 scGPT emb. 0.721 0.657 –0.607 –0.596 ComBat feat. 0.750 0.673 0.480 0.621 0.697 0.586 SCALEX feat. 0.644 0.585 0.531 0.579 –0.537 Scanorama feat. 0.281 0.185 0.140 0.094 0.037 –Geneformer emb. 0.022 0.303 –0.073 –0.428
+
+A.3 Sensitivity to the agglomerative merge order 
+
+The agglomerative integrator of Section 3.2 scores each batch by its within-batch cell-type silhouette and uses that score for two purposes: choosing the seed and ordering the greedy merges. Because the final result depends on this order, we ask how much the choice of scoring rule matters. We rerun the full pipeline with seven ranking strategies, changing only the score that drives the seed and merge order and holding every other hyperparameter fixed at the main-text configuration. Besides the deployed cell-type silhouette (highest first), we test its mirror (lowest first); the per-batch batch 
+
+silhouette in both directions (lowest first merges already-well-mixed batches earliest); batch size in both directions; and a fixed random priority. We run each strategy for both the affine and location-scale transforms, and score them on the all-methods 7-metric leaderboard exactly as in Table 3, reporting the overall composite together with its bio-conservation and batch-correction components (Figure 4). Strategy-versus-strategy comparisons within a dataset are computed on the same machine and are internally consistent; the small cross-machine drift noted in the main text affects only cross-dataset absolute values. Three observations follow. First, the merge order has a real but bounded effect: across the seven strategies the overall score spans at most 0.03 –0.07 on four of the six atlases, widening to 0.11 
+
+12 Table 8: Batch-correction sub-score per dataset (all-methods leaderboard; higher is better). Bold 
+
+marks the best method per dataset; ∗ marks label-aware methods.                                                                                          
+
+> Method type DKD GTEx Hypomap Immune Mouse TabSap ConDo (best-of-two) feat ∗0.813 0.707 0.403 0.777 0.695 0.685
+> ConDo affine 0.813 0.707 0.403 0.777 0.610 0.685 ConDo location-scale 0.837 0.629 0.510 0.790 0.695 0.542 scANVI emb ∗0.849 0.660 0.520 0.721 0.672 0.576 scVI emb. 0.846 0.659 0.608 0.720 0.701 0.581 Harmony emb. 0.855 0.695 0.498 0.772 0.676 0.614 fastMNN emb. 0.803 0.645 0.581 0.766 0.695 0.636 scGPT emb. 0.763 0.679 –0.695 –0.606 ComBat feat. 0.740 0.589 0.627 0.630 0.690 0.544 SCALEX feat. 0.790 0.558 0.479 0.626 –0.522 Scanorama feat. 0.661 0.454 0.301 0.480 0.424 –Geneformer emb. 0.000 0.009 –0.000 –0.028
+
+(MousePancreas ) and 0.17 (Hypomap ), the two atlases with the most batches ( 56 and 24 ), where ordering choices compound. Second, no strategy dominates, and the deployed cell-type-silhouette rule is competitive but not uniformly best: on the single-transform means it sits mid-pack, with the batch-silhouette-low rule slightly ahead ( 0.724 vs. 0.711 affine; 0.673 vs. 0.661 location-scale). Third, and most important for our claims, this single-transform gap all but vanishes under the best-of-two envelope that Table 3 actually reports: batch-silhouette-low averages 0.732 against the deployed rule’s 0.723 on the all-methods composite, and the two are tied at 0.744 on the feature leaderboard. We therefore retain the cell-type-silhouette rule as the headline configuration—it carries the same label-aware motivation as the rest of the method—and read this ablation as evidence that ConDo’s standing is robust to the merge order rather than as a case for tuning it: every strategy, including random priority, leaves ConDo well ahead of the other feature methods and competitive with the deep embedding models. Selecting a strategy post hoc on these same six atlases would moreover be exactly the benchmark-tuning we caution against in Section 1. Decomposing the composite into its bio-conservation and batch-correction components (Figure 4, middle and bottom rows) shows where this behavior originates. The cell-type-silhouette default is among the strongest strategies on bio-conservation —best of the seven on four of six atlases and second on average—which is the expected consequence of seeding and ordering by how cleanly cell types separate within each batch. It pays for this with the weakest batch-correction of any strategy on average, since it never optimizes for batch mixing; strategies that merge small or already-well-mixed batches first ( batch size, smallest ; batch silhouette, low ) recover more batch mixing instead. Because the composite weights bio-conservation at 0.6, the default’s biology-first behavior keeps it composite-competitive despite this batch deficit. The order-sensitivity itself is likewise concentrated in bio-conservation (spread up to 0.25 on Hypomap ) rather than batch-correction (spread ≤ 0.09 
+
+on every atlas), so the wide composite swings on the many-batch atlases are a bio-conservation phenomenon. This is consistent with the paper’s central claim: what the merge order chiefly governs is how much biological structure the conditional matching preserves. 
+
+A.4 ConDo fit runtime 
+
+Table 9 reports the wall-clock fit time of ConDo on each atlas for the two transforms under the shared official configuration. Runtime grows with dataset size, and the dense affine map is not uniformly slower than location-scale: the two are within a factor of two on every atlas, so the affine variant’s 
+
+O(d2) parameters (Section 2.2) do not impose a prohibitive time cost at these scales. 13 0.5 0.6 0.7 0.8 DKD GTEx Hypomap ImmuneCell MousePancreas TabulaSapiens 
+
+> Overall composite
+
+Affine    
+
+> 0.5 0.6 0.7 0.8
+
+Location-scale               
+
+> 0.5 0.6 0.7 0.8 DKD GTEx Hypomap ImmuneCell MousePancreas TabulaSapiens
+> Bio-conservation
+> 0.5 0.6 0.7 0.8 0.4 0.5 0.6 0.7 0.8 all-methods score (7-metric) DKD GTEx Hypomap ImmuneCell MousePancreas TabulaSapiens
+> Batch-correction
+> 0.4 0.5 0.6 0.7 0.8 all-methods score (7-metric)
+> cell-type silhouette, high (default) cell-type silhouette, low batch silhouette, low batch silhouette, high batch size, biggest batch size, smallest random priority scANVI (embedding reference)
+
+Figure 4: Merge-order ablation across seven seed/merge-order ranking strategies, under the affine (left) and location-scale (right) transforms, decomposed into the overall composite (top row), bio-conservation (middle), and batch-correction (bottom) scores—all on the all-methods 7-metric set, as in Table 3. Each dot is one strategy, colored by strategy; the emphasized star is the deployed cell-type-silhouette default; the dashed tick marks scANVI, the strongest embedding comparator, on that dataset. Horizontal spread within a dataset shows how much the merge order matters—small on most atlases, wider on the many-batch Hypomap and MousePancreas , and concentrated in bio-conservation. The default is among the strongest strategies on bio-conservation but the weakest on batch mixing, so its composite competitiveness comes from the 0.6-weighted bio term; nearly all strategies sit at or right of the scANVI tick on the composite, so ConDo’s standing is robust to the order. Due to an oversight, the location-scale panels use weight decay 10 −5, so the composite score for the default merge order differs by ≤0.008 from the 10 −4 location-scale result reported in the main table (Table 3). 14 Table 9: ConDo fit runtime (minutes) on each benchmark dataset, for the affine and location-scale transforms under the shared official configuration (MMD, features, nepochs =5 , weight decay 
+
+10 −4, celltype_silhouette ordering). Fit time is wall-clock for the complete per-dataset fit (read, agglomerative integration, write) on one NVIDIA RTX PRO 6000 GPU. Wall-clock includes the gzip write of the corrected output, which accounts for at most ∼11% of fit time (measured 
+
+4.6% /4.8% /11 .4% on DKD/GTEx/HypoMap); input reading is negligible ( < 3 s), so these times are within ∼10% of pure integration compute. Dataset Cells Affine (min) Location-scale (min) DKD 39k 6.8 4.8 GTEx v9 209k 33.4 25.4 Immune cell atlas 330k 50.5 60.1 Mouse pancreas 302k 58.1 52.2 HypoMap 385k 26.3 51.6 Tabula Sapiens 483k 94.5 110.2 Total 269.6 304.3 15
