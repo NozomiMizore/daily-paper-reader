@@ -1,0 +1,3060 @@
+Simulation-free Unbalanced Dynamic Optimal
+Transport with General Growth Penalty
+Junda Ying1, Yuxuan Wang2, Bowen Yang3, Peijie Zhou2,4,5,6,† and Lei Zhang1,2,3,4,7,†
+1Beijing International Center for Mathematical Research, Peking University.
+2Center for Quantitative Biology, Peking University.
+3School of Mathematical Sciences, Peking University.
+4Center for Machine Learning Research, Peking University.
+5National Engineering Laboratory for Big Data Analysis and Applications, Beijing.
+6AI for Science Institute, Beijing.7Institute for Artificial Intelligence, Peking University.
+yingjunda@stu.pku.edu.cn,pjzhou@pku.edu.cn,zhangl@math.pku.edu.cn
+Abstract
+Inferring cellular dynamics from unpaired single-cell snapshots requires modeling
+both state transitions and population growth or death. Unbalanced dynamic opti-
+mal transport (UDOT) addresses this by penalizing growth along transport paths,
+making the choice of growth penalty a key way to encode biological priors on
+proliferation and apoptosis. However, existing UDOT solvers either rely on com-
+putationally expensive NeuralODE simulations or depend on analytical solutions
+of conditional paths, restricting their efficiency solely to quadratic penalties, i.e.
+Wasserstein-Fisher-Rao (WFR) geodesics. To enable an efficient UDOT solver
+for general growth penalties, we first show that concave growth penalties lead to
+degenerate solutions where growth and transport are separated. We then introduce
+Simulation-free Unbalanced Dynamic Optimal transport (SUDO), a simulation-
+free framework for UDOT with general non-quadratic convex growth penalties.
+SUDO learns the conditional paths and transport costs, solves the induced semi-
+coupling problem, and subsequently leverages unbalanced flow matching to achieve
+a simulation-free solution. On WFR benchmarks, SUDO matches the accuracy
+of efficient, analytical solution-driven algorithms while outperforming simulation-
+based methods in computational speed. Beyond WFR, SUDO supports asymmetric
+penalties that encode proliferation-dominant priors and produce more plausible
+trajectories and growth estimates on synthetic and single-cell datasets.
+1
+Introduction
+Inferring the underlying dynamics of complex biological processes is a central challenge in single-cell
+trajectory inference. However, single-cell RNA sequencing (scRNA-seq) inherently destroys the cell,
+restricting our observations to static, unpaired temporal snapshots rather than continuous time-series
+profiles of individual cells. To overcome this fundamental limitation, a standard paradigm is to treat
+the observed snapshots at different time points as probability distributions and connect them using
+Dynamic Optimal Transport (DOT) (Schiebinger et al., 2019; Bunne et al., 2023b; Tong et al., 2020,
+2024a). By minimizing the transport cost between distributions, DOT provides a mathematically
+rigorous framework for reconstructing the continuous cellular trajectories from snapshots.
+While DOT assumes strict mass conservation during transitions, biological systems are characterized
+not only by state transitions but also by cell proliferation and apoptosis. Ignoring growth of the
+cell population can lead to incorrect inferences of the underlying trajectories. To address this issue,
+recent studies have introduced unbalanced extensions of OT (UOT) (Eyring et al., 2024; Klein et al.,
+Preprint.
+arXiv:2609.04710v1  [cs.LG]  4 Sep 2026
+
+
+2024, 2025; Tong et al., 2020; Lübeck et al., 2022; Sha et al., 2024; Sun et al., 2026a). Among all
+extensions, we focus on the unbalanced dynamic OT (UDOT) formulation, where a growth penalty
+denoted Ψ is added to the DOT cost, thus explicitly modeling the growth of the cell population.
+However, efficiently solving UDOT remains a challenge. Current UDOT solvers generally fall into
+two categories. The first category comprises simulation-based methods (Sha et al., 2024; Zhang
+et al., 2025; Sun et al., 2026b). While flexible, these methods rely on computationally expensive
+NeuralODE simulations (Chen et al., 2018), resulting in scalability issues and making it challenging
+for large-scale single-cell datasets. The second category includes simulation-free methods (Peng
+et al., 2026b), which are based on the flow matching framework (Lipman et al., 2023) and exhibit
+improved scalability. However, since these methods strictly depend on the availability of analytical
+solutions for the conditional path and transport cost, they are restricted to the Wasserstein-Fisher-Rao
+(WFR) problem (Chizat et al., 2018a,b), where the penalty Ψ must be a specific quadratic function.
+The ability to model general penalty functions Ψ is essential for capturing complex biological realities.
+For example, the standard quadratic penalty symmetrically penalizes proliferation and apoptosis;
+however, this can be an unrealistic assumption for many biological scenarios. If prior knowledge
+tells us that a specific developmental process involves minimal apoptosis but massive proliferation,
+an asymmetric Ψ can be a more biologically sound option. As discussed in (Baradat and Lavenant,
+2021; Sun et al., 2026b), different biological priors or reference dynamics naturally correspond to
+different choices of Ψ. Currently, a central trade-off exists: methods capable of handling general Ψ
+suffer from scalability issues, while efficient algorithms are restricted to quadratic Ψ. There is a need
+for a UDOT solver that balances the flexibility of Ψ selection with computational efficiency.
+To address these challenges, we propose Simulation-free Unbalanced Dynamic Optimal transport
+(SUDO), a simulation-free framework for efficiently solving UDOT problems with general growth
+penalties. By learning conditional paths and transport costs, SUDO extends the framework proposed
+by (Peng et al., 2026b), enabling it to solve UDOT problems in a simulation-free manner without
+relying on the analytical solution of conditional paths. Our main contributions are summarized below:
+• We introduce SUDO, an efficient simulation-free framework for UDOT problems with a
+broad class of growth penalties, balancing the flexibility of penalty selection with computa-
+tional efficiency.
+• We theoretically identify the non-degenerate regime of growth penalties for UDOT. In
+particular, we show that concave growth penalties lead to degenerate UDOT solutions where
+non-trivial growth and transport are separated, thereby motivating convex growth penalties
+as the relevant class for biologically meaningful trajectory inference.
+• We demonstrate that SUDO recovers the accuracy of analytical solution-based solvers on
+WFR problems while significantly outperforming NeuralODE-based baselines in scalability.
+• We demonstrate the necessity of selecting different Ψ as biological priors, demonstrating
+SUDO’s flexibility in integrating diverse prior knowledge through tailored penalty selection.
+2
+Related works
+2.1
+Unbalanced Optimal Transport
+While traditional static Optimal Transport (OT) Kantorovich (1958) seeks the optimal coupling
+between two probability distributions, (Benamou and Brenier, 2000) showed that using a squared
+Euclidean transport cost is equivalent to finding a continuous probability flow that minimizes total
+kinetic energy, known as dynamic OT. Unbalanced OT generalizes it to measures with different
+total masses, typically by adding penalties to the marginals in the static form (Eyring et al., 2024;
+Figalli, 2010) or to the mass growth in the dynamic form (Liero et al., 2018; Chizat et al., 2018b;
+Kondratyev et al., 2016). The latter is called the unbalanced dynamic OT (UDOT). A well-known
+example is the quadratic penalty case, referred to as Wasserstein-Fisher-Rao (WFR) metric. (Chizat
+et al., 2018a,b) provided both the analytical solution between Diracs and the static form for the WFR
+problem, alongside an efficient solver for the latter. Nevertheless, whether analytical solutions exist
+for non-quadratic penalties remains unclear.
+2
+
+
+2.2
+Flow Matching and Extensions
+Flow matching (Lipman et al., 2023; Albergo and Vanden-Eijnden, 2023) is a simulation-free
+framework for learning probability path interpolating observed marginals. Previous works combined
+it with OT-couplings for learning dynamics (Tong et al., 2024a; Klein et al., 2024; Rohbeck et al.,
+2025). Stochastic extensions (Tong et al., 2024b; Lee et al., 2025) and unbalanced extensions (Eyring
+et al., 2024; Cao et al., 2025; Corso et al., 2025; Wang et al., 2025; Peng et al., 2026b; Ying et al.,
+2026) are also introduced to model complex dynamics. At the core of the framework, one needs
+to design the conditional path corresponding to the underlying dynamics. When closed form is not
+available, it is also possible to learn it (Kapu´sniak et al., 2024; Petrovi´c et al., 2026).
+2.3
+Neural Network solvers for Unbalanced Dynamic Optimal Transport
+Motivated by single-cell dynamics inference, researchers tried to solve UDOT with neural networks.
+(Sha et al., 2024; Zhang et al., 2025; Sun et al., 2026b; Peng et al., 2026a) addressed the problem via
+NeuralODE (Chen et al., 2018), which can deal with arbitrary Ψ but is computationally expensive.
+(Eyring et al., 2024; Cao et al., 2025; Corso et al., 2025; Wang et al., 2025) introduced flow matching
+into the field. Mathematically, however, the problem they solved is not exactly the UDOT problem.
+Recently, (Peng et al., 2026b) proposed a simulation-free framework for WFR, but it can only solve
+UDOT with quadratic Ψ. A simulation-free framework for UDOT with general Ψ is therefore needed.
+3
+Preliminaries
+Optimal Transport (OT) and Extensions. Let M+(X) represent the set of all absolutely continuous
+finite measures supported on X ⊆Rd. µ0(x), µ1(x) are two measures in M+(X). Assuming µ0, µ1
+are both probability measures, the static OT between µ0 and µ1 (Kantorovich, 1958) is defined as
+OT(µ0, µ1) = inf
+γ
+Z
+X 2 C(x, y)γ(x, y)dxdy
+s.t.
+Z
+X
+γ(x, y)dy = µ0(x),
+Z
+X
+γ(x, y)dx = µ1(y)
+(1)
+where γ is called the coupling, and C(x, y) is the transport cost of transporting unit mass from x to
+y. When choosing C(x, y) = 1
+2∥x −y∥2, it also has a dynamic OT (DOT) formulation, also known
+as the BB-form (Benamou and Brenier, 2000).
+OT(µ0, µ1) = inf
+ρ,u
+Z 1
+0
+Z
+X
+1
+2∥u(x, t)∥2
+2ρt(x)dxdt
+s.t.
+∂tρ + ∇x · (ρu) = 0, ρ0 = µ0, ρ1 = µ1
+(2)
+The velocity field u models how mass flows through the space, transforming µ0 to µ1 with least
+kinetic energy cost. It is also known as the square of the 2-Wasserstein distance (scaled by 1
+2).
+With clear interpretability, DOT has been widely used in single-cell dynamics inference (Tong et al.,
+2024a; Klein et al., 2025, 2024). Recently, researchers also utilized unbalanced DOT (UDOT) to
+simultaneously model single-cell trajectories and cell population growth. When the total mass of
+µ0, µ1 may be different, the UDOT between µ0, µ1 is defined as
+UDOT(µ0, µ1) = inf
+ρ,g,u
+Z 1
+0
+Z
+X
+1
+2
+
+∥u(x, t)∥2
+2 + Ψ(g(x, t))
+
+ρt(x)dxdt
+s.t.
+∂tρ + ∇x · (ρu) = ρg, ρ0 = µ0, ρ1 = µ1
+(3)
+where g is a growth rate for modeling cell proliferation and apoptosis (Sha et al., 2024). Ψ is the
+growth penalty for enforcing relative preferred growth rate. When Ψ(g) = δ2g2, (3) is known as
+the square of the Wasserstein-Fisher-Rao (WFR) metric (Chizat et al., 2018a; Liero et al., 2018).
+One can also consider the stochastic trajectory by replacing the continuity equation constraint with
+Fokker-Planck equation. The resulting optimization problem is called the regularized unbalanced OT
+3
+
+
+(RUOT) (Zhang et al., 2025; Baradat and Lavenant, 2021).
+RUOT(µ0, µ1) = inf
+ρ,g,u
+Z 1
+0
+Z
+X
+1
+2
+
+∥u(x, t)∥2
+2 + Ψ(g(x, t))
+
+ρt(x)dxdt
+s.t.
+∂tρ + ∇x · (ρu) = ρg + σ2
+2 ∆xρ, ρ0 = µ0, ρ1 = µ1
+(4)
+Continuous Measure Flow. Consider a time dependent velocity field u : Rd × [0, 1] →Rd, and a
+time dependent growth rate g : Rd × [0, 1] →R. A population of weighted particles (xi, mi) evolve
+under the ODE: dxt = u(xt, t)dt, d ln mt = g(xt, t)dt. The time-dependent measure ρt induced
+by the particles {xi}, weighted by their mass {mi}, follows the continuity equation with source
+term ∂tρ + ∇x · (ρu) = ρg. One can also replace the ODE with SDE to introduce stochasticity. A
+diffusion term will be added to the continuity equation with source term.
+Unbalanced Flow Matching (UFM). (Peng et al., 2026b) developed a simulation-free UFM frame-
+work for learning the continuous measure flow satisfying ∂tρ + ∇x · (ρu) = ρg, which interpolates
+µ0 and µ1. They parameterized two neural networks uθ and gθ to approximate the true u and g. The
+neural networks are trained to minimize the regression loss (UFM loss).
+LUFM(θ) =
+Z 1
+0
+Z
+X
+(∥uθ(x, t) −u(x, t)∥2
+2 + ∥gθ(x, t) −g(x, t)∥2
+2)ρt(x)dxdt
+(5)
+Although the true ρ, u, g are intractable, they proved that minimizing the loss above is equivalent to
+minimize the conditional version below (CUFM loss).
+LCUFM(θ) = Et,z,x∼˜ρt(x|z)mt(z)
+ ∥uθ(x, t) −ut(x|z)∥2
+2 + ∥gθ(x, t) −gt(x|z)∥2
+2
+
+(6)
+where t ∼U[0, 1], z is a conditional variable with density q(z), ρt(x|z) is called the conditional
+measure path such that the marginal measure path ρt(x) satisfies that ρt(x) =
+R
+ρt(x|z)q(z)dz.
+The conditional measure is further decoupled into a mass term and a probability density ρt(x|z) =
+mt(z)˜ρt(x|z). Following (Chizat et al., 2018b; Peng et al., 2026b), one can choose z = (x0, x1)
+drawn from the UDOT semi-coupling γ0(x0, x1) (introduced in section 4), and derive the conditional
+velocity ut(x|z), growth rate gt(x|z) and mass mt(z) from the travelling Dirac (also introduced in
+section 4). The resulting flow recovers the UDOT flow.
+Growth Penalty as Biological Prior. While previous studies have explored the WFR problem i.e.
+the quadratic penalty Ψ(g) = δ2g2, which symmetrically penalizes the absolute magnitude of the
+growth rate to favor moderate rates of both cell proliferation and apoptosis, more general Ψ can be
+introduced to incorporate other type of biological priors.
+A family of convex Ψ was discussed by (Baradat and Lavenant, 2021). Three specific Ψ were
+introduced as proliferation/apoptosis preference with nice biological interpretation where cellular
+dynamics are modeled via branching stochastic process. By utilizing these Ψ, we can explicitly
+incorporate preferences for proliferation and apoptosis into the growth modeling. For details, see E.
+
+
+
+
+
+Ψ(g) = 2(1 −g + g log g) (g > 0)
+Only-growth
+Ψ(g) = 2(1 + g −g log(−g)) (g < 0)
+Only-death
+Ψ(g) = 2
+ 1 −
+p
+1 + g2 + g log(g +
+p
+1 + g2)
+
+No preference
+(7)
+In parallel, a family of concave Ψ(g) = |g|p, 0 < p < 1 was also introduced as regularization terms
+by (Sun et al., 2026b). The convexity or concavity of Ψ determines a certain monotonicity of the
+growth rate during the process. A more detailed discussion on their results can be found in D.4.
+In this paper, we consider a broader class of Ψ satisfying the following assumptions: 1) Ψ first
+decreases and then increases, reaching a minimum value of 0. This implies the existence of a unique,
+most-preferred growth rate g0, and the penalty increases the further the rate deviates from this value;
+2) Ψ is either convex or concave on both sides of g0, meaning that the marginal penalty for deviating
+from g0 is either increasing or decreasing. Our first results can be stated as following.
+Theorem 3.1. For Ψ which is concave on both sides of g0, the solution of UDOT problem (3)
+separates the non-trivial growth and transport.
+The proof is left to A.1. As discussed in (Wang et al., 2025; Peng et al., 2026b), in a biologically
+realistic cellular trajectory, a non-trivial population growth and cell state transitions tend to occur
+concurrently. Thus, in the following part of this paper, we focus on convex Ψ.
+4
+
+
+4
+Travelling Dirac and Static Form
+As an important special case, we first study the UDOT problem between two Diracs. The correspond-
+ing optimal path (x(t), m(t)) is usually called the travelling Dirac (Chizat et al., 2018a).
+UDOT-DD(m0δx0, m1δx1) = inf
+m,x
+Z 1
+0
+1
+2
+
+∥˙x(t)∥2
+2 + Ψ( ˙m(t)
+m(t))
+
+m(t)dt
+s.t.
+m(0) = m0, m(1) = m1, x(0) = x0, x(1) = x1
+(8)
+Theorem 4.1. There exists two 1-dimensional functions k(t), l(t) which only depend on d = ∥x1 −
+x0∥, r = m1
+m0 s.t. x(t) = x0 + k(t) x1−x0
+d
+, m(t) = m0l(t), i.e. the travelling Dirac is straight.
+The proof is left to A.2. The theorem reduces the high-dimensional optimization problem (8) to a
+1-dimensional problem.
+UDOT-DD(m0δx0, m1δx1) = Cd(m0, m1) = m0 inf
+l,k
+Z 1
+0
+1
+2
+
+˙k(t)2 + Ψ(
+˙l(t)
+l(t))
+
+l(t)dt
+s.t.
+l(0) = 1, l(1) = r, k(0) = 0, k(1) = d
+(9)
+Some properties are straightforward.
+Proposition 4.2. The cost Cd is a homogeneous function of degree 1 w.r.t (m0, m1). Thus, it takes
+form of Cd(m0, m1) = m0fd( m1
+m0 ) where fd(r) = Cd(1, r). For even Ψ, Cd is symmetric.
+The proof is left to A.3. As an important family of Ψ which is interested in this paper, for uniformly
+convex functions, we have the following theorem.
+Theorem 4.3. For uniformly convex Ψ, i.e. ∃κ > 0 s.t.Ψ′′ ≥κ, Cd is jointly convex and sublinear
+w.r.t (m0, m1) when d ≤πp κ
+2 , i.e. Cd(m0, m1) + Cd(n0, n1) ≥Cd(m0 + n0, m1 + n1).
+The proof is left to A.4. As an example, when Ψ = δ2g2, i.e. WFR, the upper bound of d is πδ,
+which is consistent to (Chizat et al., 2018a). Having a sublinear Cd, one can reformulate (3) into a
+static form, following the standard technique introduced by (Chizat et al., 2018b). This can be viewed
+as a Kantorovich form of UDOT.
+UDOT(µ0, µ1) =
+inf
+(γ0,γ1)∈Γ(µ0,µ1)
+Z
+X 2 C∥x−y∥(γ0(x, y), γ1(x, y))dxdy,
+(10)
+where (γ0, γ1), satisfying the following constraints, is called semi-coupling.
+Γ(µ0, µ1)
+def.
+=
+
+(γ0, γ1) ∈
+ M+(X 2)
+2 :
+Z
+X
+γ0(x, y)dy = µ0(x),
+Z
+X
+γ1(x, y)dx = µ1(y)
+
+.
+(11)
+Intuitively, the semi-coupling means that mass γ0(x, y) was sent from x, and γ1(x, y) was received
+at y after transport and growth.
+Theorem 4.4. For uniformly convex Ψ with Ψ′′ ≥κ > 0, and diam(X) ≤πp κ
+2 , (10) is a convex
+optimization w.r.t (γ0, γ1).
+The proof is left to A.5. As mentioned in section 3, the UDOT flow (3) can be obtained by averaging
+the travelling Dirac paths w.r.t the semi-coupling. Intuitively, The semi-coupling plans how much
+mass goes from x to y, while the travelling Dirac determines how it moves and grows through space.
+We point out that the two main assumptions used in this section: 1) Ψ is uniformly convex; 2)
+diam(X) ≤πp κ
+2 , can easily hold in practice. Since a real-world dataset is always supported
+on a compact domain X, one can scale the growth penalty Ψ with sufficiently large δ2 to satisfy
+diam(X) ≤δπp κ
+2 . And for general convex penalties such as (7), a uniformly convex wall, for
+example κ
+2 g2, can be added for sufficiently large |g| to satisfy the uniform convexity.
+5
+Simulation-free Training of General UDOT problem
+The difficulty is that only when Ψ is a quadratic function, the travelling Dirac has a closed form,
+and the semi-coupling can be easily obtained by solving an entropy regularized OT (Chizat et al.,
+5
+
+
+2018b). To efficiently solve the UDOT under UFM framework, we divide the training pipeline into
+four stages: learning the travelling Dirac, learning the transport cost, solving the semi-coupling, and
+unbalanced flow matching. The inference workflow are left to B.9.
+5.1
+Learning the Travelling Dirac Path
+Inspired by previous work (Kapu´sniak et al., 2024; Petrovi´c et al., 2026), we use a neural network to
+learn the travelling Dirac path which doesn’t have a closed form. Thanks to theorem 4.1, we only
+need to learn k(t) and l(t). Hence we never encounter the curse of dimensionality. We parameterize
+two neural network ϕη(t, d, r), ψη(t, d, r) to learn the path.
+xη(t, d, r) = x0 + (x1 −x0)(t + t(1 −t)ϕη(t, d, r))
+mη(t, d, r) = m0rt exp(t(1 −t)ψη(t, d, r))
+(12)
+With the form above, the boundary value of the travelling Dirac is automatically satisfied. More
+clearly, kη(t, d, r) = d(t+t(1−t)ϕη(t, d, r)), lη(t, d, r) = rt exp(t(1−t)ψη(t, d, r)). The goal here
+is to train the neural networks to minimize the path energy (9). Viewing it as a variational problem,
+we solve it by minimizing a Monte Carlo style loss function (E and Yu, 2018). The derivatives are
+w.r.t t. The expectation w.r.t (d, r) is taken over a 2-dim grid D × R, which is introduced below.
+Lpath(η) = Ed,rEt∼U[0,1]
+
+˙kη(t, d, r)2 + Ψ(
+˙lη(t, d, r)
+lη(t, d, r))
+
+lη(t, d, r)
+(13)
+5.2
+Learning the Transport Cost Between Diracs
+Thanks to theorem 4.3, it is sufficient to approximate Cd(1, r), which is a function of only d, r, rather
+than approximating C∥x1−x0∥(m0, m1). Further, since the total mass is bounded, Cd is bounded.
+Considering that Cd(m0, m1) = m0Cd(1, m1
+m0 ) = m1Cd( m0
+m1 , 1), it is sufficient to only approximate
+Cd(1, r) for r in some moderate range [rmin, rmax], since extremely small or large r corresponds
+to extremely small m0 or m1, hence extremely small Cd(m0, m1). Also, in the following stages,
+we only need the value of Cd(m0, m1) for d = ∥x1 −x0∥, where x1, x0 are sampled from the
+dataset. Hence, it is also sufficient to approximate only for d in some moderate range [dmin, dmax].
+In practice, we uniformly discretize the range of d into a grid D, and uniformly discretize the range of
+r on a log scale into a grid R. Given the trained path model kη and lη, we do this by parameterizing a
+neural network Eξ(d, r) and minimizing the regression loss on the 2-dim grid D × R.
+Lcost(ξ) =
+X
+d∈D
+X
+r∈R
+
+Eξ(d, r) −1
+2
+Z 1
+0
+ ˙kη(t, d, r)2 + Ψ(
+˙lη(t, d, r)
+lη(t, d, r))
+
+lη(t, d, r)dt
+2
+(14)
+The integral is calculated numerically via the trapezoid scheme. Note that the integral is 1-dimensional,
+and the derivative is calculated w.r.t t which is also a 1-dimensional variable. Hence, the numerical
+integral also encounters no curse of dimensionality. Also, we don’t need to calculate the gradient
+of the trajectory (kη and lη) in this stage, which differs from simulation-based methods such as
+NeuralODE (Chen et al., 2018). Thus, our method is simulation-free.
+5.3
+Solving the Semi-coupling via Projected Gradient Descent
+Thanks to theorem 4.4, (10) is a convex optimization w.r.t the semi-coupling (γ0, γ1) with a convex
+constraint (11), hence, can be efficiently solved by projected gradient descent. Given the trained cost
+model Eξ, we approximate (10) with a neural surrogate by replacing the true cost C with Eξ.
+UDOT-SUR(µ0, µ1) =
+inf
+(γ0,γ1)∈Γ(µ0,µ1)
+Z
+X 2 γ0(x, y)Eξ(∥x −y∥, γ1(x, y)
+γ0(x, y))dxdy,
+(15)
+The optimal semi-coupling (γ⋆
+0, γ⋆
+1) is optimized via projected gradient descent. The projection step
+is adapted from (Duchi et al., 2008).
+5.4
+Unbalanced Flow Matching
+Given the optimized semi-coupling (γ⋆
+0, γ⋆
+1) and the trained path model kη, lη, or say xη, mη, we
+then follow (Peng et al., 2026b) to train an unbalanced flow matching model for learning the velocity
+6
+
+
+field u(x, t) and growth rate g(x, t) corresponding to the UDOT problem (3). We parameterize two
+neural networks uθ(x, t), gθ(x, t) and minimize the conditional unbalanced flow matching loss (6).
+LCUFM(θ) = Et∼U[0,1],(x0,x1)∼γ⋆
+0 ,mη,t
+ ∥uθ(xη,t, t) −
+˙
+xη,t∥2
+2 +
+gθ(xη,t, t) −
+˙
+mη,t
+mη,t
+
+2
+2
+
+(16)
+where d = ∥x1 −x0∥, r = γ∗
+1 (x1,x0)
+γ∗
+0 (x1,x0), and mη,t = mη(t, d, r), xη,t = xη(t, d, r) are given by the
+learned travelling Dirac (12). The derivatives are w.r.t t. The whole training process requires no
+trajectory simulation, hence is simulation-free. A stochastic version for empirically solving the RUOT
+(4) problem can be found in B.8. Pseudocode are left to F.
+6
+Experiments
+6.1
+SUDO Recovers the WFR
+To validate SUDO’s capability in solving UDOT problems, we applied it to the WFR problem
+(Ψ(g) = δ2g2) — currently the only UDOT formulation for which an analytical solution is known.
+Since WFR-FM explicitly utilizes the WFR analytical solution, we consider it a strong approximation
+of the ground truth. We demonstrate that SUDO can match the marginal measures with high accuracy
+while obtaining a sufficiently low UDOT cost.
+Measure Matching. We first test whether SUDO can match the target measures. We trained SUDO
+on three synthetic datasets: Simulation (2D) (Zhang et al., 2025), Dyngen (5D) (Cannoodt et al.,
+2021), and Gaussian (1000D) (Peng et al., 2026b). We calculated the W1 distance and relative mass
+error (RME) between the true measure and the predicted measure generated by SUDO. The results
+are compared to other UDOT based methods in Table 1. Results on real data can be found in C.
+Table 1: Mean W1 and RME on synthetic datasets. For the methods that exhibit randomness in
+inference, we report the mean value and standard deviation over 5 runs.
+Method
+Simulation (2D)
+Dyngen (5D)
+Gaussian (1000D)
+W1 (↓)
+RME (↓)
+W1 (↓)
+RME (↓)
+W1 (↓)
+RME (↓)
+TIGON
+0.045
+0.014
+0.512
+0.047
+2.263
+0.127
+DeepRUOT
+0.043±0.002
+0.017±0.001
+0.623±0.032
+0.065±0.011
+3.785±0.009
+0.303±0.070
+Var-RUOT
+0.079±0.003
+0.008±0.002
+0.522±0.008
+0.177±0.007
+2.813±0.004
+0.041±0.006
+WFR-FM
+0.019
+0.001
+0.135
+0.005
+2.233
+0.044
+SUDO
+0.022
+0.002
+0.190
+0.005
+2.315
+0.061
+In most scenarios, SUDO outperforms simulation-based UOT methods (TIGON, DeepRUOT, Var-
+RUOT) and achieves comparable performance to WFR-FM across various datasets. We note that
+since SUDO does not rely on the analytical solution of WFR, its slight loss in accuracy relative to
+WFR-FM is predictable and acceptable.
+UDOT Cost. Given the marginal measures matched, to further evaluate whether SUDO can recover
+the dynamic WFR flow, we compared the UDOT cost (3) of the measure path ρt given by SUDO and
+WFR-FM in Table 2. The cost induced by the static semi-coupling is also shown as a ground truth.
+Table 2: The UDOT cost of SUDO and WFR-FM. Both algorithms are deterministic.
+Algorithm
+Simulation (2D)
+Dyngen (5D)
+EMT (10D)
+Gaussian (1000D)
+WFR-FM
+1.0810
+7.4620
+0.7726
+7.6843
+SUDO
+1.0703
+7.7064
+0.7741
+7.1576
+Static Reference
+1.0935
+7.8403
+0.9545
+9.9153
+SUDO delivers performance on par with WFR-FM across three synthetic dataset and EMT (Cook and
+Vanderhyden, 2020) scRNA-seq dataset. These results validate the effectiveness of SUDO in solving
+UDOT problems. The costs of both algorithms are lower than the static reference. This is because the
+marginal measures are not precisely matched, allowing them to find a lower-cost solution.
+7
+
+
+Figure 1: Left: predicted trajectories by WFR-FM and SUDO; Right: predicted growth rate by
+WFR-FM and SUDO. We also plot the particles and their growth rate at t=0.5.
+6.2
+Scalability
+To demonstrate the scalability afforded by simulation-free training, we benchmarked SUDO’s training
+time and memory usage on the Mouse dataset Weinreb et al. (2020) at varying scales (10000 to 49302
+cells). We compared our method with DeepRUOT and VarRUOT, with WFR-FM serving as the
+optimal reference baseline. Results are shown in Table 3.
+Table 3: Scalability evaluation on the Mouse dataset (Training time and peak memory consumption)
+Algorithm
+Metric
+Cell number
+10,000
+20,000
+30,000
+40,000
+49,302
+DeepRUOT
+Time (s)
+493.14 ± 58.24
+818.73 ± 11.89
+1290.99 ± 63.32
+1850.74 ± 196.53
+2204.64 ± 171.37
+Mem (GB)
+2.76 ± 0.01
+6.16 ± 0.00
+10.22 ± 0.00
+14.98 ± 0.00
+19.73 ± 0.00
+VarRUOT
+Time (s)
+2707.19 ± 319.11
+2689.76 ± 277.53
+2701.46 ± 284.03
+2754.84 ± 251.65
+2756.25 ± 281.77
+Mem (GB)
+2.57 ± 0.00
+3.55 ± 0.00
+4.58 ± 0.01
+5.64 ± 0.01
+6.63 ± 0.00
+SUDO
+Time (s)
+221.42 ± 2.83
+347.80 ± 5.55
+489.48 ± 10.65
+622.74 ± 20.02
+744.72 ± 12.36
+Mem (GB)
+4.55 ± 0.00
+5.03 ± 0.01
+5.87 ± 0.01
+7.00 ± 0.01
+8.48 ± 0.01
+WFR-FM
+Time (s)
+61.67 ± 2.23
+67.57 ± 0.44
+77.61 ± 0.34
+90.58 ± 0.32
+104.22 ± 0.35
+Mem (GB)
+0.59 ± 0.03
+1.71 ± 0.00
+3.25 ± 0.00
+5.64 ± 0.00
+8.24 ± 0.00
+SUDO outperforms simulation-based solvers in computational cost. For details of the constant
+training time of VarRUOT, see B.10.
+6.3
+The Necessity of General Growth Penalty
+While WFR is mathematically elegant and computationally efficient, a non-quadratic Ψ can express
+more explicit biological priors (Baradat and Lavenant, 2021). We demonstrate the necessity of general
+choice of Ψ on both synthetic and real scRNA-seq data.
+Consider two distant cell clusters on a 2D plane (bottom-left and top-right) with initial populations
+of 1000 each at t = 0, shifting to 400 and 2600 at t = 1. Without prior knowledge, WFR—due
+to its symmetric penalty—favors apoptosis in the bottom-left and proliferation in the top-right,
+with no migration occurring if δ2 is moderate (Figure 1). However, for highly proliferative and
+rarely apoptotic cells like cancer cells and stem cells, this solution contradicts biological priors. By
+employing an asymmetric growth penalty (only-growth)
+Ψ(g) =
+2(1 −g + g log g)
+g > 0
++ ∞
+g ≤0
+(17)
+to incorporate this prior into the dynamics inference, SUDO infers a more biologically plausible
+trajectory: rather than undergoing apoptosis, the bottom-left cluster exhibits mild proliferation and
+dispatches around 700 cells that concurrently proliferate and migrate toward the top-right cluster
+(Figure 1). This result matches the prior knowledge. The results on a more complex 1000D Gaussian
+data can be found in C.5.
+We further compared the growth rate induced by WFR penalty and only-growth penalty on 2D
+mouse hematopoiesis data (Sha et al., 2024; Weinreb et al., 2020). As shown in Figure 2, WFR
+penalty resulted in both apoptosis and proliferation while only-growth penalty induced pure positive
+growth rate. In mouse hematopoiesis, proliferation is the primary driver of population dynamics, with
+apoptosis typically maintained at low levels. By incorporating this prior via an only-growth penalty,
+SUDO reconstructs more realistic growth rates than the standard WFR framework.
+8
+
+
+Figure 2: Upper: predicted growth rate by WFR penalty; Lower: predicted growth rate by Only-
+growth penalty; From left to right: Time point 0, 1, 2. The colorbar is clipped to show the sign of the
+growth rate more clearly.
+7
+Conclusion
+We present SUDO, a simulation-free framework for solving UDOT problems with general growth
+penalties. SUDO automatically learns the travelling Dirac, transport cost, and solves the semi-
+coupling via PGD. By doing so, our framework circumvents the dependency on analytical solutions
+of travelling Diracs that characterizes previous simulation-free approaches (Peng et al., 2026b).
+SUDO also delivers computational speedups over existing simulation-based algorithms (Zhang et al.,
+2025; Sun et al., 2026b), thereby achieving a balance between flexibility and efficiency.
+A key theoretical implication of this work is that not all growth penalties lead to meaningful coupled
+dynamics. We showed that concave penalties produce degenerate UDOT solutions where non-trivial
+growth and transport are separated, thereby identifying convex growth penalties as the relevant non-
+degenerate regime for coupled cellular dynamics. Empirically, we demonstrate SUDO’s effectiveness
+in solving UDOT problems, and highlight the need for general Ψ. We point out that different Ψ can
+be viewed as different biological priors on cell proliferation and apoptosis. Integrating such prior
+knowledge into biological modeling enables more faithful reconstructions of cellular dynamics.
+The limitations of SUDO are twofold. First, while SUDO provides an empirical approach for RUOT-
+like settings, its theoretical formulation is currently developed for deterministic dynamics, leaving a
+rigorous treatment of stochastic dynamics for future work. Second, SUDO requires a pre-specified
+growth penalty Ψ. In some applications, such as lineage tracing, partial trajectory information may
+be available. Incorporating such supervision to learn or calibrate the growth penalty from data, rather
+than specifying it a prior, is an important future direction.
+9
+
+
+References
+Michael Samuel Albergo and Eric Vanden-Eijnden. Building normalizing flows with stochastic
+interpolants. In The Eleventh International Conference on Learning Representations, 2023.
+Aymeric Baradat and Hugo Lavenant. Regularized unbalanced optimal transport as entropy min-
+imization with respect to branching brownian motion, 2021. URL https://arxiv.org/abs/
+2111.01666.
+Jean-David Benamou and Yann Brenier. A computational fluid mechanics solution to the monge-
+kantorovich mass transfer problem. Numerische Mathematik, 84(3):375–393, 2000.
+Charlotte Bunne, Ya-Ping Hsieh, Marco Cuturi, and Andreas Krause. The schrödinger bridge between
+gaussian measures has a closed form. In Francisco Ruiz, Jennifer Dy, and Jan-Willem van de
+Meent, editors, Proceedings of The 26th International Conference on Artificial Intelligence and
+Statistics, volume 206 of Proceedings of Machine Learning Research, pages 5802–5833. PMLR,
+25–27 Apr 2023a.
+Charlotte Bunne, Stefan G Stark, Gabriele Gut, et al. Learning single-cell perturbation responses
+using neural optimal transport. Nature methods, 20:1759–1768, 2023b.
+Robrecht Cannoodt, Wouter Saelens, Louise Deconinck, and Yvan Saeys. Spearheading future omics
+analyses using dyngen, a multi-modal simulator of single cells. Nature communications, 12:3942,
+2021.
+Zihan Cao, Yu Zhong, and Liang-Jian Deng. Taming flow matching with unbalanced optimal transport
+into fast pansharpening, 2025. URL https://arxiv.org/abs/2503.14975.
+Ricky T. Q. Chen, Yulia Rubanova, Jesse Bettencourt, and David K Duvenaud. Neural ordinary
+differential equations. In S. Bengio, H. Wallach, H. Larochelle, K. Grauman, N. Cesa-Bianchi,
+and R. Garnett, editors, Advances in Neural Information Processing Systems, volume 31. Curran
+Associates, Inc., 2018.
+Lenaic Chizat, Gabriel Peyré, Bernhard Schmitzer, and François-Xavier Vialard. An interpolat-
+ing distance between optimal transport and fisher–rao metrics. Foundations of Computational
+Mathematics, 18(1):1–44, 2018a.
+Lenaic Chizat, Gabriel Peyré, Bernhard Schmitzer, and François-Xavier Vialard. Unbalanced optimal
+transport: Dynamic and kantorovich formulations. Journal of Functional Analysis, 274(11):
+3090–3123, 2018b.
+David P Cook and Barbara C Vanderhyden. Context specificity of the emt transcriptional response.
+Nature communications, 11:2142, 2020.
+Gabriele Corso, Vignesh Ram Somnath, Noah Getz, Regina Barzilay, Tommi Jaakkola, and Andreas
+Krause. Composing unbalanced flows for flexible docking and relaxation. In The Thirteenth
+International Conference on Learning Representations, 2025.
+Bernard Dacorogna. Direct Methods in the Calculus of Variations. Applied Mathematical Sciences.
+Springer New York, 2 edition, 2008. ISBN 978-0-387-35779-9.
+Valentin De Bortoli, James Thornton, Jeremy Heng, and Arnaud Doucet. Diffusion schrödinger bridge
+with applications to score-based generative modeling. In M. Ranzato, A. Beygelzimer, Y. Dauphin,
+P.S. Liang, and J. Wortman Vaughan, editors, Advances in Neural Information Processing Systems,
+volume 34, pages 17695–17709. Curran Associates, Inc., 2021.
+John Duchi, Shai Shalev-Shwartz, Yoram Singer, and Tushar Chandra. Efficient projections onto the
+l1-ball for learning in high dimensions. In Proceedings of the 25th international conference on
+Machine learning, 2008.
+W. E and B. Yu. The deep ritz method: A deep learning-based numerical algorithm for solving
+variational problems. Commun. Math. Stat., 6:1–12, 2018.
+10
+
+
+Stefan Elfwing, Eiji Uchibe, and Kenji Doya. Sigmoid-weighted linear units for neural network
+function approximation in reinforcement learning. Neural Networks, 107:3–11, 2018. ISSN
+0893-6080. Special issue on deep reinforcement learning.
+Luca Eyring, Dominik Klein, Théo Uscidda, Giovanni Palla, Niki Kilbertus, Zeynep Akata, and
+Fabian J Theis. Unbalancedness in neural monge maps improves unpaired domain translation. In
+The Twelfth International Conference on Learning Representations, 2024.
+Kilian Fatras, Younes Zine, Szymon Majewski, Rémi Flamary, Rémi Gribonval, and Nicolas Courty.
+Minibatch optimal transport distances; analysis and applications, 2021.
+Alessio Figalli. The optimal partial transport problem. Archive for Rational Mechanics and Analysis,
+195:533–560, 2010.
+Rémi Flamary, Nicolas Courty, Alexandre Gramfort, Mokhtar Z Alaya, Aurélie Boisbunon, Stanislas
+Chambon, Laetitia Chapel, Adrien Corenflos, Kilian Fatras, Nemo Fournier, et al. Pot: Python
+optimal transport. Journal of Machine Learning Research, 22(78):1–8, 2021.
+J. Heinonen, T. Kilpeläinen, and O. Martio. Nonlinear Potential Theory of Degenerate Elliptic
+Equations. Dover Books on Mathematics. Dover Publications, 2012. ISBN 9780486149257.
+Guillaume Huguet, Daniel Sumner Magruder, Alexander Tong, Oluwadamilola Fasina, Manik
+Kuchroo, Guy Wolf, and Smita Krishnaswamy. Manifold interpolating optimal-transport flows for
+trajectory inference. In S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh,
+editors, Advances in Neural Information Processing Systems, volume 35, pages 29705–29718.
+Curran Associates, Inc., 2022.
+Leonid V Kantorovich. On the translocation of masses. Management Science, 5(1):1–4, 1958. ISSN
+00251909, 15265501.
+Kacper Kapu´sniak, Peter Potaptchik, Teodora Reu, Leo Zhang, Alexander Tong, Michael Bronstein,
+Avishek Joey Bose, and Francesco Di Giovanni. Metric flow matching for smooth interpolations
+on the data manifold. In A. Globerson, L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. Tomczak,
+and C. Zhang, editors, Advances in Neural Information Processing Systems, volume 37, pages
+135011–135042. Curran Associates, Inc., 2024. doi: 10.52202/079017-4291.
+Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In ICLR (Poster),
+2015.
+Dominik Klein, Théo Uscidda, Fabian Theis, and Marco Cuturi. Genot: Entropic (gromov) wasser-
+stein flow matching with applications to single-cell genomics. In A. Globerson, L. Mackey,
+D. Belgrave, A. Fan, U. Paquet, J. Tomczak, and C. Zhang, editors, Advances in Neural Informa-
+tion Processing Systems, volume 37, pages 103897–103944. Curran Associates, Inc., 2024. doi:
+10.52202/079017-3301.
+Dominik Klein, Giovanni Palla, Marius Lange, et al. Mapping cells through time and space with
+moscot. Nature, 638:1065–1075, 2025.
+Stanislav Kondratyev, Léonard Monsaingeon, and Dmitry Vorotnikov. A new optimal transport
+distance on the space of finite Radon measures. Advances in Differential Equations, 21(11/12):
+1117 – 1164, 2016.
+Justin Lee, Behnaz Moradijamei, and Heman Shakeri. Multi-marginal stochastic flow matching for
+high-dimensional snapshot data at irregular time points. In Forty-second International Conference
+on Machine Learning, 2025. URL https://openreview.net/forum?id=ZLyb8DwXXE.
+Matthias Liero, Alexander Mielke, and Giuseppe Savaré. Optimal entropy-transport problems and a
+new hellinger–kantorovich distance between positive measures. Inventiones mathematicae, 211:
+969–1117, 2018.
+Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow
+matching for generative modeling. In The Eleventh International Conference on Learning Repre-
+sentations, 2023.
+11
+
+
+Frederike Lübeck, Charlotte Bunne, Gabriele Gut, Jacobo Sarabia del Castillo, Lucas Pelkmans, and
+David Alvarez-Melis. Neural unbalanced optimal transport via cycle-consistent semi-couplings,
+2022. URL https://arxiv.org/abs/2209.15621.
+Kevin R Moon, David Van Dijk, Zheng Wang, Scott Gigante, Daniel B Burkhardt, William S Chen,
+Kristina Yim, Antonia van den Elzen, Matthew J Hirn, Ronald R Coifman, et al. Visualizing
+structure and transitions in high-dimensional biological data. Nature biotechnology, 37:1482–1492,
+2019.
+Q. Peng, P. Zhou, and T. Li. stvcr: spatiotemporal dynamics of single cells. Nature Methods, 23:
+542–553, 2026a.
+Qiangwei Peng, Zihan Wang, Junda Ying, Yuhao Sun, Qing Nie, Lei Zhang, Tiejun Li, and Peijie
+Zhou. WFR-FM: Simulation-free dynamic unbalanced optimal transport. In The Fourteenth
+International Conference on Learning Representations, 2026b. URL https://openreview.
+net/forum?id=1nqu7bK1mm.
+Katarina Petrovi´c, Lazar Atanackovic, Viggo Moro, Kacper Kapu´sniak, Ismail Ilkan Ceylan,
+Michael M. Bronstein, Joey Bose, and Alexander Tong. Curly flow matching for learning non-
+gradient field dynamics. In The Thirty-ninth Annual Conference on Neural Information Processing
+Systems, 2026. URL https://openreview.net/forum?id=7cqKVDgFZQ.
+Martin Rohbeck, Charlotte Bunne, Edward De Brouwer, Jan-Christian Huetter, Anne Biton, Kelvin Y.
+Chen, Aviv Regev, and Romain Lopez. Modeling complex system dynamics with flow matching
+across time and conditions. In The Thirteenth International Conference on Learning Representa-
+tions, 2025.
+Geoffrey Schiebinger, Jian Shu, Marcin Tabaka, Brian Cleary, Vidya Subramanian, Aryeh Solomon,
+Joshua Gould, Siyan Liu, Stacie Lin, Peter Berube, et al. Optimal-transport analysis of single-cell
+gene expression identifies developmental trajectories in reprogramming. Cell, 176(4):928–943,
+2019.
+Erwin Schrödinger. Sur la théorie relativiste de l’électron et l’interprétation de la mécanique quantique.
+Annales de l’Institut Henri Poincaré, 2(4):269–310, 1932.
+Yutong Sha, Yuchi Qiu, Peijie Zhou, and Qing Nie. Reconstructing growth and dynamic trajectories
+from single-cell transcriptomics data. Nature Machine Intelligence, 6(1):25–39, 2024.
+Yuyang Shi, Valentin De Bortoli, Andrew Campbell, and Arnaud Doucet. Diffusion schrödinger
+bridge matching. In A. Oh, T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine,
+editors, Advances in Neural Information Processing Systems, volume 36, pages 62183–62223.
+Curran Associates, Inc., 2023.
+Xingzhi Sun, João Felipe Rocha, Brett Phelan, Dhananjay Bhaskar, Guillaume Huguet, Yanlei Zhang,
+Alexander Tong, Ke Xu, Oluwadamilola Fasina, Mark Gerstein, Natalia Ivanova, Christine L.
+Chaffer, Guy Wolf, and Smita Krishnaswamy. Mioflow 2.0: A unified framework for inferring
+cellular stochastic dynamics from single cell and spatial transcriptomics data, 2026a.
+URL
+https://arxiv.org/abs/2603.22564.
+Yuhao Sun, Zhenyi Zhang, Zihan Wang, Tiejun Li, and Peijie Zhou. Variational regularized unbal-
+anced optimal transport: Single network, least action. In The Thirty-ninth Annual Conference on
+Neural Information Processing Systems, 2026b. URL https://openreview.net/forum?id=
+Iguyg0LULD.
+Alexander Tong, Jessie Huang, Guy Wolf, David Van Dijk, and Smita Krishnaswamy. TrajectoryNet:
+A dynamic optimal transport network for modeling cellular dynamics. In Hal Daumé III and Aarti
+Singh, editors, Proceedings of the 37th International Conference on Machine Learning, volume
+119 of Proceedings of Machine Learning Research, pages 9526–9536. PMLR, 13–18 Jul 2020.
+Alexander Tong, Kilian Fatras, Nikolay Malkin, Guillaume Huguet, Yanlei Zhang, Jarrid Rector-
+Brooks, Guy Wolf, and Yoshua Bengio. Improving and generalizing flow-based generative models
+with minibatch optimal transport. Transactions on Machine Learning Research, pages 1–34, 2024a.
+ISSN 2835-8856.
+12
+
+
+Alexander Y. Tong, Nikolay Malkin, Kilian Fatras, Lazar Atanackovic, Yanlei Zhang, Guillaume
+Huguet, Guy Wolf, and Yoshua Bengio. Simulation-free Schrödinger bridges via score and flow
+matching. In Sanjoy Dasgupta, Stephan Mandt, and Yingzhen Li, editors, Proceedings of The 27th
+International Conference on Artificial Intelligence and Statistics, volume 238 of Proceedings of
+Machine Learning Research, pages 1279–1287. PMLR, 02–04 May 2024b.
+Dongyi Wang, Yuanwei Jiang, Zhenyi Zhang, Xiang Gu, Peijie Zhou, and Jian Sun. Joint velocity-
+growth flow matching for single-cell dynamics modeling. In The Thirty-ninth Annual Conference
+on Neural Information Processing Systems, 2025.
+Caleb Weinreb, Samuel Wolock, and Allon M Klein. Spring: a kinetic interface for visualizing
+high dimensional single-cell expression data. Bioinformatics, 34(7):1246–1248, 04 2018. ISSN
+1367-4803.
+Caleb Weinreb, Alejo Rodriguez-Fraticelli, Fernando D Camargo, and Allon M Klein. Lineage
+tracing on transcriptional landscapes links state to fate during differentiation. Science, 367(6479):
+eaaw3381, 2020.
+Junda Ying, Yuxuan Wang, Bowen Yang, Peijie Zhou, and Lei Zhang. Beyond continuity: Simulation-
+free reconstruction of discrete branching dynamics from single-cell snapshots, 2026. URL https:
+//arxiv.org/abs/2605.00545.
+Zhenyi Zhang, Tiejun Li, and Peijie Zhou. Learning stochastic dynamics from snapshots through
+regularized unbalanced optimal transport. In The Thirteenth International Conference on Learning
+Representations, 2025.
+13
+
+
+A
+Proofs
+Proofs of theorems and propositions
+A.1
+Proof of Theorem 3.1
+Theorem 3.1. For Ψ which is concave on both sides of g0, the solution of UDOT problem (3)
+separates the non-trivial growth and transport.
+Proof. By concavity, it is easy to show that Ψ(g) = O(|g|) as |g| →∞. Recall the UDOT problem
+UDOT(µ0, µ1) = inf
+ρ,g,u
+Z 1
+0
+Z
+X
+1
+2
+
+∥u(x, t)∥2
+2 + Ψ(g(x, t))
+
+ρt(x)dxdt
+s.t.
+∂tρ + ∇x · (ρu) = ρg, ρ0 = µ0, ρ1 = µ1
+(18)
+Case 1. Ψ(g) = o(|g|)
+(|g| →∞)
+Consider a family of (g, u) defined as following.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+g(x, t) = −
+Nµ0(x)
+(1 −Nt)µ0(x) = −
+N
+1 −Nt
+u(x, t) = 0
+t ∈[0, 1
+N ]
+g(x, t) = 0
+arbitrary u(x, t)
+t ∈[ 1
+N , N −1
+N
+]
+g(x, t) =
+Nµ1(x)
+(Nt −N + 1)µ1(x) =
+N
+Nt −N + 1
+u(x, t) = 0
+t ∈[N −1
+N
+, 1]
+(19)
+Intuitively, the total mass vanishes linearly in [0, 1
+N ], and grows linearly in [ N−1
+N , 1]. One can easily
+check that (g, u) defined above transports µ0 to µ1. The transport cost in [ 1
+N , N−1
+N ] is 0 due to the
+zero total mass. Thus, the total transport cost is
+Z
+1
+N
+0
+Z
+X
+Ψ(g(x, t))ρ(x, t)dxdt +
+Z 1
+N−1
+N
+Z
+X
+Ψ(g(x, t))ρ(x, t)dxdt
+=
+Z
+1
+N
+0
+Ψ(−
+N
+1 −Nt)(1 −Nt)
+Z
+X
+µ0(x)dxdt +
+Z 1
+N−1
+N
+Ψ(
+N
+Nt −N + 1)(Nt −N + 1)
+Z
+X
+µ1(x)dxdt
+=M0
+Z
+1
+N
+0
+Ψ(−
+N
+1 −Nt)(1 −Nt)dt + M1
+Z 1
+N−1
+N
+Ψ(
+N
+Nt −N + 1)(Nt −N + 1)dt
+(20)
+where M0, M1 are the total mass of µ0, µ1. Since Ψ(g) = o(|g|)
+(|g| →∞), ∀ϵ > 0, ∃N >
+0 s.t. ∀|g| > N, Ψ(g) ≤ϵ|g|.
+M0
+Z
+1
+N
+0
+Ψ(−
+N
+1 −Nt)(1 −Nt)dt + M1
+Z 1
+N−1
+N
+Ψ(
+N
+Nt −N + 1)(Nt −N + 1)dt
+≤M0ϵ
+Z
+1
+N
+0
+N
+1 −Nt(1 −Nt)dt + M1ϵ
+Z 1
+N−1
+N
+N
+Nt −N + 1(Nt −N + 1)dt
+=(M0 + M1)ϵ →0
+(ϵ →0)
+(21)
+Hence, the optimal UDOT cost of this case is 0. Intuitively, the corresponding dynamics is that at
+time t = 0, the mass of µ0 decays to zero at an infinite rate, while at time t = 1, the mass grows at an
+infinite rate to form µ1.
+Case 2. Ψ(g) ∼|g|
+(|g| →∞)
+Assume
+lim
+g→+∞
+Ψ(g)
+g
+= α,
+−lim
+g→−∞
+Ψ(g)
+g
+= β
+14
+
+
+Using the relaxation theorem for non-convex variational problems (Dacorogna, 2008), for linear
+growth functions, the infimum of (18) is equal to the infimum of its convex envelope relaxation.
+inf
+ρ,g,u
+Z 1
+0
+Z
+X
+1
+2
+
+∥u(x, t)∥2
+2 + Ψ∗∗(g(x, t))
+
+ρt(x)dxdt
+s.t.
+∂tρ + ∇x · (ρu) = ρg, ρ0 = µ0, ρ1 = µ1
+(22)
+where Ψ∗∗is the convex envelope if Ψ. And there exists a minimizing sequence of (18) which
+converges to the solution of (22) in weak sense. In this case,
+Ψ∗∗(g) = α max(g −g0, 0) + β max(g0 −g, 0) = α(g −g0)+ + β(g −g0)−
+(23)
+Let ˜s = (g −g0)ρ, the corresponding relaxed problem is
+inf
+ρ,u,˜s
+1
+2
+Z 1
+0
+Z
+X
+
+∥u(x, t)∥2ρ(x, t) + α˜s+ + β˜s−
+dxdt
+s.t. ∂tρ + ∇x · (ρu) = g0ρ + ˜s+ −˜s−, ρ0 = µ0, ρ1 = µ1
+(24)
+Change the variables
+
+
+
+
+
+ˆρ(x, t) = ρ(x, t)e−g0t
+ˆu(x, t) = u(x, t)
+ˆs(x, t) = ˜s(x, t)e−g0t
+(25)
+(24) becomes
+inf
+ˆρ,ˆu,ˆs
+1
+2
+Z 1
+0
+Z
+X
+eg0t
+∥ˆu(x, t)∥2ˆρ(x, t) + αˆs+ + βˆs−
+dxdt
+s.t. ∂tˆρ + ∇x · (ˆρˆu) = ˆs+ −ˆs−, ˆρ0 = µ0, ˆρ1 = µ1e−g0
+(26)
+Construct the Lagrangian functional of the constraint optimization problem (26)
+L(ˆρ, ˆu, ˆs+, ˆs−, ϕ)
+=
+Z 1
+0
+Z
+X
+1
+2eg0t  ∥ˆu∥2ˆρ + αˆs+ + βˆs−
++ ϕ
+ ∂tˆρ + ∇x · (ˆρˆu) −ˆs+ + ˆs−
+dxdt
+(27)
+where ϕ is the Lagrangian multiplier. Integrate by part, we have
+L =
+Z 1
+0
+Z
+X
+
+ˆρ
+1
+2eg0t∥ˆu∥2 −∂tϕ −ˆu · ∇xϕ
+
++ ˆs+
+1
+2αeg0t −ϕ
+
++ ˆs−
+1
+2βeg0t + ϕ
+
+dxdt
++
+Z
+X
+ϕ(x, 1)ˆρ1(x)dx −
+Z
+X
+ϕ(x, 0)ˆρ0(x)dx
+(28)
+By KKT conditions, we have the following properties of the optimal solution.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ˆρ
+ eg0t ˆu −∇xϕ
+
+= 0
+(stationary ˆu)
+1
+2αeg0t −ϕ(x, t) ≥0
+(stationary ˆs+)
+1
+2βeg0t + ϕ(x, t) ≥0
+(stationary ˆs−)
+ˆs+(x, t)
+1
+2αeg0t −ϕ(x, t)
+
+= 0
+(complementary slackness ˆs+)
+ˆs−(x, t)
+1
+2βeg0t + ϕ(x, t)
+
+= 0
+(complementary slackness ˆs−)
+(29)
+If ˆs̸ = 0 on some domain A, we have either ˆs+ > 0 or ˆs−> 0. By complementary slackness, it
+implies that ϕ(x, t) = 1
+2αeg0t or ϕ(x, t) = −1
+2βeg0t on A. Both implies that ϕ(x, t) is independent
+15
+
+
+to the spatial variable x, hence ˆu(x, t) = e−g0t∇xϕ = 0 on A. Changing back to the original
+variables, we have that ˜s(x, t)u(x, t) = 0, i.e. the non-trivial part of the growth (other than just g0)
+and transport are separated in the optimal solution. As a result of the relaxation theorem, we have a
+minimizing sequence of the original problem (18) which converges to the solution above in weak
+sense.
+In summary, both cases induced an unbalanced transport where non-trivial growth and transport are
+separated. The proof is completed.
+□
+A.2
+Proof of Theorem 4.1
+Theorem 4.1. There exists two 1-dimensional functions k(t), l(t) which only depend on d =
+∥x1 −x0∥, r = m1
+m0 s.t. x(t) = x0 +k(t) x1−x0
+d
+, m(t) = m0l(t), i.e. the travelling Dirac is straight.
+Proof. Recall the minimization problem (8)
+UDOT-DD(m0δx0, m1δx1) = inf
+m,x
+Z 1
+0
+1
+2
+
+∥˙x(t)∥2
+2 + Ψ( ˙m(t)
+m(t))
+
+m(t)dt
+s.t.
+m(0) = m0, m(1) = m1, x(0) = x0, x(1) = x1
+(30)
+We derive the optimality conditions via Euler-Lagrange equation.
+
+
+
+
+
+d
+dt(m ˙x) = 0
+( ∂
+∂x = d
+dt
+∂
+∂˙x)
+| ˙x|2 + Ψ −˙m
+mΨ′ = ¨mm −˙m2
+m2
+Ψ′′
+( ∂
+∂m = d
+dt
+∂
+∂˙m)
+(31)
+The first equation implies momentum conservation in the travelling Dirac, yielding a constant
+velocity direction. This restricts the spatial trajectory to a straight line; thus, it is sufficient to solely
+parameterize the relative position k(t) of the particle along this line at time t. Hence there exists a
+1-dimensional function k(t) s.t. x(t) = x0 + k(t) x1−x0
+d
+.
+Replacing x(t) and m(t) with x(t) + α and βm(t) where α, β are constant vector and scalar, it is
+easy to see that the following problem shares the same minimizer with (30).
+UDOT-DD(βm0δx0+α, βm1δx1+α) = inf
+m,x
+Z 1
+0
+1
+2
+
+∥˙x(t)∥2
+2 + Ψ(β ˙m(t)
+βm(t))
+
+βm(t)dt
+s.t.
+βm(0) = βm0, βm(1) = βm1, x(0) + α = x0 + α, x(1) + α = x1 + α
+(32)
+Thus, there exists a 1-dimensional function l(t) s.t. m(t) = m0l(t), and k(t), l(t) only depend on
+m1
+m0 and x1 −x0. Also note that only the functional of ∥˙x(t)∥is minimized, hence the direction is
+not important. Hence, k(t), l(t) only depend on r and d. The proof is completed.
+□
+A.3
+Proof of Proposition 4.2
+Proposition 4.2. The cost Cd is a homogeneous function of degree 1 w.r.t (m0, m1). Thus, it takes
+form of Cd(m0, m1) = m0fd( m1
+m0 ) where fd(r) = Cd(1, r). For even Ψ, Cd is symmetric.
+Proof. Recall the formula of transport cost where r = m1
+m0 .
+Cd(m0, m1) = m0 inf
+l,k
+Z 1
+0
+1
+2
+
+˙k(t)2 + Ψ(
+˙l(t)
+l(t))
+
+l(t)dt
+s.t.
+l(0) = 1, l(1) = r, k(0) = 0, k(1) = d
+(33)
+Replacing m0, m1 with βm0, βm1, we have
+Cd(βm0, βm1) = βm0 inf
+l,k
+Z 1
+0
+1
+2
+
+˙k(t)2 + Ψ(
+˙l(t)
+l(t))
+
+l(t)dt
+s.t.
+l(0) = 1, l(1) = r, k(0) = 0, k(1) = d
+(34)
+16
+
+
+Hence, Cd(βm0, βm1) = βCd(m0, m1), i.e. Cd is a homogeneous function of degree 1 w.r.t
+(m0, m1). Thus, Cd(m0, m1) = m0Cd(1, r).
+For even Ψ, i.e. Ψ(g) = Ψ(−g),
+Z 1
+0
+1
+2
+  d
+dtk(1 −t)
+2 + Ψ(
+d
+dtl(1 −t)
+l(1 −t) )
+
+l(1 −t)dt
+=
+Z 1
+0
+1
+2
+
+˙k(1 −t)2 + Ψ(−˙l(1 −t)
+l(1 −t) )
+
+l(1 −t)dt
+=
+Z 1
+0
+1
+2
+
+˙k(1 −t)2 + Ψ(
+˙l(1 −t)
+l(1 −t))
+
+l(1 −t)dt
+=
+Z 1
+0
+1
+2
+
+˙k(t)2 + Ψ(
+˙l(t)
+l(t))
+
+l(t)dt
+(35)
+holds for any k(t), l(t). Since
+Cd(m0, m1) = m0 inf
+l,k
+Z 1
+0
+1
+2
+
+˙k(t)2 + Ψ(
+˙l(t)
+l(t))
+
+l(t)dt
+s.t. l(0) = 1, l(1) = r, k(0) = 0, k(1) = d
+= m0 inf
+l,k
+Z 1
+0
+1
+2
+  d
+dtk(1 −t)
+2 + Ψ(
+d
+dtl(1 −t)
+l(1 −t) )
+
+l(1 −t)dt
+s.t. l(0) = 1, l(1) = r, k(0) = 0, k(1) = d
+= m1 inf
+l,k
+Z 1
+0
+1
+2
+  d
+dtk(1 −t)
+2 + Ψ(
+1
+r
+d
+dtl(1 −t)
+1
+rl(1 −t) )
+1
+r l(1 −t)dt
+s.t. 1
+r l(0) = 1
+r , 1
+r l(1) = 1, k(0) = 0, k(1) = d
+(36)
+Rename ˆl(t) = 1
+rl(1 −t), ˆk(t) = k(1 −t), we have
+Cd(m0, m1) = m1 inf
+ˆl,ˆk
+Z 1
+0
+1
+2
+˙ˆk(t)2 + Ψ(
+˙ˆl(t)
+ˆl(t)
+)
+
+ˆl(t)dt
+s.t. ˆl(0) = 1, ˆl(1) = 1
+r , ˆk(0) = d, ˆk(1) = 0
+= Cd(m1, m0)
+(37)
+The proof is completed.
+□
+A.4
+Proof of Theorem 4.3
+Theorem 4.3. For uniformly convex Ψ, i.e. ∃κ > 0 s.t.Ψ′′ ≥κ, Cd is jointly convex and sublinear
+w.r.t (m0, m1) when d ≤πp κ
+2 , i.e. Cd(a, b) + Cd(c, d) ≥Cd(a + c, b + d).
+Proof. Recall the formula of transport cost where r = m1
+m0 .
+Cd(m0, m1) = inf
+l,k
+Z 1
+0
+1
+2
+
+˙k(t)2 + Ψ(
+˙l(t)
+l(t))
+
+l(t)dt
+s.t.
+l(0) = m0, l(1) = m1, k(0) = 0, k(1) = d
+(38)
+By Cauchy’s inequality,
+d2 =
+ Z 1
+0
+˙k(t)dt
+2
+≤
+Z 1
+0
+l(t)˙k(t)2dt
+Z 1
+0
+1
+l(t)dt
+(39)
+Hence, when ˙k ∝1
+l , the equality holds.
+17
+
+
+inf
+k
+Z 1
+0
+l(t)˙k(t)2dt = d2 Z 1
+0
+1
+l(t)dt
+−1
+(40)
+We then reformulate (38) as
+Cd(m0, m1) = inf
+l J[l]
+s.t.
+l(0) = m0, l(1) = m1
+(41)
+where
+J[l] = Jmass[l] + Jdist[l] =
+Z 1
+0
+1
+2lΨ
+ ˙l
+l
+!
+dt
+|
+{z
+}
+Convex part
++ d2
+2
+Z 1
+0
+1
+l dt
+−1
+|
+{z
+}
+Concave part
+(42)
+Let w(t) = η(t)
+l(t) , we calculate the second order variation of Jdist[l] along η(t). Note that η(t) has no
+boundary condition.
+δ2Jdist[η] =
+d2
+(
+R 1
+0 l−1dt)3
+"Z 1
+0
+η
+l2 dt
+2
+−
+Z 1
+0
+1
+l dt
+ Z 1
+0
+η2
+l3 dt
+#
+=
+d2
+(
+R 1
+0 l−1dt)3
+"Z 1
+0
+w
+l dt
+2
+−
+Z 1
+0
+1
+l dt
+ Z 1
+0
+w2
+l dt
+#
+(43)
+Define a new measure dν(t) = 1
+Z l−1(t)dt where Z =
+R 1
+0 l−1(t)dt.
+δ2Jdist[η] = d2
+Z3
+"
+Z2
+Z 1
+0
+w(t)dν(t)
+2
+−Z2
+Z 1
+0
+w2(t)dν(t)
+#
+= −d2
+Z
+"Z 1
+0
+w2(t)dν(t)
+
+−
+Z 1
+0
+w(t)dν(t)
+2#
+(44)
+Next, we calculate the second order variation of Jmass[l] along η(t).
+δ2Jmass[η] =
+Z 1
+0
+l
+2Ψ′′
+ ˙l
+l
+! " ˙l2
+l4 η2 −2
+˙l
+l3 η ˙η + 1
+l2 ˙η2
+#
+dt
+=
+Z 1
+0
+l
+2Ψ′′
+ ˙l
+l
+! 
+˙ηl −η˙l
+l2
+!2
+dt
+=
+Z 1
+0
+l
+2Ψ′′
+ ˙l
+l
+!
+˙w2dt
+(45)
+Remark that ˙w(t) = dw
+dt = dw
+dν
+dν
+dt =
+1
+Zl(t)
+dw
+dν .
+δ2Jmass[η] =
+Z 1
+0
+l
+2Ψ′′
+ ˙l
+l
+!
+1
+Z2l2
+dw
+dν
+2
+dt
+= 1
+2Z
+Z 1
+0
+Ψ′′
+ ˙l
+l
+! dw
+dν
+2
+dν(t)
+(46)
+Combine (44) and (46), we have
+18
+
+
+δ2J[η] = 1
+2Z
+Z 1
+0
+Ψ′′
+ ˙l
+l
+! dw
+dν
+2
+dν(t) −d2
+Z
+"Z 1
+0
+w2(t)dν(t)
+
+−
+Z 1
+0
+w(t)dν(t)
+2#
+≥1
+Z
+(
+κ
+2
+Z 1
+0
+dw
+dν
+2
+dν(t) −d2
+"Z 1
+0
+w2(t)dν(t)
+
+−
+Z 1
+0
+w(t)dν(t)
+2#)
+(47)
+By Poincaré-Wirtinger inequality on [0, 1] (Heinonen et al., 2012), we have
+Z 1
+0
+dw
+dν
+2
+dν(t) ≥π2
+"Z 1
+0
+w2(t)dν(t)
+
+−
+Z 1
+0
+w(t)dν(t)
+2#
+(48)
+Hence, when d ≤πp κ
+2 , we have δ2J[η] ≥0 for any η, i.e. the functional J[l] is convex w.r.t
+l(t). Now, we can prove the jointly convexity of Cd(m0, m1). Let l1(t), l2(t) satisfy the boundary
+conditions
+l1(0) = m0, l1(1) = m1
+l2(0) = n0, l2(1) = n1
+(49)
+such that l1(t), l2(t) achieve the minimal cost Cd(m0, m1), Cd(n0, n1). Consider the convex combi-
+nation lλ(t) = λl1(t) + (1 −λ)l2(t) with boundary condition
+lλ(0) = λm0 + (1 −λ)n0, lλ(1) = λm1 + (1 −λ)n1
+(50)
+By the convexity of J[l] and the definition of Cd, we have
+Cd(λm0 + (1 −λ)n0, λm1 + (1 −λ)n1) ≤J[lλ] ≤λJ[l1] + (1 −λ)J[l2]
+= λCd(m0, m1) + (1 −λ)Cd(n0, n1)
+(51)
+This is the jointly convexity of Cd. Recall that Cd is also a homogeneous function of degree 1 w.r.t
+(m0, m1). The sublinearity follows natrually.
+Cd(m0 + n0, m1 + n1) ≤1
+2Cd(2m0, 2m1) + 1
+2Cd(2n0, 2n1) = Cd(m0, m1) + Cd(n0, n1)
+(52)
+The proof is completed.
+□
+A.5
+Proof of Theorem 4.4
+Theorem 4.4. For uniformly convex Ψ with Ψ′′ ≥κ > 0, and diam(X) ≤πp κ
+2 , (10) is a convex
+optimization w.r.t (γ0, γ1).
+Proof. As proved in theorem 4.3, ∀x, y ∈X, since ∥x −y∥≤diam(X) ≤πp κ
+2 , C∥x−y∥(m0, m1)
+is jointly convex w.r.t (m0, m1). Hence,
+J (γ0, γ1) =
+Z
+X 2 C∥x−y∥(γ0(x, y), γ1(x, y))dxdy
+(53)
+is a jointly convex functional w.r.t (γ0, γ1). Since the constraint of semi-coupling (11) is linear and
+hence convex, (10) is a convex optimization w.r.t (γ0, γ1). The proof is completed.
+□
+B
+Implementation details
+B.1
+Computational resources
+The experiments were performed on a shared high-performance computing cluster with NVIDIA
+A800 GPU and 12 CPU cores. All neural networks were built using PyTorch and trained by Adam
+optimizer (Kingma and Ba, 2015).
+19
+
+
+B.2
+Network architectures
+Path model. The path model (ϕη, ψη) is realized by a single neural network with input dim 3 (t, d, r),
+output dim 2 (ϕ, ψ), and 5 hidden layers with dim 256. For smoothness, we use SiLU (Elfwing et al.,
+2018) activation.
+Cost model. The cost model Eξ is realized by a neural network with input dim 2 (d, r), output dim 1
+(E), and 5 hidden layers with dim 256. We also use SiLU activation.
+Flow model. We parameterized the velocity net uθ, the growth net gθ, and if stochastic version is
+used, the score net sθ by three neural networks. These networks have 5 hidden layers with dim 256,
+and LeakyReLU activations, which is consistent to the previous simulation-free methods (Peng et al.,
+2026b).
+B.3
+Grid
+In practice, we compute the path loss (13) and the cost loss (14) on a grid D × R. In all experiments,
+we set R as the uniform logarithmic scale grid on [0.01, 10], and set D as the uniform grid on
+[0.1, dmax], where dmax is the largest distance between the data points in consecutive time points.
+The grid size of D × R is 64 × 64.
+B.4
+Mini-batch OT coupling
+Due to the time and memory constraints of computing large-scale OT, we utilize the mini-batch OT
+strategy (Fatras et al., 2021) for large dataset (EB and Mouse), consistent with prior works (Tong
+et al., 2024a,b; Peng et al., 2026b). We follow their implementation and replace the Sinkhorn solver
+by projected gradient descent solver.
+B.5
+Metrics
+Measure matching. Given two measures p, q with total mass m0, m1, let ˜p = p/m0, ˜q/m1. Their
+difference can be measured in two aspects: the difference between their shape ˜p, ˜q, and the difference
+between their total mass m0, m1.
+We use Wasserstein-1 distance W1 to measure the difference between the shapes.
+W1(˜p, ˜q) =
+min
+π∈Π(˜p,˜q)
+Z
+∥x −y∥2dπ(x, y)
+(54)
+where
+Π(˜p, ˜q) = {π(x, y) ∈M+(X 2)|
+Z
+X
+π(x, y)dy = ˜p(x),
+Z
+X
+π(x, y)dx = ˜q(y)}
+In practice, ˜p, ˜q are represented by weighted particles. The W1 can be efficiently obtained using POT
+package (Flamary et al., 2021).
+We use relative mass error (RME) to measure the difference between the total masses.
+RME(p, q) = |mp −mq|
+mq
+(55)
+In practice, p is the predicted measure, q is the true measure.
+B.6
+UDOT cost
+Given uθ and gθ, we calculate the induced UDOT cost (3) by numerical integral. In detail, we
+initialize the system by assigning a mass of 1/N to each of the N cells at t = 0, thereby constructing
+an initial measure with a unit total mass. Starting from these initial states, we generate N trajectories
+using the forward Euler method with a time step of 0.01. By performing numerical integration of the
+UDOT cost along these trajectories, we derive an estimate of the overall UDOT cost for the measure
+path.
+20
+
+
+B.7
+Static WFR cost
+On a dataset with N + 1 time points t0, t1, · · · , tN, and δ, we first compute the semi-coupling pairs
+{(γ(k)
+0 , γ(k)
+1 )}k=0:N−1. (γ(k)
+0 , γ(k)
+1 ) stands for the semi-coupling between the time point tk and tk+1.
+The static WFR cost is calculated using the closed form (Chizat et al., 2018a).
+WFR2
+δ(µt0, µt1, · · · , µtN )
+= 2δ2
+N−1
+X
+k=0
+X
+x,y
+
+γ(k)
+0 (x, y) + γ(k)
+1 (x, y) −2
+q
+γ(k)
+0 (x, y)γ(k)
+1 (x, y) cos(min{∥x −y∥
+2δ
+, π
+2 })
+
+(56)
+For consistency, we also scale the total mass of all measures to make µ0 a unit probability measure.
+B.8
+A Stochastic Version for RUOT via Unbalanced Score Matching
+Although SUDO can only be applied to UDOT problem (3) whose constraint is a continuity equation
+with source term, one can replace the conditional unbalanced flow matching loss with a conditional
+unbalanced score matching loss with noise level σ (Ying et al., 2026).
+LCUSM(θ) =Et∼U[0,1],(x0,x1)∼γ⋆
+0 ,mη,t
+  uθ(x, t) −
+  1 −2t
+t(1 −t)(x −xη,t) + ˙xη,t
+
+2
+2
++
+gθ(x, t) −
+˙
+mη,t
+mη,t
+
+2
+2
++ λ2(t)
+sθ(x, t) + x −xη,t
+σ2t(1 −t)
+
+2
+2
+
+(57)
+where sθ(x, t) is a neural network approximating the score function s(x, t) = ∇x ln ρt(x). λ(t) =
+σ
+p
+t(1 −t) is a weight scheduler for numerical stability adapted from (Tong et al., 2024b), and
+x ∼N(xη,t, σ2t(1 −t)I). The triplet (uθ, gθ, sθ) can be viewd as an approximation to RUOT (4).
+B.9
+Inference
+The output of SUDO is (uθ, gθ), or (uθ, gθ, sθ) for stochastic version. To recover the continuous
+measure flow of UDOT (3), an ODE simulator is applied for inference.
+dxt = uθ(xt, t)dt
+d ln mt = gθ(xt, t)dt
+(58)
+For stochastic version, a SDE simulator is applied.
+
+
+
+dxt = (uθ(xt, t) + σ2
+2 sθ(xt, t))dt + σdWt
+d ln mt = gθ(xt, t)dt
+(59)
+B.10
+VarRUOT training time
+In the publicly available version of VarRUOT (Sun et al., 2026b), the algorithm samples a fixed
+number of cells (2048) for NeuralSDE training regardless of the dataset size, which explains why
+its training time does not increase as the dataset grows (Table 3). However, this fixed-sampling
+strategy leads to progressively worse performance on larger datasets. Conversely, if trained to all
+cells, VarRUOT will need more time on large data (e.g., training time > 11 hours for 49302 cells).
+21
+
+
+C
+Additional results
+C.1
+The Path Model Approximates the Travelling Dirac
+To evaluate whether the path model can accurately approximate the true travelling Dirac path (see
+D.2 for detailed closed form), we train a path model (ϕη, ψη) on a WFR problem. We choose δ = 4.
+The model was trained on the range d ∈[0.1, 12], r ∈[0.01, 10]. We plot l(t) in Figure 3 for
+d ∈{0.01, 0.1, 1, 2, 6, 12, 15}, r ∈{0.001, 0.01, 0.1, 0.5, 1, 2, 5, 10, 20}. The true path is blue, and
+the learned path is red. Note that d = 0.01, 15 (The first and last column) and r = 0.001, 20 (the first
+and last row) are unseen conditions. In the seen scenarios, the learned paths closely align with the
+ground-truth paths, demonstrating that our path model has indeed captured the underlying dynamics
+of mass variation. Although the model doesn’t generalize perfectly to larger unseen values of d, it
+exhibits a certain degree of generalization capability with respect to r and small d. However, the
+practical application of our path model does not require it to generalize to larger values of d.
+Figure 3: Red curve: mass variation learned by path model; Blue curve: True mass variation.
+Columns: d ∈{0.01, 0.1, 1, 2, 6, 12, 15}; Rows: r ∈{0.001, 0.01, 0.1, 0.5, 1, 2, 5, 10, 20}.
+We plot k(t) in Figure 4 for d ∈{0.01, 0.1, 1, 2, 6, 12}, r ∈{0.001, 0.01, 0.1, 0.5, 1, 2, 5, 10, 20}.
+d = 15 is not plotted since 15 > 4π, the particles never travel, instead, they undergo pure birth-death
+dynamics (Chizat et al., 2018a).
+22
+
+
+Figure 4: Red curve: position variation learned by path model; Blue curve: True mass variation.
+Columns: d ∈{0.01, 0.1, 1, 2, 6, 12}; Rows: r ∈{0.001, 0.01, 0.1, 0.5, 1, 2, 5, 10, 20}.
+In most cases, the learned paths also closely align with the ground-truth. The paths that are not learned
+well are those where r is very small. They correspond to relatively small costs and m(t). Therefore,
+their weights in the subsequent cost fitting and unbalanced flow matching are small, ensuring that
+they won’t overly influence the subsequent procedures.
+We trained the model for 3000 epochs. The training takes about 14 seconds.
+C.2
+The Cost Model Approximates the Transport Cost
+We trained the path model and the cost model Eξ for different δ and grid size, and calculated the
+relative L2 norm error (E2) between Eξ(d, r) and the true transport cost Cd(1, r) (The closed form
+23
+
+
+of Cd is introduced in D.2) on [0, 12] × [0.01, 10], a sufficiently large domain (Table 4). Saying the
+grid size is N means that we discretize the interval [0, 12] into N equidistant points to form D, and
+the interval [0.01, 10] into N logarithmically equidistant points to form R, and trained the cost model
+on grid D × R.
+Table 4: Relative L2 norm error (E2) between the Cd(1, r) and Eξ(d, r) under different training
+settings.
+δ
+E2 (%) ↓
+N = 64
+N = 32
+N = 16
+0.5
+8.36
+8.29
+8.64
+1
+7.18
+7.16
+7.25
+2
+7.63
+7.57
+7.62
+3
+6.71
+6.65
+6.69
+5
+4.20
+3.91
+4.01
+10
+3.05
+3.26
+3.12
+15
+2.94
+2.61
+2.69
+30
+2.95
+2.93
+2.95
+50
+3.38
+3.45
+3.93
+We trained the cost model for 3000 epochs. The average training time for each run is about 20 seconds
+(Without training the path model). For experiments in the main text, we use the grid size N = 64.
+C.3
+Simulation Gene Data
+We adopted the Simulation Gene data from (Zhang et al., 2025). It simulates a gene regulatory
+network consists of 3 genes (X1, X2, X3).
+dX1
+dt
+=
+α1X2
+1 + β
+1 + α1X2
+1 + γ2X2
+2 + γ3X2
+3 + β −δ1X1 + η1ξt
+dX2
+dt
+=
+α2X2
+2 + β
+1 + γ1X2
+1 + α2X2
+2 + γ3X2
+3 + β −δ2X2 + η2ξt
+dX3
+dt
+=
+α3X2
+3
+1 + α3X2
+3
+−δ3X3 + η3ξt
+X1 and X2 undergo mutual inhibition and auto-activation, with both being repressed by X3 and
+stimulated by an external signal β. Here, ξi represents the stochastic noise within the system. The
+growth is introduced by probabilistic cell division with probability g =
+X2
+2
+2(1+X2
+2)%. Simulations were
+initialized at two different locations. The bottom-left represents a stable attractor, whereas cells in
+the bottom-right migrate toward the top-left while proliferating. The resulting dataset contains five
+temporal snapshots of the system, specifically at t ∈{0, 8, 16, 24, 32}.
+Ablation on δ. When solving the WFR problem, we conducted an ablation study on the penalty
+parameter δ. As shown in Table 5, within a reasonable range of δ, SUDO can robustly match the
+measures across different time points. We use δ = 1.2 in the main text.
+Ablation on Ψ. We also tried different growth penalties Ψ on simulation gene data. We trained
+SUDO to solve to UDOT problem with 4 different Ψ.
+Ψ(g) =
+
+
+
+
+
+
+
+
+
+δ2g2,
+WFR
+1 −g + g log g (g > 0),
+Only-growth
+1 + g −g log(−g) (g < 0),
+Only-death
+1 −
+p
+1 + g2 + g log(g +
+p
+1 + g2),
+No preference
+(60)
+24
+
+
+Table 5: Sensitivity analysis for parameter δ on simulation gene dataset.
+Parameter
+t=1
+t=2
+t=3
+t=4
+W1
+RME
+W1
+RME
+W1
+RME
+W1
+RME
+δ = 0.5
+0.036
+0.001
+0.037
+0.010
+0.044
+0.005
+0.045
+0.015
+δ = 1.0
+0.023
+0.002
+0.027
+0.006
+0.022
+0.007
+0.022
+0.011
+δ = 1.2
+0.024
+0.008
+0.025
+0.001
+0.020
+0.002
+0.019
+0.005
+δ = 1.5
+0.024
+0.002
+0.031
+0.009
+0.031
+0.011
+0.029
+0.002
+δ = 2.0
+0.032
+0.004
+0.040
+0.008
+0.031
+0.014
+0.044
+0.024
+δ = 2.5
+0.030
+0.005
+0.064
+0.004
+0.059
+0.004
+0.079
+0.021
+The W1 and RME results are shown in Table 6. SUDO matches the marginal measures under all Ψ
+settings. This suggests that the choice of Ψ does not affect SUDO’s ability to learn a measure path
+connecting the time points; rather, it merely influences how SUDO connects them.
+Table 6: Sensitivity analysis for penalty Ψ on simulation gene dataset.
+Parameter
+t=1
+t=2
+t=3
+t=4
+W1
+RME
+W1
+RME
+W1
+RME
+W1
+RME
+WFR
+0.024
+0.008
+0.025
+0.001
+0.020
+0.002
+0.019
+0.005
+Only-growth
+0.027
+0.004
+0.031
+0.009
+0.022
+0.011
+0.019
+0.014
+Only-death
+0.046
+0.001
+0.057
+0.001
+0.052
+0.006
+0.029
+0.009
+No preference
+0.028
+0.009
+0.032
+0.020
+0.027
+0.021
+0.027
+0.029
+C.4
+Dyngen Data
+Following the experimental setup in (Huguet et al., 2022; Wang et al., 2025), we utilize a synthetic
+dataset generated by the Dyngen framework (Cannoodt et al., 2021). The dataset consists of 728
+cells, with their dimensionality reduced to five via PHATE (Moon et al., 2019). This data captures
+intricate biological dynamics, characterized by temporal mass fluctuations and a distinct bifurcation.
+The bifurcation is inherently unbalanced, as the cell density in the lower branch significantly exceeds
+that of the upper branch. In the main text, we use δ = 1.7 for WFR problem. The detailed W1
+and RME results are shown in Table 7. SUDO ranks second only to WFR-FM, which utilizes the
+closed-form traveling Dirac solution. It outperforms existing simulation-based algorithms in terms of
+both measure matching accuracy and computational efficiency.
+Table 7: Comparison of method performance over time on the Dyngen dataset. Best results are in
+bold, and the second best are underlined.
+Method
+t=1
+t=2
+t=3
+t=4
+W1
+RME
+W1
+RME
+W1
+RME
+W1
+RME
+TIGON
+0.446
+0.033
+0.584
+0.060
+0.415
+0.023
+0.603
+0.071
+DeepRUOT
+0.454
+0.011
+0.481
+0.070
+0.870
+0.104
+0.688
+0.074
+Var-RUOT
+0.315
+0.128
+0.548
+0.336
+0.630
+0.222
+0.593
+0.023
+WFR-FM
+0.110
+0.003
+0.098
+0.007
+0.211
+0.008
+0.121
+0.002
+SUDO
+0.140
+0.003
+0.168
+0.007
+0.280
+0.005
+0.170
+0.006
+25
+
+
+C.5
+Gaussian Data
+We utilize the 1000D Gaussian Mixture Model (GMM) dataset as described in (Peng et al., 2026b).
+In accordance with their experimental setup, the initial population consists of 500 cells distributed
+across two Gaussian components: 100 in the upper component and 400 in the lower one. The
+upper component remains stationary while undergoing significant proliferation, whereas the lower
+component undergoes no growth, but symmetrically bifurcates into two clusters. By the terminal time
+point, the population reaches 1,400 cells, with the upper component expanding to 1,000 cells and
+the lower component splitting into two 200-cell Gaussians. The high dimensionality of this dataset
+provides a benchmark for evaluating SUDO’s performance in high dimensional space. In the main
+text, we use δ = 1.4.
+SUDO learns a more plausible growth rate. A main limitation of WFR-FM (Peng et al., 2026b)
+is that its growth rate must follow the WFR geometry, where mass varies according to a quadratic
+function of time. When connecting two measures of equal total mass using a WFR flow, the resulting
+path tends to decrease and then increase the mass to minimize kinetic energy consumption, thereby
+achieving a lower total cost. However, in our Gaussian dataset construction, the lower cluster
+undergoes pure transport without any growth or death. To prevent the model from yielding a mass-
+reducing solution typical of WFR and to ensure the upper component exhibits pure growth while the
+lower one remains pure transport, we employ an only-growth Ψ (17). By assigning a infinite cost
+to apoptosis, we explicitly penalize and thus avoid any mass decreasing. In practice, we relax the
+infinite cost on (−∞, 0] to a quadratic function 10000g2 + 1.
+Table 8 demonstrates that SUDO matches the target measure under both growth penalty setting.
+Table 8: The measure matching results on gaussian 1000d data with different growth penalty
+WFR
+Only-growth
+W1
+RME
+W1
+RME
+2.315
+0.061
+2.333
+0.016
+As shown in Figure 5, SUDO learns a more plausible growth rate than WFR-FM where the lower
+cluster undergoes pure transport with zero growth rate.
+Figure 5: Left: predicted trajectories and growth rate by WFR-FM; Right: predicted trajectories and
+growth rate by SUDO.
+26
+
+
+C.6
+Epithelial Mesenchymal Transition Data
+We utilize the single-cell dataset from (Cook and Vanderhyden, 2020), which characterizes the
+epithelial-mesenchymal transition (EMT) in A549 lung cancer cells across four time points. Following
+the preprocessing pipeline established by (Sha et al., 2024), the high-dimensional gene expression
+profiles were projected into a 10-dimensional latent space using an autoencoder. Setting δ = 2, the
+performance of SUDO is shown in Table 9.
+Table 9: Comparison of method performance over time on the 10D EMT dataset.
+Method
+t=1
+t=2
+t=3
+W1
+RME
+W1
+RME
+W1
+RME
+TIGON
+0.2433
+0.002
+0.2661
+0.003
+0.2847
+0.001
+DeepRUOT
+0.2902
+0.001
+0.3193
+0.011
+0.3291
+0.002
+Var-RUOT
+0.2540
+0.075
+0.2670
+0.014
+0.2683
+0.041
+WFR-FM
+0.2099
+0.001
+0.2272
+0.002
+0.2346
+0.001
+SUDO
+0.2305
+0.002
+0.2485
+0.003
+0.2556
+0.002
+SUDO is comparable to simulation-free WFR-FM, and is consistently better than simulation-based
+baselines.
+C.7
+Embryoid Bodies Data
+We utilize the human embryoid bodies (EB) dataset presented by (Moon et al., 2019). This dataset
+captures the 27-day differentiation process of human embryoid bodies and consists of 16,819 single-
+cell profiles across five time points. Following the dimensionality reduction protocol of (Wang et al.,
+2025), the raw data was preprocessed using Principal Component Analysis (PCA). We used the top
+100 PCs for all subsequent analyses. We set δ = 30, and the results are shown in Table 10. We use
+chunk size 2000 for mini batch OT.
+Table 10: Comparison of method performance over time on the 100D EB dataset. Best results are in
+bold, and the second best are underlined.
+Method
+t=1
+t=2
+t=3
+t=4
+W1
+RME
+W1
+RME
+W1
+RME
+W1
+RME
+TIGON
+10.547
+0.014
+12.926
+0.052
+13.897
+0.107
+14.945
+0.096
+DeepRUOT
+10.256
+0.002
+11.103
+0.074
+11.529
+0.136
+12.406
+0.047
+Var-RUOT
+11.746
+0.091
+12.237
+0.024
+12.957
+0.150
+13.335
+0.074
+WFR-FM
+9.941
+0.009
+11.040
+0.006
+11.516
+0.008
+12.664
+0.005
+SUDO
+10.231
+0.015
+11.389
+0.009
+11.914
+0.006
+13.118
+0.002
+Ablation on mini batch OT. We also conducted an ablation study on the mini batch OT strategy
+(Fatras et al., 2021). On 100D EB dataset, we trained SUDO using different mini batch OT chunk
+size, as well as full batch OT. As shown in Table 11, the performance of SUDO is not sensitive to the
+mini batch OT strategy.
+C.8
+Mouse Hematopoiesis Data
+We utilize the raw mouse hematopoietic dataset from Weinreb et al. (2020). It consists of 49,302
+cells from three time points. The dataset is preprocessed via PCA and the first 50 PCs were kept.
+Given its significant population expansion and substantial sample size, this dataset serves as an ideal
+benchmark for evaluating scalability of SUDO. We have done this in the main text (6.2). We set
+δ = 15, and mini batch chunk size 2000. As shown in Table 12, SUDO can be applied to large
+dataset.
+In 6.3, we follow the original preprocessing procedure of (Weinreb et al., 2020; Sha et al., 2024;
+Zhang et al., 2025) to obtain a 2D mouse hematopoiesis data which consists of 10998 cells. These
+27
+
+
+Table 11: Sensitivity analysis for batch size of mini-batch OT chunk size on the 100D EB dataset.
+Batch Size
+t=1
+t=2
+t=3
+t=4
+W1
+RME
+W1
+RME
+W1
+RME
+W1
+RME
+500
+10.258
+0.010
+11.408
+0.016
+11.993
+0.002
+13.360
+0.008
+1000
+10.250
+0.013
+11.364
+0.014
+11.902
+0.005
+13.151
+0.014
+2000
+10.231
+0.015
+11.389
+0.009
+11.914
+0.006
+13.118
+0.002
+3000
+10.213
+0.017
+11.436
+0.014
+12.010
+0.004
+13.348
+0.010
+4000
+10.174
+0.015
+11.379
+0.010
+11.898
+0.001
+13.177
+0.004
+full-batch
+10.195
+0.015
+11.391
+0.011
+11.911
+0.003
+13.143
+0.001
+Table 12: Comparison of method performance over time on the 50D Mouse dataset. Best results are
+in bold, and the second best are underlined.
+Method
+t=1
+t=2
+W1
+RME
+W1
+RME
+TIGON
+6.140
+0.382
+6.973
+0.326
+DeepRUOT
+6.052
+0.062
+6.757
+0.041
+Var-RUOT
+7.951
+0.131
+10.862
+0.154
+WFR-FM
+5.486
+0.012
+6.211
+0.011
+SUDO
+5.894
+0.027
+6.824
+0.019
+cells are in clones committing to neutrophils and monocytes fates at day 2, 4, 6. The data was
+projected to the reduced two force-directed layouts (SPRING plots) (Weinreb et al., 2018) after batch
+correction.
+C.9
+Numerical Travelling Diracs for only-growth and only-death
+Figure 6: Red curve: mass variation learned by only-growth penalty; Blue curve: mass variation
+induced by WFR penalty. Columns: d ∈{0.1, 0.5, 1, 2, 3, 5}; Rows: r ∈{1, 1.2, 1.5, 2, 5}.
+28
+
+
+Figure 7: Red curve: mass variation learned by only-death penalty; Blue curve: mass variation
+induced by WFR penalty. Columns: d ∈{0.1, 0.5, 1, 2, 3, 5}; Rows: r ∈{0.2, 0.5, 0.8, 1}.
+We plot the mass variation of travelling Diracs induced by the only-growth and only-death penalty
+(7). These travelling Diracs differ from the WFR travelling Diracs. For only-growth, mass never
+decrease, while for only-death, mass never increase.
+D
+Relations to other neural UOT solvers
+D.1
+UOT-FM
+UOT-FM (Eyring et al., 2024) was a straightforward extension of OT under unbalanced settings.
+They added a KL penalty to deal with the unbalanced marginals.
+UOT(µ0, µ1) :=
+inf
+γ∈M+(X 2){
+Z
+X 2 c(x, y)γ(x, y)dxdy
++ λ1 KL(
+Z
+X
+γ(x, y)dy∥µ0(x)) + λ2 KL(
+Z
+X
+γ(x, y)dx∥µ1(y))}
+(61)
+Having the corresponding unbalanced OT coupling γ, they applied the idea of OT-CFM (Tong et al.,
+2024a) to learn a flow. This is a natural way to introduce the unbalanced effect and generalize
+OT-CFM to unbalanced measures.
+This formulation primarily accounts for mass variation through the static transport plan. As a result,
+the learned dynamics are guided by an unbalanced endpoint coupling, while the continuous-time
+evolution of mass is not explicitly parameterized along the path. In particular, the flow-matching step
+focuses on learning the velocity field, so the growth or decay component is not directly modeled as
+part of the dynamical system.
+SUDO follows a different direction by building on the unbalanced flow matching framework, where
+both the velocity field and the growth rate are learned simultaneously. Moreover, by solving the
+UDOT problem, SUDO provides a dynamic formulation in which transport and mass variation are
+coupled along the continuous-time trajectory.
+D.2
+WFR-FM
+When choosing Ψ(g) = δ2g2 in UDOT formulation (3), it is called the WFR problem (Chizat et al.,
+2018a).
+WFR2
+δ(µ0, µ1) = inf
+ρ,g,u
+Z 1
+0
+Z
+X
+1
+2(∥u(x, t)∥2
+2 + δ2g(x, t)2)ρt(x)dxdt
+s.t.
+∂tρ + ∇x · (ρu) = ρg, ρ0 = µ0, ρ1 = µ1,
+(62)
+29
+
+
+The square is introduced to make WFRδ itself a metric on M+(X). When ∥x1 −x0∥≤πδ, the
+travelling Dirac has a closed form.
+
+
+
+m(t) = At2 −2Bt + m0
+x(t) = x0 +
+ω0
+√
+m0A −B2 (arctan(
+At −B
+√
+m0A −B2 ) −arctan(
+−B
+√
+m0A −B2 ))
+(63)
+where A, B, ω0 can be determined by m0, m1, x0, x1, δ in closed form.
+
+
+
+
+
+
+
+A = m0 + m1 −2
+r m0m1
+1 + τ 2 , B = m0 −
+r m0m1
+1 + τ 2
+ω0 = 2δτ
+r m0m1
+1 + τ 2 l , τ = tan(∥x1 −x0∥2
+2δ
+)
+(64)
+Where l is the unit vector of the direction x1 −x0. The transport cost between two Dirac measures
+also has a simple closed form.
+WFR-DD2
+δ(m0δx0, m1δx1) = 2δ2(m0 + m1 −2√m0m1 cos(min{∥x0 −x1∥2
+2δ
+, π
+2 }))
+(65)
+The corresponding static form of WFR is proved to be equivalent to an entropic OT problem (Chizat
+et al., 2018b).
+WFR2
+δ(µ0, µ1) = 2δ2
+inf
+γ∈M+(X 2){
+Z
+X 2 −2 ln cos(∥x −y∥2
+2δ
+)γ(x, y)dxdy
++ KL(
+Z
+X
+γ(x, y)dy∥µ0(x)) + KL(
+Z
+X
+γ(x, y)dx∥µ1(y))}
+(66)
+Given the optimal coupling γ, the semi-coupling of WFR can be obtained by renormalization (Liero
+et al., 2018; Peng et al., 2026b).
+γ0(x, y) =
+γ(x, y)
+R
+X γ(x, z)dz µ0(x), γ1(x, y) =
+γ(x, y)
+R
+X γ(z, y)dz µ1(y)
+(67)
+Based on these results, (Peng et al., 2026b) proposed WFR-FM, a simulation-free framework for
+learning dynamic WFR flow between observed measures.
+The main limitation of WFR-FM is that the framework is based on the closed form of travelling Dirac
+which can not be obtained for general Ψ. Actually, as discussed in (Ying et al., 2026), when Ψ is not
+a quadratic function, the Euler-Lagrange equation of travelling Dirac
+
+
+
+
+
+d
+dt(m ˙x) = 0
+( ∂
+∂x = d
+dt
+∂
+∂˙x)
+| ˙x|2 + Ψ −˙m
+mΨ′ = ¨mm −˙m2
+m2
+Ψ′′
+( ∂
+∂m = d
+dt
+∂
+∂˙m)
+(68)
+is hard to solve.
+In contrast, SUDO learns the travelling Dirac and the transport cost, and solves the semi-coupling
+by projected gradient descent. Given the semi-coupling and the travelling Dirac, SUDO utilizes the
+unbalanced flow matching framework proposed in WFR-FM to learn the UDOT flow. Thus, SUDO
+can be viewed as a generalization of WFR-FM on non-quadratic Ψ.
+D.3
+TIGON and DeepRUOT
+TIGON (Sha et al., 2024) used NeuralODE to solve the UDOT problem. DeepRUOT (Zhang et al.,
+2025) introduced stochasticity into it, and solved the RUOT problem. These methods can be viewed
+as simulation-based UDOT solvers which suffer from the expensive computational cost. In contrast,
+SUDO is a simulation-free solver, hence, it is more efficient than simulation-based methods.
+30
+
+
+D.4
+VarRUOT
+VarRUOT (Sun et al., 2026b) parameterized the dual variable of the RUOT problem with a single
+network to achieve faster convergence and lower action, and represents the velocity and growth rate by
+the dual variable. In their original work, they also proposed to solve a special class of RUOT problem
+with concave growth penalty Ψ(g) = |g|p, 0 < p < 1 and obtained a non-zero solution, given that
+the monotonicity of growth rate along trajectory is determined by the convexity or concavity of Ψ.
+The relation between these observations and Theorem 3.1 in this work can be understood from
+the distinction between empirical stationary dynamics and global variational behavior. Theorem
+3.1 characterizes a degeneracy of the UDOT objective under concave growth penalties: for strictly
+sublinear concave Ψ, one can construct minimizing sequences whose total cost approaches zero by
+separating mass change from transport. This result describes the global infimum structure of the
+variational problem, rather than excluding the existence of non-trivial stationary or finite-parameter
+solutions obtained under a particular numerical scheme.
+From this perspective, the non-zero solutions reported by VarRUOT are compatible with our theo-
+rem. Since VarRUOT solves a SDE simulation-based, parameterized, and regularized optimization
+problem, its empirical solutions may correspond to stable stationary points within the chosen neural
+parameterization and training procedure. Moreover, the monotonicity results in VarRUOT are derived
+from first-order optimality conditions, which are necessary conditions and therefore can also hold
+for stationary solutions that are not global minimizers of the original variational problem. Thus,
+Theorem 3.1 does not contradict the empirical findings of VarRUOT. Instead, it clarifies why concave
+growth penalties may lead to degenerate global variational behavior, and thereby helps explain the
+gap between empirical non-trivial dynamics and the underlying global optimization structure.
+E
+Growth penalties from branching Schödinger problem
+In this section, we follow (Baradat and Lavenant, 2021) to introduce a family of convex Ψ with
+nice microscopic biological interpretation. This family of Ψ is rooted in the branching Schrödinger
+problem which is related to the RUOT (4) problem. To introduce their results, we first introduce the
+branching Brownian motion.
+E.1
+Branching Brownian motion
+Branching Brownian motion (BBM) is a branching processes where particles undergo both diffusion
+and branching. Mathematically, it is characterized by a doublet (ν, q), where ν ∈R dictates the
+scale of diffusion and q ∈M+(N) represents the branching mechanism—a finite, unnormalized
+measure over the natural numbers. From this mechanism, we can derive both the overall branching
+rate λ = P
+k∈N qk and the normalized offspring distribution p = q/λ.
+Dynamically, a particle in a BBM system diffuses via standard Brownian motion scaled by ν
+(νW,W is the standard Bronian motion). This continuous movement is interrupted at a random time
+τ ∼Exp(λ) governed by an internal exponential clock. At τ, the original particle undergoes a
+branching event to produce k ∼p offspring, where k = 0 simply indicates particle death, k = 1
+means nothing happens, k = 2 indicates that the particle divides into two independent new particles,
+and so on. Each newly generated particle then independently restarts this exact same stochastic
+process.
+By constraining possible outcomes to strict duplication or death pk = 0, k̸ = 0, 2, BBM perfectly
+mirrors the underlying microscopic biological mechanisms of cell division and apoptosis. Fur-
+thermore, its inherent capacity to model discrete growth in population mass makes it an suitable
+framework for single-cell birth-death dynamics.
+E.2
+Schrödinger bridge
+Originally introduced by (Schrödinger, 1932), the Schrödinger bridge (SB) problem provides a
+mathematical framework for establishing stochastic trajectories between two given probability distri-
+butions. Specifically, it seeks the optimal stochastic process P⋆that precisely matches the normalized
+boundary distributions µ0 and µ1, while remaining as close as possible to a predefined reference
+31
+
+
+process Q. This is formulated as a Kullback-Leibler (KL) divergence minimization problem:
+P⋆=
+arg min
+P:p0=µ0,p1=µ1
+KL(P∥Q)
+(69)
+where pt represents the marginal distributions of the process P at time t. A standard choice for the
+reference prior Q is νW, representing a standard Brownian motion scaled by a diffusion coefficient
+ν. When parameterized this way, the framework is widely referred to as the diffusion Schrödinger
+bridge (DSB) De Bortoli et al. (2021); Bunne et al. (2023a); Shi et al. (2023).
+E.3
+Branching Schrödinger problem
+To extend the SB framework into unbalanced settings where µ0, µ1 are unnormalized measures with
+different total mass, (Baradat and Lavenant, 2021) developed a generalized framework known as the
+branching Schrödinger problem. By employing branching Brownian motion (BBM) as the underlying
+reference process, this formulation inherently supports mass creation and destruction. The objective
+is defined by:
+P⋆=
+arg min
+P:p0=µ0,p1=µ1
+KL(P∥Q)
+(70)
+where Q is a BBM, and the target marginals µ0 and µ1 are explicitly permitted to be unnormalized.
+The branching Schrödinger bridge problem seeks to find a branching stochastic process that connects
+the target measures while remaining as close as possible to the reference BBM. Intuitively, the
+parameters ν, λ, and p of the reference BBM represent the prior knowledge about the randomness
+and growth of the system.
+More specifically, we restrict ourselves to cases where pk = 0, k̸ = 0, 2. The choice of (p0, p2)
+represents the prior about the relative rate of cell proliferation and apoptosis. For example, setting
+p2 = 1 reflects a prior assumption of pure cellular proliferation, whereas p0 = 1 corresponds to pure
+apoptosis.
+E.4
+Penalties
+Unfortunately, the branching Schrödinger problem is ill-posed and hard to solve. (Baradat and
+Lavenant, 2021) found that its convex relaxation is exactly the RUOT problem (4).
+RUOT(µ0, µ1) = inf
+ρ,g,u
+Z 1
+0
+Z
+X
+1
+2
+
+∥u(x, t)∥2
+2 + Ψν,λ(g(x, t))
+
+ρt(x)dxdt
+s.t.
+∂tρ + ∇x · (ρu) = ρg + ν2
+2 ∆xρ, ρ0 = µ0, ρ1 = µ1
+(71)
+where Ψν,λ is determined by (ν, λ, p). Three important instances are
+
+
+
+
+
+Ψ1,1(g) = 2(1 −g + g log g) (g > 0),
+p2 = 1
+Ψ1,1(g) = 2(1 + g −g log(−g)) (g < 0),
+p0 = 1
+Ψ1,1(g) = 2
+ 1 −
+p
+1 + g2 + g log(g +
+p
+1 + g2)
+
+p0 = p2 = 1/2
+(72)
+These are penalties we introduced in (7), representing the prior about the growth of the system:
+Only-growth, Only-death, and No preference.
+For general (ν, λ), Ψν,λ(g) = ν2λΨ( g
+λ). Note that our notation is slightly different to their original
+paper. In their paper, ν is the variance of diffusion, while our ν is the standard deviation of diffusion.
+For general p, Ψ can be represented as a Legendre transform of some function determined by (ν, λ, p),
+hence, it is convex. For more details, please refer to (Baradat and Lavenant, 2021).
+Though these convex Ψ are introduced in RUOT, we point out that UDOT (3) is just the limit case of
+RUOT with zero noise ν. With small noise level, RUOT is similar to UDOT. Thus, we adopt these
+penalties as empirical growth preference prior.
+32
+
+
+F
+Algorithm workflow
+Algorithm 1 Path model training
+Require: Growth penalty Ψ, grid for distance D, grid for mass ratio R, path model (ϕη, ψη).
+1: while Training do
+2:
+t ∼U[0, 1]
+3:
+Lpath(η) ←0
+4:
+for (d, r) ∈D × R do
+5:
+kη ←t + t(1 −t)ϕη(t, d, r)
+6:
+lη ←rt exp(t(1 −t)ψη(t, d, r))
+7:
+Lpath(η) ←Lpath(η) +
+
+˙k2
+η + Ψ(
+˙lη
+lη )
+
+lη
+8:
+end for
+9:
+η ←Update(η, ∇ηLpath(η))
+10: end while
+11: return (ϕη, ψη)
+Algorithm 2 Cost model training
+Require: Growth penalty Ψ, grid for distance D, grid for mass ratio R, trained path model (ϕη, ψη),
+cost model Eξ, numerical integral node set T = {0, 1
+N , 2
+N , · · · , N−1
+N , 1}.
+1: while Training do
+2:
+Lcost(ξ) ←0
+3:
+for (d, r) ∈D × R do
+4:
+I = 0
+5:
+for t ∈T do
+6:
+kη ←t + t(1 −t)ϕη(t, d, r)
+7:
+lη ←rt exp(t(1 −t)ψη(t, d, r))
+8:
+if t ∈{0, 1} then
+9:
+I ←I +
+1
+4N
+ ˙k2
+η + Ψ(
+˙lη
+lη )
+
+lη
+10:
+else
+11:
+I ←I +
+1
+2N
+ ˙k2
+η + Ψ(
+˙lη
+lη )
+
+lη
+12:
+end if
+13:
+end for
+14:
+Lcost(ξ) ←Lcost(ξ) +
+ Eξ(d, r) −I
+2
+15:
+end for
+16:
+ξ ←Update(ξ, ∇ξLcost(ξ))
+17: end while
+18: return Eξ
+33
+
+
+Algorithm 3 Flow model training
+Require: Sample-able distributions µt0, µt1, . . . , µtK, growth penalty Ψ, trained path model
+(ϕη, ψη), velocity net uθ(x, t), growth rate net gθ(x, t), semi-couplings (γ(k)
+0 , γ(k)
+1 ).
+1: while Training do
+2:
+LCUFM(θ) ←0
+3:
+for k = 0 →K −1 do
+4:
+(xtk, xtk+1) ∼γ(k)
+0 , d ←∥xtk+1 −xtk∥, r ←γ(k)
+1 (xtk, xtk+1)
+5:
+t ∼U[0, 1], t ←tk + (tk+1 −tk)t
+6:
+xη,t ←xtk + (xtk+1 −xtk)(t + t(1 −t)ϕη(t, d, r))
+7:
+mη,t ←rt exp(t(1 −t)ψη(t, d, r))
+8:
+LCUFM(θ) ←LCUFM(θ) + mη,t
+ ∥uθ(xη,t, t) −˙xη,t∥2
+2 +
+gθ(xη,t, t) −
+˙mη,t
+mη,t
+
+2
+2
+
+9:
+end for
+10:
+θ ←Update(θ, ∇θLCUFM(θ))
+11: end while
+12: return uθ, gθ, and sθ
+Algorithm 4 Inference
+Require: Data at initial time point D0, timestep ∆t, learned vector net uθ(x, t), growth rate net
+gθ(x, t).
+1: for x in D0 do
+2:
+ω = 1
+3:
+while simulation do
+4:
+x ←x + uθ(x, t)∆t
+5:
+ω ←ω · egθ(x,t)∆t
+6:
+end while
+7:
+Dweight append (x, ω)
+8: end for
+9: return Dweight
+34
