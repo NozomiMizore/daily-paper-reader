@@ -1,0 +1,1606 @@
+Title: Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression
+
+URL Source: https://arxiv.org/pdf/2609.04995v1
+
+Published Time: Mon, 07 Sep 2026 01:02:42 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression 
+
+# Juncheng Zhou ∗
+
+School of Cyber Science and Engineering, Wuhan University Wuhan, China 2020302181088@whu.edu.cn 
+
+# Jiaxi Lu ∗
+
+School of Cyber Science and Engineering, Wuhan University Wuhan, China lulululu@whu.edu.cn 
+
+# Weijing Zeng 
+
+School of Mathematics and Statistics, Wuhan University Wuhan, China 2021302011066@whu.edu.cn 
+
+# Zhong Li 
+
+School of Synthetic Biology and Biomanufacturing, Tianjin University Tianjin, China lz95_@tju.edu.cn 
+
+# Hao Qi 
+
+School of Synthetic Biology and Biomanufacturing, Tianjin University Tianjin, China haoq@tju.edu.cn 
+
+# Jingsong Cui ✉
+
+School of Cyber Science and Engineering, Wuhan University Wuhan, China jscui@whu.edu.cn 
+
+## Abstract 
+
+Deep Imbalanced Regression (DIR) is pervasive in continuous pre-diction tasks across diverse modalities, such as age estimation, depth prediction, and protein mutation activity prediction, where label-scarce tail samples often carry higher practical value. However, most existing methods still learn deterministic point mappings un-der mean squared error or its simple variants, implicitly assuming a uniform uncertainty level across all samples and thereby over-looking the instance-wise heteroscedasticity that is widespread in long-tailed data. We further point out that even heteroscedas-tic negative log-likelihood suffers from a gradient coupling issue, which, under DIR scenarios, weakens the learning signal of hard tail samples and leads to optimization inertia as well as tail underfit-ting. To address this, we propose DUO, an uncertainty-aware long-tailed regression framework. Specifically, the proposed method models the regression target as a conditional Gaussian distribu-tion to explicitly characterize instance-level predictive uncertainty, and transforms uncertainty into a dynamic enhancement signal for tail samples through decoupled mean-variance optimization. Furthermore, we design a distribution-guided contrastive learning mechanism that adaptively constructs positive and negative pairs based on the overlap between sample distributions, thereby alle-viating feature looseness and cross-label semantic entanglement. Across visual and biological DIR benchmarks, DUO achieves the best few-shot bMAE and GM on IMDB-WIKI-DIR, AgeDB-DIR, and AAV2-DIR while remaining competitive on few-shot MAE. 
+
+## CCS Concepts 
+
+• Computing methodologies → Supervised learning ; Learning latent representations .
+
+## Keywords 
+
+Deep Imbalanced Regression, Long-Tailed Regression, Predictive Uncertainty, Contrastive Learning, Decoupled Optimization 
+
+> ∗
+
+Juncheng Zhou and Jiaxi Lu contributed equally to this work. Accepted at the 34th ACM International Conference on Multimedia (ACM MM 2026). The Version of Record will be available at https://doi.org/10.1145/3767308.3835898. (a) Uncertainty Variation from Image Quality          
+
+> 35 30 33 37 40 Age (Years)
+> 35 33 37 70 80 90 Age (Years)
+
+(b) Uncertainty Variation from Data Density                
+
+> High-Quality Image
+> Tight Distribution
+> Age Uncertainty Range ≈2
+> (33 –37 years)
+> Low-Quality Image
+> Tight Distribution
+> Age Uncertainty Range ≈5
+> (30 –40 years)
+> Common Age (Dense Data)
+> Tight Distribution
+> Age Uncertainty Range ≈2
+> (33 –37 years)
+> Rare Age (Sparse Data)
+> Wide Distribution
+> Age Uncertainty Range ≈10
+> ( 70 –90 years)
+
+Figure 1: Illustration of instance-level heteroscedasticity. (a) For the same age label, predictive uncertainty increases as im-age quality degrades. (b) Predictive uncertainty also increases in sparse label regions, even for high-quality samples. 
+
+## 1 Introduction 
+
+Deep Imbalanced Regression (DIR) is prevalent across numerous real-world continuous prediction tasks, ranging from facial age and depth estimation in multimedia systems to protein mutation activity prediction in computational biology. Such tasks typically exhibit a prominent long-tailed distribution, wherein a majority of the labels dominate while a minority remain extremely scarce. This data imbalance heavily biases optimization toward the massive, easy-to-fit majority ("Many"). Consequently, models suffer from severe prediction bias against the scarce tail ("Few"), leading to systematically less reliable predictions on underrepresented sam-ples. Tail categories can nevertheless have substantial collective influence[40], and individual rare cases may be consequential in application-specific settings. arXiv:2609.04995v1 [cs.LG] 4 Sep 2026 Juncheng Zhou, Jiaxi Lu, Weijing Zeng, Zhong Li, Hao Qi, & Jingsong Cui 
+
+For instance, Deep Mutational Scanning (DMS)[11, 12] of AAV2 capsid proteins[27] provides large fitness landscapes with pro-nounced imbalance. Bryant et al. [6] focus on a 28-residue AAV2 segment (VP1 positions 561–588) that overlaps known antibody-binding sites and generate highly diverse variants that remain viable for packaging. In our processed AAV2-DIR data, the fraction la-beled active drops from approximately 10% to 0.3% as the mutation count increases ( ≥ 6), approaching zero beyond 21 mutations. This scarcity yields a highly skewed target distribution, making reliable prediction in the sparse region important for identifying unusual viable variants. To alleviate long-tailed bias, existing research extensively ex-plores data re-weighting, re-sampling, and architecture design[4, 13, 32, 34, 38]. However, most methods still optimize using Mean Squared Error (MSE) or its simple variants as the regression loss, which limits their ability to reflect sample-wise uncertainty. From a statistical modeling perspective, MSE entails an implicit assumption of global homoscedasticity, which presumes that all samples share an identical level of confidence (or uncertainty) during prediction. Real-world data often exhibit instance-level heteroscedasticity, where predictive uncertainty varies with both image quality and label density, which is particularly relevant to responsible multime-dia systems that require reliable predictions under heterogeneous conditions. As shown in Figure 1(a), even at the same age label (e.g., 35 years old), a clear image yields a sharp distribution with low uncertainty (33-37 years, 𝜎 ≈ 2), whereas a blurry image produces a much wider distribution (30-40 years, 𝜎 ≈ 5). Figure 1(b) further shows that uncertainty also depends on label density: a common-age sample can remain highly confident (33-37 years, 𝜎 ≈ 2), while a high-quality sample from a sparse tail region (e.g., age 80) may still exhibit much higher uncertainty (70-90 years, 𝜎 ≈ 10). These observations reveal the limitation of MSE, which implicitly assumes uniform uncertainty across samples and may obscure reliability disparities across underrepresented cases. While mainstream DIR methods have made significant progress, their reliance on homoscedastic assumptions often introduces two distinct challenges. At the optimization level, highly uncertain tail samples can disrupt gradient updates, potentially leading to under-fitting in scarce regions and reduced reliability on rare samples. At the representation level, treating heterogeneous samples uniformly tends to entangle cross-label semantics and degrade intra-label feature compactness. Consequently, shifting from deterministic point mapping to modeling samples as conditional probability dis-tributions has emerged as a promising paradigm to capture data heterogeneity and provide more transparent uncertainty estimates. Following this paradigm, prior works have explored heteroscedas-tic modeling using the standard Negative Log-Likelihood (NLL) loss. However, jointly optimizing the mean and variance in NLL can compromise mean fitting (Stirn et al. [33]). Under long-tailed distributions, this issue is drastically exacerbated, inducing "opti-mization inertia." Recent uncertainty-aware DIR approaches instead adopt probabilistic smoothing or multi-expert aggregation[17, 37], but these mechanisms add modeling or inference complexity. To address these challenges, we propose DUO, an uncertainty-guided long-tailed regression framework. By modeling the pre-diction target as a conditional Gaussian distribution, DUO explic-itly captures instance-level uncertainty through two core designs, thereby better characterizing sample-wise predictive reliability. First, a mean-variance decoupled optimization mechanism utilizes gradient detachment to adaptively weight gradients, mitigating the gradient degradation issue in traditional likelihood losses. Sec-ond, a distribution-guided contrastive learning module employs the Bhattacharyya coefficient to quantify distribution overlap, thereby adaptively constructing contrastive pairs to alleviate the feature looseness and semantic entanglement of tail samples. In summary, our main contributions are threefold: (1) we for-mulate long-tailed regression as a conditional Gaussian problem to capture instance-level uncertainty, and analyze how mean–variance gradient coupling in NLL impairs optimization in DIR; (2) we pro-pose the DUO loss function, which incorporates gradient detach-ment for computationally decoupled optimization and distribution-guided contrastive learning; and (3) we validate DUO across multi-media and biological DIR benchmarks, demonstrating consistent gains on imbalance-aware few-shot metrics. 
+
+## 2 Related Work 2.1 Imbalanced Classification 
+
+Existing imbalanced classification methods are broadly divided into two mainstream paradigms: reweighting/resampling-based approaches (RW/RS) and decision boundary and prior calibration-based approaches (DBC/PC). RW/RS methods[8, 14, 18] mitigate long-tailed optimization bias by adjusting the gradient contribu-tions of different classes/samples during training, with representa-tive works including cost-sensitive learning based on inverse class frequency, Class-Balanced Loss that avoids over-amplification of tail classes via effective sample number (Cui et al.[10]), and Focal Loss that alleviates gradient domination by focusing on hard sam-ples (Lin et al.[22]). DBC/PC methods[39, 41] tackle imbalance from the perspective of classification boundary geometry or label prior mismatch, such as LDAM with class-dependent margin optimiza-tion (Cao et al.[7]), the decoupled training paradigm that separates representation learning and classifier rebalancing (Kang et al.[20]), and Logit Adjustment(Menon et al.[23]) and Balanced Softmax(Ren et al.[28]) that correct prior mismatch at the logit level. However, all above methods are built on the structural assump-tions of discrete classes, class priors, or classification boundaries. This inherent discrete label dependency makes them difficult to directly transfer to imbalanced regression tasks with continuous label spaces, where the coupling between sample scarcity, predic-tive uncertainty and feature geometry remains to be systematically modeled. 
+
+## 2.2 Imbalanced Regression 
+
+Compared with imbalanced classification, imbalanced regression faces greater challenges due to the continuous nature of label space and the absence of explicit class boundaries. Sample scarcity in IR no longer manifests as class frequency imbalance, but as highly skewed label distributions with severe sparsity and noise in tail regions (Yang et al.[38]), making most classification methods inapplicable. Existing IR approaches typically intervene at the input, feature, or output level, but most operate on only a single level and fail to model the coupling between sample scarcity and predictive uncertainty. Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression 
+
+Input-level methods mitigate label imbalance by adjusting training data distribution or sample weights directly[4, 5, 8, 34]. Early works like SMOTER[34] and SMOGN[4] define rare regions in continuous label space, and perform oversampling for tail samples while undersampling head ones. However, these methods only adjust the data distribution at the input stage, without addressing the core issues of feature collapse and prediction bias in tail regions during model optimization. 
+
+Feature-level methods preserve continuous label relationships in representation space via structural constraints on the feature space. The seminal DIR work proposes Label Distribution Smooth-ing (LDS) and Feature Distribution Smoothing (FDS), which allevi-ate tail feature collapse by sharing statistical information within lo-cal label neighborhoods (Yang et al.[38]). Building on this, RankSim[13] introduces global geometric constraints by aligning the relative or-dering between label and feature spaces, and ConR[21] further leverages contrastive learning to penalize label-feature inconsis-tency and prevent minority sample collapse. While these methods effectively model feature geometry for continuous labels, they do not incorporate predictive uncertainty into the feature learning pro-cess, leaving the coupling between sample scarcity and uncertainty under-explored. 
+
+Output-level methods mainly mitigate tail prediction bias by modifying loss functions or predictive distributions. DenseWeight[32] estimates target rarity via kernel density estimation, while LDS-based reweighting smooths empirical label densities before assign-ing sample weights[38]. Balanced MSE (BMSE)[29] corrects the discrepancy between training and target priors, and Dist Loss[25] jointly penalizes sample-wise errors and prediction–label distribu-tion distance. These methods correct prediction bias but do not use uncertainty to guide upstream representation learning. Recent works have introduced uncertainty into imbalanced re-gression: VIR [37] uses probabilistic neighborhood smoothing for long-tailed uncertainty quantification, while UVOTE [17] uses predictive uncertainty to select among ensemble experts. These methods model uncertainty primarily at the output or predictive-distribution level rather than using it to construct representation-space relations, leaving uncertainty-guided feature learning under-explored. In summary, existing IR methods generally alleviate label sparsity-induced bias from a single perspective, but fail to explicitly model the coupling among sample scarcity, predictive uncertainty, and feature geometry in continuous label spaces. Motivated by this gap, we propose DUO , which explicitly models sample-level uncertainty and uses it as a unified guidance signal for both optimization and representation learning, thereby improving tail sample modeling in long-tailed regression. 
+
+## 3 Method 3.1 Problem Formulation 
+
+DIR aims to learn a robust model from a long-tailed dataset D =
+
+{( 𝑥 𝑖 , 𝑦 𝑖 )} 𝑁 𝑖 =1, where 𝑝 (𝑦 head ) ≫ 𝑝 (𝑦 tail ). Conventional methods learn a deterministic mapping 𝑓 : X → R by minimizing the Mean Squared Error (MSE). Statistically, MSE models solely the first mo-ment (mean) of 𝑝 (𝑦 |𝑥 ), implicitly assuming homoscedasticity ( i.e. ,constant variance across all samples). However, DIR data is inherently heteroscedastic: tail samples exhibit significantly higher uncertainty and noise compared to well-represented head samples. Ignoring this variance prevents the model from dynamically adapting to sample difficulty, fundamen-tally limiting its generalization on the tail. 
+
+## 3.2 Probabilistic Regression Framework 
+
+To overcome the limitations of deterministic mappings, we reformu-late the regression task as modeling the conditional probability dis-tribution 𝑝 (𝑦 |𝑥 )[2]. Specifically, we draw inspiration from classical classification, where learning a conditional probability distribution is the standard paradigm. 
+
+Probabilistic Modeling for Continuous Space 
+
+In standard classification, the model essentially learns a discrete conditional probability distribution. Typically, it outputs a normal-ized probability vector ( i.e. , via Softmax) and makes decisions based on the Maximum A Posteriori (MAP) principle [3]: ˆ𝑦 = arg max  
+
+> 𝑘
+
+𝑝 (𝑦 = 𝑘 |𝑥 ) (1) This indicates that the core of classification lies in identifying the category with the highest confidence. From an isomorphic stand-point, regression should not be confined to predicting a single scalar; rather, it should be conceptualized as locating the point of maximum probability density within a continuous label space. To this end, we model the target conditional distribution as a Gaussian: 
+
+𝑝 (𝑦 |𝑥 ; 𝜃 ) = N  𝑦 ; 𝜇 (𝑥 ), 𝜎 2 (𝑥 ) (2) The choice of a Gaussian formulation is fundamentally princi-pled. From an information-theoretic perspective, given the con-straints of the first moment (mean) and second moment (vari-ance), the Gaussian distribution uniquely maximizes differential entropy[16], thereby introducing the minimum inductive bias into our model (we provide the rigorous mathematical proof of this max-imum entropy optimality in Appendix A). Under this framework, the prediction ˆ 𝑦 corresponds to the mode (which is also the mean 
+
+𝜇 (𝑥 )) of the distribution, mathematically unifying classification and regression. 
+
+Instance-Level Heteroscedasticity Modeling 
+
+The necessity of explicitly modeling the second moment 𝜎 2 (𝑥 )
+
+stems from correcting the bias inherent in traditional methods. Although standard MSE regression is equivalent to maximizing a Gaussian likelihood, its implicit homoscedasticity assumption forces all samples to share a fixed confidence, which contradicts the intrinsic heteroscedasticity of long-tailed data. Furthermore, since aleatoric uncertainty inherently arises from the input 𝑥 (e.g., occlusion or noise) rather than the target label 𝑦 ,formulating 𝜎 2 (𝑥 ) at the instance level is statistically more rigorous than relying on a class-level prior. This instance-wise formulation enables the model to dynamically quantify the specific ambiguity of each sample, providing a robust statistical foundation for regression. 
+
+## 3.3 Network Architecture 
+
+To instantiate this probabilistic framework, we minimally extend standard architectures. A shared backbone 𝑓 enc (e.g., ResNet-50[15]) first extracts features 𝑧 = 𝑓 enc (𝑥 ) ∈ R𝐷 . We then employ a dual-branch structure with a mean prediction head H𝜇 and a parallel Juncheng Zhou, Jiaxi Lu, Weijing Zeng, Zhong Li, Hao Qi, & Jingsong Cui Shared    
+
+> Backbone Z
+> 𝑝(𝑦|𝑥 𝑖 ) = 𝒩(𝑦; 𝜇 𝑖 ^, 𝜎
+> ^
+> 𝑖 2)
+> 𝜇 𝑖 ^
+> 𝜎
+> ^
+> 𝑖 2𝑦 𝑖
+> ^
+> Modeling
+
+Network Architecture and Probabilistic Framework  Decoupled Mean-Variance Optimization    
+
+> ℒ𝑀𝑒𝑎𝑛 = (1 + 𝑤(𝑦) ⋅ sg [𝜎
+> ^
+> (𝑥)]) ⋅ 12 ‖𝑦 − 𝜇
+> ^
+> (𝑥)‖ 2
+
+Mean  Loss  ℒ𝑀𝑒𝑎𝑛 
+
+Variance  Loss  ℒ𝑉𝑎𝑟     
+
+> ℒ𝑉𝑎𝑟 = 𝛽 ⋅ (( (𝑦 − sg [𝜇
+> ^
+> (𝑥)]) 2
+> 2𝜎
+> ^ 2(𝑥) ) + 12 log( 𝜎
+> ^2(𝑥)))
+> SG
+> SG
+
+Distribution-Guided Contrastive Learning 
+
+Gradient Flow  
+
+> Mean Head
+> Uncertainty
+> Head
+> Shared Backbone  Gradient
+> Detachment
+> Gradient
+> Backpropagation
+> Positive Pair Negative Pair
+
+𝑠 𝑖𝑗 ≥ 𝜏 𝑜𝑣𝑒𝑟𝑙𝑎𝑝  𝑠 𝑖𝑗 < 𝜏 𝑜𝑣𝑒𝑟𝑙𝑎𝑝 
+
+Align  Loss  ℒ𝐴𝑙𝑖𝑔𝑛          
+
+> Mean
+> Head
+> Uncertainty
+> Head
+> 𝒩 𝑗 = 𝒩 𝑦 𝑗 𝜎
+> ^
+> 𝑗 2
+> 𝒩 𝑖 = 𝒩 𝑦 𝑖 𝜎
+> ^
+> 𝑖 2
+> Pair Distributions
+> 𝑠 𝑖𝑗 = BC 𝒩 𝑖 𝒩 𝑗
+> BC Score
+
+Distribution-based Pair Assignment  
+
+> Warm-Up Stage
+> Contrastive OFF
+> After Warm-Up
+> Contrastive ON
+> Epoch 1 - k Epoch k+
+> Training Phase
+> Control
+
+Figure 2: Illustration of the proposed DUO framework. Top-left: a probabilistic regression architecture that models each sample as a Gaussian distribution with predicted mean and uncertainty. Top-middle and top-right: a decoupled mean-variance optimization strategy with stop-gradient, which separates mean learning from variance fitting and explicitly controls gradient flow. Bottom-left: distribution-based pair assignment using the Bhattacharyya coefficient to determine whether two samples form a positive or negative pair according to their distribution overlap. Bottom-right: a distribution-guided contrastive learning module, which is activated after warm-up to refine the feature space for DIR. 
+
+uncertainty head H𝜎 . A positive parameterization 𝑔 + ensures a valid standard deviation: ˆ𝜇 (𝑥 ) = 𝑊 𝜇 𝑧 + 𝑏 𝜇 ,
+
+ˆ𝜎 (𝑥 ) = 𝑔 + (𝑊 𝜎 𝑧 + 𝑏 𝜎 ), 𝑔 + (·) > 0. (3) This design seamlessly parameterizes 𝑝 (𝑦 |𝑥 ) = N ( 𝑦 ; ˆ 𝜇 (𝑥 ), ˆ𝜎 2 (𝑥 )) 
+
+with negligible computational overhead. 
+
+## 3.4 Decoupled Mean-Variance Optimization 
+
+To train the model robustly on long-tailed distributions, we first analyze the optimization failure of the standard Negative Log-Likelihood (NLL) loss. We then propose a decoupled objective using the stop-gradient operator. 
+
+3.4.1 Gradient Coupling in NLL Loss . For heteroscedastic Gauss-ian regression, the standard objective is the NLL loss LNLL [26]: 
+
+LNLL = 12 log ˆ 𝜎 2 + (𝑦 − ˆ𝜇 )2
+
+2 ˆ 𝜎 2 (4) To investigate its behavior under long-tailed distributions, we examine the gradient of this loss function with respect to the mean prediction ˆ 𝜇 and variance ˆ 𝜎 2 :
+
+𝜕 LNLL 
+
+𝜕 ˆ𝜇 = − 1ˆ𝜎 2 (𝑦 − ˆ𝜇 ), 𝜕 LNLL 
+
+𝜕 ˆ𝜎 2 = ˆ𝜎 2 − ( 𝑦 − ˆ𝜇 )2
+
+2 ˆ 𝜎 4 (5) Examining the gradients reveals a gradient coupling issue: the mean gradient ∇ ˆ𝜇 L = −( 𝑦 − ˆ𝜇 )/ ˆ𝜎 2 is scaled by 1 / ˆ𝜎 2. As proven in Appendix B, NLL optimization drives ˆ 𝜎 2 toward the squared residual (𝑦 − ˆ𝜇 )2 for hard samples (under both gradient descent and Newton’s method). At this equilibrium, the mean gradient magnitude behaves as 
+
+∥∇ ˆ𝜇 L∥ ≈ 1/| 𝑦 − ˆ𝜇 | → 0, leading to vanishing updates for large-error samples. In the DIR setting, tail samples are typically asso-ciated with larger residuals, which further amplifies this effect: samples that require the most correction receive the weakest learn-ing signal. Consequently, the model tends to reduce the loss by increasing the predicted variance rather than improving the mean prediction. 
+
+3.4.2 Decoupled Objective . To resolve this gradient coupling, DUO employs the stop-gradient (sg [·] ) operator[9, 35] to computa-tionally decouple the optimization of ˆ 𝜇 and ˆ 𝜎 .
+
+Mean Loss 
+
+To address the gradient vanishing in NLL, we utilize uncertainty to amplify rather than suppress the gradient. The mean loss is defined as: 
+
+L𝑀𝑒𝑎𝑛 = (1 + 𝑤 (𝑦 ) · sg [ ˆ𝜎 (𝑥 )]) 
+
+| {z } 
+
+> 𝛾 :Dynamic Difficulty Weight
+
+· 12 ∥𝑦 − ˆ𝜇 (𝑥 )∥ 2 (6) where the continuous label space is discretized into bins using the training set, and 𝑤 (𝑦 ) is the inverse empirical frequency of the bin containing 𝑦 .The gradient with respect to ˆ 𝜇 is 𝜕 LMean   
+
+> 𝜕 ˆ𝜇
+
+= −𝛾 · ( 𝑦 − ˆ𝜇 ). Here, 
+
+𝑤 (𝑦 ) captures global label scarcity, while ˆ 𝜎 (𝑥 ) captures instance-level difficulty. The latter provides a unidirectional forward weight but, due to sg [·] , receives no gradient from LMean . Thus, forward numerical dependence does not reintroduce backward optimization coupling. 
+
+Variance Loss Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression 
+
+Figure 3: Overview of label distributions in the training sets for the AgeDB-DIR, IMDB-WIKI-DIR, Nydu2-DIR and AAV2-DIR datasets. 
+
+Since ground-truth variance is unavailable, learning ˆ 𝜎 2 is unsu-pervised. To tightly approximate the prediction error, we design the decoupled variance loss: 
+
+L𝑉 𝑎𝑟 = (𝑦 − sg [ ˆ𝜇 (𝑥 )]) 2
+
+2 ˆ 𝜎 2 (𝑥 ) + 12 log ˆ 𝜎 2 (𝑥 ) (7) This objective balances residual fitting and variance regular-ization. Specifically, the log ˆ 𝜎 2 term penalizes unnecessarily large variance estimates, while the inverse-variance term penalizes under-estimated variance when the mean prediction error is large. Because sg [·] stops gradients through ˆ 𝜇 (𝑥 ), the variance branch is optimized against a fixed residual target. Setting the gradient with respect to ˆ 𝜎 2 to zero yields the station-ary point ˆ 𝜎 2 (𝑥 ) = (𝑦 − ˆ𝜇 (𝑥 )) 2.Appendix C further proves that this point is the unique global minimizer of L𝑉 𝑎𝑟 in the linear variance space, and that under log-variance parameterization the optimization converges exponen-tially in the KL/Bregman sense. Therefore, ˆ 𝜎 serves as an implicit proxy for the empirical prediction residual. 
+
+## 3.5 Distribution-Guided Contrastive Learning 
+
+While the decoupled loss optimizes output-space predictions, long-tailed data still severely degrades feature representations, often leading to feature entanglement in tail classes. Standard contrastive learning uses rigid label distance thresholds ( e.g. , |𝑦 𝑖 − 𝑦 𝑗 | < 𝜖 )to define positive pairs, ignoring the instance-level variance. To address this, we propose a distribution-guided contrastive learning module that dynamically shapes the feature manifold based on the geometric overlap of predicted distributions. 
+
+3.5.1 Pair Assignment via Distribution Overlap . To measure semantic similarity in the feature space, we construct a label-anchored proxy distribution. Since ground-truth variance is unavailable, we model each sam-ple 𝑥 𝑖 as a Gaussian proxy distribution centered at its ground-truth label 𝑦 𝑖 with predicted variance ˆ 𝜎 2 
+
+> 𝑖
+
+:
+
+𝑝 (𝑦 | 𝑥 𝑖 ) = N ( 𝑦 ; 𝑦 𝑖 , ˆ𝜎 2 
+
+> 𝑖
+
+) (8) In this way, ˆ 𝜎 𝑖 captures the uncertainty range of sample 𝑥 𝑖 in label space, while the ground-truth label 𝑦 𝑖 provides a stable semantic anchor for pair assignment. We quantify the geometric overlap between two proxy distribu-tions using the Bhattacharyya Coefficient (BC)[1, 19], defined as the overlap integral of two probability density functions: BC (𝑖, 𝑗 ) =
+
+∫√︁ 
+
+𝑝 (𝑦 |𝑥 𝑖 ) · 𝑝 (𝑦 |𝑥 𝑗 ) 𝑑𝑦 (9) Substituting the Gaussian proxy distributions into the overlap inte-gral yields the following closed-form solution, whose full derivation is provided in Appendix D: BC (𝑖, 𝑗 ) = exp − 14
+
+(𝑦 𝑖 − 𝑦 𝑗 )2
+
+ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2
+
+> 𝑗
+
+− 12 ln ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2
+
+> 𝑗
+
+2 ˆ 𝜎 𝑖 ˆ𝜎 𝑗 
+
+!
+
+(10) Essentially, this metric introduces an adaptive semantic tolerance. For high-uncertainty tail samples (large ˆ 𝜎 ), BC remains high even if the label distance |𝑦 𝑖 − 𝑦 𝑗 | is large, provided the distributions overlap. This allows hard samples to interact with a broader set of semantic neighbors during manifold alignment. Based on this probabilistic similarity, we dynamically define the positive and negative sample sets respectively as 
+
+P𝑖 = { 𝑗 | BC (𝑖, 𝑗 ) ≥ 𝜏 overlap }N𝑖 = { 𝑗 | BC (𝑖, 𝑗 ) < 𝜏 overlap } (11) thereby overcoming the limitations of rigid distance-based thresh-olds. 
+
+3.5.2 Distance-Aware Contrastive Objective . To correct fea-ture entanglement where samples with large label discrepancies are erroneously clustered, we design a distance-aware InfoNCE loss 
+
+L𝐴𝑙𝑖𝑔𝑛 to geometrically constrain the backbone features 𝑧 :
+
+L𝐴𝑙𝑖𝑔𝑛 = −∑︁ 
+
+> 𝑖
+
+log 
+
+Í𝑗 ∈ P 𝑖 𝑒 cos (𝑧 𝑖 ,𝑧 𝑗 )/ 𝜏 
+
+Í𝑗 ∈ P 𝑖 𝑒 cos (𝑧 𝑖 ,𝑧 𝑗 )/ 𝜏 + Í𝑘 ∈ N 𝑖 W𝑝𝑢𝑠ℎ (𝑖, 𝑘 ) · 𝑒 cos (𝑧 𝑖 ,𝑧 𝑘 )/ 𝜏 
+
+(12) To impose stronger repulsion on semantically incompatible yet feature-similar negatives, we introduce a dynamic penalty weight defined as the inverse Bhattacharyya overlap: 
+
+W𝑝𝑢𝑠ℎ (𝑖, 𝑘 ) = 𝑤 (𝑦 𝑖 ) · BC (𝑖, 𝑘 )−1 (13) Here, 𝑤 (𝑦 𝑖 ) amplifies the gradient contribution of tail samples, while the inverse distribution overlap BC (𝑖, 𝑘 )−1 heavily penal-izes hard negatives with vanishing semantic overlaps. Appendix E shows that this weighting induces exponentially stronger repulsion for erroneously entangled negatives, helping restore an ordered manifold topology. Juncheng Zhou, Jiaxi Lu, Weijing Zeng, Zhong Li, Hao Qi, & Jingsong Cui 
+
+During the first 𝑇 𝑤 warm-up epochs, we optimize only LMean +LVar to obtain stable uncertainty estimates. After this warm-up phase, LAlign is activated. 
+
+## 3.6 Overall Objective Function 
+
+To jointly optimize the mean prediction, variance estimation, and feature manifold, the overall objective function is formulated as: 
+
+L𝑇 𝑜𝑡𝑎𝑙 = L𝑀𝑒𝑎𝑛 + L 𝑉 𝑎𝑟 + 𝜆 L𝐴𝑙𝑖𝑔𝑛 (14) where 𝜆 is a trade-off hyperparameter that balances the contribution of the alignment objective against the regression and variance estimation terms. 
+
+## 4 Experiment 
+
+We evaluate the proposed DUO on four deep imbalanced regression (DIR) datasets, spanning diverse tasks including age estimation, depth estimation, and protein mutation activity prediction. Specif-ically, AgeDB-DIR[24] and IMDB-WIKI-DIR[30] are utilized for large-scale continuous facial age regression. NYUD2-DIR, built upon NYU Depth V2[31], aims to predict depth maps from indoor RGB images. Furthermore, to validate the generalization capabil-ity of our method in bioinformatics, we introduce the AAV2-DIR dataset, which is constructed from high-throughput viability data of AAV2 capsid protein variants[6]. This comprehensive experimental setup covers typical scenarios ranging from 1D continuous targets to high-dimensional structured labels, designed to thoroughly ver-ify the effectiveness and robustness of DUO in handling various extremely imbalanced data distributions.The label distributions of the four datasets are shown in the figure 3. Complete experimental results are provided in Tables S5–S8 of the Appendix. 
+
+## 4.1 Evaluation protocol and metrics 
+
+Following the standard DIR evaluation protocol, we report perfor-mance across four shot-based partitions: All (full test set), Many (>100 training samples per bin), Median (20–100 samples), and Few (<20 samples). For AgeDB-DIR, IMDB-WIKI-DIR and AAV2-DIR, we use MAE, balanced MAE (bMAE) [29], and error geometric mean (GM) [38], which measure overall error, bin-balanced error, and the geometric mean of per-sample errors, respectively. For NYUD2-DIR, we follow prior depth estimation DIR work and adopt RMSE and threshold accuracy 𝛿 1 (percentage of pixels with max ( 𝑑 𝑔 , 𝑔 𝑑 ) < 1.25, 
+
+𝑔 =ground-truth depth, 𝑑 =predicted depth). 
+
+4.1.1 Main results for age estimation . Table 1 presents results on AgeDB-DIR and IMDB-WIKI-DIR, averaged over five random runs. DUO obtains the best few-shot bMAE and GM on both bench-marks. Its few-shot MAE remains competitive but is slightly higher than LDS on IMDB-WIKI-DIR (22.940 vs. 22.755) and Balanced MSE on AgeDB-DIR (9.917 vs. 9.690), revealing an empirical trade-off between tail-balanced performance and the best metric-specific error. This reflects an inherent head-tail trade-off in DIR, where minor head compromises (e.g., AgeDB Many-shot MAE 6.980 vs. Vanilla 6.743) are outweighed by substantial tail gains (Few-shot 9.917 vs. 13.381). 
+
+4.1.2 Main results for depth estimation . We further evaluate DUO on NYUD2-DIR to examine its effectiveness in structured 3      
+
+> 95
+> (a) Vanilla (b) FDS
+> (c) RankSim (d) DUO
+
+Figure 4: Feature visualization on AgeDB-DIR for (a) VANILLA, (b) FDS, (c) Ranksim and (d) DUO. 
+
+regression with high-dimensional depth maps. Compared with existing DIR baselines, DUO achieves the best few-shot bMAE of 
+
+1.696 , as shown in Table 2. These results indicate that DUO can be effectively extended from scalar regression to more complex dense prediction settings while preserving robust performance in tail regions. 
+
+4.1.3 Main results for protein activity estimation . Table 1 also summarizes AAV2-DIR, which maps protein sequences to func-tional fitness. DUO achieves the best few-shot MAE, bMAE, and GM of 4.106 , 4.329 , and 3.777 , respectively. These results show that its few-shot advantages extend beyond visual regression to biological sequence activity prediction. 
+
+4.1.4 Feature visualizations . To examine representation differ-ences on deep imbalanced regression (DIR) tasks, we use t-SNE[36] to project the penultimate-layer features of ResNet-50 into 2D and color samples by their continuous targets. As shown in Figure 4, Vanilla exhibits central collapse and blurred head–tail boundaries, FDS retains substantial local overlap, and RankSim forms an over-compressed line-like manifold. DUO in-stead produces a more continuous and less entangled layout. Since t-SNE is qualitative, Appendix Table S3 further reports KNN-MAE, where DUO obtains the lowest errors in the compound-tail and median-shot regions, quantitatively supporting improved local smoothness. 
+
+4.1.5 Pairwise comparison . Although our approach entails ar-chitectural modifications, we further evaluate its complementarity with existing methods. Table 4 compares AAV2 baselines with their DUO-enhanced counterparts, with the better value in each pair highlighted in bold. DUO integration improves MAE and bMAE across all pairs and improves most GM values, although RankSim’s GM slightly worsens. This indicates useful but metric-dependent Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression 
+
+Table 1: Results are presented for the few-shot region on the IMDB, AgeDB, and AAV2 datasets. The first section reports the results of the baselines and our method, with the best results highlighted in bold. The second section reports the performance differences with respect to the corresponding baselines 
+
+MAE bMAE GM IMDB-DIR AgeDB-DIR AAV2-DIR IMDB-DIR AgeDB-DIR AAV2-DIR IMDB-DIR AgeDB-DIR AAV2-DIR Vanilla 25.546 13.381 7.365 33.085 16.579 7.565 18.091 9.644 7.351 LDS 22.755 11.489 4.361 30.179 12.055 4.681 13.786 7.577 4.054 FDS 24.347 12.136 5.023 31.839 15.531 5.388 14.600 8.326 4.786 Ranksim 25.317 14.601 4.885 32.464 17.611 5.225 17.639 11.021 4.652 ConR 25.969 12.333 4.183 33.601 14.486 4.335 17.990 9.376 3.932 Balanced MSE 23.541 9.690 7.283 30.000 11.940 7.563 13.803 10.480 7.253 Distloss 24.215 12.121 7.432 30.165 13.670 7.567 14.076 7.726 7.416 
+
+DUO (Ours) 22.940 9.917 4.106 27.190 11.590 4.329 13.650 6.587 3.777 
+
+Ours vs. Vanilla + 2.606 + 3.464 + 3.259 + 5.895 + 4.989 + 3.236 + 4.441 + 3.057 + 3.574 Ours vs. LDS - 0.185 + 1.572 + 0.255 + 2.989 + 0.465 + 0.352 + 0.136 + 0.990 + 0.277 Ours vs. FDS + 1.407 + 2.219 + 0.917 + 4.649 + 3.941 + 1.059 + 0.950 + 1.739 + 1.009 Ours vs. Ranksim + 2.377 + 4.684 + 0.779 + 5.274 + 6.021 + 0.896 + 3.989 + 4.434 + 0.875 Ours vs. ConR + 3.029 + 2.416 + 0.077 + 6.411 + 2.896 + 0.006 + 4.340 + 2.789 + 0.155 Ours vs. BM + 0.601 - 0.227 + 3.177 + 2.810 + 0.350 + 3.234 + 0.153 + 3.893 + 3.476 Ours vs. Distloss + 1.275 + 2.204 + 3.326 + 2.975 + 2.080 + 3.238 + 0.426 + 1.139 + 3.639 
+
+Table 2: Experimental results on the few-shot region of the NYUD2 dataset. Note that we do not report results for two-stage training methods like Balanced MSE and DistLoss on NYUD2, as these methods are primarily designed for global regression and do not directly scale to structured pixel-wise depth prediction. 
+
+Method RMSE ↓ MAE ↓ bMAE ↓ 𝛿 1 ↑
+
+Vanilla 1.867 1.443 1.884 0.608 LDS 1.764 1.333 1.714 0.641 FDS 1.905 1.478 1.920 0.594 RankSim 1.896 1.475 1.907 0.601 ConR 1.869 1.459 1.912 0.591 
+
+DUO(Ours) 1.759 1.351 1.696 0.643 
+
+Ours vs. Vanilla + 0.108 + 0.092 + 0.188 + 0.035 Ours vs. LDS + 0.005 - 0.018 + 0.018 + 0.002 Ours vs. FDS + 0.146 + 0.127 + 0.224 + 0.049 Ours vs. RankSim + 0.137 + 0.124 + 0.211 + 0.042 Ours vs. ConR + 0.110 + 0.108 + 0.216 + 0.052 complementarity. Results on the other datasets are provided in Appendix Tables S9–S11. 
+
+## 4.2 Ablation Studies on Design Modules 
+
+4.2.1 Component-wise ablation of DUO . Table 3 shows that the decoupled objective already improves few-shot performance, while the full DUO further benefits from contrastive alignment. To isolate capacity, decoupling, uncertainty weighting, and BC-based assignment, Appendix Table S1 reports controlled variants under matched dual-head capacity. The results show that capacity (a) Visualization for 𝝀 = 𝟎. 𝟓 (b) Visualization for 𝝀 = 𝟏. 𝟎 
+
+> (c) Analysis of the hyper-parameter 𝝀
+
+𝝀 
+
+> 𝑀𝐴𝐸
+
+Figure 5: Ablation study on the hyper-parameter 𝜆 . (a) and (b) compares the learnt feature space for parameter of 0.5 and 1 respectively. (c) shows the MAE performance under various 𝜆 values. 
+
+alone is insufficient and that removing weighting or replacing BC consistently degrades few-shot metrics. 
+
+4.2.2 Analysis of the hyper-parameter 𝜆 . We further analyze the impact of hyper-parameter 𝜆 , which controls the weight of DUO’s contrastive term and governs the trade-off between sample-level fitting and structure-level constraints during optimization. Juncheng Zhou, Jiaxi Lu, Weijing Zeng, Zhong Li, Hao Qi, & Jingsong Cui 
+
+Table 3: Component-wise ablation study of DUO in the few-shot regions. Vanilla denotes the baseline trained with Mean Squared Error (MSE). DUO-C removes the contrastive term, and DUO uses the complete objective. The best results are highlighted in bold. 
+
+MAE ↓ bMAE ↓ GM ↓
+
+Method IMDB AgeDB AAV2 IMDB AgeDB AAV2 IMDB AgeDB AAV2 Vanilla 25.546 13.381 7.365 33.085 16.579 7.565 18.091 9.644 7.351 DUO-C 23.332 10.787 4.193 30.349 13.092 4.400 13.862 6.808 3.948 
+
+DUO 22.940 9.917 4.106 27.190 11.590 4.329 13.650 6.587 3.777 Table 4: Pairwise comparison of various baselines and their DUO-enhanced counterparts on the AAV2 dataset across different shot regions. The best results within each comparison pair are highlighted in bold. 
+
+Overall Few Median Many Method MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓
+
+LDS 1.990 1.981 1.178 4.361 4.681 4.054 3.648 3.888 3.211 1.935 2.117 1.140 
+
+LDS+DUO 1.721 1.718 1.060 4.159 4.329 3.770 3.253 3.440 2.800 1.669 1.817 1.027 
+
+FDS 1.988 1.985 1.256 5.023 5.388 4.786 4.345 4.667 4.008 1.911 2.147 1.210 
+
+FDS+DUO 1.794 1.791 1.128 4.379 4.542 3.984 3.603 3.854 3.273 1.734 1.923 1.090 
+
+RankSim 1.936 1.932 1.189 4.885 5.225 4.652 4.151 4.408 3.857 1.864 2.110 1.145 RankSim+DUO 1.831 1.829 1.231 4.796 5.195 4.408 4.002 4.279 3.651 1.759 1.977 1.189 Balanced MSE (GAI) 2.650 2.639 2.115 7.283 7.563 7.253 5.992 6.226 5.978 2.539 2.745 2.045 
+
+Balanced MSE+DUO 2.439 2.441 1.839 6.677 7.076 6.576 5.693 5.968 5.598 2.333 2.573 1.775 
+
+As shown in Figure 5, a small 𝜆 imposes insufficient contrastive constraints, resulting in training dynamics close to standard regres-sion and limited performance gains in the few-shot region. With a moderate increase in 𝜆 , few-shot region performance improves con-sistently, as stronger structural constraints effectively mitigate the representation shift induced by imbalanced data distributions. How-ever, an excessively large 𝜆 degrades overall performance across all regions, as overly strong auxiliary constraints disrupt the pri-mary regression objective and hinder the model from balancing performance across target intervals. Feature visualizations further corroborate these trends: a moderate 𝜆 yields a clearer, more con-tinuous feature structure with well-defined inter-region boundaries and minimal overlap between minority and majority samples, while an overly large 𝜆 causes feature space over-separation or local in-stability. Based on both quantitative results and visual analysis, we fix 𝜆 = 1.0 for all subsequent experiments. 
+
+## 5 Conclusion 
+
+We presented DUO, an uncertainty-aware framework for deep im-balanced regression. By modeling each target as a conditional Gauss-ian distribution, DUO computationally decouples mean and vari-ance optimization and refines feature learning through distribution-guided contrastive alignment. Experiments on AgeDB-DIR, IMDB-WIKI-DIR, NYUD2-DIR, and AAV2-DIR show the strongest gains in scarce regions, particularly on imbalance-aware metrics, with mod-est trade-offs on some overall or many-shot results. These findings support sample-wise uncertainty as an effective signal for robust long-tailed regression. Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression 
+
+## References 
+
+[1] Anil Bhattacharyya. 1943. On a measure of divergence between two statistical populations defined by their probability distributions. Bulletin of the Calcutta Mathematical Society 35 (1943), 99–109. [2] Christopher M Bishop. 1994. Mixture density networks . Technical Report NCRG/94/004. Aston University. [3] Christopher M Bishop. 2006. Pattern recognition and machine learning . Springer. [4] Paula Branco, Luís Torgo, and Rita P Ribeiro. 2017. SMOGN: a pre-processing approach for imbalanced regression. In First international workshop on learning with imbalanced domains: Theory and applications . PMLR, 36–50. [5] Paula Branco, Luis Torgo, and Rita P Ribeiro. 2018. Rebagg: Resampled bagging for imbalanced regression. In Second International Workshop on Learning with Imbalanced Domains: Theory and Applications . PMLR, 67–81. [6] Drew H Bryant, Ali Bashir, Sam Sinai, Nina K Jain, Pierce J Ogden, Patrick F Riley, George M Church, Lucy J Colwell, and Eric D Kelsic. 2021. Deep diversification of an AAV capsid protein by machine learning. Nature Biotechnology 39, 6 (2021), 691–696. [7] Kaidi Cao, Colin Wei, Adrien Gaidon, Nikos Arechiga, and Tengyu Ma. 2019. Learning imbalanced datasets with label-distribution-aware margin loss. Ad-vances in neural information processing systems 32 (2019). [8] Nitesh V Chawla, Kevin W Bowyer, Lawrence O Hall, and W Philip Kegelmeyer. 2002. SMOTE: synthetic minority over-sampling technique. Journal of artificial intelligence research 16 (2002), 321–357. [9] Xinlei Chen and Kaiming He. 2021. Exploring simple siamese representation learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 15750–15758. [10] Yin Cui, Menglin Jia, Tsung-Yi Lin, Yang Song, and Serge Belongie. 2019. Class-Balanced Loss Based on Effective Number of Samples. In 2019 IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) . 9260–9269. [11] Douglas M Fowler and Stanley Fields. 2014. Deep mutational scanning: a new style of protein science. Nature methods 11, 8 (2014), 801–807. [12] Douglas M Fowler, Jason J Stephany, and Stanley Fields. 2014. Measuring the activity of protein variants on a large scale using deep mutational scanning. 
+
+Nature protocols 9, 9 (2014), 2267–2284. [13] Yu Gong, Greg Mori, and Frederick Tung. 2022. Ranksim: Ranking similarity regularization for deep imbalanced regression. In Proceedings of the 39th Interna-tional Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 162) . PMLR, 7634–7649. [14] Hui Han, Wen-Yuan Wang, and Bing-Huan Mao. 2005. Borderline-SMOTE: a new over-sampling method in imbalanced data sets learning. In International conference on intelligent computing . Springer, 878–887. [15] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. 2016. Deep residual learning for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition . 770–778. [16] Edwin T Jaynes. 1957. Information theory and statistical mechanics. Physical review 106, 4 (1957), 620–630. [17] Yuchang Jiang, Vivien Sainte Fare Garnot, Konrad Schindler, and Jan Dirk Wegner. 2025. Uncertainty voting ensemble for imbalanced deep regression. In Pattern Recognition (Lecture Notes in Computer Science, Vol. 15297) . Springer, 329–343. [18] Ziyu Jiang, Tianlong Chen, Ting Chen, and Zhangyang Wang. 2021. Improving contrastive learning on imbalanced data via open-world sampling. Advances in neural information processing systems 34 (2021), 5997–6009. [19] Thomas Kailath. 1967. The divergence and Bhattacharyya distance measures in signal selection. IEEE transactions on communication technology 15, 1 (1967), 52–60. [20] Bingyi Kang, Saining Xie, Marcus Rohrbach, Zhicheng Yan, Albert Gordo, Jiashi Feng, and Yannis Kalantidis. 2020. Decoupling representation and classifier for long-tailed recognition. In International Conference on Learning Representations .[21] Mahsa Keramati, Lili Meng, and R David Evans. 2024. Conr: Contrastive regu-larizer for deep imbalanced regression. In International Conference on Learning Representations .[22] Tsung-Yi Lin, Priya Goyal, Ross Girshick, Kaiming He, and Piotr Dollár. 2017. Focal loss for dense object detection. In Proceedings of the IEEE international conference on computer vision . 2980–2988. [23] Aditya Krishna Menon, Sadeep Jayasumana, Ankit Singh Rawat, Himanshu Jain, Andreas Veit, and Sanjiv Kumar. 2021. Long-tail learning via logit adjustment. In International Conference on Learning Representations .[24] Stylianos Moschoglou, Athanasios Papaioannou, Christos Sagonas, Jiankang Deng, Irene Kotsia, and Stefanos Zafeiriou. 2017. Agedb: the first manually collected, in-the-wild age database. In proceedings of the IEEE conference on computer vision and pattern recognition workshops . 51–59. [25] Guangkun Nie, Gongzheng Tang, and Shenda Hong. 2025. Dist loss: enhanc-ing regression in few-shot region through distribution distance constraint. In 
+
+International Conference on Learning Representations .[26] David A Nix and Andreas S Weigend. 1994. Estimating the mean and variance of the target probability distribution. In Proceedings of 1994 ieee international conference on neural networks (ICNN’94) , Vol. 1. IEEE, 55–60. [27] Pierce J Ogden, Eric D Kelsic, Sam Sinai, and George M Church. 2019. Compre-hensive AAV capsid fitness landscape reveals a viral gene and enables machine-guided design. Science 366, 6469 (2019), 1139–1143. [28] Jiawei Ren, Cunjun Yu, Shunan Sheng, Xiao Ma, Haiyu Zhao, Shuai Yi, and Hongsheng Li. 2020. Balanced meta-softmax for long-tailed visual recognition. 
+
+Advances in neural information processing systems 33 (2020), 4175–4186. [29] Jiawei Ren, Mingyuan Zhang, Cunjun Yu, and Ziwei Liu. 2022. Balanced mse for imbalanced visual regression. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 7916–7925. [30] Rasmus Rothe, Radu Timofte, and Luc Van Gool. 2018. Deep expectation of real and apparent age from a single image without facial landmarks. International Journal of Computer Vision 126, 2–4 (2018), 144–157. [31] Nathan Silberman, Derek Hoiem, Pushmeet Kohli, and Rob Fergus. 2012. Indoor segmentation and support inference from rgbd images. In European conference on computer vision . Springer, 746–760. [32] Michael Steininger, Konstantin Kobs, Padraig Davidson, Anna Krause, and An-dreas Hotho. 2021. Density-based weighting for imbalanced regression. Machine Learning 110, 8 (2021), 2187–2211. [33] Andrew Stirn, Harm Wessels, Megan Schertzer, Laura Pereira, Neville Sanjana, and David Knowles. 2023. Faithful heteroscedastic regression with neural net-works. In Proceedings of the 26th International Conference on Artificial Intelligence and Statistics (Proceedings of Machine Learning Research, Vol. 206) . PMLR, 5593– 5613. [34] Luís Torgo, Rita P Ribeiro, Bernhard Pfahringer, and Paula Branco. 2013. Smote for regression. In Portuguese conference on artificial intelligence . Springer, 378– 389. [35] Aaron Van den Oord, Oriol Vinyals, and Koray Kavukcuoglu. 2017. Neural discrete representation learning. In Advances in Neural Information Processing Systems , Vol. 30. 6306–6315. [36] Laurens Van der Maaten and Geoffrey Hinton. 2008. Visualizing data using t-SNE. Journal of machine learning research 9 (2008), 2579–2605. [37] Ziyan Wang and Hao Wang. 2023. Variational imbalanced regression: Fair uncertainty quantification via probabilistic smoothing. Advances in Neural Information Processing Systems 36 (2023), 30429–30452. [38] Yuzhe Yang, Kaiwen Zha, Yingcong Chen, Hao Wang, and Dina Katabi. 2021. Delving into deep imbalanced regression. In Proceedings of the 38th Interna-tional Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 139) . PMLR, 11842–11851. [39] Xi Yin, Xiang Yu, Kihyuk Sohn, Xiaoming Liu, and Manmohan Chandraker. 2019. Feature transfer learning for face recognition with under-represented data. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition .5704–5713. [40] Chongsheng Zhang, George Almpanidis, Gaojuan Fan, Binquan Deng, Yanbo Zhang, Ji Liu, Aouaidjia Kamel, Paolo Soda, and João Gama. 2025. A system-atic review on long-tailed learning. IEEE Transactions on Neural Networks and Learning Systems 36, 8 (2025), 13670–13690. [41] Zhisheng Zhong, Jiequan Cui, Shu Liu, and Jiaya Jia. 2021. Improving calibration for long-tailed recognition. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 16489–16498. Supplementary Material for “Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression” 
+
+## JUNCHENG ZHOU ∗, School of Cyber Science and Engineering, Wuhan University, China 
+
+## JIAXI LU ∗, School of Cyber Science and Engineering, Wuhan University, China 
+
+## WEIJING ZENG, School of Mathematics and Statistics, Wuhan University, China 
+
+## ZHONG LI, School of Synthetic Biology and Biomanufacturing, Tianjin University, China 
+
+## HAO QI, School of Synthetic Biology and Biomanufacturing, Tianjin University, China 
+
+## JINGSONG CUI ✉, School of Cyber Science and Engineering, Wuhan University, China 
+
+A Proof of Maximum Entropy Optimality for Gaussian Distribution 
+
+In this section, we demonstrate from an information-theoretic perspective that the Gaussian distribution is the unique optimal probabilistic form that introduces the minimum inductive bias under given mean 𝜇 and variance 𝜎 2 constraints, achieved by maximizing the differential entropy[4]. Theorem A.1 (Maximum Entropy Distribution). Let 𝑋 be a continuous random variable defined on (−∞ , +∞) with a probability density function 𝑝 (𝑥 ). Among all possible distributions satisfying E[𝑋 ] = 𝜇 and Var (𝑋 ) = 𝜎 2, the unique distribution that maximizes the differential entropy 𝐻 (𝑝 ) is the Gaussian distribution N ( 𝜇, 𝜎 2).
+
+Proof. The differential entropy of a continuous random variable 𝑋 is defined as 𝐻 (𝑝 ) = − ∫ +∞ −∞ 𝑝 (𝑥 ) ln 𝑝 (𝑥 ) 𝑑𝑥 . To find the distribution 𝑝 (𝑥 ) that maximizes 𝐻 (𝑝 ), we introduce the following constraints: 
+
+• Normalization: ∫ +∞ −∞ 𝑝 (𝑥 ) 𝑑𝑥 = 1
+
+• Mean: ∫ +∞ −∞ 𝑥𝑝 (𝑥 ) 𝑑𝑥 = 𝜇 
+
+• Variance: ∫ +∞ −∞ (𝑥 − 𝜇 )2𝑝 (𝑥 ) 𝑑𝑥 = 𝜎 2
+
+We construct the Lagrangian functional L( 𝑝 ) incorporating these constraints: 
+
+L( 𝑝 ) = −
+
+∫ +∞ −∞ 
+
+𝑝 (𝑦 ) ln 𝑝 (𝑦 ) 𝑑𝑦 + 𝜆 0
+
+∫ +∞ −∞ 
+
+𝑝 (𝑦 ) 𝑑𝑦 − 1
+
+
+
++ 𝜆 1
+
+∫ +∞ −∞ 
+
+𝑦𝑝 (𝑦 ) 𝑑𝑦 − 𝜇 
+
+
+
++ 𝜆 2
+
+∫ +∞ −∞ 
+
+(𝑦 − 𝜇 )2𝑝 (𝑦 ) 𝑑𝑦 − 𝜎 2
+
+
+
+Setting the functional derivative with respect to 𝑝 (𝑦 ) to zero yields the extremum condition: 
+
+𝛿 L
+
+𝛿𝑝 (𝑦 ) = −1 − ln 𝑝 (𝑦 ) + 𝜆 0 + 𝜆 1𝑦 + 𝜆 2 (𝑦 − 𝜇 )2 = 0
+
+> ∗Juncheng Zhou and Jiaxi Lu contributed equally to this work. Accepted at the 34th ACM International Conference on Multimedia (ACM MM 2026). The Version of Record will be available at https://doi.org/10.1145/ 3767308.3835898. Authors’ Contact Information: Juncheng Zhou, School of Cyber Science and Engineering, Wuhan University, Wuhan, China, 2020302181088@whu.edu.cn; Jiaxi Lu, School of Cyber Science and Engineering, Wuhan University, Wuhan, China, lulululu@whu.edu.cn; Weijing Zeng, School of Mathematics and Statistics, Wuhan University, Wuhan, China, 2021302011066@whu.edu.cn; Zhong Li, School of Synthetic Biology and Biomanufacturing, Tianjin University, Tianjin, China, lz95_@tju.edu.cn; Hao Qi, School of Synthetic Biology and Biomanufacturing, Tianjin University, Tianjin, China, haoq@tju.edu.cn; Jingsong Cui, School of Cyber Science and Engineering, Wuhan University, Wuhan, China, jscui@whu.edu.cn.
+
+12 Zhou et al. which implies 𝑝 (𝑦 ) = exp  (𝜆 0 − 1) + 𝜆 1𝑦 + 𝜆 2 (𝑦 − 𝜇 )2 . For integrability we require 𝜆 2 < 0. And for a Gaussian-type distribution 𝑝 (𝑦 ) ∝ 𝑒 𝑎𝑦 2+𝑏𝑦 with 𝑎 < 0, the mean is 
+
+E[𝑦 ] = − 𝑏 
+
+2𝑎 .
+
+Substituting 𝑎 = 𝜆 2 and 𝑏 = 𝜆 1 − 2𝜆 2𝜇 yields 
+
+E[𝑦 ] = − 𝜆 1 − 2𝜆 2𝜇 
+
+2𝜆 2
+
+= 𝜇 − 𝜆 1
+
+2𝜆 2
+
+.
+
+Using the mean constraint E[𝑦 ] = 𝜇 , we have 
+
+𝜇 − 𝜆 1
+
+2𝜆 2
+
+= 𝜇. 
+
+Since 𝜆 2 < 0, we know 2 𝜆 2 ≠ 0, which implies 
+
+𝜆 1 = 0.
+
+Let 𝐶 = exp (𝜆 0 − 1). Substituting 𝑝 (𝑦 ) into the constraints and utilizing Gaussian integrals: 1 =
+
+∫ +∞ −∞ 
+
+𝐶𝑒 𝜆 2 (𝑦 −𝜇 )2
+
+𝑑𝑦 = 𝐶 √︂ 𝜋 
+
+−𝜆 2
+
+, 𝜎 2 =
+
+∫ +∞ −∞ 
+
+(𝑦 − 𝜇 )2𝐶𝑒 𝜆 2 (𝑦 −𝜇 )2
+
+𝑑𝑦 = 𝐶 √𝜋 
+
+2(− 𝜆 2)3/2
+
+=⇒ 𝜎 2 = 𝐶 √𝜋 /2(− 𝜆 2)3/2
+
+𝐶 √︁ 𝜋 /− 𝜆 2
+
+= 1
+
+−2𝜆 2
+
+=⇒ 𝜆 2 = − 12𝜎 2 , 𝐶 = 1
+
+√2𝜋𝜎 2
+
+Substituting 𝜆 2 and 𝐶 back into the probability density function, we obtain: 
+
+𝑝 (𝑦 ) = 1
+
+√2𝜋𝜎 2 exp 
+
+
+
+− (𝑦 − 𝜇 )2
+
+2𝜎 2
+
+
+
+(1) The derivation rigorously establishes the optimal probabilistic form for instance-level variance modeling from an information-theoretic perspective. □
+
+B Optimization Laziness Analysis of NLL Loss in Deep Imbalanced Regression B.1 Problem Formulation and Notation 
+
+Consider a heteroscedastic Gaussian regression model where for an input 𝑥 , the model outputs mean 𝜇 (𝑥 ) and variance 
+
+𝜎 2 (𝑥 ) > 0. Given label 𝑦 , the single-sample Negative Log-Likelihood (NLL) loss is [7]: 
+
+L𝑁 𝐿𝐿 = 12 log 𝜎 2 (𝑥 ) + (𝑦 − 𝜇 (𝑥 )) 2
+
+2𝜎 2 (𝑥 ) (2) For simplicity, we define the residual 𝑒 (𝑥 ) := 𝑦 − 𝜇 (𝑥 ) and let 𝑣 := 𝜎 2 (𝑥 ) > 0 be the optimization variable. The loss becomes L = 12 log 𝑣 + 𝑒 2 
+
+> 2𝑣
+
+. In this analysis, we study partial derivatives with respect to 𝜇 and 𝑣 separately; hence, when differentiating with respect to 𝑣 , the residual 𝑒 = 𝑦 − 𝜇 is treated as fixed. 
+
+B.2 Gradient Computation 
+
+Proposition B.1. The first-order partial derivatives of L with respect to 𝜇 and 𝑣 = 𝜎 2 are: 
+
+∇𝜇 L = 𝜇 − 𝑦 𝜎 2 (𝑥 ) = − 𝑒 𝜎 2 , ∇𝑣 L = 𝜎 2 (𝑥 ) − 𝑒 2
+
+2𝜎 4 (𝑥 ) (3) Proof. Fixing 𝑣 , the derivative w.r.t. 𝜇 is: 
+
+𝜕 L
+
+𝜕𝜇 = 𝜕 𝜕𝜇 
+
+ (𝑦 − 𝜇 )2
+
+2𝑣 
+
+
+
+= 2(𝑦 − 𝜇 )(− 1)
+
+2𝑣 = 𝜇 − 𝑦 𝑣 = − 𝑒 𝜎 2Supplementary Material for “Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression” 3where 𝜕𝑒 𝜕𝜇 = −1. The mean gradient is scaled by 1 /𝜎 2 (𝑥 ); thus, a large 𝜎 2 (𝑥 ) directly suppresses the update step of 𝜇 .Fixing 𝜇 , the derivative w.r.t. 𝑣 is: 
+
+𝜕 L
+
+𝜕𝑣 = 𝜕 𝜕𝑣 
+
+ 12 log 𝑣 + 𝑒 2
+
+2𝑣 
+
+
+
+= 12𝑣 − 𝑒 2
+
+2𝑣 2 = 𝑣 − 𝑒 2
+
+2𝑣 2 = 𝜎 2 (𝑥 ) − 𝑒 2
+
+2𝜎 4 (𝑥 )
+
+□
+
+B.3 Convergence of Standard Iterative Methods to a Unique Optimum 
+
+B.3.1 Gradient Descent (GD). 
+
+Theorem B.2 (Variance Inflation and Convergence). Under the GD update rule with learning rate 𝜂 > 0, if 
+
+𝑒 2 > 𝑣 𝑡 , the variance strictly increases. The unique stable equilibrium is 𝑣 ∗ = 𝑒 2, around which GD converges linearly. 
+
+Proof. (a) Monotonicity: The GD rule is 𝑣 𝑡 +1 = 𝑣 𝑡 −𝜂 𝜕 L  
+
+> 𝜕𝑣 𝑣 𝑡
+
+= 𝑣 𝑡 −𝜂 𝑣 𝑡 −𝑒 2
+
+> 2𝑣 2
+> 𝑡
+
+. If 𝑒 2 > 𝑣 𝑡 , then 𝜕 L 
+
+> 𝜕𝑣
+
+< 0, leading to 𝑣 𝑡 +1 > 𝑣 𝑡 .Thus, the variance strictly increases. 
+
+(b) Uniqueness, Lipschitz Smoothness and Step Size Condition: Setting 𝜕 L 
+
+> 𝜕𝑣
+
+= 0 yields the unique critical point 𝑣 ∗ = 𝑒 2.The second-order derivative (Hessian) is 
+
+𝜕 2 L
+
+𝜕𝑣 2 = 𝜕 𝜕𝑣 
+
+ 12𝑣 − 𝑒 2
+
+2𝑣 2
+
+
+
+= − 12𝑣 2 + 𝑒 2
+
+𝑣 3 = 2𝑒 2 − 𝑣 
+
+2𝑣 3 .
+
+In a neighborhood of 𝑣 ∗ = 𝑒 2, the Hessian is positive and bounded above by 𝐿 = 12𝑒 4 , which implies the gradient of L is 
+
+𝐿 -Lipschitz continuous in this neighborhood. For gradient descent to converge stably to a local minimum, the step size must satisfy 0 < 𝜂 < 2 
+
+> 𝐿
+
+= 4𝑒 4. At 𝑣 = 𝑒 2, we have 𝜕 2 L  
+
+> 𝜕𝑣 2𝑣 =𝑒 2
+
+= 12𝑒 4 > 0, so 𝑣 ∗ = 𝑒 2 is a strict local minimum. 
+
+(c) Linear Convergence Rate: Let 𝛿 𝑡 = 𝑣 𝑡 − 𝑒 2. A first-order Taylor expansion near 𝑣 ∗ gives 𝛿 𝑡 +1 ≈ ( 1 − 𝜂 𝑒 4 )𝛿 𝑡 + O( 𝛿 2 
+
+> 𝑡
+
+).With 0 < 𝜂 < 2𝑒 4, the convergence factor 𝜌 = |1 − 𝜂 /𝑒 4 | < 1 ensures linear convergence: 𝛿 𝑡 = O( 𝜌 𝑡 ). □
+
+In summary, under the approximate equilibrium state 𝜎 2 (𝑥 ) ≈ 𝑒 (𝑥 )2, the predicted variance of "hard" samples (where 
+
+𝑒 2 ≫ 𝜎 2) will rapidly inflate to the magnitude of the squared residual. 
+
+B.3.2 Newton’s Method. 
+
+Theorem B.3 (Quadratic Convergence under Newton’s Method). When updating the variance using Newton’s method, the iteration satisfies: 
+
+𝑣 𝑡 +1 = 𝑣 𝑡 (3𝑒 2 − 2𝑣 𝑡 )
+
+2𝑒 2 − 𝑣 𝑡 
+
+(4) 
+
+Furthermore, the deviation 𝛿 𝑡 = 𝑣 𝑡 − 𝑒 2 achieves quadratic convergence: 
+
+|𝛿 𝑡 +1 | = 2𝛿 2
+
+> 𝑡
+
+𝑒 2 − 𝛿 𝑡 
+
+= O( 𝛿 2 
+
+> 𝑡
+
+) (5) Proof. (a) Derivation of Newton’s update formula: The update rule is 𝑣 𝑡 +1 = 𝑣 𝑡 − [∇ 2 
+
+> 𝑣
+
+L] −1∇𝑣 L. Substituting the known derivatives ∇𝑣 L = 𝑣 −𝑒 2 
+
+> 2𝑣 2
+
+and ∇2 
+
+> 𝑣
+
+L = 2𝑒 2 −𝑣  
+
+> 2𝑣 3
+
+, the iteration step size Δ𝑣 and the updated variance 𝑣 𝑡 +1 are computed as: 
+
+Δ𝑣 = − 2𝑣 3
+
+2𝑒 2 − 𝑣 · 𝑣 − 𝑒 2
+
+2𝑣 2 = 𝑣 (𝑒 2 − 𝑣 )
+
+2𝑒 2 − 𝑣 𝑣 𝑡 +1 = 𝑣 + 𝑣 (𝑒 2 − 𝑣 )
+
+2𝑒 2 − 𝑣 = 𝑣 (2𝑒 2 − 𝑣 ) + 𝑣 (𝑒 2 − 𝑣 )
+
+2𝑒 2 − 𝑣 = 𝑣 (3𝑒 2 − 2𝑣 )
+
+2𝑒 2 − 𝑣 4 Zhou et al. (b) Verification of the equilibrium point: Letting 𝑣 = 𝑒 2, we obtain 𝑣 𝑡 +1 = 𝑒 2 (3𝑒 2 −2𝑒 2 )  
+
+> 2𝑒 2−𝑒 2
+
+= 𝑒 2.(c) Quadratic convergence rate: Newton’s method converges quadratically to 𝑣 ∗ for initial points sufficiently close to 𝑣 ∗, since the Hessian ∇2 
+
+> 𝑣
+
+L( 𝑣 ∗) = 12𝑒 4 > 0 is positive definite and non-singular at 𝑣 ∗. Let 𝛿 𝑡 = 𝑣 𝑡 − 𝑒 2. Substituting 
+
+𝑣 𝑡 = 𝑒 2 + 𝛿 𝑡 into the update formula, the deviation at the next step 𝛿 𝑡 +1 = 𝑣 𝑡 +1 − 𝑒 2 is: 
+
+𝛿 𝑡 +1 = (𝑒 2 + 𝛿 𝑡 )( 𝑒 2 − 2𝛿 𝑡 )
+
+𝑒 2 − 𝛿 𝑡 
+
+− 𝑒 2 = 𝑒 4 − 𝑒 2𝛿 𝑡 − 2𝛿 2 
+
+> 𝑡
+
+− 𝑒 4 + 𝑒 2𝛿 𝑡 
+
+𝑒 2 − 𝛿 𝑡 
+
+= −2𝛿 2
+
+> 𝑡
+
+𝑒 2 − 𝛿 𝑡 
+
+For sufficiently small 𝛿 𝑡 , 𝑒 2 − 𝛿 𝑡 > 0, ensuring 𝑣 𝑡 > 0 throughout the iteration. Thus, |𝛿 𝑡 +1 | = 2𝛿 2   
+
+> 𝑡
+> |𝑒 2−𝛿 𝑡 |
+
+= O( 𝛿 2 
+
+> 𝑡
+
+). This demonstrates that the residual converges quadratically. □
+
+B.4 Proof of the Vanishing Mean Update Signal 
+
+Theorem B.4 (Gradient Vanishing). Under the approximate equilibrium state 𝜎 2 (𝑥 ) ≈ 𝑒 (𝑥 )2:
+
+∇𝜇 L = |𝑒 |
+
+𝜎 2 ≈ |𝑒 |
+
+𝑒 2 = 1
+
+|𝑒 | (6) 
+
+Consequently, lim |𝑒 (𝑥 ) |→∞ ∇𝜇 L = 0. That is, the mean update signal for hard samples (with extremely large errors) tends to vanish. 
+
+Proof. we have ∇𝜇 L = − 𝑒 𝜎 2 , thus the gradient magnitude is: 
+
+∥∇ 𝜇 L∥ = |𝑒 |
+
+𝜎 2 .
+
+By the equilibrium condition, 𝜎 2 = 𝑒 2 + 𝑜 (𝑒 2) as |𝑒 | → ∞ , which means lim |𝑒 |→∞ 𝜎 2 −𝑒 2 
+
+> 𝑒 2
+
+= 0. Substituting into the gradient: 
+
+|𝑒 |
+
+𝜎 2 = |𝑒 |
+
+𝑒 2 + 𝑜 (𝑒 2) = 1
+
+|𝑒 | · 11 + 𝑜 (𝑒 2 )
+
+> 𝑒 2
+
+.
+
+As |𝑒 | → ∞ , 𝑜 (𝑒 2 ) 
+
+> 𝑒 2
+
+→ 0, so 11+ 𝑜 (𝑒 2 )
+
+> 𝑒 2
+
+→ 1, hence: 
+
+|𝑒 |
+
+𝜎 2 ∼ 1
+
+|𝑒 | (| 𝑒 | → ∞) .
+
+Taking the limit: lim   
+
+> |𝑒 |→∞
+
+∥∇ 𝜇 L∥ = lim  
+
+> |𝑒 |→∞
+
+1
+
+|𝑒 | = 0.
+
+This completes the proof that the mean update signal vanishes for hard samples. □ □
+
+To rapidly decrease the NLL loss for hard samples, the optimizer inflates the predicted variance. However, this simultaneously suppresses the learning signal for the mean to zero, rendering the model almost unable to improve its mean predictions for these challenging samples. Whether using Gradient Descent or Newton’s method, the optimization of the NLL loss drives 𝜎 2 (𝑥 ) → 𝑒 (𝑥 )2 =
+
+ 𝑦 − 𝜇 (𝑥 )2. Since Gradient Descent converges linearly and Newton’s method converges quadratically, the adaptive variance actively “absorbs” the errors of hard samples during training. As a result, the mean head nearly stops learning for these instances. Supplementary Material for “Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression” 5
+
+C Convergence Measure Proof for L𝑉 𝑎𝑟 Loss 
+
+Proof Objective: For nonzero residuals, we identify the unique global minimum of L𝑉 𝑎𝑟 and characterize its local optimization behavior in the linear and logarithmic parameterizations. 
+
+C.1 Problem Formulation 
+
+C.1.1 Loss Function. The variance-specific loss L𝑉 𝑎𝑟 is defined as: 
+
+L𝑉 𝑎𝑟 = 𝛽 ·
+
+ (𝑦 − sg [ ˆ𝜇 (𝑥 )]) 2
+
+2 ˆ 𝜎 2 (𝑥 ) + 12 log ˆ 𝜎 2 (𝑥 )
+
+
+
+(7) where: 
+
+• sg [·] denotes the stop-gradient operator, which treats the mean prediction ˆ 𝜇 (𝑥 ) as a constant during variance optimization to decouple the two processes. 
+
+• 𝛽 > 0 is a positive scaling coefficient. 
+
+• ˆ𝜎 2 (𝑥 ) > 0 is the predicted variance to be optimized. 
+
+C.1.2 Notation Simplification. For a fixed sample (𝑥, 𝑦 ) with a nonzero residual, let 𝐸 := (𝑦 − sg [ ˆ𝜇 (𝑥 )]) 2 > 0 and 
+
+𝑆 := ˆ𝜎 2 (𝑥 ) > 0. The objective function simplifies to a univariate function of 𝑆 :
+
+𝐽 (𝑆 ) = 𝛽 
+
+ 𝐸 
+
+2𝑆 + 12 log 𝑆 
+
+
+
+, 𝑆 > 0 (8) Under logarithmic parameterization (let 𝑣 = log ˆ 𝜎 2 (𝑥 ), hence 𝑆 = 𝑒 𝑣 ): ˜𝐽 (𝑣 ) = 𝛽 
+
+2 (𝐸𝑒 −𝑣 + 𝑣 ) , 𝑣 ∈ R (9) 
+
+C.2 Convergence Analysis in Linear Space 
+
+C.2.1 Global Unique Minimum. 
+
+Theorem C.1. The function 𝐽 (𝑆 ) has a unique global minimum on (0, +∞) at: 
+
+𝑆 ∗ = 𝐸 = (𝑦 − ˆ𝜇 (𝑥 )) 2 (10) Proof. The derivative is 𝜕𝐽 (𝑆 ) 
+
+> 𝜕𝑆
+
+= 𝛽 (𝑆 −𝐸 ) 
+
+> 2𝑆 2
+
+. It is negative for 0 < 𝑆 < 𝐸 , zero only at 𝑆 = 𝐸 , and positive for 𝑆 > 𝐸 .Hence, 𝐽 decreases up to 𝐸 and increases thereafter, so 𝑆 ∗ = 𝐸 is the unique global minimum. Notice that 𝐽 ′′ (𝑆 ) = 𝛽 (2𝐸 −𝑆 )
+
+> 2𝑆 3
+
+changes sign; global convexity is therefore neither claimed nor required. Thus, L𝑉 𝑎𝑟 and L𝑁 𝐿𝐿 share the same stationary variance for a fixed mean prediction. □
+
+C.2.2 Convergence Rate in Linear Space. A critical distinction lies in the gradient dynamics. For L𝑁 𝐿𝐿 , the mean gradient 𝜕 L𝑁 𝐿𝐿  
+
+> 𝜕𝜇
+
+= − 𝑦 −𝜇 (𝑥 )   
+
+> 𝜎 2(𝑥 )
+
+is suppressed by a factor of 𝑐 when 𝜎 2 (𝑥 ) inflates ( 𝜎 2 = 𝑐𝐸, 𝑐 ≫ 1). In contrast, for L𝑉 𝑎𝑟 ,the stop-gradient operator ensures 𝜕 L𝑉 𝑎𝑟    
+
+> 𝜕𝜇 𝑉 𝑎𝑟 term
+
+≡ 0. The mean head is updated via an independent loss term, making its gradient magnitude invariant to 𝜎 2 inflation. Comparing the Hessians at 𝑆 = 𝐸 : 𝐻 𝑉 𝑎𝑟 = 𝛽  
+
+> 2𝐸 2
+
+= 𝛽 · 𝐻 𝑁 𝐿𝐿 . Under Gradient Descent (GD) with step size 𝜂 , the spectral radii are: 
+
+𝜌 𝑁 𝐿𝐿 = |1 − 𝜂 
+
+2𝐸 2 |, 𝜌 𝑉 𝑎𝑟 = |1 − 𝜂𝛽 
+
+2𝐸 2 | (11) The coefficient 𝛽 therefore rescales the local curvature and must be considered jointly with the optimization step size. 6 Zhou et al. Theorem C.2 (Quadratic Convergence of Newton’s Method). Let 𝛿 𝑡 = 𝑆 𝑡 − 𝐸 be the deviation at step 𝑡 . When initialized sufficiently close to 𝐸 , Newton’s method on 𝐽 (𝑆 ) achieves quadratic convergence: |𝛿 𝑡 +1 | = O( 𝛿 2 
+
+> 𝑡
+
+).
+
+Proof. The Newton update 𝑆 𝑡 +1 = 𝑆 𝑡 − 𝐽 ′ (𝑆 𝑡 )    
+
+> 𝐽 ′′ (𝑆 𝑡 )
+
+simplifies to 𝑆 𝑡 +1 = 𝑆 𝑡 (3𝐸 −2𝑆 𝑡 ) 
+
+> 2𝐸 −𝑆 𝑡
+
+. Substituting 𝑆 𝑡 = 𝐸 + 𝛿 𝑡 :
+
+𝛿 𝑡 +1 = (𝐸 + 𝛿 𝑡 )( 𝐸 − 2𝛿 𝑡 )
+
+𝐸 − 𝛿 𝑡 
+
+− 𝐸 = 𝐸 2 − 𝐸𝛿 𝑡 − 2𝛿 2 
+
+> 𝑡
+
+− 𝐸 2 + 𝐸𝛿 𝑡 
+
+𝐸 − 𝛿 𝑡 
+
+= −2𝛿 2
+
+> 𝑡
+
+𝐸 − 𝛿 𝑡 
+
+Thus, |𝛿 𝑡 +1 | = 2𝛿 2  
+
+> 𝑡
+> |𝐸 −𝛿 𝑡 |
+
+= O( 𝛿 2 
+
+> 𝑡
+
+). □
+
+C.2.3 Convergence under 𝜒 2-Divergence. 
+
+Theorem C.3. Locally, GD optimization of 𝐽 (𝑆 ) induces a contraction in the 𝜒 2-divergence space. Defining 𝐷 𝜒 2 (𝑆 ∥𝐸 ) :=   
+
+> (𝑆 −𝐸 )2
+> 𝐸
+
+, the iteration satisfies: 
+
+𝐷 𝜒 2 (𝑆 𝑡 +1 ∥𝐸 ) = (1 − 𝜂𝛽 
+
+2𝐸 2 )2𝐷 𝜒 2 (𝑆 𝑡 ∥𝐸 ) + O(| 𝛿 𝑡 |3) (12) Proof. Expanding 𝛿 𝑡 +1 = 𝛿 𝑡 − 𝜂 𝛽𝛿 𝑡 
+
+> 2𝑆 2
+> 𝑡
+
+near 𝑆 𝑡 ≈ 𝐸 , we get 𝛿 𝑡 +1 = 𝜌𝛿 𝑡 + O( 𝛿 2 
+
+> 𝑡
+
+) where 𝜌 := 1 − 𝜂𝛽  
+
+> 2𝐸 2
+
+. For |𝜌 | < 1, squaring this local expansion gives 𝐷 𝜒 2 (𝑆 𝑡 +1 ∥𝐸 ) = 𝜌 2𝐷 𝜒 2 (𝑆 𝑡 ∥𝐸 ) + O(| 𝛿 𝑡 |3). □
+
+D Closed-form Derivation of the Bhattacharyya Coefficient for Gaussian Distributions 
+
+This appendix provides the detailed mathematical derivation for the closed-form Bhattacharyya Coefficient (BC) between two label-anchored Gaussian proxy distributions, 𝑝 (𝑦 |𝑥 𝑖 ) = N ( 𝑦 𝑖 , ˆ𝜎 2 
+
+> 𝑖
+
+) and 𝑝 (𝑦 |𝑥 𝑗 ) = N ( 𝑦 𝑗 , ˆ𝜎 2 
+
+> 𝑗
+
+), as presented in Section 3.5.1. By substituting the Gaussian density functions into the overlap integral and completing the square for the exponential terms, we have: BC (𝑖, 𝑗 ) =
+
+∫ +∞ −∞ √︁ 𝑝 (𝑦 |𝑥 𝑖 )𝑝 (𝑦 |𝑥 𝑗 ) 𝑑𝑦 
+
+=
+
+∫ +∞ −∞ 
+
+vuut 1√︃ 
+
+2𝜋 ˆ𝜎 2
+
+> 𝑖
+
+exp 
+
+
+
+− (𝑦 − 𝑦 𝑖 )2
+
+2 ˆ 𝜎 2
+
+> 𝑖
+
+
+
+· 1√︃ 
+
+2𝜋 ˆ𝜎 2
+
+> 𝑗
+
+exp − (𝑦 − 𝑦 𝑗 )2
+
+2 ˆ 𝜎 2
+
+> 𝑗
+
+!
+
+𝑑𝑦 
+
+= 1
+
+(2𝜋 ˆ𝜎 𝑖 ˆ𝜎 𝑗 )1/2
+
+∫ +∞ −∞ 
+
+exp − 14
+
+"
+
+(𝑦 − 𝑦 𝑖 )2
+
+ˆ𝜎 2
+
+> 𝑖
+
++ (𝑦 − 𝑦 𝑗 )2
+
+ˆ𝜎 2
+
+> 𝑗
+
+# ! 
+
+𝑑𝑦 
+
+= 1√︁ 
+
+2𝜋 ˆ𝜎 𝑖 ˆ𝜎 𝑗 
+
+∫ +∞ −∞ 
+
+exp ©«
+
+− 14
+
+
+
+ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2
+
+> 𝑗
+
+ˆ𝜎 2 
+
+> 𝑖
+
+ˆ𝜎 2
+
+> 𝑗
+
+𝑦 − 𝑦 𝑖 ˆ𝜎 2 
+
+> 𝑗
+
++ 𝑦 𝑗 ˆ𝜎 2
+
+> 𝑖
+
+ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2
+
+> 𝑗
+
+!2
+
++ (𝑦 𝑖 − 𝑦 𝑗 )2
+
+ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2
+
+> 𝑗
+
+ª®¬
+
+𝑑𝑦 
+
+= 1√︁ 
+
+2𝜋 ˆ𝜎 𝑖 ˆ𝜎 𝑗 
+
+exp − (𝑦 𝑖 − 𝑦 𝑗 )2
+
+4( ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2 
+
+> 𝑗
+
+)
+
+! ∫ +∞ −∞ 
+
+exp ©«
+
+− ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2
+
+> 𝑗
+
+4 ˆ 𝜎 2 
+
+> 𝑖
+
+ˆ𝜎 2
+
+> 𝑗
+
+𝑦 − 𝑦 𝑖 ˆ𝜎 2 
+
+> 𝑗
+
++ 𝑦 𝑗 ˆ𝜎 2
+
+> 𝑖
+
+ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2
+
+> 𝑗
+
+!2
+
+ª®¬
+
+𝑑𝑦 
+
+= 1√︁ 
+
+2𝜋 ˆ𝜎 𝑖 ˆ𝜎 𝑗 
+
+exp − (𝑦 𝑖 − 𝑦 𝑗 )2
+
+4( ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2 
+
+> 𝑗
+
+)
+
+!
+
+·
+
+vt 4𝜋 ˆ𝜎 2 
+
+> 𝑖
+
+ˆ𝜎 2
+
+> 𝑗
+
+ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2
+
+> 𝑗
+
+= exp − (𝑦 𝑖 − 𝑦 𝑗 )2
+
+4( ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2 
+
+> 𝑗
+
+)
+
+!√︄ 2 ˆ 𝜎 𝑖 ˆ𝜎 𝑗 
+
+ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2
+
+> 𝑗
+
+= exp − 14
+
+(𝑦 𝑖 − 𝑦 𝑗 )2
+
+ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2
+
+> 𝑗
+
+− 12 ln ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2
+
+> 𝑗
+
+2 ˆ 𝜎 𝑖 ˆ𝜎 𝑗 
+
+!
+
+This completes the derivation, mathematically verifying the closed-form formulation of our adaptive semantic tolerance measure. Supplementary Material for “Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression” 7
+
+E Asymptotic Analysis of Repulsive Gradients Based on Reciprocal Distribution Overlap 
+
+This section mathematically analyzes the proposed weighting mechanism based on reciprocal distribution overlap. We demonstrate that when sample pairs are in a state of Topological Hallucination, this mechanism adaptively generates exponentially amplified repulsive gradients, effectively correcting erroneous connections within the feature manifold. Proposition E.1 (Asymptotic Growth Rate of Repulsive Gradients). Assume samples 𝑖 and 𝑘 are in a state of topological hallucination, where their semantic label distance is large ( Δ𝑖,𝑘 = |𝑦 𝑖 − 𝑦 𝑘 | → ∞ ) despite being erroneously clustered in the feature space ( 𝑐 𝑖,𝑘 → 1). Suppose the predicted variances are bounded, i.e., ˆ𝜎 𝑖 , ˆ𝜎 𝑘 = O( 1). For any ordinary hard negative sample 𝑚 with a finite label distance, the relative repulsive gradient produced by target sample 𝑘 asymptotically satisfies: 
+
+𝐹 (𝑖, 𝑘 )
+
+𝐹 (𝑖, 𝑚 ) ∼ exp Δ2
+
+> 𝑖,𝑘
+
+Σ2
+
+!
+
+→ +∞ (13) 
+
+where Σ2 = 4( ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2 
+
+> 𝑘
+
+). That is, the repulsive gradient grows squared-exponentially with respect to the label distance. 
+
+Proof. First, we derive the explicit expression for the repulsive gradient. Let 𝑐 𝑖,𝑘 = cos (𝑧 𝑖 , 𝑧 𝑘 ) denote the cosine similarity between samples 𝑖 and 𝑘 . Based on the definition of the alignment loss L𝐴𝑙𝑖𝑔𝑛 , the partial derivative with respect to 𝑐 𝑖,𝑘 for a negative sample 𝑘 ∈ N 𝑖 yields the base repulsive gradient: 
+
+𝜕 L (𝑖 )
+
+> 𝐴𝑙𝑖𝑔𝑛
+
+𝜕𝑐 𝑖,𝑘 
+
+= 1
+
+𝜏𝑍 𝑖 
+
+𝑒 𝑐 𝑖,𝑘 /𝜏 
+
+where 𝜏 is the temperature parameter and 𝑍 𝑖 = Í𝑗 𝑒 𝑐 𝑖,𝑗 /𝜏 is the partition function serving as the normalization denominator. Incorporating our proposed dynamic weight W𝑝𝑢𝑠ℎ (𝑖, 𝑘 ) = 𝑤 (𝑦 𝑖 ) · BC (𝑖, 𝑘 )−1, the full repulsive gradient 
+
+𝐹 (𝑖, 𝑘 ) becomes: 
+
+𝐹 (𝑖, 𝑘 ) = 𝑤 (𝑦 𝑖 )
+
+𝜏𝑍 𝑖 
+
+· BC (𝑖, 𝑘 )−1 · 𝑒 𝑐 𝑖,𝑘 /𝜏 (14) Next, we expand the reciprocal Bhattacharyya weight. For the Gaussian proxies 𝑝 (𝑦 |𝑥 𝑖 ) = N ( 𝑦 𝑖 , ˆ𝜎 2 
+
+> 𝑖
+
+), the closed-form reciprocal BC is: BC (𝑖, 𝑘 )−1 = exp Δ2
+
+> 𝑖,𝑘
+
+4( ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2 
+
+> 𝑘
+
+) + 12 ln ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2
+
+> 𝑘
+
+2 ˆ 𝜎 𝑖 ˆ𝜎 𝑘 
+
+!
+
+Substituting this into the gradient expression yields: 
+
+𝐹 (𝑖, 𝑘 ) = 𝑤 (𝑦 𝑖 )
+
+𝜏𝑍 𝑖 
+
+exp Δ2
+
+> 𝑖,𝑘
+
+4( ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2 
+
+> 𝑘
+
+) + 12 ln ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2
+
+> 𝑘
+
+2 ˆ 𝜎 𝑖 ˆ𝜎 𝑘 
+
++ 𝑐 𝑖,𝑘 
+
+𝜏 
+
+!
+
+Finally, we perform the asymptotic analysis for the topological hallucination scenario. Comparing 𝐹 (𝑖, 𝑘 ) with an ordinary hard negative 𝐹 (𝑖, 𝑚 ), the partition function 𝑍 𝑖 and base weight 𝑤 (𝑦 𝑖 ) cancel out: 
+
+𝐹 (𝑖, 𝑘 )
+
+𝐹 (𝑖, 𝑚 ) = BC (𝑖, 𝑚 )
+
+BC (𝑖, 𝑘 ) exp 
+
+ 𝑐 𝑖,𝑘 − 𝑐 𝑖,𝑚 
+
+𝜏 
+
+
+
+= exp Δ2
+
+> 𝑖,𝑘
+
+4( ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2 
+
+> 𝑘
+
+) − Δ2
+
+> 𝑖,𝑚
+
+4( ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2 
+
+> 𝑚
+
+) + 𝑐 𝑖,𝑘 − 𝑐 𝑖,𝑚 
+
+𝜏 + 𝐶 𝑖,𝑘,𝑚 
+
+!
+
+where 𝐶 𝑖,𝑘,𝑚 = 12 ln ( ˆ𝜎 2         
+
+> 𝑖 +ˆ𝜎 2
+> 𝑘 )ˆ𝜎 𝑚
+> (ˆ𝜎 2
+> 𝑖 +ˆ𝜎 2
+> 𝑚 )ˆ𝜎 𝑘
+
+is the logarithmic variance term. Given ˆ 𝜎 𝑖 , ˆ𝜎 𝑘 , ˆ𝜎 𝑚 = O( 1) and 𝑐 𝑖,𝑘 , 𝑐 𝑖,𝑚 ∈ [− 1, 1],both 𝐶 𝑖,𝑘,𝑚 and the similarity residual are bounded. As Δ𝑖,𝑘 → ∞ , the squared-exponential term dominates. Letting 8 Zhou et al. 
+
+Σ2 = 4( ˆ𝜎 2 
+
+> 𝑖
+
++ ˆ𝜎 2 
+
+> 𝑘
+
+), we obtain the asymptotic equivalence: 
+
+𝐹 (𝑖, 𝑘 )
+
+𝐹 (𝑖, 𝑚 ) ∼ exp Δ2
+
+> 𝑖,𝑘
+
+Σ2
+
+!
+
+→ +∞ 
+
+□
+
+The derivation above highlights two key properties of our weighting mechanism: 
+
+• Correction of Topological Errors: When samples with large semantic gaps are erroneously clustered ( 𝑐 𝑖,𝑘 → 1and Δ𝑖,𝑘 → ∞ ), the squared-exponential repulsive gradient provides a sufficiently large penalty to rectify the distorted feature manifold. 
+
+• Uncertainty-Adaptivity: The growth of the repulsive gradient is constrained by Σ2 in the denominator, which is inversely proportional to the predicted variances. For noisy samples with high uncertainty (large variance), gradient amplification is naturally suppressed, preventing gradient explosion and maintaining training stability. 
+
+F Experiment Details 
+
+To comprehensively evaluate DUO, we compare it against representative deep imbalanced regression (DIR) baselines: 
+
+Vanilla relies solely on the standard regression loss; LDS & FDS (Yang et al. [8]) leverage the neighboring correlation of continuous targets to jointly smooth and calibrate both target and feature distributions; RankSim (Gong et al. [2]) introduces ranking regularization, forcing the neighbor topology in the feature space to strictly align with the distance ranking in the target space; Balanced MSE (Ren et al., 2022) incorporates target priors, modifying the mean squared error from a statistical perspective to recover unbiased predictions; ConR (Keramati et al. [5]) models target similarities via contrastive learning to prevent minority features from collapsing into majority ones. We also include the recent 
+
+Dist Loss (Nie et al. [6]), which explicitly aligns the predicted distribution with the ground-truth target distribution by jointly penalizing sample-level errors and macroscopic distribution distances. All models are trained using a single NVIDIA GeForce RTX 4090 D GPU. To ensure fair comparisons, all standard training, validation, and testing splits strictly follow the configurations set by Yang et al.[8]. The remainder of this section provides implementation details and hyper-parameter selections for the three datasets. For the imbalance-aware weight, we discretize the continuous label space into bins using the training set and define 
+
+𝑤 (𝑦 𝑖 ) as the inverse empirical frequency of the bin containing 𝑦 𝑖 . This global scarcity factor is multiplied by the detached instance-level uncertainty in L𝑀𝑒𝑎𝑛 . Training uses the squared-error mean objective, whereas MAE, bMAE, and GM are evaluation metrics. 
+
+F.1 Age estimation 
+
+For the AgeDB-DIR and IMDB-WIKI-DIR benchmarks, we adopt ResNet-50 as the backbone encoder, followed by independent fully connected heads to output 𝜇 and 𝜎 , respectively. The batch size is set to 64, and the initial learning rate is 2 .5 × 10 −4, which decays by a factor of 10 at epoch 60 and epoch 80. We use the Adam optimizer (momentum of 0.9, weight decay of 10 −4) and Mean Squared Error (MSE) as the base regression loss. All models are trained for 120 epochs. The input image size is 224x224, and data augmentation includes random cropping and random horizontal flipping. Label smoothing is applied using a Gaussian kernel (kernel size 9, 𝜎 lds = 1), and the re-weighting scheme uses inverse frequency weighting. The hyper-parameters for DUO are set as follows: variance term weight 𝛽 = 1.0, alignment weight 𝜆 align = 1.0, temperature parameter 𝜏 = 0.07, Gaussian overlap threshold 𝛿 = 0.5, and push coefficient Supplementary Material for “Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression” 9
+
+𝜂 = 0.01. The number of warm-up epochs is 15, validation MAE is used as the monitoring metric, and the random seed is fixed to 42. 
+
+F.2 Depth estimation 
+
+For the NYUD2-DIR benchmark, we employ a ResNet-50 based encoder-decoder architecture (Hu et al.[3]), outputting depth maps with a resolution of 152x114. Unlike age estimation, the prediction targets are dense depth maps; thus, 𝝁 
+
+and 𝝈 are output pixel-wise. The loss function terms are computed pixel-wise within the valid pixel mask and then averaged. In the contrastive alignment module, the sample-level proxy target ¯ 𝑦 𝑖 is defined as the spatial mean of the depth map over valid pixels, and ¯ 𝜎 𝑖 is computed similarly, thereby constructing the Gaussian distribution N ( ¯𝑦 𝑖 , ¯𝜎 𝑖 )
+
+for positive and negative sample partitioning. Other training configurations include: batch size of 12, initial learning rate of 2 .5 × 10 −4 (decaying by a factor of 10 every 5 epochs), Adam optimizer (momentum 0.9, weight decay 10 −4), MSE regression loss, and 120 training epochs. Data augmentation includes random horizontal flipping, ±5° rotation, color jittering, and PCA lighting perturbations. Label smoothing utilizes a Gaussian kernel (kernel size 9, 𝜎 lds = 1) with inverse frequency re-weighting. DUO hyper-parameters: 𝛽 = 1.0, 𝜆 align = 0.1, 𝜏 = 0.07, 𝛿 = 0.5, 𝜂 = 0.01, 10 warm-up epochs, and random seed 42. 
+
+F.3 Protein estimation 
+
+For the protein fitness dataset, we use AAV2-DIR, which contains 42,329 AAV2 capsid protein variant sequences and their fitness scores. These are randomly split into training, validation, and testing sets at a ratio of 7:1.5:1.5. Each sequence is embedded into a 1024-dimensional vector by mean-pooling ProtBERT residue embeddings from ProtTrans[1]. The downstream model is a two-layer Transformer encoder ( 𝑑 model = 256, 8 attention heads, FFN dimension 512), which splits the 1024-dimensional input into 64 patches followed by sequence mean pooling. The DUO branch outputs 𝜇 and 𝜎 .Training configurations: batch size of 128, Adam optimizer, initial learning rate of 2 .5 × 10 −4, MSE loss, and a maximum of 200 epochs. DUO hyper-parameters: 𝛽 = 1.0, 𝜆 align = 1.0, 𝜏 = 0.07, 𝛿 = 0.5, 10 warm-up epochs, inverse frequency re-weighting, and random seed 42. 
+
+F.4 Additional Analyses from the Rebuttal 
+
+Controlled component ablation. Table S1 isolates four factors under matched dual-head capacity: architectural capacity, mean–variance decoupling, uncertainty weighting, and the contrastive assignment rule. Dual-head controls share DUO’s exact prediction-head structure; Vanilla is retained as the single-head reference. Pure dual-head NLL fails to improve over single-head Vanilla, confirming that gains do not arise from extra parameters. Each removal or replacement of a DUO component—disabling decoupling, disabling dynamic weighting, or replacing BC with ConR—consistently degrades few-shot metrics, confirming that all three components contribute to tail performance. 
+
+Uncertainty and overlap controls. Replacing learned uncertainty with the instantaneous absolute residual removes the variance head and degrades most tail metrics, indicating that the learned predictor provides a smoother difficulty estimate than a batch-wise residual. Replacing BC with interval IoU, which reduces each Gaussian to a rigid interval, also performs worse than the full model. 
+
+Feature-space smoothness. Because t-SNE is qualitative, we additionally measure local smoothness on AgeDB-DIR using KNN-MAE ( 𝑘 = 5), which computes the average label discrepancy between each sample and its 𝑘 nearest 10 Zhou et al. 
+
+Table S1. Fine-grained ablation in the few-shot regions.                                                                                   
+
+> Method Head Key setting MAE ↓bMAE ↓GM ↓
+> IMDB AgeDB AAV2 IMDB AgeDB AAV2 IMDB AgeDB AAV2 Vanilla Single Standard MSE 25.546 13.381 7.365 33.085 16.579 7.565 18.091 9.644 7.351 NLL Dual Joint mean–variance 25.842 14.280 7.880 33.986 16.710 8.095 17.862 15.850 8.274 NLL + BC Dual Joint NLL + BC 24.295 11.916 4.160 31.334 14.347 4.396 16.775 8.762 3.823 DUO (NoWeight) Dual Decoupled + BC 24.560 12.226 4.109 31.821 14.968 4.380 16.306 8.447 3.815 DUO + ConR Dual Decoupled + ConR 23.996 11.565 4.208 31.269 14.265 4.596 15.633 7.996 3.869
+> DUO Dual Decoupled + weight + BC 22.940 9.917 4.106 27.190 11.590 4.329 13.650 6.587 3.777
+
+Table S2. Few-shot controls on uncertainty representation and overlap metric. 
+
+MAE ↓ bMAE ↓ GM ↓
+
+Method IMDB AgeDB AAV2 IMDB AgeDB AAV2 IMDB AgeDB AAV2 DUO 22.94 9.92 4.11 27.19 11.59 4.33 13.65 6.59 3.78 
+
+Raw residual 24.37 12.00 4.15 30.75 13.61 4.39 16.61 8.65 3.82 Interval IoU 23.80 11.40 4.20 30.90 13.80 4.50 15.10 7.60 3.90 neighbors in feature space. DUO yields the lowest neighborhood error in both the compound tail and median-shot regions, supporting the local-continuity interpretation of the visualization. 
+
+Table S3. KNN-MAE feature smoothness on AgeDB-DIR. Lower is better. 
+
+Method Few ∪ Old Median Few-shot MAE Vanilla 7.51 4.88 13.38 RankSim 7.90 5.48 14.60 FDS 7.15 4.97 12.14 
+
+DUO 7.03 4.61 11.79 
+
+Warm-up sensitivity. Table S4 shows a stable U-shaped trend around the selected 𝑇 𝑤 = 15 on AgeDB-DIR, rather than sensitivity to a single unstable setting. 
+
+Table S4. Sensitivity to the warm-up epoch 𝑇 𝑤 on AgeDB-DIR. 
+
+𝑇 𝑤 MAE ↓ bMAE ↓ GM ↓
+
+5 11.324 14.012 7.801 
+
+15 9.917 11.590 6.587 
+
+20 10.602 13.102 7.302 50 10.702 13.202 7.352 Supplementary Material for “Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression” 11 
+
+Table S5. Experimental results on the IMDB-WIKI dataset across different shot regions (Overall, Few, Median, Many). 
+
+Overall Few Median Many Method MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓
+
+Vanilla 7.829 13.717 4.389 25.546 33.085 18.091 14.387 14.933 9.797 7.052 7.146 4.024 NLL 8.094 14.201 4.519 25.842 33.986 17.862 15.221 15.918 10.420 7.266 7.371 4.133 LDS 7.626 12.739 4.257 22.755 30.179 13.786 12.146 12.597 6.938 7.059 7.133 4.024 FDS 7.829 13.294 4.457 24.347 31.839 14.600 12.762 13.335 7.145 7.209 7.283 4.219 RankSim 7.892 13.708 4.443 25.317 32.464 17.639 14.914 15.546 10.401 7.077 7.181 4.058 ConR 7.817 13.797 4.430 25.969 33.601 17.990 14.323 14.836 9.859 7.039 7.130 4.064 Balanced MSE 7.943 12.924 4.639 23.541 30.000 13.803 12.258 12.679 7.054 7.388 7.461 4.416 DistLoss 11.725 15.966 7.368 24.215 30.165 14.076 16.316 16.450 10.145 11.179 11.252 7.111 DUO 8.420 12.850 4.580 22.941 27.190 13.650 14.120 14.350 9.050 7.750 7.830 4.380 
+
+Table S6. Experimental results on the AgeDB dataset across different shot regions (Overall, Few, Median, Many). 
+
+Overall Few Median Many Method MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓
+
+Vanilla 7.754 9.848 4.951 13.381 16.579 9.644 9.172 9.230 6.175 6.743 6.743 4.324 NLL 8.220 10.000 8.990 14.280 16.710 15.850 9.980 9.990 9.850 6.950 6.950 6.810 LDS 7.904 8.826 5.139 11.489 12.055 7.577 8.435 8.426 5.404 7.369 7.369 4.860 FDS 7.679 9.574 4.906 12.136 15.531 8.326 8.956 9.000 5.811 6.833 6.833 4.415 RankSim 8.320 10.504 5.331 14.601 17.611 11.021 10.069 10.114 7.042 7.143 7.143 4.550 ConR 7.345 9.018 4.681 12.333 14.486 9.376 8.482 8.550 5.845 6.484 6.484 4.075 DistLoss 10.017 10.825 6.316 12.121 13.670 7.726 10.300 10.308 6.531 9.645 9.645 6.087 Balanced MSE 8.190 9.070 8.420 9.690 11.940 10.480 7.640 7.640 7.490 8.080 8.080 7.820 DUO 7.452 8.468 4.799 9.917 11.590 6.587 8.305 8.335 5.162 6.980 6.980 4.509 
+
+Table S7. Experimental results on the AAV2 dataset across different shot regions (Overall, Few, Median, Many). 
+
+Overall Few Median Many Method MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓
+
+Vanilla 2.643 2.623 2.079 7.365 7.565 7.351 5.918 6.116 5.890 2.534 2.757 2.010 LDS 1.990 1.981 1.178 4.361 4.681 4.054 3.648 3.888 3.211 1.935 2.117 1.140 FDS 1.988 1.985 1.256 5.023 5.388 4.786 4.345 4.667 4.008 1.911 2.147 1.210 RankSim 1.936 1.932 1.189 4.885 5.225 4.652 4.151 4.408 3.857 1.864 2.110 1.145 ConR 1.719 1.716 0.992 4.183 4.305 3.932 3.358 3.590 3.043 1.665 1.852 0.957 Balanced MSE 2.650 2.639 2.115 7.283 7.563 7.253 5.992 6.226 5.978 2.539 2.745 2.045 DistLoss 2.652 2.624 2.013 7.432 7.567 7.416 5.856 6.024 5.813 2.545 2.788 1.945 DUO 1.672 1.669 1.023 4.106 4.329 3.777 3.231 3.437 2.855 1.620 1.774 0.989 
+
+Table S8. Experimental results on the NYUD2 dataset across different shot regions (Overall, Few, Median, Many).                                                                                                                                    
+
+> Overall Few Median Many Method RMSE ↓MAE ↓bMAE ↓𝛿 1↑RMSE ↓MAE ↓bMAE ↓𝛿 1↑RMSE ↓MAE ↓bMAE ↓𝛿 1↑RMSE ↓MAE ↓bMAE ↓𝛿 1↑
+> Vanilla 0.580 0.371 1.051 0.807 1.867 1.443 1.884 0.608 0.795 0.596 0.673 0.668 0.457 0.318 0.363 0.824 LDS 0.633 0.434 1.004 0.737 1.764 1.333 1.714 0.641 0.781 0.590 0.658 0.680 0.546 0.392 0.426 0.744 FDS 0.589 0.374 1.067 0.807 1.905 1.478 1.920 0.594 0.802 0.601 0.675 0.661 0.464 0.320 0.364 0.825 RankSim 0.594 0.377 1.066 0.803 1.896 1.475 1.907 0.601 0.818 0.622 0.698 0.638 0.470 0.322 0.367 0.822 ConR 0.586 0.378 1.067 0.801 1.869 1.459 1.912 0.591 0.805 0.601 0.683 0.668 0.463 0.325 0.370 0.818 DUO 0.597 0.396 0.990 0.781 1.759 1.351 1.696 0.643 0.777 0.586 0.653 0.668 0.497 0.350 0.423 0.795
+
+12 Zhou et al. 
+
+Table S9. Pairwise comparison of various baselines and their DUO-enhanced counterparts on the AgeDB dataset across different shot regions. 
+
+Overall Few Median Many Method MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓
+
+LDS 7.904 8.826 5.139 11.489 12.055 7.577 8.435 8.426 5.404 7.369 7.369 4.860 LDS+DUO 8.121 8.983 5.116 9.595 11.563 5.415 9.411 9.396 5.860 7.588 7.588 4.887 FDS 7.679 9.574 4.906 12.136 15.531 8.326 8.956 9.000 5.811 6.833 6.833 4.415 FDS+DUO 7.699 9.137 4.892 11.561 13.751 8.267 9.028 9.054 5.929 6.901 6.901 4.374 RankSim 8.320 10.504 5.330 14.601 17.611 11.021 10.069 10.114 7.042 7.143 7.143 4.550 RankSim+DUO 8.346 9.525 5.478 11.640 13.334 7.124 9.368 9.393 6.302 7.698 7.698 5.114 Balanced MSE 8.190 9.070 8.420 9.690 11.940 10.480 7.640 7.640 7.490 8.080 8.080 7.820 Balanced MSE+DUO 6.660 7.400 6.840 9.120 10.160 9.510 8.600 8.600 8.560 5.880 5.880 5.610 
+
+Table S10. Pairwise comparison of various baselines and their DUO-enhanced counterparts on the IMDB-WIKI dataset across different shot regions. 
+
+Overall Few Median Many Method MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓ MAE ↓ bMAE ↓ GM ↓
+
+LDS 7.626 12.739 4.257 22.755 30.179 13.786 12.146 12.597 6.938 7.059 7.133 4.024 LDS+DUO 8.492 13.848 5.038 24.378 31.551 16.595 14.398 14.793 9.392 7.793 7.885 4.697 FDS 7.829 13.294 4.457 24.347 31.839 14.600 12.762 13.335 7.145 7.209 7.283 4.219 FDS+DUO 8.404 13.815 4.893 24.471 31.432 16.903 14.743 15.256 9.874 7.664 7.755 4.535 RankSim 7.892 13.708 4.443 25.317 32.464 17.639 14.914 15.546 10.401 7.077 7.181 4.058 RankSim+DUO 8.458 13.732 4.953 23.911 30.774 15.731 14.923 15.372 9.955 7.714 7.809 4.596 
+
+Table S11. Pairwise comparison of various baselines and their DUO-enhanced counterparts on the NYUD2 dataset across different shot regions.                                                                                                                                    
+
+> Overall Few Median Many Method RMSE ↓MAE ↓bMAE ↓𝛿 1↑RMSE ↓MAE ↓bMAE ↓𝛿 1↑RMSE ↓MAE ↓bMAE ↓𝛿 1↑RMSE ↓MAE ↓bMAE ↓𝛿 1↑
+> LDS 0.633 0.434 1.004 0.737 1.764 1.333 1.714 0.641 0.781 0.590 0.658 0.680 0.546 0.392 0.426 0.744 LDS+DUO 0.626 0.417 1.008 0.762 1.767 1.341 1.727 0.648 0.821 0.624 0.684 0.651 0.528 0.370 0.415 0.774 FDS 0.589 0.374 1.067 0.807 1.905 1.478 1.920 0.594 0.802 0.601 0.675 0.661 0.464 0.320 0.364 0.825 FDS+DUO 0.607 0.396 1.054 0.783 1.845 1.443 1.854 0.606 0.819 0.621 0.700 0.660 0.494 0.344 0.391 0.799 RankSim 0.594 0.377 1.066 0.803 1.896 1.475 1.907 0.601 0.818 0.622 0.698 0.638 0.470 0.322 0.367 0.822 RankSim+DUO 0.604 0.393 1.066 0.789 1.852 1.455 1.882 0.590 0.827 0.622 0.710 0.660 0.488 0.340 0.387 0.805
+
+Supplementary Material for “Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression” 13 
+
+References 
+
+[1] Ahmed Elnaggar, Michael Heinzinger, Christian Dallago, Ghalia Rehawi, Yu Wang, Llion Jones, Tom Gibbs, Tamas Feher, Christoph Angerer, Martin Steinegger, Debsindhu Bhowmik, and Burkhard Rost. 2022. ProtTrans: Toward understanding the language of life through self-supervised learning. 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence 44, 10 (2022), 7112–7127. [2] Yu Gong, Greg Mori, and Frederick Tung. 2022. Ranksim: Ranking similarity regularization for deep imbalanced regression. In Proceedings of the 39th International Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 162) . PMLR, 7634–7649. [3] Junjie Hu, Mete Ozay, Yan Zhang, and Takayuki Okatani. 2019. Revisiting single image depth estimation: Toward higher resolution maps with accurate object boundaries. In 2019 IEEE winter conference on applications of computer vision (WACV) . IEEE, 1043–1051. [4] Edwin T Jaynes. 1957. Information theory and statistical mechanics. Physical review 106, 4 (1957), 620–630. [5] Mahsa Keramati, Lili Meng, and R David Evans. 2024. Conr: Contrastive regularizer for deep imbalanced regression. In International Conference on Learning Representations .[6] Guangkun Nie, Gongzheng Tang, and Shenda Hong. 2025. Dist loss: enhancing regression in few-shot region through distribution distance constraint. In International Conference on Learning Representations .[7] David A Nix and Andreas S Weigend. 1994. Estimating the mean and variance of the target probability distribution. In Proceedings of 1994 ieee international conference on neural networks (ICNN’94) , Vol. 1. IEEE, 55–60. [8] Yuzhe Yang, Kaiwen Zha, Yingcong Chen, Hao Wang, and Dina Katabi. 2021. Delving into deep imbalanced regression. In Proceedings of the 38th International Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 139) . PMLR, 11842–11851.
