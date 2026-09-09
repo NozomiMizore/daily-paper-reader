@@ -1,0 +1,3032 @@
+Title: A Network-Structured Bayesian Hierarchical Model for Sparse Mutation-Drug Response Associations: Application to Cancer Pharmacogenomics
+
+URL Source: https://arxiv.org/pdf/2609.05784v1
+
+Published Time: Wed, 09 Sep 2026 00:25:45 GMT
+
+Number of Pages: 49
+
+Markdown Content:
+# A Network-Structured Bayesian Hierarchical Model for Sparse Mutation-Drug Response Associations: Application to Cancer Pharmacogenomics 
+
+Hammed A. Olayinka 1* and Saheed O. Olayinka 21Department of Mathematical Sciences, Worcester Polytechnic Institute, Worcester, MA, USA 
+
+> 2
+
+Department of Computer Science and Artificial Intelligence, University of Ibadan, Ibadan, Nigeria 
+
+> *
+
+haolayinka@wpi.edu 
+
+Abstract Abstract 
+
+We develop a network-structured Bayesian hierarchical model for sparse association map-ping between genomic alterations and quantitative treatment-response phenotypes. The framework combines a Gaussian Markov random field prior that borrows strength across pathway-connected genes, a global-local horseshoe prior inducing sparsity, and a conjugate Gibbs sampler requiring no Metropolis-Hastings steps. Though broadly applicable to high-dimensional settings with known predictor networks, we validate it using cancer cell-line drug-sensitivity data. Applied to GDSC2 ( N = 951 cell lines, G = 219 driver genes, D = 295 drugs), the model identifies 126 gene-drug associations (0.195% of 64,605 pairs), concen-trated in EZH2 (45 drugs, all sensitivity-direction, mean effect −0.911 lnIC50) and KMT2D (36 drugs, all sensitivity-direction, mean effect −0.496 lnIC50). These markers show exter-nal support in an independent PRISM screen (1,518 compounds), with KMT2D achieving complete directional replication (36/36) and EZH2 partial replication (8/12). Five-fold cross-validated predictive log-likelihood confirms each prior layer’s value: the full model outper-forms the no-network ablation by +3 ,109 log-units per fold and the no-horseshoe ablation by +14 ,039 log-units, consistently across folds. Simulations under three scenarios show the full model achieves the highest precision and lowest false-discovery rate throughout, while the net-work prior improves sensitivity recovery under network-structured signal. A tissue-stratified extension identifies coherent subgroup refinements, including lung-specific EGFR-inhibitor sensitivity and skin-specific BRAF-Dabrafenib sensitivity. These results show the framework identifies sparse, interpretable, externally supported drug-sensitivity markers while enabling principled investigation of tissue-specific departures from shared effects. 
+
+Keywords: Bayesian inference; horseshoe shrinkage; Gaussian Markov random fields; pathway smoothing; cell-line screening; tissue-specific heterogeneity. 
+
+# 1 Introduction 
+
+High-dimensional pharmacogenomic studies often seek to identify sparse associations between genomic alterations and quantitative treatment-response phenotypes. In this setting, the scientific goal is not simply to optimize statistical prediction, but to characterize which genomic features are credible candidate markers or modifiers of measured drug sensitivity across a large collection of candidate feature-outcome relationships. Cancer drug-sensitivity screens provide a particularly important example of this problem: hundreds of cancer cell lines are screened against hundreds or thousands of compounds while mutation status is recorded across hundreds of genes, so the number of candidate mutation-drug response associations 1arXiv:2609.05784v1 [stat.AP] 5 Sep 2026 can greatly exceed the number of independent biological samples available to estimate them (Garnett et al., 2012; Barretina et al., 2012; Iorio et al., 2016; Corsello et al., 2020). An analogous challenge arises in other high-dimensional biomedical and biological settings where sparse genomic signals must be recovered under a known relational structure among predictors, including patient-level pharmacogenomics, genome-wide association studies where prior pathway knowledge may inform inference, organoid and patient-derived xenograft screens, agricultural genomics studies predicting phenotypic response from marker panels, and microbial genomics settings where gene presence or absence predicts antibiotic resistance (Kaplan et al., 2020; Driehuis et al., 2020; Gao et al., 2015; Su et al., 2019; Danilevicz et al., 2022). The statistical framework developed here is applicable to any of these settings; we develop and validate it using cancer drug-sensitivity data. Two structural features make naive regression approaches unreliable in this setting. First, most can-didate mutations are not expected to be relevant to a given drug’s mechanism of action. A model that estimates an unconstrained, unshrunk effect for every gene–drug pair will therefore overfit unless it in-corporates a principled sparsity mechanism. Second, genes do not operate independently. Genes that participate in the same biological pathway, or that are co-selected through shared mutational processes, may have correlated mutation patterns and biologically related effects. This raises the question of whether known pathway or network structure should be used to pool statistical strength across genes rather than being ignored or treated only as a nuisance source of correlation (Li and Li, 2008, 2010; Kaplan et al., 2020). Bayesian hierarchical models are a natural framework for addressing these two issues simultaneously. A global–local shrinkage prior can encode sparsity directly in the posterior, avoiding a separate variable-selection step, while a network-structured prior can incorporate known biological relationships among predictors (Carvalho et al., 2010; Rue and Held, 2005; Li and Li, 2008). In the present work, we develop such a model for sparse mutation-drug response association mapping, with cancer drug sensitivity as the primary application. The model combines a pathway-informed Gaussian Markov random field (GMRF) prior, which encourages related genes to have correlated drug-response effects, with a global–local horseshoe shrinkage layer, which allows most mutation effects to be strongly shrunk while permitting supported signals to escape shrinkage (Rue and Held, 2005; Carvalho et al., 2010). The framework also accommodates an optional tissue-stratification layer that allows each gene’s drug-response effect to vary across cancer lineages while pooling toward a shared pan-cancer mean (Section 2.2), enabling joint characterization of pan-cancer associations and their tissue-specific heterogeneity. Two existing lines of work motivate key components of this framework, but neither addresses the full problem considered here. Samorodnitsky et al. (2020) fit a pan-cancer, polygenic Bayesian hierarchical model relating somatic mutation status across 50 genes to survival outcomes across 27 cancer types drawn from The Cancer Genome Atlas. Their model allows each gene’s effect to vary by cancer type while pooling toward a shared mean, a hierarchical pooling structure that successfully borrows strength across small and heterogeneous subgroups and which the present model adopts as an optional layer (Section 2.2). However, their model treats genes as exchangeable: no two genes’ coefficients are correlated in the prior, regardless of whether the genes participate in the same biological pathway. Moreover, gene importance is ultimately assessed through a forward-selection procedure outside the Bayesian posterior, evaluated by cross-validated predictive likelihood rather than posterior uncertainty. Pham et al. (2018) take the opposite approach to network structure. Their three-level model links gene expression to latent pathway factors via a confirmatory factor analysis layer, then places a conditional autoregressive (CAR) prior on those latent factors using a pathway–pathway adjacency matrix constructed from shared Gene Ontology annotation. This is, to our knowledge, one of the clearest existing uses of an explicit biological network as a Bayesian prior structure in this literature, and the pathway-derived adjacency matrix used in the present model follows the same general construction logic (Section 2.1.1). However, their CAR layer describes correlation among latent expression factors for a biological sample, not correlation among mutation-effect coefficients across genes. Their outcome is gene expression under drug perturbation rather than quantitative drug-sensitivity response, so the modelling target is fundamentally 2different. A third related model, Tansey et al. (2022)’s Bayesian Tensor Filtering, shares statistical strength across many cell lines and many drugs through learned low-dimensional embeddings. This model is closely related on the drug-response side, but its notion of structure is an unsupervised latent embedding rather than a biologically interpretable gene or pathway network, and mutation status is not incorporated as a covariate. The present model is, to our knowledge, the first to combine in a single coherent Bayesian posterior: (i) mutation-level genetic structure as the predictor; (ii) quantitative drug response – rather than survival or gene expression – as the outcome; (iii) an explicit pathway-network prior governing how mutation effects on that outcome are pooled across genes; and (iv) a continuous sparsity mechanism built into the posterior rather than applied as a post-hoc selection step. Two additional bodies of prior work anticipate individual components of this construction but not their combination. Li and Li (2008) introduced a frequentist network-constrained regularization penalty for genomic regression that uses the graph Laplacian of a gene network as a smoothness penalty on regression coefficients – the same mathematical object underlying the GMRF prior used here, but formulated as penalized likelihood rather than Bayesian posterior inference and without a global–local sparsity layer. Stingo et al. (2011) developed a fully Bayesian variable-selection model using a Markov random field prior over a gene–pathway network to inform pathway and gene selection for a continuous outcome, directly analogous in spirit to the network layer proposed here. Their model, however, places the network-informed prior on selection indicators in a spike-and-slab framework rather than on continuous mutation-effect coefficients, and is not designed for the per-drug gene-effect structure required here. The present model can therefore be viewed as combining the network-informed regularization philos-ophy of Li and Li (2008) and Stingo et al. (2011) with a continuous global–local shrinkage layer in the tradition of Mitchell and Beauchamp (1988), George and McCulloch (1993), Polson and Scott (2010), and Carvalho et al. (2010). By using continuous horseshoe shrinkage rather than discrete spike-and-slab inclusion indicators, the model avoids a combinatorial search over gene–drug inclusion patterns while still producing posterior summaries that characterize the full uncertainty over mutation–response associations. We apply this framework to cancer drug-sensitivity data by modelling quantitative drug response as a function of somatic mutation status. For each drug, the vector of mutation effects is regularized by two coupled prior components. A Gaussian Markov random field prior, defined on a curated cancer-pathway network, induces dependence among effects for pathway-connected genes and allows information to be shared across biologically related predictors. A global–local horseshoe prior imposes sparsity by shrinking most gene–drug effects strongly toward zero while retaining heavy-tailed local scales for effects supported by the data. This construction reflects the biological premise that true pharmacogenomic signals are sparse, but that nonzero effects are more likely to occur in pathway-organized patterns than as isolated, independent events. Two practical considerations shaped the model’s final form. First, a model with both a network prior and a horseshoe prior places two shrinkage mechanisms on the same coefficient vector. In an initial specification where both global variance components were assigned the same Inverse-Gamma prior family, the corresponding shrinkage parameters collapsed toward zero in a mutually reinforcing feedback loop. This behaviour is consistent with known pathologies of weakly informative variance-component priors in hierarchical models (Gelman, 2006), and is made more severe here because the network and horseshoe layers both act on the same gene–drug coefficient vector. We resolve this by adapting the Group Inverse-Gamma Gamma (GIGG) prior of Boss et al. (2021): we place Gamma priors on the precisions of the global network and horseshoe shrinkage parameters while retaining the Inverse-Gamma representation for the local gene-specific horseshoe parameter (Section 2.1.3). This asymmetry stabilizes both global shrinkage components and preserves conjugate Gibbs updates. Second, the model is evaluated not only as a methodological construction but also as a tool for identifying biologically interpretable mutation-drug response associations. In the primary cancer drug-sensitivity analysis, two chromatin-regulatory genes, EZH2 and KMT2D, emerge as dominant mutation-level predictors of drug response. These associations 3are supported by mechanistic evidence from the cancer pharmacology literature, persist under ablation comparisons, and demonstrate external robustness in PRISM/DepMap analyses. We therefore use the cancer drug-sensitivity application both to demonstrate the model’s feasibility and to show that network-structured Bayesian shrinkage produces sparse, interpretable, and externally supported mutation–response associations. The remainder of the paper is organized as follows. Section 2 develops the model framework, presenting Model I, the primary network–horseshoe specification, and Model II, the tissue-group extension, together with the computational details of the conjugate Gibbs sampler. Section 3 presents simulation studies designed to evaluate operating characteristics under known truth, including sensitivity, precision, false-discovery control, and interval coverage across distinct data-generating scenarios. Section 4 applies the proposed framework to cancer pharmacogenomic data, including the primary GDSC2 analysis, ablation comparisons, external robustness assessment using PRISM/DepMap data, and the tissue-stratified group-layer analysis. Section 5 discusses the findings in relation to the biological literature, model behavior, limitations, and broader methodological implications. Section 6 concludes the paper. 
+
+# 2 Model Framework 
+
+2.1 Model I: Shared-Effect Network–Horseshoe Model 
+
+Let i = 1 , . . . , N index biological samples or experimental units (e.g., cancer cell lines), d = 1 , . . . , D index drugs, and g = 1 , . . . , G index genes. Let mig ∈ { 0, 1} denote the mutation status of gene g in sample i.The response yid , such as a log-transformed drug-sensitivity measure, is modeled as 
+
+yid | μid , σ 2 
+
+> d
+
+∼ Normal( μid , σ 2
+
+> d
+
+), μid = αd +
+
+> G
+
+X
+
+> g=1
+
+mig eβgd , (1) where αd is a drug-specific intercept and eβgd is the shared effect of a somatic mutation in gene g on response to drug d.
+
+2.1.1 Network-Structured Prior 
+
+Let W denote a fixed, undirected gene–gene adjacency matrix defined over the subset of G′ genes with available network information. For each drug d, the corresponding sub-vector β(net)  
+
+> ·d
+
+receives a Gaussian Markov random field (GMRF) prior (Besag, 1974; Besag et al., 1991): 
+
+β(net)  
+
+> ·d
+
+| κ2 
+
+> d
+
+∼ Normal 
+
+
+
+0, κ 2
+
+> d
+
+(DW − δW )−1
+
+, (2) where DW = diag( W 1) is the degree matrix and δ ∈ (0 , 1) is a fixed smoothing parameter chosen so that 
+
+DW − δW is positive-definite. Fixing δ, rather than estimating it via the adaptive Metropolis step used by Pham et al. (2018) for an analogous CAR scaling parameter, is the first of two deliberate simplifications made to keep every step of posterior computation a closed-form conjugate draw. 
+
+2.1.2 Global–Local Horseshoe Prior 
+
+Because most candidate mutations are not relevant to a given drug’s mechanism, eβgd additionally receives a global–local horseshoe prior (Polson and Scott, 2010; Carvalho et al., 2010; Makalic and Schmidt, 2016), a continuous-shrinkage alternative to discrete spike-and-slab variable selection (Mitchell and Beauchamp, 1988; George and McCulloch, 1993) that avoids a combinatorial search over inclusion indicators: 
+
+eβgd | λ2
+
+> gd
+
+, ζ 2 
+
+> d
+
+∼ Normal(0 , λ 2
+
+> gd
+
+ζ2 
+
+> d
+
+), λ2 
+
+> gd
+
+| νgd ∼ Inverse-Gamma 
+
+ 12 , 1
+
+νgd 
+
+
+
+, (3) 4with 
+
+νgd ∼ Inverse-Gamma 
+
+ 12 , 1
+
+
+
+.
+
+Here λgd is the local gene–drug-specific shrinkage parameter and ζd is the global drug-specific shrinkage parameter. The GMRF and horseshoe prior factors act on the same shared coefficient eβgd : the network prior induces dependence across pathway-connected genes, while the horseshoe layer controls sparse global–local shrinkage. 
+
+2.1.3 Hyperpriors and Variance-Component Parameterization 
+
+For Model I, we assign weakly informative hyperpriors to the drug-specific network and sparsity variance components through their precision parameterization: 
+
+τκ,d = 1 /κ 2 
+
+> d
+
+∼ Gamma(1 , 1) , (4) 
+
+τζ,d = 1 /ζ 2 
+
+> d
+
+∼ Gamma(1 , 1) , (5) 
+
+νgd ∼ Inverse-Gamma 
+
+ 12 , 1
+
+
+
+, (6) 
+
+αd ∼ Normal(0 , 100) , (7) 
+
+σ2 
+
+> d
+
+∼ Inverse-Gamma(0 .01 , 0.01) . (8) Gamma distributions are parameterized by shape and rate, and Inverse-Gamma distributions are also parameterized by shape and rate. The Gamma priors on the precision parameters τκ,d and τζ,d are used instead of highly diffuse Inverse-Gamma priors directly on the corresponding variance components. This precision-based parameterization follows the stabilization principle underlying the Group Inverse-Gamma Gamma prior construction (Boss et al., 2021) and avoids undesirable boundary behavior that can arise from near-improper Inverse-Gamma priors on variance components (Gelman, 2006). In particular, placing highly diffuse Inverse-Gamma priors directly on κ2 
+
+> d
+
+and ζ2 
+
+> d
+
+can produce unstable variance updates and excessive shrinkage toward zero for some drug-specific effects. Parameterizing these components through their precisions yields stable conjugate updates while retaining adaptive drug-specific control over network smoothing and global sparsity. Full conditional derivations are provided in Supplementary Section S2. 
+
+2.1.4 Joint Posterior for Model I 
+
+The joint posterior for Θ I = { eβgd , α d, σ 2
+
+> d
+
+, κ 2
+
+> d
+
+, ζ 2 
+
+> d
+
+, λ 2
+
+> gd
+
+, ν gd }.π(Θ I | y) ∝ Y
+
+> i,d
+
+N( yid ; μid , σ 2
+
+> d
+
+) · Y
+
+> d
+
+N( β(net)  
+
+> ·d
+
+; 0, κ 2
+
+> d
+
+(DW − δW )−1)
+
+× Y
+
+> g,d
+
+N( eβgd ; 0 , λ 2
+
+> gd
+
+ζ2 
+
+> d
+
+) · IG( λ2
+
+> gd
+
+; 12 , ν −1 
+
+> gd
+
+) · IG( νgd ; 12 , 1) 
+
+× Y
+
+> d
+
+Gamma( τκ,d ; 1 , 1) · Gamma( τζ,d ; 1 , 1) · N( αd; 0 , 100) · IG( σ2
+
+> d
+
+; 0 .01 , 0.01) . (9) Full derivations of all conditional posterior distributions needed for the Gibbs sampler steps are in Supplementary Section S2. 52.2 Model II: Tissue-Group Extension 
+
+As an extension, Model II allows mutation effects to vary across predefined groups, such as tissue of origin. Let ci ∈ { 1, . . . , K } denote the group membership of sample i. The likelihood becomes 
+
+yid | · ∼ Normal( μ(ci) 
+
+> id
+
+, σ 2
+
+> d
+
+), μ(ci) 
+
+> id
+
+= αcid +
+
+> G
+
+X
+
+> g=1
+
+mig β(ci) 
+
+> gd
+
+, (10) where αkd is a group-and-drug-specific intercept and β(k) 
+
+> gd
+
+is the group-specific gene effect. Each group-specific effect is pooled toward a shared mean eβgd :
+
+β(k) 
+
+> gd
+
+| ˜βgd , η 2 
+
+> gd
+
+∼ Normal( ˜βgd , η 2
+
+> gd
+
+), k = 1 , . . . , K, (11) where η2 
+
+> gd
+
+is the group-heterogeneity variance. The shared mean ˜βgd then receives the same GMRF network prior (2) and horseshoe prior (3) as in Model I. 
+
+2.2.1 Preprocessing: Minimum Group-Size Requirement 
+
+The group-specific update for group k and outcome d requires sampling a G-dimensional coefficient vector using the precision matrix 
+
+Akd = 1
+
+σ2
+
+> d
+
+M ′
+
+> kd
+
+Mkd + diag(1 /η 2
+
+> gd
+
+) + εI, (12) where Mkd is the nkd × G design submatrix for the nkd observations in group k with observed outcome d.The matrix M ′
+
+> kd
+
+Mkd has rank at most min( nkd , G ), so when nkd < G , the likelihood contribution alone identifies only a low-dimensional subspace of the G coefficient dimensions. The remaining directions are stabilized by the prior precision diag(1 /η 2
+
+> gd
+
+) and by the ridge term εI .To avoid fitting group-specific effects for groups with very limited within-group information, we impose a minimum group-size requirement nmin . Groups with nk < n min are merged into a single “Other” category prior to fitting the group-layer model. This preprocessing step ensures that each retained group contributes enough observations to support stable group-specific coefficient updates while preserving all observations in the likelihood. In the analyses in Section 4, we set nmin = 50, a conservative threshold chosen to ensure adequate within-group replication relative to the G = 219 predictors in the real-data application. More generally, users applying the group-layer model to other datasets should choose nmin based on the number of predictors, the number of outcomes, and the degree of within-group replication. Groups below the chosen threshold should either be merged into an “Other” category or the model should be fitted without the group layer. 
+
+2.2.2 Hyperpriors for Model II 
+
+All hyperpriors for ˜βgd , κ2
+
+> d
+
+, ζ2 
+
+> d
+
+, λ2
+
+> gd
+
+, σ2
+
+> d
+
+, and αkd are identical to Model I (4–8). The group-heterogeneity variance η2 
+
+> gd
+
+requires a proper prior. Using Inverse-Gamma(0 .01 , 0.01) – analogous to the near-improper prior on σ2 
+
+> d
+
+– caused numerical overflow in Akd (12) because η2 
+
+> gd
+
+could take arbitrarily large values early in the chain, driving diag(1 /η 2
+
+> gd
+
+) → 0 and leaving Akd near-singular. We therefore assign the proper prior 
+
+η2 
+
+> gd
+
+∼ Inverse-Gamma( aη, b η), (13) With aη = 2 and bη = 0 .5, this prior has mode bη/(aη + 1) = 0 .167 and mean bη/(aη − 1) = 0 .5., placing the group-level standard deviation 
+
+q
+
+η2 
+
+> gd
+
+in the range [0 .2, 0.7] a priori – a scale consistent with documented tissue-level heterogeneity in cancer drug response.. The conjugate conditional posterior is 6η2 
+
+> gd
+
+| · ∼ Inverse-Gamma aη + K
+
+2 , bη + 12
+
+> K
+
+X
+
+> k=1
+
+ β(k) 
+
+> gd
+
+− ˜βgd 
+
+2
+
+!
+
+. (14) Additionally, a ridge term εI with ε = 10 −4 is added to Akd before Cholesky factorization (12). This is equivalent to a weak additional Normal(0 , ε −1) prior on each group-specific coefficient and guarantees positive-definiteness of Akd regardless of the realized value of η2
+
+> gd
+
+.The hyperpriors for Model II therefore differ from Model I in exactly two respects: (i) η2 
+
+> gd
+
+∼ IG( aη, b η)replaces the absence of this parameter in Model I; and (ii) tissue-specific intercepts αkd ∼ Normal(0 , 100) replace the drug-specific intercept αd of Model I. 
+
+2.2.3 Joint Posterior for Model II 
+
+The joint posterior for Θ II = {β(k) 
+
+> gd
+
+, ˜βgd , α kd , σ 2
+
+> d
+
+, κ 2
+
+> d
+
+, ζ 2 
+
+> d
+
+, λ 2
+
+> gd
+
+, ν gd , η 2
+
+> gd
+
+} is 
+
+p(Θ II | y) ∝ Y
+
+> i,d
+
+N
+
+
+
+yid ; αcid + P 
+
+> g
+
+mig β(ci) 
+
+> gd
+
+, σ 2
+
+> d
+
+
+
+· Y
+
+> k,g,d
+
+N( β(k) 
+
+> gd
+
+; ˜βgd , η 2
+
+> gd
+
+)
+
+× Y
+
+> g,d
+
+IG( η2
+
+> gd
+
+; aη, b η) · Y
+
+> d
+
+N( ˜β(net)  
+
+> ·d
+
+; 0, κ 2
+
+> d
+
+(DW − δW )−1)
+
+× Y
+
+> g,d
+
+N( ˜βgd ; 0 , λ 2
+
+> gd
+
+ζ2 
+
+> d
+
+) · IG( λ2
+
+> gd
+
+; 12 , ν −1 
+
+> gd
+
+) · IG( νgd ; 12 , 1) 
+
+× Y
+
+> d
+
+Gamma( τκ,d ; 1 , 1) · Gamma( τζ,d ; 1 , 1) · Y
+
+> d
+
+IG( σ2
+
+> d
+
+; 0 .01 , 0.01) 
+
+× Y
+
+> k,d
+
+N( αkd ; 0 , 100) . (15) Full derivations of all Gibbs sampler steps for Model II, including the group-specific updates for αkd ,
+
+β(k) 
+
+> gd
+
+, η2
+
+> gd
+
+, and eβgd , are provided in Supplementary Section S2.2. The corresponding Model I derivations are provided in Supplementary Section S2.1. 
+
+2.3 Posterior Computation 
+
+Both models are fitted by Gibbs sampling (Geman and Geman, 1984; Gelfand and Smith, 1990). The hi-erarchical specification was chosen so that the full conditional distributions for the regression coefficients, intercepts, residual variances, network-scale parameters, and global–local shrinkage components are avail-able in closed form. In particular, the required updates are Normal, Inverse-Gamma, or Gamma draws, yielding a fully conjugate sampler with no Metropolis–Hastings step. This is in contrast to related network-structured Bayesian models that require adaptive Metropolis updates or more general-purpose posterior samplers for at least one parameter (Samorodnitsky et al., 2020; Pham et al., 2018). Full conditional posterior distributions and derivations are provided in Supplementary Section S2. For continuous drug-response outcomes, the Gaussian likelihood in (1) leads directly to conjugate Gaussian updates for the regression coefficients and intercepts. The current sampler is therefore designed for continuous response summaries, such as log-transformed IC50, AUC, or viability scores. It cannot be applied directly to a binary responder/non-responder outcome without modifying the likelihood, because a Bernoulli likelihood would break the Gaussian conjugacy used in the coefficient updates. If the response were instead a binary responder indicator, one natural extension would be to use a probit formulation with the Albert–Chib data-augmentation scheme (Albert and Chib, 1993). Specifically, one could introduce a latent continuous response zid such that 
+
+yid = 1{zid > 0}, zid | · ∼ Normal( μid , 1) ,
+
+7where μid is defined using the same linear predictor as in (1). Conditional on the binary outcome, the latent variable zid is sampled from a Normal distribution truncated above or below zero. Conditional on the augmented latent responses {zid }, the remaining model again has a Gaussian working likelihood, so the same conjugate updates for the regression effects, network prior, shrinkage parameters, and group-layer extension can be retained with minor modifications. The residual variance is fixed to one in the probit model for identifiability. We do not pursue this binary-response extension here, because the present application focuses on continuous drug-sensitivity summaries. Two computational simplifications are used throughout. First, parameter-independent cross-product terms are precomputed within each drug-specific update whenever possible. Second, a single Cholesky factorization is reused both to solve for the posterior mean and to generate the Gaussian random draw. For Model I, these simplifications substantially reduce the cost of each drug-specific coefficient update. Model II retains the same conjugate structure but is computationally more expensive because, for each drug and MCMC iteration, it additionally updates K group-specific G-dimensional coefficient vectors, requiring up to K Cholesky factorizations of G × G precision matrices per drug. 
+
+# 3 Simulation Study 
+
+Because ground truth is unknown in any real data, we evaluate the model’s operating characteristics under three controlled data-generating scenarios where the true gene–drug associations are known. The simulation design is fully described in Supplementary Section S4; we summarize it here. 
+
+3.1 Simulation Design 
+
+Simulation design. For each replicate, N = 400 cell lines, G = 150 genes, D = 50 drugs, and G′ = 100 network-mapped genes are used. Mutation indicators mig ∼ Bernoulli( pg) with pg ∼ Uniform(0 .01 , 0.25). Drug-specific intercepts αd ∼ Normal(0 , σ 2
+
+> α
+
+). Responses follow yid = αd + P 
+
+> g
+
+mig βgd + εid , εid ∼
+
+Normal(0 , 1). Three scenarios vary how true effects βgd are generated. 
+
+Scenario 1 (Sparse independent): A sparse set Sd of genes is selected independently of the network per drug; effects βgd = sgd bgd , bgd ∼ Normal( μβ , τ 2 
+
+> β
+
+), sgd ∈ {− 1, +1 }. No pathway structure in the truth. Tests whether the horseshoe controls false discoveries when the network prior is irrelevant. 
+
+Scenario 2 (Network-structured): For each drug d, an active network module Pd is generated by seeding a random network-mapped gene and iteratively adding adjacent genes until the desired module size is reached. To induce correlated effects within the active module, network-correlated perturbations are drawn as u·d ∼ Normal  0, τ 2net (DW − δW + εI )−1 , where W is the gene adjacency matrix and DW is the corresponding degree matrix. True effects are then set to βgd = sdθ + ugd , g ∈ P d, and βgd = 0 for g / ∈ P d,with sd ∈ {− 1, +1 } determining the common direction of the drug-specific module effect. This scenario tests whether the GMRF prior improves recovery and false-discovery control when true mutation–response effects are localized within connected pathway modules. 
+
+Scenario 3 (Dense weak noise with sparse strong signals): Sparse strong effects ( βgd = sgd b(S) 
+
+> gd
+
+,
+
+b(S) 
+
+> gd
+
+∼ Normal( μS , τ 2 
+
+> S
+
+)) are mixed with many weak effects ( βgd = b(W ) 
+
+> gd
+
+, b(W ) 
+
+> gd
+
+∼ Normal(0 , τ 2 
+
+> W
+
+), τW ≪ τS ). Only the strong set is marked as truly associated. This tests whether the horseshoe distinguishes sparse strong signals from weak nuisance effects. A gene–drug pair is classified as selected when its 95% posterior credible interval excludes zero. We report sensitivity, precision, FDR, coefficient RMSE (overall and decomposed by true-association status), and 95% CI coverage. The simulation sparsity rate is approximately 3.3% (250 of 7,500 pairs), intentionally higher than the real-data rate (0.20%); an extremely sparse simulation would yield near-zero sensitivity for all models. 83.2 Simulation Results 
+
+Four findings emerge from the simulation studies results. First, the full model achieves the highest precision and lowest FDR in all three scenarios (Table 1, Figure 1). The full model selects fewer gene–drug pairs, but a larger fraction of its selected pairs are true associations. The no-network model is more sensitive but this comes at the cost of substantially higher FDR. The no-horseshoe model has FDR near or above 0.50 in Scenarios 1 and 3, indicating substantial over-selection when the global–local sparsity layer is removed. 
+
+Table 1: Simulation results at the 95% credible-interval operating point. 
+
+Scenario Model Sensitivity Precision FDR RMSE (all)  
+
+> β
+
+Coverage 1: Sparse Indep. Full 0.734 (0.039) 0.923 (0.017) 0.077 (0.017) 0.122 (0.005) 0.977 No-net 0.874 (0.029) 0.843 (0.023) 0.157 (0.023) 0.112 (0.015) 0.992 No-HS 0.864 (0.031) 0.505 (0.021) 0.495 (0.021) 0.180 (0.010) 0.957 2: Network Struct. Full 0.654 (0.084) 0.972 (0.008) 0.028 (0.008) 0.127 (0.009) 0.953 No-net 0.659 (0.060) 0.939 (0.010) 0.061 (0.010) 0.130 (0.006) 0.981 No-HS 0.841 (0.046) 0.791 (0.016) 0.209 (0.016) 0.174 (0.011) 0.958 3: Dense Weak Full 0.732 (0.039) 0.890 (0.021) 0.110 (0.021) 0.125 (0.005) 0.967 No-net 0.879 (0.027) 0.791 (0.025) 0.209 (0.025) 0.112 (0.006) 0.988 No-HS 0.868 (0.028) 0.473 (0.020) 0.527 (0.020) 0.181 (0.012) 0.956 
+
+Note. Results are based on n = 100 simulation replicates. Values are mean (SD), except coverage, which is reported as the mean empirical 95% credible-interval coverage. Scenario labels denote sparse independent effects, network-structured effects, and dense weak noise with sparse strong signals. No-net = No-network model; No-HS = No-horseshoe model. RMSE denotes RMSE (all)  
+
+> β
+
+over all G × D = 7 ,500 gene–drug pairs. Bold entries mark the best-performing model per metric within each scenario. Full model results at n ∈ { 1, 10 , 20 , 50 , 100 } are in Supplementary Table 2. 
+
+Figure 1: Simulation study results across three scenarios ( n = 100 replicates each). Rows: sensitivity, precision, and FDR (lower is better for FDR; dashed reference line at FDR = 0.10). Columns: Scenario 1 (sparse independent), Scenario 2 (network-structured), and Scenario 3 (dense weak noise with sparse strong signals). Colors denote the full model, no-network ablation, and no-horseshoe ablation. 
+
+9Second, in Scenarios 1 and 3 (non-network DGPs), the no-network model achieves lower RMSE (all) 
+
+> β
+
+than the full model. In Scenario 2 (network-structured DGP), the ordering reverses: the full model achieves the lowest aggregate RMSE (0.127 vs. 0.130 for the no-network model), confirming that the GMRF prior improves overall coefficient estimation when the true effects are localized within the same pathway structure as the prior. This result is unique to Scenario 2 and is consistent with the matched-FDR sensitivity advantage. In all three scenarios, aggregate RMSE alone does not fully characterize model performance. When RMSE is decomposed by true association status (Table 2, Figure 2), the tradeoff becomes clear: the no-network model has lower RMSE on true 
+
+Table 2: Threshold-Based and RMSE-Decomposed Simulation Results 
+
+Scenario Model Sens. at FDR ≤10% RMSE (signal)  
+
+> β
+
+RMSE (null) 
+
+> β
+
+1: Sparse Independent Full 0.747 0.562 0.066 
+
+No-network 0.859 0.263 0.102 No-horseshoe 0.764 0.415 0.166 2: Network Structured Full 0.772 0.303 0.073 
+
+No-network 0.700 0.241 0.105 No-horseshoe 0.769 0.189 0.172 3: Dense Weak Noise Full 0.727 0.562 0.073 
+
+No-network 0.849 0.259 0.104 No-horseshoe 0.748 0.411 0.167           
+
+> Note. Sens. at FDR ≤10% = sensitivity of the largest selected set satisfying empirical FDR ≤
+> 10% using posterior sign probability qgd ; RMSE (signal)
+> β= RMSE on the 250 truly associated pairs; RMSE (null)
+> β= RMSE on the 7,250 truly null pairs. Bold = best per metric per scenario. In Scenario 2, the full model wins matched-FDR sensitivity (0.772 vs. 0.700 for no-network), confirming that the GMRF prior provides a genuine advantage when the DGP matches the prior structure.
+> Figure 2: RMSE decomposed by true-association status ( n=100 replicates, mean values). Solid bars: RMSE restricted to the 250 truly associated pairs (3.3%). Hatched bars: RMSE restricted to the 7,250 truly null pairs (96.7%).
+
+signals in Scenarios 1 and 3 (less shrinkage bias), while the full model has the lowest RMSE on truly null pairs in every scenario (stronger shrinkage of irrelevant associations). Since false positives are the main practical concern for gene–drug association prioritization, the full model’s lower null RMSE and lower FDR are more aligned with the intended use of the model. 10 Third, the threshold-based evaluation (Table 2, Figure 3) reveals a scenario-dependent pattern that directly validates the GMRF network prior. In Scenario 2 (network-structured DGP), where true effects are generated using the same pathway network structure as the model’s prior, the full model achieves the highest matched-FDR sensitivity (0.772), surpassing the no-network model (0.700) and the no-horseshoe model (0.769). This confirms that the GMRF prior provides a genuine advantage in recovering true associations when pathway structure is real: by borrowing  
+
+> Figure 3: Sensitivity at a matched FDR of 10% for each model across three simulation scenarios ( n=100 replicates, mean values). Stars mark the best-performing model in each scenario.
+
+information across network-connected genes, the full model identifies associations that the no-network model misses. In Scenarios 1 and 3 (non-network DGPs), where true effects are generated independently of network structure, the no-network model has higher matched-FDR sensitivity (0.849–0.859 vs. 0.727– 0.747 for the full model). This is the expected bias-variance tradeoff: when no pathway structure exists in the signal, the GMRF prior introduces mild smoothing toward network configurations, reducing sensitivity relative to an unconstrained model. The result across all three scenarios – the full model wins when the prior matches the DGP and loses when it does not – is precisely the behavior a correctly specified network prior should exhibit. At the primary 95% credible-interval operating point, the full model maintains superior FDR control in all three scenarios (2.8–11% vs. 6.1–21% for the no-network model and 20.9–53% for the no-horseshoe model; Table 1). Fourth, the 95% credible-interval coverage is well-calibrated for the full model (Table 1), ranging from 0.957 to 0.977 across scenarios. The no-network model over-covers substantially (0.981–0.992), consistent with inflated posterior variance when the sparsity-inducing layer is removed. The no-horseshoe model has coverage near 0.957–0.958 but substantially worse FDR, indicating that nominal interval coverage alone is insufficient for reliable association selection. Overall, the simulation study shows that the full model behaves as a conservative structured-shrinkage procedure: it consistently provides the most reliable selected association set (highest precision, lowest FDR, strongest null shrinkage), and the GMRF prior provides a genuine recovery advantage precisely when pathway structure is real. The no-network model is more aggressive and ranks true signals higher when signal has no network structure, but at the cost of substantially more false discoveries. The no-horseshoe model performs worst on FDR in every scenario, confirming that the global–local shrinkage layer is the primary mechanism responsible for false-discovery control. 11 4 Application to Cancer Pharmacogenomics 
+
+4.1 Data Sources and Network Construction 
+
+We use the Genomics of Drug Sensitivity in Cancer (GDSC2) dataset (Yang et al., 2013; Garnett et al., 2012; Iorio et al., 2016), which provides fitted dose-response summaries (median inhibitory concentration, IC50, on the natural log scale) for a panel of cancer cell lines screened against a panel of drugs, together with somatic mutation calls from Cell Model Passports (van der Meer et al., 2019) restricted to a curated set of cancer driver genes. GDSC2 was preferred to the legacy GDSC1 release (improved screening protocol; GDSC’s own documentation recommends GDSC2 values where both are available) and to genome-wide mutation calling (the curated driver-gene panel removes the need to separately filter passenger mutations); a comparable resource, the Cancer Cell Line Encyclopedia (Barretina et al., 2012), was considered but not used for the primary analysis, and is noted in Section 5 as a candidate for external validation. After restricting mutation calls to coding, driver-flagged variants and intersecting the resulting gene set with the GDSC2 cell-line panel, the final analysis dataset comprises N = 951 cell lines, D = 295 drugs, and 
+
+G = 219 genes, with 237 ,566 (cell line, drug) response observations (no missing values among them). The pathway network used in the model’s prior structure (Section 2.1.1) was constructed from KEGG (Kyoto Encyclopedia of Genes and Genomes) (Kanehisa and Goto, 2000) signaling, regulatory, and cellular-process pathway gene sets. We excluded broad metabolic maps and disease- or infection-specific maps before constructing the graph because these categories can create dense, less specific gene connections that may weaken the interpretability of network smoothing. This filtering choice is biologically conservative rather than exhaustive: metabolic reprogramming, immune signalling, and inflammatory pathways can influence cancer drug response, but the goal of the GMRF prior here was to encode a curated set of cancer-relevant regulatory and signalling relationships rather than a complete causal map of all drug-response biology. This filtering reduced 320 candidate KEGG pathways to 171 after pathway-category exclusion, and to 141 after restricting to pathways containing at least one gene in the 219-gene panel. Let W denote the resulting weighted gene–gene adjacency matrix. Two genes were linked in W if and only if they shared membership in at least one retained pathway, with edge weights defined by the Jaccard index of their pathway-membership sets. After restricting to non-isolated panel genes, the final KEGG-derived graph used by the GMRF prior contained 134 genes. The remaining 85 genes were retained in the likelihood and global–local shrinkage layer but received no network-correlated prior structure. For this network, we constructed DW = diag( W 1) and verified that DW − δW was positive-definite for 
+
+δ ∈ { 0.5, 0.7, 0.8, 0.9}. The primary analysis used δ = 0 .8, which was also used in the simulation study. 
+
+4.2 Primary GDSC2 Analysis 
+
+4.2.1 Posterior Computation and MCMC Diagnostics 
+
+We fit Model I from Section 2.1 to the full GDSC2 dataset ( N = 951 cell lines, G = 219 genes, and D = 295 drugs) using two Markov chains of 5,000 iterations each, with 1,000 burn-in iterations and thinning by 2, yielding 2,000 retained posterior samples per chain. We assessed MCMC behavior using the Gelman–Rubin potential scale reduction factor ˆR (Gelman and Rubin, 1992), effective sample size (ESS), and the Geweke diagnostic (Geweke, 1992), computed across all 219 × 295 = 64 ,605 gene–drug coefficients. The diagnostic summaries indicated satisfactory overall mixing. Only 27 coefficients (0.04%) had ˆR > 1.1, and only 14 coefficients (0.02%) had ESS below 800, with a median ESS of 3,822. The Geweke diagnostic produced two-sided p-values below 0.05 for 4.47% of coefficients, which are not concentrated in any particular gene or drug. These results suggest that posterior summaries for the primary real-data analysis are not driven by widespread chain instability. 12 4.2.2 A Sparse, Concentrated Set of Mutation-Drug Associations 
+
+For each of the 64 ,605 gene-drug pairs, we assessed posterior inclusion via whether βgd ’s 95% credible interval excludes zero. 126 pairs (0.195%) met this criterion, spanning 20 genes and 105 of the 295 drugs. As presented in Table 3, the associations were highly concentrated in two genes: EZH2 , mutated in only 22 of 951 cell lines (2.3%), was associated with 45 drugs, and KMT2D , mutated in 103 cell lines (10.8%), with 36 drugs – together accounting for 64% of all flagged associations. Every one of EZH2’s 45 associations and KMT2D’s 36 were in the same direction (negative; mutation associated with lower lnIC50, i.e. greater drug sensitivity). 
+
+Table 3: Top recurrent gene–drug response associations under the full model. 
+
+Gene Mut. freq. Drugs % of pairs ˆβ SD EZH2 2.3% 45 35.7% −0.911 0.357 KMT2D 10.8% 36 28.6% −0.496 0.210 TET2 2.0% 8 6.3% −1.002 0.410 ASXL1 3.3% 7 5.6% −1.230 0.384 PBRM1 3.0% 5 4.0% 0.644 0.263 BRAF 8.6% 4 3.2% −0.134 0.057 TP53 67.3% 1 0.8% 1.351 0.144 
+
+Note. Genes are ranked by the number of associated drugs among 295 screened drugs. A gene–drug pair is counted as associated when the 95% posterior credible interval for βgd excludes zero. ˆβ and SD are the posterior mean and standard deviation of βgd averaged across each gene’s associated drugs. In total, 126 of 64,605 gene–drug pairs met the inclusion criterion, spanning 20 genes; the table reports the seven most frequent genes. Full per-drug posterior summaries for all flagged gene–drug pairs are provided in the Supplementary Section S6, Table 3. 
+
+Figure 4: Posterior mean effect distributions for the seven most-associated driver genes (full model, δ=0 .8). Each point represents one associated drug whose 95% posterior credible interval excludes zero; the bold vertical tick marks the mean posterior effect across all associated drugs for that gene. EZH2 ( n=45) and KMT2D ( n=36) cluster uniformly in the sensitivity (negative-effect) region. PBRM1 ( n=5) and TP53 ( n=1, Nutlin-3a) are the only genes with positive mean effects; TP53’s single hit is mechanistically explained in the text. Blue shaded region = greater sensitivity; red = greater resistance. 
+
+The recurrent genes in Table 3 also suggest a broader chromatin- and epigenetic-regulator pattern 13 beyond the two dominant genes. TET2 and ASXL1 were the third and fourth most recurrent genes, with 8 and 7 associated drugs, respectively, and both showed average effects in the sensitivity direction. This is biologically plausible: TET2 is a DNA methylation regulator frequently altered in lymphoid and myeloid malignancies, and ASXL1 is a chromatin-associated regulator of epigenetic marks (Lio et al., 2019; Inoue et al., 2018). Thus, although EZH2 and KMT2D account for most flagged associations, the broader pattern among the most recurrent genes is consistent with the hypothesis that alterations in chromatin or epigenetic regulators may mark increased in-vitro drug sensitivity. This interpretation is hypothesis-generating, since we did not perform a formal enrichment test for epigenetic regulators as a gene class. 
+
+TP53 , the most frequently mutated gene in the panel (67.3% of cell lines) and the dominant predictor in Samorodnitsky et al. (2020), was associated with only 1 of 295 drugs: Nutlin-3a, an MDM2 inhibitor (posterior mean ˆβ = 1 .351, SD 0 .144, 95% CI [1 .063 , 1.612]), with a positive sign indicating TP53 mutation is associated with greater resistance (Figure 4). This direction is mechanistically expected: Nutlin-3a works by blocking MDM2-mediated degradation of wild-type p53, which has no substrate to act on in TP53-mutant cells. We return to TP53’s broader near-absence in Section 5. 
+
+4.3 Biological Interpretation and Pharmacological Support 
+
+4.3.1 Pharmacological Support for the EZH2 and KMT2D Associations 
+
+We cross-referenced the drugs associated with EZH2 and KMT2D against their documented mechanisms of action. EZH2 is the catalytic subunit of Polycomb Repressive Complex 2 (PRC2), responsible for histone H3 lysine 27 trimethylation and transcriptional silencing of target genes; somatic EZH2 mutations are recurrently observed across solid and hematological cancers (Laugesen et al., 2016). The 45 drugs associated with EZH2 mutation included GSK343, a direct, selective small-molecule EZH2 inhibitor, as well as several chromatin- and transcription-regulatory compounds, including BET inhibitors (I-BET-762, JQ1, I-BRD9), HDAC inhibitors (Vorinostat, Entinostat, PCI-34051), and DOT1L inhibitors (EPZ004777 and EPZ5676) (Daigle et al., 2013). Knutson et al. (2014) report that lymphoma cell lines carrying EZH2 catalytic-domain point mutations show selective sensitivity to EZH2 inhibition both in vitro and in vivo; the direction of our model’s estimated effect is consistent with this finding for all 45 associated drugs. The 36 drugs associated with KMT2D mutation included several PARP inhibitors (Olaparib, Veliparib, Rucaparib, Niraparib, Talazoparib) and DNA-damaging or DNA-repair-related agents (Cisplatin, Oxali-platin, Camptothecin, Irinotecan, Cytarabine, Gemcitabine, Fludarabine). KMT2D’s documented role in chromatin-mediated DNA damage response provides a plausible mechanistic rationale: the close paralog KMT2C/MLL3 has been shown directly to regulate DNA-repair gene expression, with KMT2C-depleted cells becoming dependent on PARP1/2 for survival (Rampias et al., 2019). This is structurally analogous to – though mechanistically distinct from – the well-established sensitization of BRCA1/2-deficient tumors to PARP inhibition (Bryant et al., 2005; Farmer et al., 2005). 
+
+4.3.2 No Coordinated Signal from a Correlated Co-Mutation Cluster 
+
+A preliminary diagnostic check identified a cluster of six genes – RPL22, ACVR2A, BAX, BMPR2, KMT2B, and STAT5B – whose mutation status is highly correlated across cell lines, consistent with their being co-targets of a shared microsatellite-instability (MSI) mechanism: ACVR2A and BAX in particular are coding-microsatellite frameshift targets with directly measured mutation rates in DNA mismatch-repair-deficient cells (Chung et al., 2008). Of the 295 × 6 = 1 ,770 possible gene-drug associations among these six genes, only one met the inclusion criterion (RPL22, one drug), and no drug showed more than one cluster gene as associated simultaneously. The model does not detect a coordinated MSI-driven drug-response signal distinct from individual gene effects at this sample size and gene count. 14 4.4 Model Ablation and Predictive Assessment 
+
+To assess whether the network and horseshoe priors are each contributing to, rather than merely compli-cating, the result above, we refit the model twice more at a shorter chain length (1,500 iterations, 300 burn-in, 2 chains), once with the network prior removed ( no-network : ˜βgd retains only the horseshoe prior) and once with the horseshoe prior removed ( no-horseshoe : ˜βgd retains only the network prior, plus a flat Normal(0 , 100) fallback for the 84 genes outside the network). Both reduced models identify far more associations than the full model (Table 4). KRAS illustrates the mechanism: in the full model, KRAS shows a small, consistent positive effect (posterior mean ≈ 0.023), correctly identified as real but too diffuse to meet the inclusion criterion (1 of 295 drugs); with the horseshoe removed, the same effect crosses the threshold for 161 drugs – the largest count of any gene in that model – which we interpret as inflated rather than genuinely informative. By contrast, EZH2 and KMT2D survive both ablations (EZH2: 95/12 drugs without horseshoe/network; KMT2D: 111/30), corroborating the finding of Section 4.2.2. 
+
+Table 4: GDSC2 model ablation comparison of flagged gene–drug associations. 
+
+Model Associated pairs (of 64,605) Ratio to full model Full model 126 (0.195%) —No-network 867 (1.34%) 6.9×
+
+No-horseshoe 2,011 (3.11%) 16 .0×  
+
+> Note. A gene–drug pair is counted as associated when the 95% posterior credible interval for
+> βgd excludes zero. Percentages are computed relative to all 64 ,605 tested gene–drug pairs. The ratio column reports the number of associated pairs relative to the full model.
+
+4.4.1 Cross-Validated Predictive Likelihood 
+
+To move from qualitative inclusion-behavior comparison to a formal out-of-sample predictive comparison following Samorodnitsky et al. (2020)’s Section 2.4, we computed the k-fold ( k = 5) cross-validated posterior predictive log-likelihood for all three model configurations, splitting cell lines into 5 equal folds ( ≈ 190 held-out per fold). 
+
+Table 5: Five-fold cross-validated predictive performance of the full model and ablation variants. 
+
+Held-out log-likelihood by fold Model Fold 1 Fold 2 Fold 3 Fold 4 Fold 5 Full model −82 ,356 −81 ,418 −85 ,267 −84 ,822 −80 ,376 No-network −84 ,914 −84 ,963 −89 ,062 −87 ,035 −83 ,812 No-horseshoe −95 ,247 −98 ,238 −99 ,997 −95 ,802 −95 ,150 Mean (all folds) Full model advantage Model vs. No-network. vs. No-horseshoe. Full model −82 ,848 — —No-network −85 ,957 +3 ,109 —No-horseshoe −96 ,887 — +14 ,039  
+
+> Note. Values are held-out log-likelihoods; higher values, or less negative values, indicate better predictive perfor-mance. The full model advantage is the mean held-out log-likelihood of the full model minus that of the correspond-ing ablation model across the five folds. Positive values indicate better held-out predictive performance by the full model.
+
+As presented in Table 5, the full model achieves the highest held-out predictive log-likelihood in every one of the five folds, without exception. Its mean per-fold advantage over the no-network variant is +3 ,109 15 log-units (range +2 ,213 to +3 ,795), and over the no-horseshoe variant is +14 ,039 log-units (range +10 ,980 to +16 ,820). These are not marginal: the no-horseshoe model’s predictive performance is 14.5% worse and the no-network model’s is 3.6% worse on average. Each prior layer independently contributes to out-of-sample predictive accuracy, not merely to in-sample posterior behavior. 
+
+4.5 Robustness to Network-Smoothing Parameter δ
+
+The GMRF network prior contains one fixed parameter, δ ∈ (0 , 1), controlling smoothing strength between adjacent network genes. We refit the full model and both ablation variants at δ ∈ { 0.5, 0.7, 0.9} and repeated the posterior inclusion scan. 
+
+Table 6: Delta-sensitivity analysis under the full model. 
+
+δ EZH2 KMT2D Total Genes Drugs ¯ˆβEZH2 ¯ˆβKMT2D 
+
+0.5 44 36 125 20 105 −0.922 −0.495 0.7 44 36 125 20 105 −0.922 −0.496 
+
+0.8 45 36 126 20 105 −0.911 −0.496 
+
+0.9 45 36 125 20 105 −0.911 −0.496                     
+
+> Note. EZH2 and KMT2D drug counts, total flagged pairs, distinct driver genes, distinct associated drugs, and mean posterior effect at each value of δ. Bold row = primary analysis. ¯ˆβis negative throughout, indicating greater drug sensitivity in mutant cell lines.
+> Figure 5: Stability of EZH2 and KMT2D associations across four values of δ∈ { 0.5,0.7,0.8,0.9}.Left: Mean posterior effect size ( ±1 SD across associated drugs) as a function of δ. EZH2’s mean effect ranges from −0.922 to −0.911; KMT2D’s from
+> −0.496 to −0.495. Right: Number of associated drugs as a function of δ.KMT2D’s count is constant at 36; EZH2 varies between 44 and 45. The dotted vertical line marks the primary analysis value δ=0 .8.
+
+KMT2D’s 36 associated drugs are identical across all four δ values. EZH2 varies by at most one drug; mean effect sizes vary by less than 0.015; the ablation ordering full ≺ no-network ≺ no-horseshoe is preserved at every δ. These results (Table 6, Figure 5) confirm that the paper’s primary findings are not an artifact of the specific choice δ = 0 .8 within the retained KEGG-derived network. This analysis does not, however, assess sensitivity to alternative KEGG pathway-category inclusion rules; that question concerns the boundary of the network itself rather than the strength of smoothing over a fixed network. 
+
+4.6 External Validation in PRISM/DepMap 
+
+To assess whether the EZH2 and KMT2D associations identified in GDSC2 replicate in an independent pharmacogenomic screen using a different assay technology, we applied the full model to data from the 16 PRISM Repurposing Public 24Q2 dataset (Corsello et al., 2020) paired with DepMap 26Q1 somatic muta-tion calls. PRISM measures log 2 fold-change in pooled cell-line viability at a fixed dose of 2.5 μM, providing both a larger compound panel and a methodologically independent readout. After intersecting cell lines and restricting to our 219-gene panel, the PRISM analysis dataset comprised N =899 cell lines, G=218 genes (one absent from DepMap 26Q1), and D=1 ,518 compounds, yielding 330 ,924 gene-compound pairs. 
+
+Table 7: External PRISM validation of recurrent GDSC2 mutation-drug response associations. 
+
+Gene GDSC2 PRISM Direction Mean ˆβ (GDSC2) Mean ˆβ (PRISM) EZH2 45 12 8 sens. / 4 resist. −0.911 −0.421 KMT2D 36 36 36 sens. / 0 resist. −0.496 −0.302     
+
+> Note. GDSC2 and PRISM columns report the number of associated compounds for each gene. “Direction” denotes the number of associated PRISM compounds with negative posterior mean effects, interpreted as greater sensitivity, versus positive posterior mean effects, interpreted as resistance. Mean ˆβvalues are averaged across associated compounds within each dataset. Effect-size attenuation from GDSC2 to PRISM is expected because PRISM uses a fixed single-dose viability readout rather than the fitted dose–response IC50 summary used in GDSC2.
+
+KMT2D replicates with complete directional consistency. As shown in Table 7, all 36 compounds flagged for KMT2D in PRISM show negative posterior mean effects, identical in direction to all 36 GDSC2 associations. The drug count is identical despite a 5-fold larger compound panel in PRISM, suggesting KMT2D’s sensitivity association is concentrated in a specific mechanistic class of compounds. Effect size attenuates from ¯ˆβ=−0.496 (GDSC2) to −0.302 (PRISM), consistent with fixed single-dose attenuation. 
+
+EZH2 shows partial replication. As presented in Table 7, twelve of 1,518 PRISM compounds are flagged for EZH2 (vs. 45 of 295 in GDSC2), of which 8 (67%) show the same negative direction. The top two negative-direction compounds are directly mechanistically coherent: CPI-169 is a selective EZH2 inhibitor (Balasubramanian et al., 2014); CYC065 (fadraciclib) is a CDK2/9 inhibitor, and CDK2 directly phosphorylates EZH2 (Parry et al., 2020). The four resistance-direction compounds have no established EZH2-related mechanism and likely reflect noise at the 2.5 μM fixed dose. 
+
+Assay differences explain the attenuation. PRISM’s fixed dose captures a single point on the dose-response curve; compounds with shallow slopes or high IC50 values will show attenuated LFC signals even when the biological association is real. The reduction in EZH2’s flagged count (45 to 12) and four resistance-direction compounds are consistent with increased measurement noise rather than genuine reversal of the GDSC2 finding. 
+
+Observations. KMT2D’s association replicates exactly across two independent screens with fundamen-tally different assay technologies. EZH2’s association replicates in directional majority and in the two mechanistically strongest hits. Together, these results provide independent, cross-platform support for the primary GDSC2 findings. 
+
+Ablation comparison. The model ordering observed in GDSC2 replicates in PRISM: the full model flags 1,077 of 330,924 gene–compound pairs (0.325%), compared to 2,544 for the no-network model (0.769%; 2.4×) and 8,549 for the no-horseshoe model (2.583%; 7 .9×). The ordering full ≺ no-network ≺ no-horseshoe by inclusion count is preserved, confirming that each prior layer’s sparsity-inducing role operates consistently across both screens. 
+
+4.7 Targeted Tissue-Group Analysis 
+
+We next used the group-layer model in Section 2.2 as a targeted follow-up analysis to assess whether recurrent mutation-drug associations showed tissue-specific departures from the shared effect. Because storing posterior draws for all K × G × D group-specific coefficients is memory intensive, we refit the full group-layer model while retaining posterior draws of β(k) 
+
+> gd
+
+for 25 target genes selected from the primary 17 Table 8: Selected tissue-group-specific mutation-drug effects. 
+
+Group ( nk) Gene Drug ˆβ(k)
+
+(95% CI) ˆ∆(95% CI) Direction Skin (57) BRAF Dabrafenib −4.143 [−5.274 , −3.016] 
+
+−4.139 [−5.265 , −3.008] Sensitive Lung (187) EGFR Sapitinib −4.071 [−5.406 , −2.690] 
+
+−4.068 [−5.415 , −2.660] Sensitive Lung (187) EGFR Osimertinib −3.918 [−4.814 , −3.045] 
+
+−3.916 [−4.810 , −3.050] Sensitive Lung (187) EGFR Gefitinib −3.489 [−4.375 , −2.590] 
+
+−3.487 [−4.380 , −2.587] Sensitive Lung (187) EGFR AZD3759 −3.446 [−4.219 , −2.668] 
+
+−3.443 [−4.215 , −2.664] Sensitive. Lung (187) EGFR Erlotinib −3.287 [−4.237 , −2.367] 
+
+−3.284 [−4.251 , −2.354] Sensitive Lung (187) EGFR Afatinib −3.281 [−4.364 , −2.217] 
+
+−3.280 [−4.362 , −2.207] Sensitive Haem./Lymph. (164) TP53 Nutlin-3a (-) 2.535 [2 .069 , 3.000] 2.531 [2 .066 , 2.996] Resistant Haem./Lymph. (164) ASXL1 Nilotinib −3.662 [−4.510 , −2.784] 
+
+−3.419 [−4.546 , −1.682] Sensitive Haem./Lymph. (164) NRAS PD0325901 −2.049 [−2.862 , −1.242] 
+
+−2.046 [−2.859 , −1.227] Sensitive Breast (51) PTEN AZD8186 −1.823 [−3.036 , −0.754] 
+
+−1.814 [−3.031 , −0.736] Sensitive Other (437) STAG2 Talazoparib −3.860 [−4.991 , −2.692] 
+
+−3.852 [−4.985 , −2.679] Sensitive Breast (51) STAG2 Foretinib 3.584 [0 .645 , 6.582] 3.583 [0 .641 , 6.567] Resistant             
+
+> Note. ˆβ(k)is the posterior mean of the group-specific mutation-drug effect for the indicated group. ˆ∆ is the posterior mean of the tissue/group-specific deviation ∆ kgd =β(k)
+> gd −eβgd from the shared effect. CI denotes posterior credible interval. Negative effects indicate greater sensitivity and positive effects indicate resistance under the response orientation used in the main analysis. Haem./Lymph. denotes the haematopoietic and lymphoid group. The “Other” group contains tissue categories merged because their sample sizes were below the pre-specified minimum group-size threshold. Rows shown are selected examples in which both the group-specific effect and the deviation from the shared effect had 95% credible intervals excluding zero.
+
+full-model findings and the exploratory group-layer screen. The analysis used a minimum tissue-group size threshold of nmin = 50, yielding K = 6 final groups after merging smaller tissue categories into “Other”. For each retained target gene–drug–group combination, we computed posterior summaries for the group-specific effect β(k) 
+
+> gd
+
+and for the tissue-specific deviation from the shared effect, ∆kgd = β(k) 
+
+> gd
+
+− eβgd .
+
+Across the 6 × 25 × 295 = 44 ,250 scanned group–gene–drug combinations, 1,216 group-specific effects had 95% credible intervals excluding zero, and 1,103 tissue-specific deviations had 95% credible intervals excluding zero. These results indicate that the targeted group-layer analysis identified a selective subset of group-specific mutation-drug effects and deviations from the shared effect. The strongest tissue-specific refinements were biologically coherent (Table 8). EGFR showed pro-nounced lung-specific sensitivity effects across multiple EGFR inhibitors, including Sapitinib, Osimertinib, Gefitinib, AZD3759, Erlotinib, and Afatinib. For all six compounds, both the group-specific effect and 18 the deviation from the shared effect had 95% credible intervals excluding zero, indicating that the EGFR-associated sensitivity signal was substantially amplified in the lung group. Similarly, BRAF showed a strong skin-specific sensitivity effect for Dabrafenib ( bβ(k) 
+
+> gd
+
+= −4.143, 95% CI: [ −5.274 , −3.016]; b∆kgd = −4.139, 95% CI: [ −5.265 , −3.008]). Additional strong tissue-specific effects included haematopoietic and lymphoid ASXL1–Nilotinib sensitivity and STAG2-associated effects for Talazoparib and Foretinib. The gene-level summary further showed that tissue-specific effects were not restricted to a single gene. The largest numbers of 95% credible group-specific effects were observed for KRAS, RB1, STAG2, TP53, and BRAF, with corresponding 95% tissue-deviation counts of 272, 200, 157, 109, and 93, respectively. In contrast, EZH2 and KMT2D, although important in the primary shared-effect analysis, showed compara-tively limited evidence of tissue-specific deviation in the targeted group-layer scan. Thus, the group-layer model refined the primary analysis by identifying tissue contexts in which selected mutation-drug effects were substantially amplified, rather than simply recapitulating the most recurrent shared-effect genes.             
+
+> Figure 6: Selected tissue/group-specific effects from the targeted group-layer analysis. Panel A shows posterior means and 95% credible intervals for the group-specific effects β(k)
+> gd .Panel B shows posterior means and 95% credible intervals for the deviations from the shared effect, ∆ kgd =β(k)
+> gd −eβgd . For several selected examples, the shared effect eβgd is close to zero, so the group-specific effect and the deviation from the shared effect are visually similar; the two panels nevertheless represent distinct posterior summaries. The dashed vertical line denotes zero. Negative values indicate greater sensitivity, whereas positive values indicate resistance under the response orientation used in the main analysis.
+
+The paired intervals in Figure 6 visually confirms that the selected tissue/group-specific effects were not only nonzero within their respective groups, but also represented departures from the shared pan-sample effect. The most coherent patterns were the lung-specific EGFR inhibitor effects and the skin-specific BRAF-Dabrafenib effect, supporting the interpretation that the group-layer model identified tissue contexts in which selected mutation-drug effects were amplified. 
+
+# 5 Discussion 
+
+The central finding of this paper is specific: somatic mutations in EZH2 and KMT2D are reproducible, independently corroborated candidate mutation-level markers of in-vitro drug sensitivity, identified here across a large cancer cell-line pharmacogenomics panel. Of the 64,605 gene-drug pairs examined, 126 19 (0.195%) meet the 95% posterior credible-interval criterion, with EZH2 and KMT2D together accounting for 64% of all flagged associations. Every association for both genes is in the sensitivity direction (negative ˆβgd ), the effect sizes are large relative to their posterior uncertainty (mean | ˆβ| = 0 .911 for EZH2 and 0.496 for KMT2D), and the findings survive each specification check applied: removal of the network prior, removal of the horseshoe prior, variation in the network smoothing parameter δ, five-fold cross-validation, and replication in an independent screen. These genes also have plausible biological relevance: EZH2 is acatalytic component of Polycomb repressive complex 2 and an established epigenetic drug target, while KMT2D is a frequently altered chromatin regulator whose loss can reprogram enhancer and transcriptional states in cancer (Kim and Roberts, 2016; Dhar and Lee, 2021). Moreover, TET2 and ASXL1 also appear among the most recurrent genes, suggesting that the dominant EZH2 and KMT2D findings may be part of a broader chromatin- and epigenetic-regulator-associated sensitivity pattern (Lio et al., 2019; Inoue et al., 2018). We discuss below what each model check contributes to interpreting the main result, and what the findings collectively imply for the method and for cancer pharmacogenomics. Although EZH2 and KMT2D are emphasized because they account for the largest share of flagged associations, the recurrence of TET2 and ASXL1 among the top genes is also biologically informative. Both genes are involved in epigenetic regulation, and both showed average sensitizing effects across their associated drugs. This pattern does not establish formal enrichment of epigenetic regulators, but it supports a hypothesis-generating interpretation that mutation-level alterations in chromatin and epigenetic control may define a subset of cell lines with broadly altered in-vitro drug sensitivity. 
+
+Cross-validated predictive accuracy and the value of each prior layer. The most direct evidence that the model’s complexity is warranted comes from the five-fold cross-validated predictive log-likelihood (Section 4.4.1). The full model outperforms the no-network variant by a mean of +3 ,109 log-units per fold (range +2 ,213 to +3 ,795) and the no-horseshoe variant by +14 ,039 log-units (range +10 ,980 to +16 ,820), with the full model winning in every fold for both comparisons. These differences indicate that the network and sparsity layers improve out-of-sample prediction, not merely in-sample posterior summaries. This is important because large pharmacogenomic screens are high-dimensional by design: they seek to relate molecular features to drug-response phenotypes across many cell lines and many compounds (Barretina et al., 2012; Garnett et al., 2012; Iorio et al., 2016). In this setting, an association model must control false discoveries while retaining signals that generalize to unseen samples. The cross-validation results suggest that each prior layer earns its complexity: the GMRF prior contributes biologically informed borrowing across pathway-connected genes, while the horseshoe prior provides the sparsity needed to avoid overfitting in a large gene–drug search space. 
+
+TP53: a positive-control result and a model limitation. TP53, the most frequently mutated gene in the panel (67.3% of samples) and the dominant predictor in the pan-cancer survival analysis of Samorodnitsky et al. (2020), is associated with only one drug in the full model: Nutlin-3a, in the resistance direction ( ˆβ = 1 .351). This result is mechanistically coherent. Nutlin-3a is an MDM2 antagonist that inhibits the MDM2–p53 interaction, thereby stabilizing and activating p53; its activity is therefore expected to depend on an intact p53 pathway (Vassilev et al., 2004; Gu et al., 2008). Consistent with this mechanism, prior experimental work has shown that Nutlin-3 is cytotoxic in wild-type p53 leukemia cells but has little effect in p53-mutant or p53-null cells (Gu et al., 2008). Thus, the resistance-direction TP53–Nutlin-3a association in our analysis serves as a useful positive-control signal. The near-absence of TP53 associations across the remaining 294 drugs is also informative. TP53 mutation status is common in the dataset, which reduces contrast between mutated and non-mutated groups, and TP53 mutations are functionally heterogeneous. Different TP53 variants can produce loss-of-function, dominant-negative, or gain-of-function effects, with distinct consequences for DNA damage response, apoptosis, metabolism, and drug sensitivity (Monti et al., 2020; Alvarado-Ortiz et al., 2021). A binary mutation indicator cannot distinguish these classes. The contrast between TP53’s limited role here and its importance in the survival analysis of Samorodnitsky et al. (2020) is therefore not a discrepancy: 20 that study examined patient survival, whereas the present analysis examines quantitative in-vitro drug response. These outcomes capture different aspects of TP53 biology. 
+
+The MSI co-mutation cluster. The six-gene microsatellite-instability cluster (RPL22, ACVR2A, BAX, BMPR2, KMT2B, STAT5B) was checked specifically for coordinated drug-response signal and pro-duced only one flagged association (RPL22, one drug). This negative result should be distinguished from the estimation difficulty caused by co-mutation. These genes are highly correlated in mutation status across samples, which increases posterior uncertainty on each gene’s individual effect. The model is there-fore correctly reporting that it cannot separate individual contributions of co-mutated genes and that no coordinated MSI-driven drug-response signal is detectable at this sample size. This is an honest negative finding, not a model failure. More generally, this result illustrates why high-dimensional pharmacoge-nomic association analyses should not treat correlated genomic features as independent sources of evidence without explicit regularization or uncertainty propagation. 
+
+External validation and the meaning of partial replication. The PRISM replication analysis (Section 4.6) provides independent cross-platform support for the primary findings. KMT2D replicates with complete directional consistency across a compound panel larger than GDSC2: all 36 PRISM-flagged compounds show the sensitivity direction, matching the direction of all 36 GDSC2 associations. This level of directional consistency across two distinct screening platforms is strong evidence that the KMT2D signal is not an artifact of a single dataset. EZH2 shows partial replication: 8 of 12 flagged PRISM compounds are in the sensitivity direction, with the most mechanistically interpretable hits including an EZH2 inhibitor and a CDK2/9 inhibitor. This pattern is consistent with EZH2’s established role as a chromatin regulator and therapeutic target, but the PRISM-only resistance-direction compounds should be interpreted cautiously because they do not have an obvious EZH2-directed mechanism (Kim and Roberts, 2016). Effect-size attenuation from GDSC2 to PRISM (mean ˆβ from −0.911 to −0.421 for EZH2; from −0.496 to −0.302 for KMT2D) is also expected. GDSC2 estimates drug response using dose-response screening and fitted sensitivity summaries, whereas the PRISM repurposing screen is a high-throughput pooled viability platform that supports much broader compound coverage (Iorio et al., 2016; Corsello et al., 2020). Differences in assay format, compound concentration, screening duration, and response summarization can attenuate or reshape effect sizes even when the underlying biological direction is preserved. The important validation result is therefore not identity of effect magnitude, but reproducibility of direction and the persistence of sparse, biologically interpretable signals across platforms. 
+
+Simulation study. The simulation study (Section 3) provides controlled evidence about the conditions under which each model component adds value. Across all three scenarios, the full model achieves the highest precision and lowest false-discovery rate at the primary 95% credible-interval operating point, the operating characteristic most relevant for an application in which every predicted association may require laboratory follow-up. The matched-FDR sensitivity comparison further clarifies the role of the network layer. The full model wins sensitivity in Scenario 2, where nonzero effects are generated in connected pathway modules, whereas the no-network model can be more sensitive when the data-generating process is independent of network structure. This behavior is expected: graph- or network-informed regularization is beneficial when the prior network captures meaningful dependence among predictors, but it need not improve power when true signals are independent of that structure (Li and Li, 2008, 2010). The simulation results therefore support a conditional interpretation of the network prior: it is useful to the extent that the supplied pathway graph captures biologically relevant clustering of mutation effects. 
+
+Tissue-level heterogeneity and the limits of pan-sample association. The group-layer extension (Section 4.7) provides a targeted assessment of whether mutation-drug associations detected in the pooled analysis are amplified, attenuated, or reversed in specific tissue contexts. This is important because cancer pharmacogenomic studies have shown that tissue lineage can mediate drug response and influence how 21 genomic alterations translate into sensitivity or resistance (Iorio et al., 2016). Rather than treating the pan-sample effect as the only scientifically relevant estimand, Model II decomposes each selected association into a shared effect and a tissue/group-specific deviation, ∆kgd = β(k) 
+
+> gd
+
+− eβgd .
+
+This decomposition allows the model to distinguish broadly shared associations from effects that are concentrated in particular tissue contexts. The strongest tissue-specific refinements in the targeted group-layer scan were biologically coherent. The clearest examples were lung-specific EGFR sensitivity effects across multiple EGFR inhibitors, in-cluding Sapitinib, Osimertinib, Gefitinib, AZD3759, Erlotinib, and Afatinib. This pattern is consistent with the established role of EGFR alterations as predictive markers for EGFR tyrosine kinase inhibitors in non-small-cell lung cancer (Holleman et al., 2019). Similarly, BRAF showed a strong skin-specific sensi-tivity effect for Dabrafenib, in agreement with the established therapeutic relevance of BRAF inhibition in BRAF-mutant melanoma (Kainthla et al., 2014). TP53 showed recurrent tissue-specific resistance effects to Nutlin-3a, particularly in the haematopoietic and lymphoid group, again consistent with the dependence of MDM2 antagonism on a functional p53 pathway (Vassilev et al., 2004; Gu et al., 2008). Additional strong deviations were observed for STAG2, ASXL1, NRAS, PTEN, and related target genes. These find-ings illustrate the value of the group-layer model as a refinement of the primary pan-sample analysis: it identifies tissue contexts in which selected mutation-drug effects are substantially stronger than the shared effect. The targeted group-layer analysis also clarifies which primary pan-sample signals do not appear to be strongly tissue-specific. Although EZH2 and KMT2D were important in the primary shared-effect analysis, they showed comparatively limited evidence of tissue-specific departure in the targeted group-layer scan. In particular, EZH2 had only two 95% credible group-specific effects and no 95% credible deviations from the shared effect, while KMT2D had eight 95% credible group-specific effects but only one 95% credible deviation. Thus, the group-layer model does not simply reproduce the most recurrent pan-sample associations. Instead, it separates broadly shared associations from effects that are concentrated in particular tissue contexts. More generally, these results emphasize a limitation of purely pan-sample association models in cancer pharmacogenomics. A pooled model can efficiently detect mutation-drug associations that are stable across samples, but it may average over heterogeneous subgroup-specific effects. The group-layer extension pro-vides a principled Bayesian mechanism for investigating this heterogeneity while retaining partial pooling toward a shared effect. The same framework could be applied in other stratified settings, including patient subgroups defined by ancestry, sex, treatment history, molecular subtype, or clinical context, whenever the scientific question concerns both an overall association and its variation across biologically meaningful subgroups. Several limitations should be noted. First, the mutation indicator is binary, conflating gain-of-function, dominant-negative, and loss-of-function variants whose pharmacological consequences may differ substan-tially. This limitation is especially relevant for genes such as TP53, where different classes of alteration have distinct biological and therapeutic implications (Monti et al., 2020; Alvarado-Ortiz et al., 2021). Sec-ond, the pathway network used in the GMRF prior is necessarily incomplete and reflects both current database coverage and the pathway-category filtering choices used to construct the graph, rather than a complete causal map of pathway interactions. The robustness of the primary findings to variation in δ
+
+addresses sensitivity to the strength of smoothing within the retained network, but it does not address uncertainty about the network’s boundaries, missing biological edges, or the exclusion of broad metabolic and immune/inflammatory pathway categories. Future work could compare alternative pathway-filtering schemes, including networks that retain metabolic or immune-related pathways, to assess whether the same shared-effect findings persist under broader biological graph definitions.. Third, although the modelling framework itself is not restricted to cell lines, the empirical validation in this study uses cancer cell-line drug screens. The model requires a quantitative treatment-response 22 phenotype, a matrix of binary genomic predictors, and a network structure among those predictors, all of which may also be available in patient-level pharmacogenomics cohorts, organoid screens, and related biomedical settings. Nevertheless, cell lines lack the stromal, immune, vascular, and pharmacokinetic contexts that shape treatment response in patients; the tumor microenvironment is now understood to play an active role in cancer progression and therapeutic resistance (de Visser and Joyce, 2023). Consequently, in-vitro drug sensitivity should not be interpreted as a direct surrogate for clinical outcome. Replication of the strongest candidate markers, including EZH2 and KMT2D, in patient-level or organoid-based cohorts remains an important direction for future work. Fourth, the group-layer extension requires adequate sample sizes within each stratum to estimate group-specific effects reliably. In datasets with highly unequal stratum sizes, small groups must be merged, reducing the resolution of the stratified analysis. In the present application, the group-layer analysis was therefore used as a targeted follow-up rather than as a complete scan of all group-specific posterior draws. Although this targeted analysis identified biologically coherent tissue-specific effects, including lung-specific EGFR inhibitor sensitivity and skin-specific BRAF–Dabrafenib sensitivity, broader tissue-specific inference would require either larger sample sizes within each lineage or more memory-efficient strategies for storing and summarizing all group-specific posterior samples. 
+
+# 6 Conclusion 
+
+We developed a network-structured Bayesian hierarchical model for sparse association mapping between genomic alterations and quantitative treatment-response phenotypes. The model integrates pathway-informed smoothing, global–local sparsity regularisation, and a fully conjugate Gibbs sampler into a tractable framework for high-dimensional biomedical settings where prior network information among predictors is available. In application to cancer pharmacogenomics, the primary shared-effect model iden-tified EZH2 and KMT2D as dominant mutation-level associations with in-vitro drug sensitivity. These findings were independently replicated in PRISM, supported by established chromatin-regulatory biology, and robust to the model specification checks performed. The targeted group-layer extension provided a complementary tissue-stratified refinement, identifying contexts in which selected mutation-drug effects were amplified, most notably lung-specific EGFR sensitivity across multiple EGFR inhibitors and skin-specific BRAF-Dabrafenib sensitivity. At the same time, EZH2 and KMT2D showed comparatively limited evidence of tissue-specific deviation, suggesting that their primary signals are better interpreted as shared or broadly pooled associations rather than strongly lineage-restricted effects. Together, these results show that the proposed approach can identify sparse, interpretable, and externally supported candidate genomic markers of treatment-response phenotypes while also providing a principled extension for subgroup-specific heterogeneity. More broadly, the framework is applicable to pharmacogenomic and other high-dimensional biomedical screens in which quantitative response phenotypes, genomic predictors, and prior network in-formation are available. 23 SUPPLEMENTAL MATERIALS The Supplementary Material provides notation details, full conditional posterior derivations for both model variants, simulation summaries, complete posterior summary tables, and extended results from the targeted tissue-group analysis. ACKNOWLEDGMENTS The authors thank Samuel Isife (Cellular and Molecular Biology, Worcester Polytechnic Institute) for help-ful biological and pharmacological review of the manuscript, particularly comments on the interpretation of the mutation-drug response findings.The authors remain responsible for all analyses, interpretations, and conclusions. Also, the autors are grateful to the editor and the anonymous reviewers for careful reading of the manuscript and their suggestions. Results in this paper were obtained in part using a high-performance computing system acquired through NSF MRI grant DMS-1337943 to WPI. CONFLICT OF INTEREST The authors declare no known conflict of interest that may influence the publication of the paper. DATA AVAILABILITY The GDSC2 drug-sensitivity and somatic mutation data used in the primary analysis are publicly available from the Genomics of Drug Sensitivity in Cancer portal ( https://www.cancerrxgene.org ). The PRISM repurposing screen data are available from the DepMap portal ( https://depmap.org/portal ). The cancer pathway network adjacency matrix was derived from KEGG pathway gene-membership tables, available at https://www.genome.jp/kegg . All three datasets are freely accessible without restriction. Processed analysis files, and codes required to reproduce the results are available at 
+
+https://github.com/haolayinka/Bayesian-Network-Horseshoe-pharmacogenomics .FUNDING The authors received no financial support for the research, authorship, and publication of this article. 24 References 
+
+Albert, J. H. and Chib, S. (1993). Bayesian analysis of binary and polychotomous response data. Journal of the American Statistical Association , 88(422):669–679. Alvarado-Ortiz, E., de la Cruz-L´ opez, K. G., Becerril-Rico, J., Sarabia-S´ anchez, M. A., Ortiz-S´ anchez, E., and Garc´ ıa-Carranc´ a, A. (2021). Mutant p53 gain-of-function: Role in cancer development, progression, and therapeutic approaches. Frontiers in Cell and Developmental Biology , 8:607670. Balasubramanian, V., Iyer, P., Arora, S., Troyer, P., and Normant, E. (2014). CPI-169, a novel and potent EZH2 inhibitor, synergizes with CHOP in vivo and achieves complete regression in lymphoma xenograft models. In Proceedings of the 105th Annual Meeting of the American Association for Cancer Research ,volume 74 of Cancer Research , page Abstract 1697. Barretina, J., Caponigro, G., Stransky, N., Venkatesan, K., et al. (2012). The cancer cell line encyclopedia enables predictive modelling of anticancer drug sensitivity. Nature , 483:603–607. Besag, J. (1974). Spatial interaction and the statistical analysis of lattice systems. Journal of the Royal Statistical Society, Series B (Methodological) , 36(2):192–236. Besag, J., York, J., and Molli´ e, A. (1991). Bayesian image restoration, with two applications in spatial statistics. Annals of the Institute of Statistical Mathematics , 43(1):1–59. Boss, J., Datta, J., Wang, X., Park, S. K., et al. (2021). Group inverse-gamma gamma shrinkage for sparse regression with block-correlated predictors. arXiv preprint arXiv:2102.10670 .Bryant, H. E., Schultz, N., Thomas, H. D., Parker, K. M., et al. (2005). Specific killing of brca2-deficient tumours with inhibitors of poly(adp-ribose) polymerase. Nature , 434:913–917. Carvalho, C. M., Polson, N. G., and Scott, J. G. (2010). The horseshoe estimator for sparse signals. 
+
+Biometrika , 97(2):465–480. Chung, H., Young, D. J., Lopez, C. G., Le, T.-A. T., et al. (2008). Mutation rates of tgfbr2 and acvr2 coding microsatellites in human cells with defective dna mismatch repair. PLoS ONE , 3(10):e3463. Corsello, S. M., Nagari, R. T., Spangler, R. D., Rossen, J., et al. (2020). Discovering the anti-cancer potential of non-oncology drugs by systematic viability profiling. Nature Cancer , 1:235–248. Daigle, S. R., Olhava, E. J., Therkelsen, C. A., Basavapathruni, A., et al. (2013). Potent inhibition of dot1l as treatment of mll-fusion leukemia. Blood , 122(6):1017–1025. Danilevicz, M. F., Gill, M., Anderson, R., Batley, J., et al. (2022). Plant genotype to phenotype prediction using machine learning. Frontiers in Genetics , 13:822173. de Visser, K. E. and Joyce, J. A. (2023). The evolving tumor microenvironment: From cancer initiation to metastatic outgrowth. Cancer Cell , 41(3):374–403. Dhar, S. S. and Lee, M. G. (2021). Cancer-epigenetic function of the histone methyltransferase kmt2d and therapeutic opportunities for the treatment of kmt2d-deficient tumors. Oncotarget , 12(13):1296–1308. Driehuis, E., Kretzschmar, K., and Clevers, H. (2020). Establishment of patient-derived cancer organoids for drug-screening applications. Nature Protocols , 15(10):3380–3409. Farmer, H., McCabe, N., Lord, C. J., Tutt, A. N. J., et al. (2005). Targeting the dna repair defect in brca mutant cells as a therapeutic strategy. Nature , 434:917–921. 25 Gao, H., Korn, J. M., Ferretti, S., et al. (2015). High-throughput screening using patient-derived tumor xenografts to predict clinical trial drug response. Nature Medicine , 21(11):1318–1325. Garnett, M. J., Edelman, E. J., Heidorn, S. J., Greenman, C. D., et al. (2012). Systematic identification of genomic markers of drug sensitivity in cancer cells. Nature , 483:570–575. Gelfand, A. E. and Smith, A. F. M. (1990). Sampling-based approaches to calculating marginal densities. 
+
+Journal of the American Statistical Association , 85(410):398–409. Gelman, A. (2006). Prior distributions for variance parameters in hierarchical models. Bayesian Analysis ,1(3):515–534. Gelman, A. and Rubin, D. B. (1992). Inference from iterative simulation using multiple sequences. Statis-tical Science , 7(4):457–472. Geman, S. and Geman, D. (1984). Stochastic relaxation, gibbs distributions, and the bayesian restoration of images. IEEE Transactions on Pattern Analysis and Machine Intelligence , 6(6):721–741. George, E. I. and McCulloch, R. E. (1993). Variable selection via gibbs sampling. Journal of the American Statistical Association , 88(423):881–889. Geweke, J. (1992). Evaluating the accuracy of sampling-based approaches to the calculation of posterior moments. In Bernardo, J. M., Berger, J. O., Dawid, A. P., and Smith, A. F. M., editors, Bayesian Statistics 4 , pages 169–193. Clarendon Press. Gu, L., Zhu, N., Findley, H. W., and Zhou, M. (2008). Mdm2 antagonist nutlin-3 is a potent inducer of apoptosis in pediatric acute lymphoblastic leukemia cells with wild-type p53 and overexpression of mdm2. Leukemia , 22(4):730–739. Holleman, M. S., van Tinteren, H., Groen, H. J. M., Al, M. J., and Uyl-de Groot, C. A. (2019). First-line tyrosine kinase inhibitors in egfr mutation-positive non-small-cell lung cancer: a network meta-analysis. 
+
+OncoTargets and Therapy , 12:1413–1421. Inoue, D., Fujino, T., and Kitamura, T. (2018). Asxl1 as a critical regulator of epigenetic marks and therapeutic potential of mutated cells. Oncotarget , 9(81):35203–35204. Iorio, F., Knijnenburg, T. A., Vis, D. J., Bignell, G. R., et al. (2016). A landscape of pharmacogenomic interactions in cancer. Cell , 166(3):740–754. Kainthla, R., Kim, K. B., and Falchook, G. S. (2014). Dabrafenib for treatment of braf-mutant melanoma. 
+
+Pharmacogenomics and Personalized Medicine , 7:21–29. Kanehisa, M. and Goto, S. (2000). Kegg: Kyoto encyclopedia of genes and genomes. Nucleic Acids Research , 28(1):27–30. Kaplan, A., Lock, E. F., and Fiecas, M. (2020). Bayesian gwas with structured and non-local priors. 
+
+Bioinformatics , 36(1):17–25. Kim, K. H. and Roberts, C. W. M. (2016). Targeting ezh2 in cancer. Nature Medicine , 22(2):128–134. Knutson, S. K., Kawano, S., Minoshima, Y., Warholic, N. M., et al. (2014). Selective inhibition of ezh2 by epz-6438 leads to potent antitumor activity in ezh2-mutant non-hodgkin lymphoma. Molecular Cancer Therapeutics , 13(4):842–854. Laugesen, A., Højfeldt, J. W., and Helin, K. (2016). Role of the polycomb repressive complex 2 (prc2) in transcriptional regulation and cancer. Cold Spring Harbor Perspectives in Medicine , 6(9):a026575. 26 Li, C. and Li, H. (2008). Network-constrained regularization and variable selection for analysis of genomic data. Bioinformatics , 24(9):1175–1182. Li, C. and Li, H. (2010). Variable selection and regression analysis for graph-structured covariates with an application to genomics. The Annals of Applied Statistics , 4(3):1498–1516. Lio, C.-W. J., Yuita, H., and Rao, A. (2019). Dysregulation of the tet family of epigenetic regulators in lymphoid and myeloid malignancies. Blood , 134(18):1487–1497. Makalic, E. and Schmidt, D. F. (2016). A simple sampler for the horseshoe estimator. IEEE Signal Processing Letters , 23(1):179–182. Mitchell, T. J. and Beauchamp, J. J. (1988). Bayesian variable selection in linear regression. Journal of the American Statistical Association , 83(404):1023–1032. Monti, P., Menichini, P., Speciale, A., Cutrona, G., et al. (2020). Heterogeneity of tp53 mutations and p53 protein residual function in cancer: Does it matter? Frontiers in Oncology , 10:593383. Parry, D., Guzi, T., Shanahan, F., Davis, N., et al. (2020). Fadraciclib (CYC065), a novel CDK inhibitor, targets key pro-survival and oncogenic pathways in cancer. PLoS ONE , 15(7):e0234103. Pham, L. M., Carvalho, L., Schaus, S., and Kolaczyk, E. D. (2018). Perturbation detection through modeling of gene expression on a latent biological pathway network: A bayesian hierarchical approach. 
+
+arXiv preprint arXiv:1409.0503 .Polson, N. G. and Scott, J. G. (2010). Shrink globally, act locally: Sparse bayesian regularization and prediction. In Bayesian Statistics 9 , pages 501–538. Oxford University Press. Rampias, T., Karagiannis, D., Avgeris, M., Polyzos, A., et al. (2019). The lysine-specific methyltransferase kmt2c/mll3 regulates dna repair components in cancer. EMBO Reports , 20(3):e46821. Rue, H. and Held, L. (2005). Gaussian Markov Random Fields: Theory and Applications . Chapman and Hall/CRC, Boca Raton, FL. Samorodnitsky, S., Hoadley, K. A., and Lock, E. F. (2020). A pan-cancer and polygenic bayesian hierar-chical model for the effect of somatic mutations on survival. arXiv preprint arXiv:1910.03447 .Stingo, F. C., Chen, Y. A., Tadesse, M. G., and Vannucci, M. (2011). Incorporating biological information into linear models: A bayesian approach to the selection of pathways and genes. Annals of Applied Statistics , 5(3):1978–2002. Su, M., Satola, S. W., and Read, T. D. (2019). Genome-based prediction of bacterial antibiotic resistance. 
+
+Journal of Clinical Microbiology , 57(3):e01405–18. Tansey, W., Tosh, C., and Blei, D. M. (2022). A bayesian model of dose-response for cancer drug studies. 
+
+Annals of Applied Statistics , 16(2):680–705. van der Meer, D., Barthorpe, S., Yang, W., Lightfoot, H., Hall, C., Gilbert, J., Francies, H. E., and Garnett, M. J. (2019). Cell model passports—a hub for clinical, genetic and functional datasets of preclinical cancer models. Nucleic Acids Research , 47:D923–D929. Vassilev, L. T., Vu, B. T., Graves, B., Carvajal, D., Podlaski, F., Filipovic, Z., Kong, N.-Y., Kammlott, U., Lukacs, C., Klein, C., Fotouhi, N., and Liu, E.-H. A. (2004). In vivo activation of the p53 pathway by small-molecule antagonists of mdm2. Science , 303(5659):844–848. Yang, W., Soares, J., Greninger, P., Edelman, E. J., et al. (2013). Genomics of drug sensitivity in cancer (gdsc): A resource for therapeutic biomarker discovery in cancer cells. Nucleic Acids Research , 41:D955– D961. 27 Supplementary Material for A Network-Structured Bayesian Hierarchical Model for Sparse Mutation-Drug Response Associations: Application to Cancer Pharmacogenomics 
+
+# S1. Notation and Model Recap 
+
+We restate the models from the main text to fix notation before deriving the full conditional posterior distributions. Let i = 1 , . . . , N index observational units or samples (e.g., cancer cell lines), d = 1 , . . . , D index outcomes or drugs, and g = 1 , . . . , G index genes. Let mig ∈ { 0, 1}
+
+denote the mutation status of gene g in unit i, and let yid denote the observed response for unit i
+
+and outcome d.For each outcome d, let Id ⊆ { 1, . . . , N } denote the set of units with observed response to outcome d, and let nd = |I d|. Let Md denote the corresponding nd × G mutation design matrix. For the group-layer model, let k(i) ∈ { 1, . . . , K } denote the group membership of unit i, and let 
+
+Ikd denote the subset of units in group k with observed response to outcome d, with nkd = |I kd |.
+
+S1.1 Model I: Network–Horseshoe Model 
+
+Model I uses a shared gene-effect vector 
+
+eβ·d = ( eβ1d, . . . , eβGd )′
+
+for each outcome d. The likelihood is 
+
+yid | · ∼ Normal( μid , σ 2
+
+> d
+
+), μid = αd +
+
+> G
+
+X
+
+> g=1
+
+mig eβgd . (L-I) The intercept and residual variance priors are 
+
+αd ∼ Normal(0 , σ 2
+
+> α
+
+), σ2 
+
+> α
+
+= 100 , (A-I) 
+
+σ2 
+
+> d
+
+∼ Inverse-Gamma( aσ, b σ), aσ = bσ = 0 .01 . (S-I) For the subset of G′ genes represented in the biological network, let eβ(net)  
+
+> ·d
+
+denote the corre-sponding subvector. The network prior is 
+
+eβ(net)  
+
+> ·d
+
+| κ2 
+
+> d
+
+∼ Normal  0, κ 2
+
+> d
+
+(DW − δW )−1 , (N) where W is the fixed gene–gene adjacency matrix, DW = diag( W 1) is the degree matrix, and δ is fixed so that DW − δW is positive-definite. Genes not mapped to the network do not receive this GMRF prior contribution. 1The global–local shrinkage layer is 
+
+eβgd | λ2
+
+> gd
+
+, ζ 2 
+
+> d
+
+∼ Normal(0 , λ 2
+
+> gd
+
+ζ2 
+
+> d
+
+), (H1) 
+
+λ2 
+
+> gd
+
+| νgd ∼ Inverse-Gamma 
+
+ 12 , 1
+
+νgd 
+
+
+
+, νgd ∼ Inverse-Gamma 
+
+ 12 , 1
+
+
+
+. (H2) The network and global shrinkage scales are updated through precision parameterizations: 
+
+τκ,d = 1
+
+κ2
+
+> d
+
+∼ Gamma( aκ, b κ), aκ = bκ = 1 , (K) 
+
+τζ,d = 1
+
+ζ2
+
+> d
+
+∼ Gamma( aζ , b ζ ), aζ = bζ = 1 . (Z) This precision-based specification is the corrected scale-parameter formulation used in the final sampler. 
+
+S1.2 Model II: Group-Layer Model 
+
+Model II extends Model I by allowing group-specific mutation effects. For unit i in group k(i), the likelihood is 
+
+yid | · ∼ Normal( μid , σ 2
+
+> d
+
+), μid = αk(i)d +
+
+> G
+
+X
+
+> g=1
+
+mig β(k(i))  
+
+> gd
+
+. (L-II) Here αkd is a group-specific intercept for group k and outcome d, and β(k) 
+
+> gd
+
+is the group-specific effect of gene g on outcome d in group k. The group-specific intercept prior is 
+
+αkd ∼ Normal(0 , σ 2
+
+> α
+
+), σ2 
+
+> α
+
+= 100 . (A-II) The group-specific effects are shrunk toward the shared effect eβgd :
+
+β(k) 
+
+> gd
+
+| eβgd , η 2 
+
+> gd
+
+∼ Normal( eβgd , η 2
+
+> gd
+
+), k = 1 , . . . , K. (G1) The group-level variance prior is 
+
+η2 
+
+> gd
+
+∼ Inverse-Gamma( aη, b η), aη = 2 , bη = 0 .5. (G2) The shared effect vector eβ·d = ( eβ1d, . . . , eβGd )′
+
+retains the same network and global–local shrinkage priors as in Model I. Thus, for the network-mapped genes, 
+
+eβ(net)  
+
+> ·d
+
+| κ2 
+
+> d
+
+∼ Normal  0, κ 2
+
+> d
+
+(DW − δW )−1 , (N-II) and for all genes, 
+
+eβgd | λ2
+
+> gd
+
+, ζ 2 
+
+> d
+
+∼ Normal(0 , λ 2
+
+> gd
+
+ζ2 
+
+> d
+
+). (H1-II) The auxiliary-variable hierarchy for λ2 
+
+> gd
+
+and νgd , as well as the precision priors for τκ,d = 1 /κ 2 
+
+> d
+
+and 
+
+τζ,d = 1 /ζ 2 
+
+> d
+
+, are the same as in Model I. The residual variance prior is also unchanged: 
+
+σ2 
+
+> d
+
+∼ Inverse-Gamma( aσ, b σ), aσ = bσ = 0 .01 . (S-II) 2S1.3 Notational Shorthand Used in the Derivations 
+
+All full conditional derivations condition on every other parameter at its current value, as required for Gibbs sampling. We write “ ·” to denote all such conditioning quantities. For Model I, define the residual before removing the intercept as 
+
+r(−α) 
+
+> id
+
+= yid −
+
+> G
+
+X
+
+> g=1
+
+mig eβgd ,
+
+and the intercept-adjusted response vector as 
+
+rd = yd − αd1nd .
+
+For Model II, define the residual before removing the group-specific intercept as 
+
+r(−α) 
+
+> id
+
+= yid −
+
+> G
+
+X
+
+> g=1
+
+mig β(k) 
+
+> gd
+
+, i ∈ I kd ,
+
+and define the group-specific intercept-adjusted response vector as 
+
+rkd = ykd − αkd 1nkd .
+
+Let Mkd be the nkd ×G design matrix for observations in group k with observed response to outcome 
+
+d.For the network-scale update, define the network quadratic form 
+
+Qd = eβ(net) ⊤·d (DW − δW )eβ(net)  
+
+> ·d
+
+.
+
+For the global horseshoe scale update, define 
+
+Sd =
+
+> G
+
+X
+
+> g=1
+
+eβ2
+
+> gd
+
+λ2
+
+> gd
+
+.
+
+Throughout, Inverse-Gamma distributions are parameterized by shape and rate, and Gamma dis-tributions are also parameterized by shape and rate. 
+
+# S2. Derivation of Each Full Conditional 
+
+This section gives the full conditional posterior distributions used in the Gibbs sampler. We present the derivations separately for Model I and Model II because Model II introduces group-specific coefficients and an additional group-level variance component. Throughout, Inverse-Gamma dis-tributions are parameterized by shape and rate. 
+
+S2.1 Full Conditional Distributions for Model I 
+
+Model I is the primary network–horseshoe model without the group layer. For each outcome or drug d, the likelihood is 
+
+yid = αd +
+
+> G
+
+X
+
+> g=1
+
+mig eβgd + εid , εid ∼ Normal(0 , σ 2
+
+> d
+
+),
+
+where eβ·d = ( eβ1d, . . . , eβGd )′ denotes the shared gene-effect vector for outcome d.3S2.1.1 αd | · 
+
+Let Id denote the observations with observed response for outcome d, and let nd = |I d|. Define the residual before removing the intercept as 
+
+r(−α) 
+
+> id
+
+= yid −
+
+> G
+
+X
+
+> g=1
+
+mig eβgd , i ∈ I d.
+
+With prior αd ∼ Normal(0 , σ 2
+
+> α
+
+), where σ2 
+
+> α
+
+= 100, the full conditional kernel is 
+
+p(αd | · ) ∝ exp 
+
+− 12σ2
+
+> d
+
+X
+
+> i∈I d
+
+
+
+r(−α) 
+
+> id
+
+− αd
+
+2
+
+ exp 
+
+
+
+− α2
+
+> d
+
+2σ2
+
+> α
+
+
+
+. (1) Keeping only terms involving αd gives 
+
+− 12
+
+ nd
+
+σ2
+
+> d
+
++ 1
+
+σ2
+
+> α
+
+
+
+α2 
+
+> d
+
++ αd
+
+ 1
+
+σ2
+
+> d
+
+X
+
+> i∈I d
+
+r(−α)
+
+> id
+
+ .
+
+Thus, 
+
+αd | · ∼ Normal 
+
+P 
+
+> i∈I d
+
+r(−α)
+
+> id
+
+nd + σ2
+
+> d
+
+/σ 2
+
+> α
+
+,
+
+ nd
+
+σ2
+
+> d
+
++ 1
+
+σ2
+
+> α
+
+−1!
+
+. (2) 
+
+S2.1.2 eβ·d | · 
+
+Let Md denote the design matrix for observations with observed response to outcome d, and define the intercept-adjusted response vector 
+
+rd = yd − αd1nd .
+
+The likelihood contribution is 
+
+rd | eβ·d, σ 2 
+
+> d
+
+∼ Normal 
+
+
+
+Md eβ·d, σ 2
+
+> d
+
+Ind
+
+
+
+.
+
+This contributes precision Ωdata ,d = M ′
+
+> d
+
+Md
+
+σ2
+
+> d
+
+and mean-term 
+
+bdata ,d = M ′
+
+> d
+
+rd
+
+σ2
+
+> d
+
+.
+
+For the network-mapped genes, the GMRF prior contributes precision 1
+
+κ2
+
+> d
+
+(DW − δW ).
+
+Embedding this matrix into the full G×G coefficient space gives Ω net ,d , with zero rows and columns for genes outside the network-mapped subset. The global–local shrinkage prior contributes independent precision Ωhs ,d = diag 
+
+ 1
+
+λ21dζ2
+
+> d
+
+, . . . , 1
+
+λ2
+
+> Gd
+
+ζ2
+
+> d
+
+
+
+.
+
+4Combining likelihood, network, and shrinkage precision terms gives 
+
+eβ·d | · ∼ Normal  B−1 
+
+> d
+
+bd, B −1
+
+> d
+
+ , (3) where 
+
+Bd = Ω data ,d + Ω net ,d + Ω hs ,d , bd = bdata ,d . (4) In the no-network ablation, Ω net ,d is omitted. In the no-horseshoe ablation, Ω hs ,d is replaced by the weak ridge precision used in the implementation. As in standard Bayesian linear regression, this update follows by expanding the Gaussian like-lihood and Gaussian prior terms, collecting quadratic and linear terms in eβ·d, and completing the square. 
+
+S2.1.3 κ2 
+
+> d
+
+| · , via τκ,d 
+
+The network-scale parameter is updated through the precision parameterization 
+
+τκ,d = 1
+
+κ2
+
+> d
+
+.
+
+For the network-mapped subvector eβ(net)  
+
+> ·d
+
+, define 
+
+Qd = eβ(net) ⊤·d (DW − δW )eβ(net)  
+
+> ·d
+
+.
+
+Under the GMRF prior, 
+
+eβ(net)  
+
+> ·d
+
+| τκ,d ∼ Normal 
+
+
+
+0, [τκ,d (DW − δW )] −1
+
+.
+
+Thus, as a function of τκ,d ,
+
+p
+
+eβ(net)  
+
+> ·d
+
+| τκ,d 
+
+
+
+∝ τ G′/2 
+
+> κ,d
+
+exp 
+
+
+
+− τκ,d Qd
+
+2
+
+
+
+,
+
+where G′ is the number of network-mapped genes. With prior 
+
+τκ,d ∼ Gamma( aκ, b κ),
+
+the full conditional is 
+
+τκ,d | · ∼ Gamma 
+
+
+
+aκ + G′
+
+2 , b κ + Qd
+
+2
+
+
+
+, κ2 
+
+> d
+
+= 1
+
+τκ,d 
+
+. (5) In the implementation, aκ = bκ = 1. 
+
+S2.1.4 λ2
+
+> gd
+
+, ν gd | · 
+
+Using the Makalic–Schmidt auxiliary-variable representation of the Half-Cauchy prior, 
+
+λ2 
+
+> gd
+
+| νgd ∼ Inverse-Gamma 
+
+ 12 , 1
+
+νgd 
+
+
+
+, νgd ∼ Inverse-Gamma 
+
+ 12 , 1
+
+
+
+.
+
+5Conditional on eβgd , ζ2 
+
+> d
+
+, and νgd ,
+
+p(λ2 
+
+> gd
+
+| · ) ∝ (λ2
+
+> gd
+
+)−1/2 exp −
+
+eβ2
+
+> gd
+
+2λ2
+
+> gd
+
+ζ2
+
+> d
+
+!
+
+(λ2
+
+> gd
+
+)−1/2−1 exp − 1
+
+νgd λ2
+
+> gd
+
+!
+
+∝ (λ2
+
+> gd
+
+)−2 exp 
+
+(
+
+− 1
+
+λ2
+
+> gd
+
+1
+
+νgd 
+
++
+
+eβ2
+
+> gd
+
+2ζ2
+
+> d
+
+!) 
+
+. (6) Therefore, 
+
+λ2 
+
+> gd
+
+| · ∼ Inverse-Gamma 1, 1
+
+νgd 
+
++
+
+eβ2
+
+> gd
+
+2ζ2
+
+> d
+
+!
+
+. (7) Similarly, 
+
+νgd | · ∼ Inverse-Gamma 1, 1 + 1
+
+λ2
+
+> gd
+
+!
+
+. (8) 
+
+S2.1.5 ζ2 
+
+> d
+
+| · , via τζ,d 
+
+The global horseshoe scale is updated through 
+
+τζ,d = 1
+
+ζ2
+
+> d
+
+.
+
+Define 
+
+Sd =
+
+> G
+
+X
+
+> g=1
+
+eβ2
+
+> gd
+
+λ2
+
+> gd
+
+.
+
+Conditional on the local scales, the contribution involving τζ,d is proportional to 
+
+τ G/ 2 
+
+> ζ,d
+
+exp 
+
+
+
+− τζ,d Sd
+
+2
+
+
+
+.
+
+With prior 
+
+τζ,d ∼ Gamma( aζ , b ζ ),
+
+the full conditional is 
+
+τζ,d | · ∼ Gamma 
+
+
+
+aζ + G
+
+2 , b ζ + Sd
+
+2
+
+
+
+, ζ2 
+
+> d
+
+= 1
+
+τζ,d 
+
+. (9) In the implementation, aζ = bζ = 1. 
+
+S2.1.6 σ2 
+
+> d
+
+| · 
+
+With prior 
+
+σ2 
+
+> d
+
+∼ Inverse-Gamma( aσ, b σ),
+
+and likelihood 
+
+yid | · ∼ Normal( μid , σ 2
+
+> d
+
+), μid = αd +
+
+> G
+
+X
+
+> g=1
+
+mig eβgd ,
+
+the full conditional is 
+
+σ2 
+
+> d
+
+| · ∼ Inverse-Gamma 
+
+aσ + nd
+
+2 , b σ + 12
+
+X
+
+> i∈I d
+
+(yid − μid )2
+
+ . (10) In the implementation, aσ = bσ = 0 .01. 6S2.2 Full Conditional Distributions for Model II: Group-Layer Model 
+
+Model II extends Model I by introducing group-specific coefficients β(k) 
+
+> ·d
+
+for each group k = 1 , . . . , K .For observation i in group k(i), 
+
+yid = αk(i)d +
+
+> G
+
+X
+
+> g=1
+
+mig β(k(i))  
+
+> gd
+
++ εid , εid ∼ Normal(0 , σ 2
+
+> d
+
+).
+
+The group-specific coefficients are shrunk toward the shared effect eβ·d through 
+
+β(k) 
+
+> gd
+
+| eβgd , η 2 
+
+> gd
+
+∼ Normal 
+
+ eβgd , η 2
+
+> gd
+
+
+
+.
+
+S2.2.1 αkd | · 
+
+Restricting to observations in group k for outcome d, let Ikd denote the index set and nkd = |I kd |.Define 
+
+r(−α) 
+
+> id
+
+= yid −
+
+> G
+
+X
+
+> g=1
+
+mig β(k) 
+
+> gd
+
+, i ∈ I kd .
+
+With prior αkd ∼ Normal(0 , σ 2
+
+> α
+
+), where σ2 
+
+> α
+
+= 100, 
+
+αkd | · ∼ Normal 
+
+P 
+
+> i∈I kd
+
+r(−α)
+
+> id
+
+nkd + σ2
+
+> d
+
+/σ 2
+
+> α
+
+,
+
+ nkd 
+
+σ2
+
+> d
+
++ 1
+
+σ2
+
+> α
+
+−1!
+
+. (11) 
+
+S2.2.2 β(k) 
+
+> ·d
+
+| · 
+
+For group k and outcome d, let Mkd be the nkd × G design submatrix and let 
+
+rkd = ykd − αkd 1nkd 
+
+be the intercept-adjusted response vector. Define Ληd = diag  η−21d , . . . , η −2
+
+> Gd
+
+ .
+
+The likelihood contribution is Gaussian and the prior is 
+
+β(k) 
+
+> ·d
+
+| eβ·d, η2 
+
+> ·d
+
+∼ Normal 
+
+eβ·d, Λ−1
+
+> ηd
+
+
+
+.
+
+Combining likelihood and prior gives 
+
+β(k) 
+
+> ·d
+
+| · ∼ Normal  A−1 
+
+> kd
+
+bkd , A −1
+
+> kd
+
+ , (12) where 
+
+Akd = M ′
+
+> kd
+
+Mkd 
+
+σ2
+
+> d
+
++ Λ ηd + εI G, bkd = M ′
+
+> kd
+
+rkd 
+
+σ2
+
+> d
+
++ Λ ηd eβ·d. (13) The ridge term εI G is included for numerical stability and is the same ridge term used in the implementation. 7S2.2.3 η2 
+
+> gd
+
+| · 
+
+The final model uses the proper prior 
+
+η2 
+
+> gd
+
+∼ Inverse-Gamma( aη, b η), aη = 2 , bη = 0 .5.
+
+The likelihood contribution from the K group-specific effects is 
+
+> K
+
+Y
+
+> k=1
+
+(η2
+
+> gd
+
+)−1/2 exp 
+
+(
+
+− 12η2
+
+> gd
+
+
+
+β(k) 
+
+> gd
+
+− eβgd 
+
+2
+
+)
+
+.
+
+Combining this with the prior gives 
+
+p(η2 
+
+> gd
+
+| · ) ∝ (η2
+
+> gd
+
+)−(aη +K/ 2) −1 exp 
+
+(
+
+− 1
+
+η2
+
+> gd
+
+"
+
+bη + 12
+
+> K
+
+X
+
+> k=1
+
+
+
+β(k) 
+
+> gd
+
+− eβgd 
+
+2
+
+#) 
+
+.
+
+Therefore, 
+
+η2 
+
+> gd
+
+| · ∼ Inverse-Gamma aη + K
+
+2 , b η + 12
+
+> K
+
+X
+
+> k=1
+
+
+
+β(k) 
+
+> gd
+
+− eβgd 
+
+2
+
+!
+
+. (14) 
+
+S2.2.4 eβ·d | · 
+
+Conditional on the group-specific effects, eβgd is the prior mean for β(1)  
+
+> gd
+
+, . . . , β (K) 
+
+> gd
+
+. Therefore the group-layer contribution to the precision of eβ·d is diagonal: Λgrp ,d = diag 
+
+> K
+
+X
+
+> k=1
+
+η−21d , . . . , 
+
+> K
+
+X
+
+> k=1
+
+η−2
+
+> Gd
+
+!
+
+,
+
+and the corresponding mean-term is 
+
+bgrp ,d =
+
+> K
+
+X
+
+> k=1
+
+β(k)1d
+
+η21d
+
+, . . . , 
+
+> K
+
+X
+
+> k=1
+
+β(k)
+
+> Gd
+
+η2
+
+> Gd
+
+!′
+
+.
+
+The network and horseshoe contributions are the same as in Model I: Ωnet ,d = 1
+
+κ2
+
+> d
+
+(DW − δW )embedded into the full G × G coefficient space, and Ωhs ,d = diag 
+
+ 1
+
+λ21dζ2
+
+> d
+
+, . . . , 1
+
+λ2
+
+> Gd
+
+ζ2
+
+> d
+
+
+
+.
+
+Thus, eβ·d | · ∼ Normal  B−1 
+
+> d
+
+bd, B −1
+
+> d
+
+ , (15) where 
+
+Bd = Λ grp ,d + Ω net ,d + Ω hs ,d , bd = bgrp ,d . (16) 8S2.2.5 κ2 
+
+> d
+
+| · , via τκ,d 
+
+The update is identical to Model I because the network prior is placed on the shared effect vector 
+
+eβ·d. Defining 
+
+Qd = eβ(net) ′ 
+
+> ·d
+
+(DW − δW )eβ(net)  
+
+> ·d
+
+, τκ,d = 1
+
+κ2
+
+> d
+
+,
+
+and using τκ,d ∼ Gamma( aκ, b κ), we obtain 
+
+τκ,d | · ∼ Gamma 
+
+
+
+aκ + G′
+
+2 , b κ + Qd
+
+2
+
+
+
+, κ2 
+
+> d
+
+= 1
+
+τκ,d 
+
+. (17) 
+
+S2.2.6 λ2
+
+> gd
+
+, ν gd | · 
+
+The local horseshoe updates are also unchanged from Model I because the horseshoe prior is placed on the shared effect eβgd . Therefore, 
+
+λ2 
+
+> gd
+
+| · ∼ Inverse-Gamma 1, 1
+
+νgd 
+
++
+
+eβ2
+
+> gd
+
+2ζ2
+
+> d
+
+!
+
+, (18) and 
+
+νgd | · ∼ Inverse-Gamma 1, 1 + 1
+
+λ2
+
+> gd
+
+!
+
+. (19) 
+
+S2.2.7 ζ2 
+
+> d
+
+| · , via τζ,d 
+
+Define 
+
+Sd =
+
+> G
+
+X
+
+> g=1
+
+eβ2
+
+> gd
+
+λ2
+
+> gd
+
+, τζ,d = 1
+
+ζ2
+
+> d
+
+.
+
+With τζ,d ∼ Gamma( aζ , b ζ ), the full conditional is 
+
+τζ,d | · ∼ Gamma 
+
+
+
+aζ + G
+
+2 , b ζ + Sd
+
+2
+
+
+
+, ζ2 
+
+> d
+
+= 1
+
+τζ,d 
+
+. (20) 
+
+S2.2.8 σ2 
+
+> d
+
+| · 
+
+For Model II, the fitted mean for observation i in group k(i) is 
+
+μid = αk(i)d +
+
+> G
+
+X
+
+> g=1
+
+mig β(k(i))  
+
+> gd
+
+.
+
+With prior 
+
+σ2 
+
+> d
+
+∼ Inverse-Gamma( aσ, b σ),
+
+the full conditional is 
+
+σ2 
+
+> d
+
+| · ∼ Inverse-Gamma 
+
+aσ + nd
+
+2 , b σ + 12
+
+X
+
+> i∈I d
+
+(yid − μid )2
+
+ . (21) In the implementation, aσ = bσ = 0 .01. 9S2.3 Cholesky-Based Gaussian Sampling 
+
+For all multivariate Normal updates above, the sampler avoids explicit matrix inversion. If a coefficient vector has full conditional 
+
+θ | · ∼ Normal( A−1b, A −1),
+
+the sampler computes a Cholesky factorization A = R′R. The posterior mean is obtained by solving 
+
+R′z = b, Rμ = z, 
+
+and the random draw is generated as 
+
+θ = μ + R−1z0, z0 ∼ Normal( 0, I ).
+
+This procedure is algebraically equivalent to sampling from Normal( A−1b, A −1) and is used for both the shared-effect updates and the group-specific coefficient updates. 
+
+# S3. Summary Table of Full Conditional Distributions 
+
+Table 1: Summary of full conditional posterior distributions for Models I and II. 
+
+Model Parameter Full conditional Eq. 
+
+Model I: Network–horseshoe model 
+
+I αd Normal 
+
+P 
+
+> i∈I d
+
+r(−α)
+
+> id
+
+nd + σ2
+
+> d
+
+/σ 2
+
+> α
+
+,
+
+ nd
+
+σ2
+
+> d
+
++ 1
+
+σ2
+
+> α
+
+−1!
+
+(2) I eβ·d Normal  B−1 
+
+> d
+
+bd, B −1
+
+> d
+
+, where Bd = Ω data ,d + Ω net ,d +Ωhs ,d and bd = bdata ,d .(3) I τκ,d = 1 /κ 2 
+
+> d
+
+Gamma 
+
+
+
+aκ + G′
+
+2 , b κ + Qd
+
+2
+
+
+
+(5) I λ2 
+
+> gd
+
+IG 1, 1
+
+νgd 
+
++
+
+eβ 2
+
+> gd
+
+2ζ2
+
+> d
+
+!
+
+(7) I νgd IG 1, 1 + 1
+
+λ2
+
+> gd
+
+!
+
+(8) I τζ,d = 1 /ζ 2 
+
+> d
+
+Gamma 
+
+
+
+aζ + G
+
+2 , b ζ + Sd
+
+2
+
+
+
+(9) I σ2 
+
+> d
+
+IG 
+
+
+
+aσ + nd
+
+2 , b σ + 12
+
+P 
+
+> i∈I d
+
+(yid − μid )2
+
+
+
+(10) 
+
+Model II: Group-layer model 
+
+II αkd Normal 
+
+P 
+
+> i∈I kd
+
+r(−α)
+
+> id
+
+nkd + σ2
+
+> d
+
+/σ 2
+
+> α
+
+,
+
+ nkd 
+
+σ2
+
+> d
+
++ 1
+
+σ2
+
+> α
+
+−1!
+
+(11) II β(k) 
+
+> ·d
+
+Normal  A−1 
+
+> kd
+
+bkd , A −1
+
+> kd
+
+, where Akd = M ⊤
+
+> kd
+
+Mkd /σ 2 
+
+> d
+
++Ληd + εI G and bkd = M ⊤
+
+> kd
+
+rkd /σ 2 
+
+> d
+
++ Λ ηd eβ·d.(12) 
+
+Continued on next page 
+
+10 Table 1 continued 
+
+Model Parameter Full conditional Eq. II η2 
+
+> gd
+
+IG 
+
+
+
+aη + K
+
+2 , b η + 12
+
+PKk=1 (β(k) 
+
+> gd
+
+− eβgd )2
+
+
+
+(14) II eβ·d Normal  B−1 
+
+> d
+
+bd, B −1
+
+> d
+
+, where Bd = Λ grp ,d + Ω net ,d +Ωhs ,d and bd = bgrp ,d .(15) II τκ,d = 1 /κ 2 
+
+> d
+
+Gamma 
+
+
+
+aκ + G′
+
+2 , b κ + Qd
+
+2
+
+
+
+(17) II λ2 
+
+> gd
+
+IG 1, 1
+
+νgd 
+
++
+
+eβ 2
+
+> gd
+
+2ζ2
+
+> d
+
+!
+
+(18) II νgd IG 1, 1 + 1
+
+λ2
+
+> gd
+
+!
+
+(19) II τζ,d = 1 /ζ 2 
+
+> d
+
+Gamma 
+
+
+
+aζ + G
+
+2 , b ζ + Sd
+
+2
+
+
+
+(20) II σ2 
+
+> d
+
+IG 
+
+
+
+aσ + nd
+
+2 , b σ + 12
+
+P 
+
+> i∈I d
+
+(yid − μid )2
+
+
+
+(21)                   
+
+> Note. IG denotes the Inverse-Gamma distribution parameterized by shape and rate. Gamma distributions are also parameterized by shape and rate. In the implementation, σ2
+> α= 100, aσ=bσ= 0 .01, aη= 2, bη= 0 .5, and
+> aκ=bκ=aζ=bζ= 1.
+
+Every entry in Table 1 is a direct draw from a standard distribution (Normal, Inverse-Gamma, or Gamma); no Metropolis–Hastings step appears anywhere in the sampler, and every derivation in S2 was checked either by direct symbolic expansion against the claimed closed-form posterior (S2.1, S2.4, S2.6, S2.8) or by numerical grid evaluation of the unnormalized posterior density against the claimed closed form (S2.5, and identically for S2.7) before being adopted in the implementation used for the main text’s results. 
+
+# S4. Full Simulation Study Design 
+
+The simulation study evaluates the operating characteristics of the proposed model and two ablation variants under three controlled data-generating mechanisms. In each scenario, we generated N =400 cell lines, G = 150 genes, D = 50 drugs, and G′ = 100 network-mapped genes. For simulations involving group structure, K = 8 groups were used. Mutation indicators were generated as mig ∼
+
+Bernoulli( pg) with pg ∼ Uniform(0 .01 , 0.25). Drug-specific intercepts were generated as αd ∼
+
+Normal(0 , σ 2
+
+> α
+
+) with σα = 0 .5, and responses were generated from 
+
+yid = αd +
+
+> G
+
+X
+
+> g=1
+
+mig βgd + εid , εid ∼ Normal(0 , σ 2 
+
+> y
+
+),
+
+with σy = 1 .0. Unless otherwise stated, strong-effect magnitudes were generated using μβ = 1 .0 and τβ = 0 .25. The network-smoothing parameter was fixed at δ = 0 .8, the network ridge term was ε = 0 .01, and the scale of network-correlated perturbations in the network-structured scenario was τnet = 0 .20. Scenarios 1 and 3 used nsignal = 5 strong true associations per drug, yielding 250 true nonzero gene– drug pairs out of G × D = 7 ,500 possible pairs. Scenario 2 instead used connected network modules and therefore contained a larger number of true nonzero effects. Each scenario was repeated for 100 independent simulation replicates. For each replicate, we fit the full model, the no-network ablation, and the no-horseshoe ablation using the same MCMC settings. 11 Scenario 1 (Sparse independent effects). For each drug d, a sparse signal set Sd ⊂ { 1, . . . , G }
+
+of size nsignal = 5 was selected uniformly at random, independently of the network. True effects were generated as 
+
+βgd =
+
+(
+
+sgd bgd , g ∈ S d,
+
+0, g / ∈ S d, bgd ∼ Normal( μβ , τ 2 
+
+> β
+
+), sgd ∈ {− 1, +1 }.
+
+This scenario evaluates performance when the true mutation-response effects are sparse but not network-structured. 
+
+Scenario 2 (Network-structured effects). For each drug d, an active module Pd was selected from the gene network by seeding a random network-mapped gene and iteratively adding adjacent genes until the target module size was reached. To induce correlated effects among network-connected genes, we drew network-correlated perturbations 
+
+u·d ∼ Normal  0, τ 2net (DW − δW + εI )−1 ,
+
+where W is the gene adjacency matrix, DW is the corresponding degree matrix, and εI is a small ridge term added for numerical stability. True effects were then set to 
+
+βgd =
+
+(
+
+sd θ + ugd , g ∈ P d,
+
+0, g / ∈ P d, θ = μβ , sd ∈ {− 1, +1 }.
+
+Thus, true nonzero effects were concentrated within connected pathway modules, creating a setting in which the GMRF prior is expected to improve false-discovery control and recovery of network-localized signals. 
+
+Scenario 3 (Dense weak noise with sparse strong signals). For each drug d, a sparse strong-signal set Sd and a larger weak-effect set Ad were selected. True effects were generated as 
+
+βgd =
+
+
+
+sgd b(S) 
+
+> gd
+
+, g ∈ S d,b(W ) 
+
+> gd
+
+, g ∈ A d,
+
+0, otherwise ,
+
+where 
+
+b(S) 
+
+> gd
+
+∼ Normal( μS , τ 2 
+
+> S
+
+), b(W ) 
+
+> gd
+
+∼ Normal(0 , τ 2 
+
+> W
+
+), τW ≪ τS .
+
+Only the strong-effect set Sd was treated as truly associated when computing sensitivity, precision, and false discovery rate. This scenario evaluates whether the horseshoe layer can separate sparse strong effects from many weak nuisance effects. 
+
+Performance metrics. A gene–drug pair ( g, d ) was selected when its 95% posterior credible interval excluded zero. Let bS denote the selected set and S denote the true associated set. We computed Sensitivity = | bS ∩ S| |S| , Precision = | bS ∩ S| | bS| ,
+
+and FDR = | bS \ S| | bS| .
+
+12 Empirical 95% credible-interval coverage was computed as Coverage = 1
+
+GD 
+
+> G
+
+X
+
+> g=1
+> D
+
+X
+
+> d=1
+
+1 βtrue  
+
+> gd
+
+∈ CI 95% ,gd .
+
+Coefficient RMSE, denoted RMSE β , was computed over all GD gene–drug pairs and also separately over true nonzero and true zero subsets. For secondary threshold-based pair-level evaluation, gene–drug pairs were ranked by posterior sign probability 
+
+qgd = max {P (βgd > 0 | data) , P (βgd < 0 | data) } .
+
+AUC-PR was defined as the area under the precision–recall curve, and sensitivity at matched FDR was defined as the sensitivity of the largest ranked selected set satisfying FDR ≤ 0.10. 
+
+# S5. Additional Simulation Study results 
+
+S5.1. Metric Across Replicate Counts 
+
+Table 2 shows full model metrics at n ∈ { 1, 10 , 20 , 50 , 100 } replicates for each of the three simulation scenarios (main text, Section 3.2), confirming that all metrics stabilize well before n = 100. 
+
+Table 2: Full-model simulation metrics as the number of replicates increases. 
+
+Scenario n reps Sensitivity Precision FDR RMSE β Coverage 1: Sparse Indep. 1 0.712 0.922 0.078 0.122 0.977 10 0.750 0.915 0.085 0.121 0.976 20 0.737 0.920 0.080 0.121 0.976 50 0.733 0.920 0.080 0.122 0.976 100 0.734 0.923 0.077 0.122 0.977 2: Network Struct. 1 0.580 0.973 0.027 0.135 0.951 10 0.614 0.969 0.031 0.131 0.951 20 0.633 0.970 0.030 0.129 0.952 50 0.641 0.972 0.028 0.128 0.953 100 0.654 0.972 0.028 0.127 0.953 3: Dense Weak 1 0.724 0.870 0.130 0.127 0.966 10 0.728 0.888 0.112 0.127 0.967 20 0.729 0.889 0.111 0.126 0.968 50 0.733 0.890 0.110 0.126 0.967 100 0.733 0.890 0.110 0.125 0.967             
+
+> Note. Values are cumulative means for the full model using n∈ { 1,10 ,20 ,50 ,100 }simulation replicates. Scenario labels denote sparse independent effects, network-structured effects, and dense weak noise with sparse strong signals. RMSE βdenotes coefficient RMSE computed over all gene–drug pairs. The n= 100 rows correspond to the final simulation summaries reported in the main text, up to rounding.
+
+S5.2 Secondary Threshold-Based Pair-Level Evaluation 
+
+In addition to the primary 95% posterior credible-interval operating point used in the main text, we performed a secondary threshold-based evaluation using pair-level posterior scores. For each gene–drug pair, we computed the posterior sign probability 
+
+qgd = max {P (βgd > 0 | data) , P (βgd < 0 | data) } . (22) 13 Gene–drug pairs were ranked from largest to smallest qgd , and sensitivity was evaluated at the largest selected set whose empirical false discovery rate did not exceed 10%. This analysis is in-tended as a rank-based secondary diagnostic rather than the primary model-selection criterion, because the main scientific use case is association prioritization under a fixed high-confidence pos-terior rule. The threshold-based analysis favors the no-network model in sensitivity at matched FDR, whereas the full model has the lowest RMSE among truly null gene–drug pairs in all three scenarios. This pattern is consistent with the interpretation in the main text: the no-network model is less conservative and therefore ranks more true signals highly, but this comes with weaker control of false discoveries at the fixed 95% credible-interval operating point. Because the intended use of the model is to prioritize a smaller set of high-confidence mutation-drug response associations for follow-up, the main text emphasizes the fixed 95% credible-interval rule. The threshold-based results are included here for transparency and to show how conclusions vary when models are compared by ranked posterior evidence rather than by the posterior interval rule used for final association selection. 
+
+# S6. Additional Cancer Pharmacogenomics Results 
+
+Table 3 reports the posterior mean, posterior standard deviation, and 95% credible interval of βgd 
+
+for every one of the 126 gene–drug pairs whose interval excludes zero under the full model (main text, Table 3 and Section 4.2), underlying every summary statistic quoted in the main text. All genes are reported; the 20 distinct genes appearing are exactly those summarized in main text Table 3, here broken out per individual drug rather than averaged. Drug ID refers to the GDSC2 drug identifier. 
+
+Table 3: Posterior summaries for all full-model flagged gene–drug pairs.                                                                             
+
+> Gene Drug ID ˆβgd SD 95% CI AMER1 1025 -0.707 0.351 [-1.366, -0.007] ARHGEF10 1149 1.948 0.869 [0.070, 3.517] ASXL1 1013 -1.575 0.320 [-2.206, -0.938] ASXL1 1019 -1.534 0.314 [-2.136, -0.897] ASXL1 1060 -0.954 0.498 [-1.899, -0.002] ASXL1 1062 -1.001 0.406 [-1.765, -0.140] ASXL1 1079 -2.067 0.491 [-2.981, -1.118] ASXL1 1777 -0.693 0.342 [-1.333, -0.005] ASXL1 2040 -0.784 0.312 [-1.376, -0.108] ATF7IP 1853 0.605 0.313 [0.005, 1.196] ATF7IP 1940 0.470 0.244 [0.001, 0.948] ATF7IP 2109 0.560 0.292 [0.005, 1.127] BCL9L 1783 -0.543 0.288 [-1.100, -0.002] BRAF 1036 -0.152 0.060 [-0.281, -0.044] BRAF 1061 -0.130 0.055 [-0.248, -0.028] BRAF 1062 -0.095 0.052 [-0.202, -0.000] BRAF 1373 -0.157 0.061 [-0.286, -0.044] EZH2 1012 -0.609 0.280 [-1.139, -0.036]
+> Continued on next page
+
+14 Table 3 continued 
+
+Gene Drug ID ˆβgd SD 95% CI EZH2 1016 -1.090 0.455 [-1.940, -0.098] EZH2 1018 -0.429 0.231 [-0.875, -0.000] EZH2 1025 -0.495 0.264 [-1.012, -0.001] EZH2 1030 -0.593 0.291 [-1.136, -0.026] EZH2 1036 -0.710 0.385 [-1.452, -0.000] EZH2 1038 -0.804 0.344 [-1.457, -0.095] EZH2 1042 -0.728 0.305 [-1.301, -0.082] EZH2 1043 -0.584 0.232 [-1.018, -0.107] EZH2 1052 -0.930 0.418 [-1.725, -0.055] EZH2 1053 -1.211 0.353 [-1.874, -0.501] EZH2 1054 -1.627 0.353 [-2.317, -0.924] EZH2 1057 -0.841 0.367 [-1.538, -0.073] EZH2 1061 -0.870 0.346 [-1.505, -0.121] EZH2 1237 -0.753 0.233 [-1.198, -0.288] EZH2 1249 -0.781 0.347 [-1.449, -0.069] EZH2 1373 -1.207 0.467 [-2.084, -0.196] EZH2 1375 -0.822 0.330 [-1.455, -0.144] EZH2 1563 -0.685 0.252 [-1.160, -0.170] EZH2 1578 -0.571 0.246 [-1.042, -0.051] EZH2 1580 -0.654 0.315 [-1.251, -0.021] EZH2 1593 -0.912 0.462 [-1.782, -0.002] EZH2 1615 -0.744 0.237 [-1.188, -0.261] EZH2 1621 -0.750 0.348 [-1.403, -0.050] EZH2 1624 -0.910 0.449 [-1.767, -0.003] EZH2 1631 -0.966 0.377 [-1.666, -0.136] EZH2 1632 -0.962 0.279 [-1.479, -0.387] EZH2 1909 -1.620 0.450 [-2.479, -0.724] EZH2 1910 -1.150 0.557 [-2.170, -0.019] EZH2 1912 -1.443 0.331 [-2.074, -0.784] EZH2 1913 -0.588 0.226 [-1.007, -0.100] EZH2 1918 -0.761 0.371 [-1.443, -0.007] EZH2 1924 -0.831 0.374 [-1.544, -0.049] EZH2 1928 -0.926 0.319 [-1.538, -0.277] EZH2 2003 -0.825 0.334 [-1.442, -0.089] EZH2 2037 -1.433 0.442 [-2.252, -0.514] EZH2 2045 -0.989 0.290 [-1.537, -0.391] EZH2 2106 -1.551 0.684 [-2.793, -0.054] EZH2 2107 -0.831 0.271 [-1.341, -0.267] EZH2 2110 -0.721 0.319 [-1.305, -0.039] EZH2 2111 -0.832 0.430 [-1.661, -0.002] EZH2 2157 -0.850 0.365 [-1.538, -0.082] EZH2 2172 -1.197 0.513 [-2.157, -0.068] EZH2 2362 -0.866 0.411 [-1.645, -0.019] EZH2 2438 -1.342 0.430 [-2.130, -0.403] 
+
+Continued on next page 
+
+15 Table 3 continued 
+
+Gene Drug ID ˆβgd SD 95% CI FAT1 1010 -0.577 0.252 [-1.063, -0.054] FAT1 1549 -0.890 0.390 [-1.609, -0.049] FAT1 1915 -0.442 0.233 [-0.887, -0.002] FUBP1 1016 -1.536 0.674 [-2.753, -0.031] KMT2D 1003 -0.573 0.245 [-1.039, -0.065] KMT2D 1005 -0.545 0.275 [-1.055, -0.002] KMT2D 1006 -1.092 0.332 [-1.720, -0.423] KMT2D 1017 -0.501 0.160 [-0.813, -0.166] KMT2D 1018 -0.224 0.116 [-0.450, -0.003] KMT2D 1019 -0.439 0.198 [-0.819, -0.033] KMT2D 1020 -0.273 0.141 [-0.544, -0.006] KMT2D 1046 -0.510 0.198 [-0.891, -0.099] KMT2D 1051 -0.728 0.313 [-1.308, -0.041] KMT2D 1069 -0.286 0.130 [-0.538, -0.018] KMT2D 1088 -0.732 0.243 [-1.185, -0.226] KMT2D 1089 -0.648 0.217 [-1.054, -0.200] KMT2D 1175 -0.408 0.137 [-0.674, -0.133] KMT2D 1177 -0.413 0.201 [-0.803, -0.013] KMT2D 1179 -0.397 0.191 [-0.764, -0.021] KMT2D 1190 -0.954 0.405 [-1.710, -0.078] KMT2D 1259 -0.587 0.291 [-1.152, -0.022] KMT2D 1494 -0.808 0.249 [-1.288, -0.327] KMT2D 1578 -0.272 0.121 [-0.498, -0.023] KMT2D 1598 -0.323 0.142 [-0.601, -0.047] KMT2D 1622 -0.268 0.148 [-0.558, -0.000] KMT2D 1629 -0.303 0.145 [-0.585, -0.012] KMT2D 1733 -0.478 0.244 [-0.959, -0.001] KMT2D 1806 -0.506 0.248 [-0.986, -0.014] KMT2D 1813 -0.761 0.314 [-1.334, -0.087] KMT2D 1814 -0.374 0.163 [-0.679, -0.044] KMT2D 1821 -0.476 0.162 [-0.791, -0.157] KMT2D 1828 -0.250 0.131 [-0.507, -0.001] KMT2D 1830 -0.261 0.137 [-0.525, -0.001] KMT2D 1909 -0.535 0.253 [-1.008, -0.011] KMT2D 1910 -0.600 0.274 [-1.117, -0.017] KMT2D 1999 -0.540 0.241 [-1.003, -0.038] KMT2D 2044 -0.389 0.171 [-0.715, -0.030] KMT2D 2055 -0.451 0.232 [-0.901, -0.003] KMT2D 2149 -0.476 0.188 [-0.836, -0.091] KMT2D 2159 -0.469 0.215 [-0.886, -0.041] KRAS 1047 0.223 0.113 [0.003, 0.448] LRP1B 1168 0.412 0.194 [0.024, 0.781] MAP2 1068 0.762 0.375 [0.014, 1.455] MAP2 1733 1.103 0.574 [0.005, 2.167] 
+
+Continued on next page 
+
+16 Table 3 continued 
+
+Gene Drug ID ˆβgd SD 95% CI PBRM1 1012 0.506 0.244 [0.022, 0.974] PBRM1 1862 0.373 0.169 [0.017, 0.691] PBRM1 1911 1.026 0.346 [0.331, 1.690] PBRM1 2044 0.737 0.296 [0.113, 1.285] PBRM1 2154 0.578 0.261 [0.031, 1.074] RPL22 1836 -0.573 0.299 [-1.145, -0.001] SETD2 1833 -0.816 0.411 [-1.596, -0.006] SETD2 1918 -0.581 0.305 [-1.165, -0.005] SPEN 1836 -0.568 0.288 [-1.122, -0.008] TET2 1033 -0.674 0.271 [-1.174, -0.098] TET2 1375 -0.781 0.374 [-1.466, -0.011] TET2 1563 -0.857 0.275 [-1.359, -0.250] TET2 1845 -1.899 0.756 [-3.279, -0.156] TET2 1931 -0.915 0.334 [-1.532, -0.204] TET2 1936 -0.674 0.354 [-1.360, -0.004] TET2 2046 -1.120 0.467 [-2.002, -0.087] TET2 2111 -1.098 0.447 [-1.921, -0.113] TP53 1047 1.351 0.144 [1.063, 1.612] ZNF626 1915 -0.804 0.417 [-1.591, -0.004] ZNF626 2043 -0.724 0.394 [-1.465, -0.002]    
+
+> Note. The table reports posterior summaries for every gene–drug pair flagged under the full model. ˆβgd denotes the posterior mean, SD denotes the posterior standard deviation, and 95% CI denotes the 95% posterior credible interval. Flagged pairs are those whose 95% posterior credible interval excludes zero.
+
+# S7. Targeted Tissue-Group Analysis 
+
+This section provides supporting tables for the targeted group-layer analysis reported in the main text. Posterior summaries were computed from retained posterior draws of the group-specific coefficients β(k) 
+
+> gd
+
+for 25 target genes. For each group–gene–drug combination, we summarized both the group-specific effect β(k) 
+
+> gd
+
+and the deviation from the shared effect, ∆ kgd = β(k) 
+
+> gd
+
+− eβgd .
+
+Table 4: Gene-level recurrence counts and effect-size summaries in the targeted group-layer scan. 
+
+Gene nβ95 n∆95 Mean |β| Max |β| Mean |∆| Max |∆|
+
+KRAS 274 272 0.190 1.652 0.190 1.649 RB1 201 200 0.202 2.136 0.201 2.132 STAG2 162 157 0.350 3.860 0.346 3.852 TP53 115 109 0.182 2.535 0.181 2.531 BRAF 95 93 0.319 4.143 0.317 4.139 STK11 56 49 0.152 1.052 0.151 1.049 PBRM1 42 10 0.176 2.112 0.121 1.820 
+
+Continued on next page 
+
+17 Table 4 continued 
+
+Gene nβ95 n∆95 Mean |β| Max |β| Mean |∆| Max |∆|
+
+NRAS 42 42 0.164 2.049 0.163 2.046 APC 41 40 0.151 5.519 0.150 5.518 ALK 30 2 0.169 1.801 0.113 1.276 EGFR 29 28 0.166 4.071 0.166 4.068 STAT3 25 25 0.131 3.035 0.130 3.034 ASXL1 22 11 0.136 3.662 0.087 3.419 PTEN 22 20 0.161 1.823 0.159 1.814 NF1 13 13 0.168 1.365 0.167 1.359 CACNA1D 12 12 0.106 3.406 0.105 3.403 ATM 9 9 0.212 1.464 0.212 1.461 KMT2D 8 1 0.143 0.826 0.125 0.757 ZNF626 6 4 0.164 5.657 0.107 5.477 BAP1 5 2 0.193 1.556 0.148 1.477 EBF1 2 2 0.112 4.361 0.084 4.154 EZH2 2 0 0.118 1.042 0.085 0.778 PRKD2 1 2 0.129 5.679 0.127 5.674 PCDH17 1 0 0.171 5.066 0.101 4.682 TET2 1 0 0.144 1.994 0.104 1.800           
+
+> Note. nβ95 is the number of group–drug combinations for which the 95% credible interval for the group-specific effect β(k)
+> gd excluded zero. n∆95 is the corresponding count for the deviation ∆kgd =β(k)
+> gd −eβgd . Mean and maximum absolute effects are computed over all scanned group– drug combinations for each target gene.
+
+Table 5: Top group-specific effect and top deviation for each target gene. 
+
+Gene Top β group Top β drug Top β Top ∆ group Top ∆ drug Top ∆ KRAS Other Ibrutinib 1.652 Other Ibrutinib 1.649 RB1 Lung Navitoclax -2.136 Lung Navitoclax -2.132 STAG2 Other Talazoparib -3.860 Other Talazoparib -3.852 TP53 Haematopoietic and Lymphoid Nutlin-3a (-) 2.535 Haematopoietic and Lymphoid Nutlin-3a (-) 2.531 BRAF Skin Dabrafenib -4.143 Skin Dabrafenib -4.139 STK11 Lung CDK9 5576 -1.052 Lung CDK9 5576 -1.049 PBRM1 Lung Pevonedistat 2.112 Lung Pevonedistat 1.820 NRAS Haematopoietic and Lymphoid PD0325901 -2.049 Haematopoietic and Lymphoid PD0325901 -2.046 APC Breast Dabrafenib -5.519 Breast Dabrafenib -5.518 ALK Other Navitoclax -1.801 Lung Bortezomib 1.276 EGFR Lung Sapitinib -4.071 Lung Sapitinib -4.068 STAT3 Other VSP34 8731 3.035 Other VSP34 8731 3.034 ASXL1 Haematopoietic and Lymphoid Nilotinib -3.662 Haematopoietic and Lymphoid Nilotinib -3.419 PTEN Breast AZD8186 -1.823 Breast AZD8186 -1.814 
+
+Continued on next page 
+
+18 Table 5 continued 
+
+Gene Top β group Top β drug Top β Top ∆ group Top ∆ drug Top ∆ NF1 Central Nervous System Daporinad 1.365 Central Nervous System Daporinad 1.359 CACNA1DHaematopoietic and Lymphoid Selumetinib -3.406 Haematopoietic and Lymphoid Selumetinib -3.403 ATM Haematopoietic and Lymphoid Dinaciclib 1.464 Haematopoietic and Lymphoid Dinaciclib 1.461 KMT2D Lung Dihydrorotenone -0.826 Other BX795 0.757 ZNF626 Haematopoietic and Lymphoid Motesanib -5.657 Haematopoietic and Lymphoid Motesanib -5.477 BAP1 Other Luminespib 1.556 Haematopoietic and Lymphoid AZD5153 1.477 EBF1 Haematopoietic and Lymphoid Nilotinib -4.361 Haematopoietic and Lymphoid Nilotinib -4.154 EZH2 Haematopoietic and Lymphoid Alisertib 1.042 Other AZD8186 -0.778 PRKD2 Lung IAP 5620 -5.679 Lung IAP 5620 -5.674 PCDH17 Lung Savolitinib -5.066 Lung Savolitinib -4.682 TET2 Lung Savolitinib -1.994 Lung Savolitinib -1.800 
+
+Note. For each target gene, the table reports the group–drug combination with the largest absolute poste-rior mean group-specific effect, and the group–drug combination with the largest absolute posterior mean deviation from the shared effect. Positive values indicate resistance and negative values indicate sensitivity under the response orientation used in the main analysis. 
+
+Table 6: Top group-specific mutation-drug effects from the targeted group-layer analysis. 
+
+Rank Group ( nk ) Gene Drug ˆβ(k) 95% CI Dir. 1 Lung (187) PRKD2 IAP 5620 -5.679 [-9.517, -0.927] Sens. 2 Haematopoietic and Lymphoid (164) ZNF626 Motesanib -5.657 [-8.406, -2.636] Sens. 3 Breast (51) APC Dabrafenib -5.519 [-10.454, 0.030] Sens. 4 Lung (187) PCDH17 Savolitinib -5.066 [-9.311, 0.157] Sens. 5 Haematopoietic and Lymphoid (164) ZNF626 BIBR-1532 -4.958 [-7.703, -1.453] Sens. 6 Haematopoietic and Lymphoid (164) EBF1 Nilotinib -4.361 [-7.476, -1.013] Sens. 7 Skin (57) BRAF Dabrafenib -4.143 [-5.274, -3.016] Sens. 8 Lung (187) EGFR Sapitinib -4.071 [-5.406, -2.690] Sens. 9 Lung (187) EGFR Osimertinib -3.918 [-4.814, -3.045] Sens. 10 Other (437) STAG2 Talazoparib -3.860 [-4.991, -2.692] Sens. 11 Haematopoietic and Lymphoid (164) ASXL1 Nilotinib -3.662 [-4.510, -2.784] Sens. 12 Breast (51) STAG2 Foretinib 3.584 [0.645, 6.582] Resist. 13 Lung (187) EGFR Gefitinib -3.489 [-4.375, -2.590] Sens. 14 Haematopoietic and Lymphoid (164) ZNF626 Nilotinib -3.467 [-7.479, -0.244] Sens. 15 Lung (187) EGFR AZD3759 -3.446 [-4.219, -2.668] Sens. 16 Haematopoietic and Lymphoid (164) CACNA1D Selumetinib -3.406 [-5.318, -1.474] Sens. 17 Haematopoietic and Lymphoid (164) ASXL1 Dasatinib -3.394 [-4.680, -2.142] Sens. 18 Lung (187) EGFR Erlotinib -3.287 [-4.237, -2.367] Sens. 
+
+Continued on next page 
+
+19 Table 6 continued 
+
+Rank Group ( nk ) Gene Drug ˆβ(k) 95% CI Dir. 19 Lung (187) EGFR Afatinib -3.281 [-4.364, -2.217] Sens. 20 Haematopoietic and Lymphoid (164) CACNA1D PD0325901 -3.272 [-5.366, -1.128] Sens. 21 Haematopoietic and Lymphoid (164) ZNF626 Sorafenib -3.222 [-6.505, -0.458] Sens. 22 Breast (51) BRAF PD0325901 -3.193 [-6.340, -0.404] Sens. 23 Other (437) STAT3 VSP34 8731 3.035 [1.469, 4.489] Resist. 24 Haematopoietic and Lymphoid (164) CACNA1D Trametinib -3.013 [-5.375, -0.692] Sens. 25 Breast (51) BRAF Trametinib -2.923 [-6.326, -0.178] Sens. 26 Other (437) BRAF Dabrafenib -2.892 [-3.442, -2.354] Sens. 27 Skin (57) APC Dabrafenib 2.809 [-0.142, 6.188] Resist. 28 Haematopoietic and Lymphoid (164) CACNA1D Refametinib -2.790 [-4.893, -0.727] Sens. 29 Breast (51) BRAF Dabrafenib -2.709 [-6.374, 0.153] Sens. 30 Other (437) STAG2 Irinotecan -2.705 [-3.690, -1.694] Sens. 31 Other (437) STAG2 Mitoxantrone -2.647 [-3.865, -1.387] Sens. 32 Other (437) STAG2 Schweinfurthin A-2.637 [-3.864, -1.396] Sens. 33 Haematopoietic and Lymphoid (164) TP53 Nutlin-3a (-) 2.535 [2.069, 3.000] Resist. 34 Other (437) STAG2 Cisplatin -2.511 [-3.489, -1.489] Sens. 35 Other (437) STAG2 Topotecan -2.451 [-3.567, -1.318] Sens. 36 Other (437) STAG2 Niraparib -2.431 [-3.203, -1.657] Sens. 37 Breast (51) APC Trametinib -2.371 [-7.358, 0.347] Sens. 38 Haematopoietic and Lymphoid (164) ASXL1 Bosutinib -2.361 [-3.144, -1.584] Sens. 39 Central Nervous System (55) TP53 Nutlin-3a (-) 2.360 [1.595, 3.105] Resist. 40 Skin (57) BRAF SB590885 -2.358 [-3.405, -1.265] Sens. 41 Other (437) STAG2 AZD5991 -2.328 [-3.804, -0.814] Sens. 42 Other (437) STAG2 LMP744 -2.296 [-3.597, -0.991] Sens. 43 Haematopoietic and Lymphoid (164) CACNA1D Tretinoin -2.275 [-5.196, -0.077] Sens. 44 Haematopoietic and Lymphoid (164) ZNF626 Cediranib -2.261 [-5.590, -0.061] Sens. 45 Other (437) EGFR Sapitinib -2.245 [-3.958, -0.590] Sens. 46 Other (437) EGFR Gefitinib -2.244 [-3.501, -1.005] Sens. 47 Breast (51) STAG2 Dactinomycin 2.238 [-0.050, 5.907] Resist. 48 Other (437) STAG2 Olaparib -2.210 [-2.850, -1.562] Sens. 49 Other (437) STAG2 Teniposide -2.198 [-3.212, -1.143] Sens. 50 Breast (51) STAG2 YK-4-279 2.191 [-0.096, 5.304] Resist. 
+
+Note. Rows are the 50 largest group-specific effects ranked by | ˆβ(k) 
+
+> gd
+
+| in the targeted 25-gene group-layer scan. ˆβ(k) is the posterior mean of the group-specific mutation-drug effect. CI denotes posterior credible interval. Negative effects indicate greater sensitivity and positive effects indicate resistance under the response orientation used in the main analysis. 
+
+Table 7: Top tissue/group-specific deviations from the shared effect in the targeted group-layer analysis. 
+
+Rank Group ( nk ) Gene Drug ˆ∆ 95% CI Direction 1 Lung (187) PRKD2 IAP 5620 -5.674 [-9.535, -0.926] Below shared 2 Breast (51) APC Dabrafenib -5.518 [-10.442, 0.032] Below shared 3 Haematopoietic and Lymphoid (164) ZNF626 Motesanib -5.477 [-8.380, -2.299] Below shared 
+
+Continued on next page 
+
+20 Table 7 continued 
+
+Rank Group ( nk ) Gene Drug ˆ∆ 95% CI Direction 4 Haematopoietic and Lymphoid (164) ZNF626 BIBR-1532 -4.754 [-7.591, -1.206] Below shared 5 Lung (187) PCDH17 Savolitinib -4.682 [-9.249, 0.280] Below shared 6 Haematopoietic and Lymphoid (164) EBF1 Nilotinib -4.154 [-7.383, -0.765] Below shared 7 Skin (57) BRAF Dabrafenib -4.139 [-5.265, -3.008] Below shared 8 Lung (187) EGFR Sapitinib -4.068 [-5.415, -2.660] Below shared 9 Lung (187) EGFR Osimertinib -3.916 [-4.810, -3.050] Below shared 10 Other (437) STAG2 Talazoparib -3.852 [-4.985, -2.679] Below shared 11 Breast (51) STAG2 Foretinib 3.583 [0.641, 6.567] Above shared 12 Lung (187) EGFR Gefitinib -3.487 [-4.380, -2.587] Below shared 13 Lung (187) EGFR AZD3759 -3.443 [-4.215, -2.664] Below shared 14 Haematopoietic and Lymphoid (164) ASXL1 Nilotinib -3.419 [-4.546, -1.682] Below shared 15 Haematopoietic and Lymphoid (164) CACNA1D Selumetinib -3.403 [-5.304, -1.460] Below shared 16 Lung (187) EGFR Erlotinib -3.284 [-4.251, -2.354] Below shared 17 Lung (187) EGFR Afatinib -3.280 [-4.362, -2.207] Below shared 18 Haematopoietic and Lymphoid (164) CACNA1D PD0325901 -3.268 [-5.372, -1.124] Below shared 19 Breast (51) BRAF PD0325901 -3.189 [-6.332, -0.390] Below shared 20 Haematopoietic and Lymphoid (164) ZNF626 Nilotinib -3.054 [-7.281, -0.019] Below shared 21 Other (437) STAT3 VSP34 8731 3.034 [1.471, 4.492] Above shared 22 Haematopoietic and Lymphoid (164) CACNA1D Trametinib -3.010 [-5.392, -0.689] Below shared 23 Breast (51) BRAF Trametinib -2.918 [-6.300, -0.166] Below shared 24 Other (437) BRAF Dabrafenib -2.888 [-3.438, -2.346] Below shared 25 Haematopoietic and Lymphoid (164) ZNF626 Sorafenib -2.832 [-6.323, -0.116] Below shared 26 Skin (57) APC Dabrafenib 2.810 [-0.130, 6.204] Above shared 27 Haematopoietic and Lymphoid (164) CACNA1D Refametinib -2.786 [-4.876, -0.710] Below shared 28 Breast (51) BRAF Dabrafenib -2.706 [-6.376, 0.140] Below shared 29 Other (437) STAG2 Irinotecan -2.695 [-3.683, -1.684] Below shared 30 Other (437) STAG2 Mitoxantrone -2.636 [-3.868, -1.375] Below shared 31 Other (437) STAG2 Schweinfurthin A -2.623 [-3.852, -1.374] Below shared 32 Haematopoietic and Lymphoid (164) TP53 Nutlin-3a (-) 2.531 [2.066, 2.996] Above shared 33 Other (437) STAG2 Cisplatin -2.501 [-3.503, -1.477] Below shared 34 Other (437) STAG2 Topotecan -2.439 [-3.564, -1.300] Below shared 35 Other (437) STAG2 Niraparib -2.414 [-3.207, -1.636] Below shared 36 Breast (51) APC Trametinib -2.367 [-7.300, 0.357] Below shared 37 Central Nervous System (55) TP53 Nutlin-3a (-) 2.356 [1.592, 3.110] Above shared 38 Skin (57) BRAF SB590885 -2.354 [-3.399, -1.270] Below shared 39 Other (437) STAG2 AZD5991 -2.317 [-3.795, -0.814] Below shared 40 Other (437) STAG2 LMP744 -2.281 [-3.563, -0.961] Below shared 41 Haematopoietic and Lymphoid (164) CACNA1D Tretinoin -2.272 [-5.175, -0.077] Below shared 42 Other (437) EGFR Sapitinib -2.242 [-3.941, -0.588] Below shared 43 Other (437) EGFR Gefitinib -2.242 [-3.504, -1.006] Below shared 44 Breast (51) STAG2 Dactinomycin 2.238 [-0.054, 5.894] Above shared 45 Other (437) STAG2 Olaparib -2.202 [-2.876, -1.538] Below shared 46 Breast (51) STAG2 YK-4-279 2.198 [-0.072, 5.322] Above shared 47 Other (437) STAG2 Teniposide -2.182 [-3.207, -1.117] Below shared 48 Other (437) STAG2 Gemcitabine -2.135 [-3.830, -0.515] Below shared 49 Lung (187) RB1 Navitoclax -2.132 [-2.760, -1.507] Below shared 
+
+Continued on next page 
+
+21 Table 7 continued 
+
+Rank Group ( nk ) Gene Drug ˆ∆ 95% CI Direction 50 Breast (51) APC Selumetinib -2.054 [-6.458, 0.331] Below shared 
+
+Note. Rows are the 50 largest tissue/group-specific deviations ranked by | ˆ∆kgd | in the targeted 25-gene group-layer scan. Here ∆ kgd = β(k) 
+
+> gd
+
+− eβgd is the deviation of the group-specific effect from the shared effect. CI denotes posterior credible interval. Negative deviations indicate that the group-specific effect is more negative than the shared effect, whereas positive deviations indicate that it is more positive than the shared effect. 
+
+Table 8: BRAF and EGFR targeted group-layer summaries. 
+
+Gene nβ95 n∆95 Mean |β| Max |β| Mean |∆| Max |∆| Top β effect Top ∆ effect BRAF 95 93 0.319 4.143 0.317 4.139 Skin– Dabrafenib, 
+
+−4.143 Skin– Dabrafenib, 
+
+−4.139 EGFR 29 28 0.166 4.071 0.166 4.069 Lung–Sapitinib, 
+
+−4.071 Lung–Sapitinib, 
+
+−4.068 
+
+Note. nβ95 is the number of group–drug combinations for which the 95% credible interval for the group-specific effect β(k) 
+
+> gd
+
+excluded zero. n∆95 is the corresponding count for the deviation ∆ kgd = β(k) 
+
+> gd
+
+− eβgd . Mean and maximum absolute effects are computed across all scanned group–drug combinations for the indicated gene. The top entries report the group–drug combination with the largest absolute posterior mean. 
+
+Table 9: EZH2 and KMT2D targeted group-layer summaries. 
+
+Gene nβ95 n∆95 Mean |β| Max |β| Mean |∆| Max |∆| Top β effect Top ∆ effect KMT2D 8 1 0.143 0.826 0.125 0.757 Lung– Dihydrorotenone, 
+
+−0.826 Other–BX795, 0.757 EZH2 2 0 0.118 1.042 0.085 0.778 Haem./Lymph.– Alisertib, 1 .042 Other– AZD8186, 
+
+−0.778 
+
+Note. nβ95 is the number of group–drug combinations for which the 95% credible interval for the group-specific effect β(k) 
+
+> gd
+
+excluded zero. n∆95 is the corresponding count for the deviation ∆ kgd = β(k) 
+
+> gd
+
+− eβgd . Mean and maximum absolute effects are computed across all scanned group–drug combinations for each gene. The top entries report the group–drug combination with the largest absolute posterior mean. Haem./Lymph. denotes the haematopoietic and lymphoid group. The complete EZH2/KMT2D group–drug scan contains 3,540 rows and cannot be presented here. 
+
+22

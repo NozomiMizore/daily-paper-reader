@@ -6,24 +6,27 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-08
-- 运行时间：2026-09-08 22:48:19 UTC
+- 最新运行日期：2026-09-09
+- 运行时间：2026-09-09 21:53:15 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：0
-- 速读区：1
+- 本次总论文数：2
+- 精读区：2
+- 速读区：0
 
 ### 今日简报（AI）
-今日仅速读1篇论文，无精读，整体投入偏少。值得关注的是《Beyond Homoscedasticity》提出的解耦不确定性优化方法，用于改善深度不均衡回归。建议后续可围绕该方向补充1~2篇相关精读，以加深理解。
-- 详情：[/202609/08/README](/202609/08/README)
+今日精读2篇高分论文，均聚焦生物医学与AI交叉领域。最值得关注的是癌症药物基因组学中的稀疏突变-药物关联建模，以及基于Transformer的裸盖菇素转录响应编码方法。建议读者优先关注这两项方法在精准医疗与神经科学中的应用潜力。
+- 详情：[/202609/09/README](/202609/09/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [A Network-Structured Bayesian Hierarchical Model for Sparse Mutation-Drug Response Associations: Application to Cancer Pharmacogenomics](/202609/09/2609.05784v1-a-network-structured-bayesian-hierarchical-model-for-sparse-mutation-drug-response-associations-application-to-cancer-pharmacogenomics)  
+   标签：评分：8.0/10、query:virtual-cell
+   evidence：将基因变异映射到药物反应表型，构建癌症药物基因组学中的扰动反应预测关联模型
+2. [A Transformer-Based Delta Expression Encoder for Psilocybin Transcriptional Response: Architecture, Representations, and Biological Validation](/202609/09/2609.08165v1-a-transformer-based-delta-expression-encoder-for-psilocybin-transcriptional-response-architecture-representations-and-biological-validation)  
+   标签：评分：8.0/10、query:virtual-cell
+   evidence：用Transformer在单细胞层面建模并分类药物转录扰动响应状态
 
 ### 速读区论文标签
-1. [Beyond Homoscedasticity: Decoupled Uncertainty Optimization for Deep Imbalanced Regression](/202609/08/2609.04995v1-beyond-homoscedasticity-decoupled-uncertainty-optimization-for-deep-imbalanced-regression)  
-   标签：评分：6.0/10、query:virtual-cell
-   evidence：面向不平衡回归的解耦不确定性优化可迁移至突变活性等扰动响应预测任务
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
