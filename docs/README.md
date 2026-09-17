@@ -6,24 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-16
-- 运行时间：2026-09-16 21:47:39 UTC
+- 最新运行日期：2026-09-17
+- 运行时间：2026-09-17 22:27:51 UTC
 - 运行状态：成功
-- 本次总论文数：1
+- 本次总论文数：2
 - 精读区：0
-- 速读区：1
+- 速读区：2
 
 ### 今日简报（AI）
-今日速读 1 篇，聚焦知识增强的单细胞基础模型。最值得看的方向是把外部知识融入单细胞基础模型，以提升表征与下游任务表现（6.0/10，属探索性参考）。普通读者可先了解单细胞基础模型的基本思路，再关注知识增强是否带来可复现的提升。
-- 详情：[/202609/16/README](/202609/16/README)
+2026-09-17日报：共收录2篇单细胞分析论文，均为速读，精读0篇。  
+最值得关注的是7.0分的《Causal Path Analysis from Perturbational and Population-Scale Single-Cell Data with Multiscale Confounding and Measurement Error》和6.0分的《RAGCell: Retrieval-Augmented Generation as Supervision for Versatile Single-cell Analysis》，分别指向因果路径分析与检索增强生成用于单细胞分析。  
+普通读者可先读7分那篇了解因果推断思路，再浏览RAGCell看检索增强生成如何服务单细胞任务。
+- 详情：[/202609/17/README](/202609/17/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Towards a knowledge-enhanced single-cell foundation model](/202609/16/2609.14970v1-towards-a-knowledge-enhanced-single-cell-foundation-model)  
+1. [Causal Path Analysis from Perturbational and Population-Scale Single-Cell Data with Multiscale Confounding and Measurement Error](/202609/17/2609.16510v1-causal-path-analysis-from-perturbational-and-population-scale-single-cell-data-with-multiscale-confounding-and-measurement-error)  
+   标签：评分：7.0/10、query:virtual-cell
+   evidence：整合单细胞扰动数据与群体尺度数据进行基因调控因果分析
+2. [RAGCell: Retrieval-Augmented Generation as Supervision for Versatile Single-cell Analysis](/202609/17/2609.14147v1-ragcell-retrieval-augmented-generation-as-supervision-for-versatile-single-cell-analysis)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：融合基因调控知识的单细胞基础模型
+   evidence：面向通用单细胞分析的单细胞基础模型框架
 
 
 <div class="dpr-home-promo-card">
