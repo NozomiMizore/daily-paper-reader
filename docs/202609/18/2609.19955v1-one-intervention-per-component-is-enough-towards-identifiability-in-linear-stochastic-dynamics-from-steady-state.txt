@@ -1,0 +1,2811 @@
+Title: One Intervention per Component is Enough: Towards Identifiability in Linear Stochastic Dynamics from Steady State
+
+URL Source: https://arxiv.org/pdf/2609.19955v1
+
+Published Time: Fri, 18 Sep 2026 00:56:07 GMT
+
+Number of Pages: 32
+
+Markdown Content:
+# One Intervention per Component is Enough: Towards Identifiability in Linear Stochastic Dynamics from Steady State 
+
+Saber Salehkaleybar 1
+
+# Abstract 
+
+We study the problem of recovering the parame-ters of a multivariate Ornstein–Uhlenbeck (OU) process from steady-state observational and in-terventional data. In many applications, such as large-scale gene perturbation experiments, only stationary “snapshot” measurements are available, making standard stochastic differential equation estimation methods that rely on time-series tra-jectories inapplicable. We first establish an iden-tifiability result: one intervention per strongly connected component (SCC) of the drift graph suffices to recover all OU process parameters generically up to a global scaling factor. This holds provided that the SCC condensation graph is connected with a single root and certain spec-tral nondegeneracy assumptions hold. We pro-pose a recursive learning algorithm that orders SCCs topologically and, for each component, iso-lates its marginal dynamics and solves a linear system derived from the steady-state moment equations, leveraging parameters recovered for upstream components. Building on this theoret-ical foundation, we propose a regularized least-squares estimator that jointly minimizes residuals of the steady-state mean and covariance equations across observational and interventional data. Ex-perimental results validate our theoretical findings in recovering parameters of the underlying OU process. 
+
+# 1. Introduction 
+
+Understanding the structure and parameters of dynamical systems from data is a fundamental problem in many sci-entific domains, including systems biology (Bansal et al., 2006; Marbach et al., 2012), neuroscience (Paninski et al., 2010), and economics (Hamilton, 2020). In many settings, 
+
+> 1
+
+Leiden Institute of Advanced Computer Science, Leiden Uni-versity, The Netherlands. Correspondence to: Saber Salehkaleybar 
+
+<s.salehkaleybar@liacs.leidenuniv.nl >.
+
+such as gene regulatory networks, the underlying dynamics can be modeled by a stochastic differential equation (SDE) whose steady-state distribution encodes both the interaction structure and kinetic parameters (Gardiner, 2009; Villaverde et al., 2016). Accurately recovering these parameters en-ables causal representation of interactions among variables, and predictions under unseen perturbations (Pearl, 2009). However, in experimental biology and related areas, data are often available only in the form of “snapshot” measure-ments (Cao et al., 2019; Schiebinger et al., 2019). The time-series trajectories (required by many SDE estimation methods (Zhang et al., 2024; Oh et al., 2024)) are expensive or infeasible to obtain at scale. In such cases, interventions such as gene knockdown (Datlinger et al., 2017) provide additional information by selectively intervening on parts of the system, potentially resolving non-identifiability issues that arise from observational data alone (Peters et al., 2017). A substantial body of work addresses causal inference in linear stochastic systems. (Varando & Hansen, 2020; Det-tling et al., 2024) focus on recovering drift structures from steady-state data using the Lyapunov equation. These ap-proaches rely solely on observational measurements and do not leverage interventions, which can limit identifiability. More recently, (Lorch et al., 2024), focused on fitting the observational/interventional distributions without providing parameter recovery guarantees. Intervention-aware models, such as in (Rohbeck et al., 2024), achieve good empirical prediction, but the identifiability results are very restricted (see the related work section for more details). In this paper, our aim is to incorporate interventions into the learning process, establishing identifiability results on recovering the parameters of SDEs and developing learn-ing algorithms grounded in these theoretical results. Our contributions are as follows: • We establish an identifiability result for recovering the parameters of a multivariate Ornstein–Uhlenbeck (OU) process from steady-state observational and interven-tional data. We show that a single intervention per SCC of the drift graph is sufficient to recover the parame-ters up to a global scaling 1 if the SCC condensation 
+
+> 1
+
+In OU processes, from the stationary distribution, parameters 
+
+1arXiv:2609.19955v1 [cs.LG] 17 Sep 2026 One Intervention Per Component Is Enough 
+
+graph is connected with a single root and certain spec-tral/rank nondegeneracy assumptions (Assumptions A.1 and A.2) hold. To prove this, we first consider the case where the drift matrix is a single SCC and show that by solving the linear system of equations for the first and second moments (based on observational data and data from one intervention), we can recover all the parameters up to a global scaling (Theorem 3.1). • For the general case with multiple SCCs (Theorem 3.6), we provide a recursive algorithm that topologically orders the SCCs and, for each component, isolates its marginal dynamics. This reduces the problem to a sequence of single-SCC cases. For each SCC, the algorithm solves a linear system (derived from the steady-state moment equations for the observational and interventional settings) using parameters recovered for upstream components. We also provide an example that if the SCC condensation graph has more than one root, then it is impossible to learn all the parameters with a single global scaling. • We show that changes in the steady-state means under single-node interventions reveal the SCC-level struc-ture of the graph. In particular, Theorem 3.3 char-acterizes the set of nodes whose means change after an intervention as the downstream region of the inter-vened SCC. Consequently, one intervention per SCC is sufficient to recover the SCC decomposition and a topological order of the DAG over SCCs (Remark 3.4). This structural recovery step does not require the spec-tral/rank nondegeneracy assumptions used for parame-ter identification. • Building on these theoretical findings, we formulate a regularized least-squares optimization problem that jointly minimizes the squared residuals of the steady-state mean and covariance equations across both ob-servational and interventional data. Empirical results validate the identifiability results in recovering param-eters and predicting unseen interventions. 
+
+# 2. Problem Formulation 
+
+Ornstein–Uhlenbeck process : The Ornstein–Uhlenbeck (OU) process is a continuous-time stochastic process that satisfies the stochastic differential equation (SDE): 
+
+dx = ( −Λx + b) dt + σ dWt, (1) where x ∈ Rn is the state vector, Λ ∈ Rn×n is a drift matrix (assumed positive stable), b ∈ Rn is a constant vector representing external input, σ ∈ Rn×n is the diffusion matrix, and dWt is an n-dimensional Wiener process. 
+
+> are identifiable at most up to a global scaling, an intrinsic ambiguity that cannot be resolved from stationary data alone.
+
+The stationary distribution of the OU process has a mul-tivariate normal distribution with the following mean and covariance: • Mean: 
+
+μ = E[x∞] = Λ−1b, (2) where x∞ denotes a random vector distributed accord-ing to the stationary distribution of the OU process. • Covariance: 
+
+ΛΣ + ΣΛ ⊤ = σσ ⊤, (3) where Σ ∈ Rn×n is the steady-state covariance matrix: 
+
+Σ = E[( x∞ − μ)( x∞ − μ)⊤].
+
+We assume that the diffusion power matrix is diagonal and positive: D := σσ ⊤ = diag( d1, . . . , d n) ≻ 0.
+
+Intervention: We define an intervention on i-th coordinate of x as follows, where the i-th row of the drift matrix Λ
+
+is modified to remove influence from all other variables, while preserving its self-regulation. Formally, we define the modified drift matrix eΛ(i) as: 
+
+eΛ(i) 
+
+> kj
+
+=
+
+
+
+Λkj , i̸ = k, 
+
+0, i = k, j ̸ = i, 
+
+Λii , i = k, j = i. 
+
+That is, we zero out all off-diagonal entries in the i-th row, but retain Λii , analogous to a knockout perturbation that isolates a variable from its regulators. This notion of inter-vention is often considered in the causal SDE literature, see, e.g., (Hansen & Sokol, 2014) and (Boeken & Mooij, 2024), where some post-intervention SDEs are formulated in this form. The modified dynamic under intervention is: dx =(− eΛ(i)x + b) dt + σ dWt. In the intervened system, the mean is denoted by μ(i) and satisfies: 
+
+μ(i) = E[x(i) 
+
+> ∞
+
+] = 
+
+ eΛ(i)−1
+
+b, (4) assuming eΛ(i) is invertible. Similarly, the steady-state covariance Σ(i) satisfies the Lya-punov equation: 
+
+eΛ(i)Σ(i) + Σ(i)  eΛ(i)⊤
+
+= σσ ⊤. (5) We assume that, for every intervention considered, eΛ(i) is positive stable, so the interventional stationary mean and covariance are well-defined. Our goal is to recover the parameters of OU process, i.e., 
+
+Λ, b, and D from the observational mean and covariance 2One Intervention Per Component Is Enough 
+
+(μ, Σ) and a collection of interventional means and covari-ances {(μ(i), Σ(i))}i∈I where I is the set of coordinates intervened on. Please note that the parameters are iden-tifiable only up to a global scaling because the stationary first-moment and second-moment equations are invariant under global scaling of parameters. 
+
+Graph definitions: In the following, we briefly review the graph-theoretic concepts used throughout the paper: 
+
+- Strongly connected components. For a directed graph G,a strongly connected component (SCC) is a maximal subset of nodes C such that for every pair u, v ∈ C there exists a directed path from u to v and a directed path from v to u.The SCCs of G form a partition of its nodes. 
+
+- Condensation graph. Given the SCCs C1, . . . , C K of G,the condensation graph is a directed graph whose nodes correspond to the SCCs and which contains a directed edge 
+
+Ci → Cj whenever there exists an edge in G from some node in Ci to some node in Cj . By construction, the con-densation graph is always a directed acyclic graph (DAG). A root (or source) SCC has no incoming edge from another SCC. Connectedness of this DAG refers to its underlying undirected graph; with finitely many SCCs, a unique root reaches every SCC. 
+
+- Topological order over SCCs. A topological order of the SCCs is any ordering of the nodes of the condensation graph such that all directed edges point from earlier to later components. Equivalently, Ci may appear before Cj in the order if and only if there is no directed path from Cj to Ci
+
+in the condensation graph. 
+
+# 3. Identifiability Results 
+
+For a drift matrix Λ, define the associated directed graph 
+
+G(Λ) by considering an edge j → i if and only if Λij ̸ = 0 .In the following, first we consider that G(Λ) is strongly connected. Under some spectral/rank non-degeneracy as-sumptions, we show that the parameters of the OU process can be recovered generically up to some global scaling by just having one intervention on any coordinate. We then consider the case where G(Λ) has multiple SCCs. In this setting, we first show that changes in interventional means identify the SCCs and a topological ordering over the SCC condensation DAG 2. Given this SCC-level structure, we prove generic identification up to a single global scaling in the graph-compatible model class, under the unique-root, intervention-coverage, and isolated-realization hypotheses of Theorem 3.6. 
+
+> 2This structural step does not require the spectral/rank nonde-generacy assumptions.
+
+3.1. Single SCC Theorem 3.1. Consider the OU process in equation 1 with true parameters Λ, b, and D. Moreover, suppose that we have access to the observational steady-state mean and covariance (μ, Σ) and an interventional mean and covari-ance (μ(i), Σ(i)) (i can be any coordinate). If the graph 
+
+G(Λ) is strongly connected and certain spectral/rank non-degeneracy assumptions hold (See Assumption A.1 and As-sumption A.2 in Appendix A.6), generically 3, any other pa-rameter triple ( bΛ, bb, bD) that yields the same observational and interventional moments must satisfy: 
+
+bΛ = cΛ, bb = cb, bD = cD,
+
+for some scalar c > 0.
+
+All the proofs of theorems (if not given in the main body) are available in the appendix. The key idea in the proof is based on forming a system of linear equations according to equation 2, equation 3, equation 4, and equation 5, showing that any possible solution for this set of equations should be a scale of the true parameters. In particular, let 
+
+Θ = 
+
+
+
+vec( Λ)
+
+bd
+
+ ∈ Rp,
+
+where p := n2 + 2 n, and d := ( d1, . . . , d n)⊤, where dk := 
+
+Dkk > 0. Moreover, the operator vec stacks the columns of its matrix argument. Therefore, vec( Λ) ∈ Rn2
+
+. Now, we can write the linear equations in the following form: 
+
+A Θ = 0 where A ∈ R m×p (refer to Appendix A.1 for the definition of A) and m = n2 + 3 n. In the proof, we show that every admissible solution of this linear system is a positive scaling of the true parameters. 
+
+Remark 3.2 . The nondegeneracy assumptions used in the proofs include spectral/rank conditions on moment-derived linear systems. We do not prove their genericity in this work; instead, we evaluate them numerically in Appendix C. The precise statements of the assumptions and their roles in the proofs are deferred to Appendix A and Appendix C.2, respectively. Establishing genericity of these conditions alone is left as a direction for future work. For SCCs whose graph is a directed cycle, Appendix C.2 provides additional justification for the relevant injectivity condition. 
+
+3.2. General Case 
+
+In the general case, where the graph G(Λ) has multiple SCCs, assume that the intervention set I contains at least one intervention targeting a variable inside each SCC. More-over, the DAG of SCCs is connected and there is exactly 
+
+> 3Please see the definition of genericity in Appendix A.2.
+
+3One Intervention Per Component Is Enough 
+
+one root SCC. Under these conditions and certain spec-tral/rank non-degeneracy assumptions (see Assumptions A.1 and A.2, in the appendix), we show that the parameters of the OU process can be recovered up to a global scaling. The key idea is to first recover a topological ordering over the SCCs by inspecting which means change under each inter-vention; this structural recovery step does not require the spectral/rank nondegeneracy assumptions. The following theorem allows us to identify the set of variables in each SCC, as well as a topological ordering over the SCCs. With this structural information in hand, we then recursively iden-tify the model parameters for each SCC by conditioning on previously resolved components, thereby reducing the multi-SCC case to a sequence of single-SCC problems. 
+
+Theorem 3.3. Let C be an SCC in G(Λ) and let i ∈ C.Consider the intervention on i and let μ and μ(i) be the observational and interventional steady-state means, respec-tively. 
+
+(Non-null case). If the i-th row is non-null, i.e., ∃ j̸ = i with 
+
+Λij ̸ = 0 , then, generically, for the set of parameters (Λ, b)
+
+consistent with G(Λ),
+
+μ(i)
+
+> k
+
+̸ = μk ⇐⇒ k ∈ Desc( C),
+
+where Desc( C) denotes the set of nodes in SCCs reachable from C in the DAG of SCCs (including C itself). 
+
+(Null case). If the i-th row has no off-diagonals, i.e., Λij = 0 
+
+for all j̸ = i, then μ(i) = μ.Remark 3.4 . For an intervention on i ∈ C, define Ri := 
+
+{ j : μ(i)
+
+> j
+
+̸ = μj }. Suppose there is at least one intervention in each SCC. Based on the above theorem, intersecting and differencing the sets Ri across interventions identifies the SCCs and yields a topological order for the DAG over SCCs (see Appendix A.5 for more details). 
+
+Remark 3.5 . The same SCC-recovery argument extends to non-null soft row interventions (at least one per SCC), where the intervened drift differs from Λ only in row i,but the changed row is not necessarily obtained by hard zeroing. The set of coordinates whose means change is again generically the downstream region of the intervened SCC. The proof is given in Appendix A.4. 
+
+Theorem 3.6. Consider the OU process in equation 1 with true parameters Λ, b, D. Suppose we have access to the observational steady-state mean and covariance (μ, Σ), as well as to interventional means and covariances (μ(i), Σ(i))
+
+for at least one intervention in each SCC of G(Λ). Assume that, for each non-singleton SCC and its selected interven-tion, the admissible isolated SCC model admits a realization satisfying Assumptions A.1 and A.2. If the DAG over SCCs of G(Λ) is connected with a single root SCC, then, generi-cally, any other admissible parameter triple ( bΛ, bb, bD) com-patible with the same graph G(Λ) that yields the same observational and interventional moments must satisfy 
+
+bΛ = cΛ, bb = cb, bD = cD,
+
+for some scalar c > 0.Remark 3.7 . The graph-compatibility assumption in Theo-rem 3.6 can be replaced by the requirement that every com-peting model under consideration satisfies the mean-support property of Theorem 3.3 for each performed non-null inter-vention, with descendant sets computed in its own graph. Keeping the remaining hypotheses unchanged, matching interventional means then forces competing drifts to respect the recovered block ordering (i.e., a competing graph can-not contain an edge from a later block to an earlier block). The single-SCC assumptions provide injectivity on the full target-block matrix space, so the recursive reconstruction does not require competitors to have exactly the same edges within blocks or between earlier and later blocks as the true graph. Although the mean-support property holds generi-cally for each fixed graph, requiring it of every competitor is an additional restriction. Genericity of the true parameters alone does not exclude exceptional competitors that violate this property. 
+
+Proof. Based on Theorem 3.3, we can infer the SCCs and also a topological ordering over them if there is at least one intervention in each SCC. Let us denote these SCCs based on the topological ordering as C1, C 2, · · · , C K where 
+
+K is the number of components. Suppose that we already learned the parameters of the OU process in the components 
+
+C1, C 2, · · · , C r up to some global scaling. Now, we aim for learning the parameters in Cr+1 .We partition the state vector according to the SCC decom-position of G(Λ):
+
+x = xP
+
+|{z} 
+
+> C1∪···∪ Cr
+
+⊕ xT
+
+|{z} 
+
+> Cr+1
+
+⊕ xF
+
+|{z} 
+
+> Cr+2 ∪···∪ CK
+
+,
+
+where the operator ⊕ denotes concatenation of subvectors corresponding to disjoint index sets. The steady-state mean and covariance matrices are parti-tioned accordingly: 
+
+μ =
+
+μP
+
+μT
+
+μF
+
+ , Σ =
+
+ΣP P ΣP T ΣP F 
+
+ΣT P ΣT T ΣT F 
+
+ΣF P ΣF T ΣF F 
+
+ .
+
+Everything inside the P -block is assumed known, i.e., the blocks ΛP P , bP , and DP , up to the same scaling c.Because xP and xT are jointly Gaussian, we can write: 
+
+xT = B x P + r, where B := ΣT P Σ−1 
+
+> P P
+
+.
+
+The regression matrix B is computable directly from the ob-served moments, with no dependence on model parameters. 4One Intervention Per Component Is Enough 
+
+Moreover, the residual term r := xT − Bx P is a Gaussian variable with 
+
+μT |P = μT −B μP , ΣT |P = ΣT T −ΣT P Σ−1 
+
+> P P
+
+ΣP T .
+
+(6) Substituting the definitions of B and r into the OU dynamics yields: 
+
+˙r = −ΛT T r +  −ΛT P − ΛT T B + BΛ P P 
+
+xP
+
++ ( bT − Bb P ) + ( σT ˙WT − BσP ˙WP ).
+
+(7) To identify the residual moment equations, we use the cross-covariance block of the Lyapunov equation: 
+
+ΛT P ΣP P + ΛT T ΣT P + ΣT P Λ⊤ 
+
+> P P
+
+= 0.
+
+Using B = ΣT P Σ−1 
+
+> P P
+
+, this gives 
+
+ΛT P + ΛT T B = −BΣ P P Λ⊤ 
+
+> P P
+
+Σ−1 
+
+> P P
+
+.
+
+Combining this with the parent Lyapunov equation 
+
+ΛP P ΣP P + ΣP P Λ⊤ 
+
+> P P
+
+= DP ,
+
+we obtain 
+
+ΛT P + ΛT T B = BΛ P P − BD P Σ−1 
+
+> P P
+
+. (8) For the mean, using 
+
+ΛT P μP + ΛT T μT = bT , μT = μT |P + BμP ,
+
+together with equation 8, gives 
+
+ΛT T μT |P = bT − B  bP − DP Σ−1 
+
+> P P
+
+μP
+
+ . (9) Similarly, for the residual covariance, 
+
+ΛT T ΣT |P + ΣT |P Λ⊤ 
+
+> T T
+
+= DT + BD P B⊤. (10) Now, based on the first and second moments of the residual which are given above, we can identify the parameters of component T and also ΛT P up to the same scaling. In particular, we have: 
+
+ΛT T : Note that the corresponding diffusion power matrix of the residual moment equation is DT + BD P B⊤, and therefore it is not necessarily diagonal. Nevertheless, the proof of Theorem 3.1 can be adapted to recover ΛT T up to the same scaling c by solving the residual moment equations; see Appendix A.7. 
+
+ΛT P : Having ΛP P , DP , and ΛT T up to the same scaling 
+
+c, equation 8 gives 
+
+ΛT P = BΛ P P − BD P Σ−1 
+
+> P P
+
+− ΛT T B.
+
+Therefore, ΛT P is recovered with the same scaling. 
+
+bT and DT : According to equation 2, we have 
+
+bT = ΛT T μT + ΛT P μP .
+
+Since we recovered ΛT T and ΛT P with the same scaling factor, bT is identifiable with the same scaling from the above equation. Regarding σT (or diffusion power matrix DT ), from the Lyapunov equation for the covariance matrix of residual (in other words, ΣT |P ), we have: 
+
+ΛT T ΣT |P + ΣT |P Λ⊤ 
+
+> T T
+
+= DT + B D P B⊤.
+
+Therefore, 
+
+DT = diag  ΛT T ΣT |P + ΣT |P Λ⊤ 
+
+> T T
+
+− BD P B⊤ ,
+
+and hence DT is learned with the same scaling. This com-pletes the recursive step and the proof. 
+
+Remark 3.8 . The connectedness assumption in Theorem 3.6 is necessary. If the DAG over SCCs is disconnected, then each disconnected part of the DAG can only be identified up to its own scaling factor. Moreover, if there are multiple root SCCs, the parameters of the OU process may not be recov-ered up to a single global scaling. An example illustrating this case is provided in Appendix A.8. Building on the above, we design a recursive algorithm that proceeds in two stages (the pseudo-code is given in Algorithm 1): • In the first stage, we use the changes in interventional means to identify the SCCs of the drift graph G(Λ),along with a topological ordering over these compo-nents. This structural information is inferred using Theorem 3.3. • In the second stage, we iterate over the SCCs in topo-logical order. For each component T , we treat the union of previously processed SCCs as P , and con-dition on xP to isolate the marginal dynamics of xT .Using the conditional moments (μT |P , ΣT |P ), we first recover ΛT T up to a scaling. Then, leveraging the structure of the OU dynamics, we recover ΛT P , bT ,and DT up to the same scaling. The procedure contin-ues recursively until all components have been identi-fied. 
+
+Remark 3.9 . Rather than directly running Algorithm 1, one can alternatively construct a global linear system from the observational and interventional first- and second-moment equations, as in the proof of Theorem 3.1. If this system has a one-dimensional null space, then all parameters are identified up to a global scaling. Theorems 3.1 and 3.6 5One Intervention Per Component Is Enough 
+
+Algorithm 1 Recursive OU Learning with Interventions  
+
+> 1:
+
+Input: Observational and interventional means and covariances (μ, Σ), {(μ(i), Σ(i))}i∈I  
+
+> 2:
+
+Phase 1: Learn SCCs  
+
+> 3:
+
+Identify SCCs, C1, C 2, . . . , C K , and a topological or-dering over them from mean changes using Theorem 3.3  
+
+> 4:
+
+Phase 2: Recover parameters per SCC  
+
+> 5:
+
+for each component T = Cj in topological order do  
+
+> 6:
+
+Let P := C1 ∪ · · · ∪ Cj−1 be the union of previously processed SCCs  
+
+> 7:
+
+Compute conditional mean μT |P and covariance 
+
+ΣT |P according to equation 6  
+
+> 8:
+
+Recover ΛT T using the interventional moments with the same scaling in P 
+
+> 9:
+
+Recover ΛT P , bT , DT up to the same scaling using cross-covariances and stationary conditions  
+
+> 10:
+
+end for  
+
+> 11:
+
+Output: Drift matrix Λ, input vector b, and diffusion matrix D (up to a global scaling) provide conditions under which this one-dimensional am-biguity is the only ambiguity, while Theorem 3.3 provides the SCC-level structural information used by the recursive procedure. 
+
+Remark 3.10 . Although the parameters (Λ, b, D) are iden-tifiable only up to a global scaling, this ambiguity does not affect the prediction of stationary moments. In particular, our identifiability result implies that any alternative parame-ter triple consistent with the observational and interventional steady state is of the form ˆΛ = cΛ, ˆb = cb, ˆD = cD, for some scalar c > 0. For the steady-state mean, we have 
+
+μ = Λ−1b, and ˆμ = ˆΛ−1ˆb = ( cΛ)−1(cb) = Λ−1b = μ,
+
+so the scaling cancels out. The same holds for the steady-state covariance where Σ is defined as the unique solu-tion of the Lyapunov equation ΛΣ + ΣΛ ⊤ = D, under the assumption that Λ is stable. Under the scaled param-eters, the covariance ˆΣ satisfies ˆΛ ˆΣ + ˆΣ ˆΛ⊤ = ˆD ⇐⇒ 
+
+cΛ ˆΣ + ˆΣcΛ⊤ = cD ⇐⇒ Λ ˆΣ + ˆΣΛ ⊤ = D. By uniqueness of the solution to the Lyapunov equation for a stable drift matrix, we obtain ˆΣ = Σ. The same arguments can be applied to an intervened drift eΛ(i), so the predicted moments for unseen interventions are also invariant to the global scaling. 
+
+# 4. Learning Algorithm 
+
+In finite-sample settings, plugging in empirical moments generally yields full-column-rank systems, which admit only the trivial solution of zero vector. Nevertheless, the identifiability result in Theorem 3.1 motivates replacing true moments with empirical ones and relaxing the equations into a least-squares objective. Specifically, in the observational case, the mean vector μ and covariance matrix Σ satisfy the linear system in equation 2 and equation 3, respectively. Moreover, for each intervention i ∈ I , the mean vector 
+
+μ(i) and Σ(i) satisfy equations in equation 4 and equation 5, respectively. For the set of free parameters Θ = (vec( Λ), b, d), where 
+
+d is the diagonal of matrix D, we define the following least-square objective: 
+
+L(Θ) = αO
+
+
+
+∥Λ ˆμ − b∥22 + Λ ˆΣ + ˆΣ Λ ⊤ − D 2
+
+> F
+
+
+
++ αI
+
+X
+
+> i∈I
+
+eΛ(i) ˆμ(i) − b 22
+
+
+
++ αI
+
+X
+
+> i∈I
+
+eΛ(i) ˆΣ(i) + ˆΣ(i)( eΛ(i))⊤ − D 2
+
+> F
+
+
+
+,
+
+(11) where αO , α I > 0 are weighting coefficients; we often give a larger weight to observational terms since observational samples are often more abundant and their estimates are more accurate. Moreover, ˆμ, ˆΣ, ˆμ(i), ˆΣ(i), i ∈ I are the unbiased estimates of first and second moments in the observational and interventional settings and ∥ · ∥ F is the Frobenius norm. To promote sparsity in the drift graph, we add an ℓ1 penalty on the off-diagonal elements of Λ:
+
+R(Λ) = γ P 
+
+> i̸=j
+
+|Λij |, where γ > 0 controls the sparsity level. Therefore, the optimization problem becomes 
+
+min  
+
+> Θ
+
+L(Θ) + R(Λ), (12) subject to positive stability of Λ and the intervened drifts, with dk > 0 for all k. Because the moment equations are homogeneous in (Λ, b, D), we can impose a scale-fixing normalization, such as tr( Λ) = n, to remove the global scaling ambiguity. 
+
+# 5. Related Work 
+
+Herein, we mainly review methods that perform inference from stationary distributions of dynamical systems, rather than from full trajectories 4.
+
+Identifiability and learning from steady state in SDE models. A line of work on graphical continuous Lyapunov models treats the steady-state covariance as the solution of a continuous Lyapunov equation. In this setting, (Varando & Hansen, 2020) proposed an l1-regularized estimator to recover sparse drift structure from observational snapshots. (Dettling et al., 2023) subsequently analyzed identifiability in this framework, proving that when only observational covariances are available and the diffusion matrix is known, 
+
+> 4There are several surveys on causal discovery from temporal data (e.g., (Gong et al., 2024; Hasan et al., 2023))
+
+6One Intervention Per Component Is Enough 
+
+the drift is globally identifiable from the covariance if and only if the drift graph is simple, meaning it contains no directed two-cycles. While these results provide valuable insights, they are limited to observational data, cannot re-cover models with two-cycles in the drift, and do not handle unknown diffusion. In contrast, our work incorporates in-terventional data, allows unknown diagonal diffusion, and shows that a single intervention in each SCC (under some conditions on the DAG of SCCs) suffices for recovery up to a global scaling. More recently, (Dettling et al., 2024) proposed a Lasso-based estimator for recovering the drift structure of linear SDEs from stationary observational co-variances and analyzed its identifiability properties. How-ever, their framework does not incorporate interventions. Very recently, (Zweig et al., 2025) studied identifiability of linear SDEs under mean-shift interventions, assuming a low-rank drift matrix. In contrast, we allow general drift matrices and base identifiability on the SCC structure of the drift graph rather than on a low rank assumption. Other approaches aim to learn stationary SDE models with-out focusing on identifiability. (Lorch et al., 2024) proposed a kernel deviation-from-stationarity objective that measures how far a candidate SDE’s stationary distribution deviates from the empirical distribution. Their framework can accom-modate cycles and generalizes well to unseen interventions, but its goal is density fitting in reproducing kernel Hilbert spaces rather than moment-based parameter identification. Our work differs by deriving explicit graphical conditions under which the OU parameters are recoverable from first and second moments. Recent empirical work has also combined steady-state dy-namics with interventions. (Rohbeck et al., 2024) intro-duced Bicycle, a model in which interventions alter a subset of parameters. Bicycle achieves good performance in both structure recovery and prediction under out-of-distribution interventions in single-cell datasets. However, it is designed primarily as a predictive model and provides identifiability guarantees only when interventions are performed on all coordinates except one. In contrast, we gave identifiability results under substantially weaker requirements, i.e., one intervention per SCC. (Boege et al., 2025) have studied the conditional indepen-dence relations implied by sparsity in the drift of stationary multivariate diffusions. Their results link graph structure to conditional independencies in the stationary state distri-bution. Nonetheless, this line of work does not address the recovery of drift or diffusion parameters, nor how interven-tions could enable identifiability. Finally, there exists related work for deterministic linear ODEs rather than stochastic OU models. For example, (Wang et al., 2024) analyzed the identifiability of linear ODE systems with hidden confounders from time series or discretely sampled trajectories and derived conditions under which latent confounding can be resolved. 
+
+Gene perturbation prediction from steady state. In sys-tems biology, several methods aim to predict the effects of genetic perturbations directly from stationary data. For instance, (Sethuraman et al., 2023) proposed NODAGS-Flow, which learns nonlinear cyclic causal structures from interventional steady-state gene expression by fitting resid-ual normalizing flows, producing predictions and plausible graphs. While providing good performance in practice, NODAGS-Flow is a likelihood-based method without for-mal identifiability guarantees on recovering the parameters of the underlying system. Other works focus on high-performing predictive models. For instance, (Roohani et al., 2022) proposed GEAR, which combines graph neural networks with prior biological net-work information to predict transcriptional responses to single or multiple gene perturbations, showing improved generalization to unseen combinations. (Yu et al., 2025) pro-posed PerturbNet, which uses conditional invertible flows to model the distributional effects of unseen perturbations. Per-turBench (Wu et al.) provides a unified benchmark suite for single-cell perturbation modeling, facilitating comparison between predictive models. 
+
+# 6. Experiments 
+
+Scope of empirical evaluation. The goal of this section is to validate the identifiability results (e.g., parameter re-covery). Regarding comparisons, we focus on methods that assume linear SDE models and operate on stationary data. In particular, (Rohbeck et al., 2024) considered a Lyapunov-based loss that corresponds to our objective without the mean terms; we include this variant explicitly as an ablation (Covariance only ). (Varando & Hansen, 2020) proposed an ℓ1-regularized estimator based solely on observational covariances (without interventions), and is therefore not de-signed for the interventional setting. (Lorch et al., 2024) also proposed a loss for linear SDEs, but their interventions are implemented as mean shifts rather than the hard inter-ventions assumed in our work. We adapted their loss to our hard-intervention setting and evaluated it on synthetic data. However, we did not observe improvements in performance as the number of interventions increased, and hence did not report its results. 
+
+Synthetic Data. We generated synthetic datasets by simulat-ing steady-state observations from a stable linear stochastic system. The drift matrix Λ ∈ Rn×n was initialized as a zero matrix, then each off-diagonal entry was set to a Gaussian random value with probability ρ and left at zero otherwise, where ρ is the desired density level. For each row, the diago-nal entry was set to be larger than the sum of the absolute val-7One Intervention Per Component Is Enough         
+
+> (a) Λ(b) D(c) b(d) Constraints satisfaction
+> Figure 1. (a–c) Relative errors of estimated parameters of the OU process versus the number of interventions, and (d) percentage of instances satisfying graphical conditions in Theorem 3.6.
+
+ues of off-diagonal entries in that row by at least a positive margin, ensuring stability. The diffusion power D was diag-onal with strictly positive entries sampled uniformly from 
+
+[dmin = 0 .2, d max = 0 .4] , and the bias vector b was drawn uniformly from [bmin = 0 .2, b max = 1 .5] . The observa-tional steady-state mean and covariance were then computed by solving the corresponding linear and Lyapunov equations for the given Λ, b, and D. Interventions were simulated by zeroing all off-diagonal entries in a selected row of Λ while keeping the diagonal entry unchanged and leaving b un-changed. For the observational setting and each intervention, samples were drawn from the corresponding multivariate normal distribution. All the implementations are available in the following link: https://github.com/sabersalehk/OU ID. More details of experiments are given in Appendix B. In Figure 1 (a-c), we report the estimation error of Λ, D,and b as a function of the number of interventions with 
+
+n = 10 . To evaluate recovery up to scaling, we compute the scaling factor c = ⟨ ˆA, A⟩/⟨A, A⟩ for each parameter matrix/vector A ∈ { Λ, D, b}, where ⟨X, Y⟩ = tr( X⊤Y)
+
+for matrices and ⟨x, y⟩ = x⊤y for vectors. The relative error is then measured as ∥ ˆA − cA∥/∥A∥. We apply this procedure separately to Λ, D, and b. The results with 90% confidence intervals are given in blue curves with the legend “Mean and Covariance (90% CI)”. As shown, for Λ and b,the relative error decreases as the number of interventions increases. For D, we observe a small non-monotone effect: the error is initially low with no interventions, increases slightly for a few interventions, and then decreases again. One possible explanation is that D is already estimated ac-curately from observational data, so incorporating a small number of interventional data (which may contain fewer samples than the observational data) can worsen its estima-tion. As the number of interventions increases, however, the estimation of Λ improves, which in turn reduces the error in D.We also report results when the loss includes only the resid-uals of the Lyapunov equations (i.e., using covariances but not means) with the legend “Covariance (90% CI),” similar to (Dettling et al., 2024; Rohbeck et al., 2024). This variant performs noticeably worse, highlighting that the mean terms are essential (please note that there is no curve for b in this case as there is no term for estimating it); mean estimates are typically much more accurate than covariance estimates, and incorporating them substantially improves recovery. In Figure 1d, we depict the percentage of instances of Λ
+
+satisfying the graphical conditions in Theorem 3.6 as a function of the number of interventions for different graph densities ( ρ). For sparse graphs ( ρ = 0 .3), less than 50% of instances satisfy the conditions with a single intervention, but the percentage increases steadily as more interventions are added. In contrast, denser graphs ( ρ = 0 .5, 0.7) already satisfy the graphical conditions at a high rate with only a few interventions. We also evaluated the SCC-recovery step from finite sam-ples. Using the reconstruction procedure implied by The-orem 3.3 and Remark 3.4, we estimated the response sets from empirical mean shifts and recovered the SCC partition under both hard and soft interventions. We measured recov-ery quality using the Adjusted Rand Index (ARI), where 1
+
+indicates exact recovery. As shown in Table 2, SCC recovery improves steadily as the number of samples increases. Hard interventions are more informative in this experiment, but soft interventions also show a clear improvement with sam-ple size. The details of experiments are given in Appendix B.5. Our identifiability theory assumes diagonal diffusion, and this assumption is mainly used for the parameter-identifiability result in Theorem 3.6. The learning objective, however, can also be applied with a non-diagonal diffu-sion matrix. To evaluate this empirically, we repeated the synthetic experiment in the same setup as Figure 1, but allowed the diffusion matrix to be non-diagonal. The re-sults in Table 3 show the same qualitative trend as in the diagonal-diffusion setting: the relative errors for Λ, D, and 
+
+b decrease as the number of interventions increases. This suggests that, although the current identifiability proof uses diagonal diffusion, the proposed moment-based estimator remains empirically useful beyond that setting. The details of experiments are given in Appendix B.6. 8One Intervention Per Component Is Enough  
+
+> Table 1. Evaluation of DES and PDS on the three Perturb-seq datasets. The interventional mean is shaded to indicate oracle access to interventional data.
+
+Co-Culture Control IFN-γ
+
+Method DES PDS DES PDS DES PDS Observational mean 0.33 0.57 0.33 0.57 0.35 0.67 Ours (“Covariance”) 0.51 0.43 0.46 0.43 0.42 0.43 Ours (“Mean + Covariance”) 0.43 0.67 0.33 0.63 0.47 0.70 
+
+Interventional mean 0.52 0.57 0.42 0.67 0.36 0.70    
+
+> Table 2. SCC recovery from estimated means. Recovery is mea-sured by Adjusted Rand Index (ARI), where 1indicates exact recovery.
+
+Sample size Hard int. (ARI) Soft int. (ARI) 500 0.660 0.464 1000 0.746 0.615 5000 0.849 0.804 10000 0.881 0.837  
+
+> Table 3. Parameter recovery with non-diagonal diffusion. Relative errors decrease as the number of interventions increases.
+
+# int. Rel. err. (Λ) Rel. err. (D) Rel. err. (b)
+
+0 0.2064 0.1811 0.1407 2 0.1782 0.1582 0.1423 4 0.1570 0.1449 0.1394 6 0.1198 0.1188 0.1185 8 0.0859 0.1011 0.0994 10 0.0646 0.0719 0.0661 We further empirically investigate how conservative the graphical conditions in Theorem 3.6 are in Appendix B.3, and study the impact of sample size on performance in Appendix B.4. 
+
+Real Data. We assess our method on real-world data, leveraging three published single-cell perturbation screen datasets (Frangieh et al., 2021). Since the true causal graph is unknown in this setting, our evaluation focuses on general-ization to unseen perturbations. Specifically, we consider a Perturb-seq dataset containing targeted CRISPR knock-out perturbations of 249 target genes in tumor-infiltrating lym-phocytes (TILs) of melanoma patients. The perturbations were performed under three conditions, which we treat as separate datasets: a baseline culture of TILs in a neutral medium (“Control”), a culture of TILs with interferon-γ
+
+added (“IFN-γ”), and a co-culture of TILs with patient-derived melanoma cells (“Co-Culture”). Following the setup in (Sethuraman et al., 2023), we restrict our analysis to the same subset of 61 genes and adopt their reported training/test split: 90% of interventions are used for training and the remaining 10% are held out for evaluation, with analyses performed separately for each dataset. Our goal is to predict the interventional mean μ for unseen perturbations, using the estimated parameters and the steady-state equation for the mean. Note that global scaling is not an issue here, as it cancels out for predicting μ.For evaluation, we do not rely on Mean Absolute Error (MAE), as even the observational mean achieves a very close performance to the one using the interventional mean on the held-out set. Instead, following the recommendation in the Virtual Cell Challenge 5, we report the Differential Expres-sion Score (DES) and the Perturbation Differential Score (PDS), where higher values indicate better performance. DES measures agreement in identifying differentially ex-pressed genes, while PDS measures a model’s ability to distinguish between perturbations by ranking predictions according to their similarity to the true perturbational effect, regardless of their effect size. In Table 1, we compare our full method (“Mean + Covariance”) against the “Covari-ance” only variant (similar to the approaches in (Dettling et al., 2024; Rohbeck et al., 2024)), and against the one us-ing the interventional mean of the held-out set (which is not available to our method). As shown in Table 1, our method achieves comparable and in some cases even higher scores than the oracle baseline using the interventional mean, de-spite not having access to held-out interventional data. 
+
+# 7. Conclusions and Future Work 
+
+We studied recovery of multivariate OU parameters from steady-state observational and interventional data. Our main theoretical contribution shows that one intervention per SCC of the drift graph suffices for generic recovery of (Λ, b, D)
+
+up to a single global scaling when the DAG over SCCs is connected with a unique root. The single-SCC case (Theo-rem 3.1) yields a one-dimensional null space for the stacked moment equations, and the multi-SCC result (Theorem 3.6) follows via a constructive, recursive decomposition that leverages mean shifts (Theorem 3.3) to infer SCCs and a topological order. Building on these guarantees, we con-
+
+> 5https://virtualcellchallenge.org/ evaluation#scoring
+
+9One Intervention Per Component Is Enough 
+
+sidered a regularized least-squares estimator and observed accurate parameter recovery in synthetic datasets. While our theoretical results are developed for linear SDEs, we note that this setting is a canonical model class for studying causal inference in continuous-time systems where causal effects and parameter recovery can be analyzed rigor-ously. The identifiability results we obtain, can lead to some practical insights on when stationary data of interventions are sufficient to recover causal structure. This might be interesting for the wider ML community working on pertur-bation predictions. Our guarantees rely on some spectral/rank nondegeneracy assumptions. Numerical results suggest these hold gener-ically for strongly connected drift graphs. A key avenue for future work is a formal genericity proof. Another direc-tion is to understand how diffusion assumptions (e.g., not diagonal diffusion matrices) change the boundary between identifiable and non-identifiable regimes. 
+
+# References 
+
+Bansal, M., Gatta, G. D., and Di Bernardo, D. Inference of gene regulatory networks and compound mode of action from time course gene expression profiles. Bioinformat-ics , 22(7):815–822, 2006. Boege, T., Drton, M., Hollering, B., Lumpp, S., Misra, P., and Schkoda, D. Conditional independence in stationary distributions of diffusions. Stochastic Processes and their Applications , 184:104604, 2025. Boeken, P. and Mooij, J. M. Dynamic structural causal models. arXiv preprint arXiv:2406.01161 , 2024. Cao, J., Spielmann, M., Qiu, X., Huang, X., Ibrahim, D. M., Hill, A. J., Zhang, F., Mundlos, S., Christiansen, L., Steemers, F. J., et al. The single-cell transcriptional land-scape of mammalian organogenesis. Nature , 566(7745): 496–502, 2019. Datlinger, P., Rendeiro, A. F., Schmidl, C., Krausgruber, T., Traxler, P., Klughammer, J., Schuster, L. C., Kuchler, A., Alpar, D., and Bock, C. Pooled crispr screening with single-cell transcriptome readout. Nature methods , 14(3): 297–301, 2017. Dettling, P., Homs, R., Am´ endola, C., Drton, M., and Hansen, N. R. Identifiability in continuous lyapunov models. SIAM Journal on Matrix Analysis and Applica-tions , 44(4):1799–1821, 2023. Dettling, P., Drton, M., and Kolar, M. On the lasso for graph-ical continuous lyapunov models. In Causal Learning and Reasoning , pp. 514–550. PMLR, 2024. Folland, G. B. A guide to advanced real analysis . Num-ber 37. American Mathematical Soc., 2009. Gardiner, C. Stochastic methods , volume 4. Springer Berlin Heidelberg, 2009. Gong, C., Zhang, C., Yao, D., Bi, J., Li, W., and Xu, Y. Causal discovery from temporal data: An overview and new perspectives. ACM Computing Surveys , 57(4):1–38, 2024. Hamilton, J. D. Time series analysis . Princeton university press, 2020. Hansen, N. and Sokol, A. Causal interpretation of stochastic differential equations. 2014. Hasan, U., Hossain, E., and Gani, M. O. A survey on causal discovery methods for iid and time series data. 
+
+Transactions on Machine Learning Research , 2023. Hespanha, J. P. et al. Linear systems theory , volume 41. Princeton university press Princeton, NJ, 2009. Lin, C.-T. Structural controllability. IEEE Transactions on Automatic Control , 19(3):201–208, 1974. Lorch, L., Krause, A., and Sch¨ olkopf, B. Causal modeling with stationary diffusions. In International Conference on Artificial Intelligence and Statistics , pp. 1927–1935. PMLR, 2024. Marbach, D., Costello, J. C., K¨ uffner, R., Vega, N. M., Prill, R. J., Camacho, D. M., Allison, K. R., Kellis, M., Collins, J. J., et al. Wisdom of crowds for robust gene network inference. Nature methods , 9(8):796–804, 2012. Mityagin, B. The zero set of a real analytic function. arXiv preprint arXiv:1512.07276 , 2015. Oh, Y., Lim, D., and Kim, S. Stable neural stochastic dif-ferential equations in analyzing irregular time series data. In The Twelfth International Conference on Learning Representations , 2024. Paninski, L., Ahmadian, Y., Ferreira, D. G., Koyama, S., Rahnama Rad, K., Vidne, M., Vogelstein, J., and Wu, W. A new look at state-space models for neural data. Journal of computational neuroscience , 29(1):107–126, 2010. Pearl, J. Causality . Cambridge university press, 2009. Peters, J., Janzing, D., and Sch¨ olkopf, B. Elements of causal inference: foundations and learning algorithms . MIT press, 2017. Rohbeck, M., Clarke, B., Mikulik, K., Pettet, A., Stegle, O., and Ueltzh¨ offer, K. Bicycle: Intervention-based causal discovery with cycles. In Causal Learning and Reasoning ,pp. 209–242. PMLR, 2024. 10 One Intervention Per Component Is Enough 
+
+Roohani, Y., Huang, K., and Leskovec, J. Gears: Predicting transcriptional outcomes of novel multi-gene perturba-tions. BioRxiv , pp. 2022–07, 2022. Schiebinger, G., Shu, J., Tabaka, M., Cleary, B., Subrama-nian, V., Solomon, A., Gould, J., Liu, S., Lin, S., Berube, P., et al. Optimal-transport analysis of single-cell gene expression identifies developmental trajectories in repro-gramming. Cell , 176(4):928–943, 2019. Sethuraman, M. G., Lopez, R., Mohan, R., Fekri, F., Bian-calani, T., and H¨ utter, J.-C. Nodags-flow: Nonlinear cyclic causal structure learning. In International Confer-ence on Artificial Intelligence and Statistics , pp. 6371– 6387. PMLR, 2023. Varando, G. and Hansen, N. R. Graphical continuous lya-punov models. In Conference on Uncertainty in Artificial Intelligence , pp. 989–998. Pmlr, 2020. Villaverde, A. F., Barreiro, A., and Papachristodoulou, A. Structural identifiability of dynamic systems biology models. PLoS computational biology , 12(10):e1005153, 2016. Wang, Y., Huang, B., Huang, W., Geng, X., and Gong, M. Identifiability analysis of linear ode systems with hidden confounders. Advances in Neural Information Processing Systems , 37:59054–59092, 2024. Wu, Y., Wershof, E., Schmon, S. M., Nassar, M., Osi´ nski, B., Eksi, R., Zhang, K., and Graepel, T. Perturbench: Benchmarking machine learning models for cellular per-turbation analysis. In NeurIPS 2024 Workshop on AI for New Drug Modalities .Yu, H., Qian, W., Song, Y., and Welch, J. D. Perturbnet predicts single-cell responses to unseen chemical and genetic perturbations. Molecular Systems Biology , pp. 1–23, 2025. Zhang, X. N., Pu, Y., Kawamura, Y., Loza, A., Bengio, Y., Shung, D., and Tong, A. Trajectory flow matching with applications to clinical time series modelling. Advances in Neural Information Processing Systems , 37:107198– 107224, 2024. Zweig, A., Lin, Z., Azizi, E., and Knowles, D. Towards iden-tifiability of interventional stochastic differential equa-tions. arXiv preprint arXiv:2505.15987 , 2025. 11 One Intervention Per Component Is Enough 
+
+# A. Proofs 
+
+A.1. Forming the Linear System 
+
+For completeness, write mt = E[xt] and St = Cov( xt). Taking expectations in the SDE and applying Itˆ o’s product rule to the centered second moment gives 
+
+˙mt = −Λmt + b, ˙St = −ΛSt − StΛ⊤ + D.
+
+The last term is the Brownian quadratic-variation contribution. At stationarity both derivatives vanish, yielding equation 2 and equation 3; the same calculation with the intervened drift gives their interventional counterparts. Throughout, In denotes the n × n identity, ⊗ is the Kronecker product, and ek is the k-th canonical basis vector in Rn.Explicitly, A ⊗ B = [ Ajk B] and (A ⊙ B)jk = Ajk Bjk , where ⊙ denotes the Hadamard (entrywise) product. Column-wise vectorization satisfies vec( AXB ) = ( B⊤ ⊗ A) vec( X); this identity produces the linear-system blocks below. We define the following selector matrices: • Introduce the matrix P ∈ R n2×n such that vec  diag( d) = P d , where the k-th column of P is given by P:,k =vec( Ekk ), and Ekk denotes the n × n matrix with a one in entry (k, k ) and zeros elsewhere. • For a fixed row index i, let Ei := In ⊗ e⊤ 
+
+> i
+
+∈ R n×n2
+
+. Therefore, Ei vec( Λ) = Λi1, . . . , Λin 
+
+⊤ extracts the entire i-th row of Λ.• Sn ∈ R n(n+1) 2 ×n2
+
+is the upper-triangular elimination matrix. • Let C ∈ R n2×n2
+
+denote the commutation matrix, so that vec( X⊤) = C vec( X) for any X ∈ Rn×n.For the equation of observational mean, we define: 
+
+M0 := 
+
+h
+
+− μ⊤ ⊗ In
+
+ In 0
+
+i
+
+∈ R n×p,
+
+where p = n2 + 2 n.For the equation of the interventional mean (on coordinate i), let Ji := In − eie⊤ 
+
+> i
+
+. We define: 
+
+M1 := 
+
+h
+
+− (μ(i))⊤ ⊗ In
+
+ + ei(μ(i))⊤JiEi In 0
+
+i
+
+∈ R n×p.
+
+For the observational covariance, vectorising ΛΣ + ΣΛ ⊤ − diag( d) = 0 and selecting the upper-triangular part yields 
+
+K0 =
+
+h
+
+Sn
+
+ Σ ⊗ In + ( In ⊗ Σ) C 0 − SnP
+
+i
+
+∈ R n(n+1) 2 ×p.
+
+For the interventional covariance (on coordinate i), we define: 
+
+K1 =
+
+h
+
+Sn
+
+ Σ(i) ⊗ In + ( In ⊗ Σ(i)) C − (In ⊗ ei) + ( ei ⊗ In)Σ(i)JiEi
+
+ 0 − SnP
+
+i
+
+∈ R n(n+1) 2 ×p.
+
+Assembling all the equations: 
+
+A := 
+
+
+
+M0
+
+M1
+
+K0
+
+K1
+
+ ∈ R m×p, (13) where m = n + n + n(n+1) 2 + n(n+1) 2 = n2 + 3 n.12 One Intervention Per Component Is Enough 
+
+A.2. Notion of Genericity 
+
+Fix a directed graph G, and let ΘG ⊂ R|E|+3 n denote the admissible parameter space consisting of all free parameters θ =(Λ, b, d) compatible with G, with Λ and the drifts for the performed interventions positive stable, and D = diag( d) ≻ 0.Here, compatibility with G means that the off-diagonal support of Λ is a subset of G. The set ΘG is open in R|E|+3 n. We say that a property holds generically on ΘG if there exists a Lebesgue-measure-zero subset NG ⊂ ΘG such that the property holds for every θ ∈ ΘG \ NG. Here ΘG specifies the family of true parameters over which genericity is asserted. The class of competing models is specified separately in each theorem. For instance, competitors are unrestricted in graph support in Theorem 3.1, whereas Theorem 3.6 explicitly requires compatibility with G.
+
+Rational witnesses. We repeatedly use the fact that the zero set of a nonzero real polynomial has Lebesgue measure zero (Mityagin, 2015). If f = p/q is rational, a single parameter value with q̸ = 0 and f̸ = 0 proves that p is not the zero polynomial. We call such a parameter choice a witness ; it establishes generic nonvanishing where f is defined. Matrix inverses and solutions of nonsingular finite linear systems are rational by the adjugate formula. A full-column-rank matrix has at least one nonzero maximal minor, so the same argument gives generic full rank from one such witness. Finitely many rational functions that are not identically zero can be made nonzero simultaneously. Indeed, each function has a measure-zero zero set, and the finite union of these sets still has measure zero. Outside this union, all the functions are nonzero at the same point. Their individual witnesses need not coincide. Each witness only establishes that its corresponding function is not identically zero. In particular, every nonempty open admissible neighborhood on which the functions are defined contains such a common point, because an open neighborhood has positive Lebesgue measure and therefore cannot be contained in the exceptional union. 
+
+A.3. Proof of Theorem 3.3 
+
+Throughout this proof, genericity is understood with respect to the admissible parameter space ΘG for any given graph G, as defined in the genericity convention. The statement of this theorem only depends on (Λ, b), not on the diffusion parameters 
+
+d. Thus, any Lebesgue-measure-zero exceptional set in the free coordinates for (Λ, b) induces a Lebesgue-measure-zero exceptional set in the full admissible space ΘG. Moreover, by the model setup, the intervened matrix eΛ(i) is invertible whenever the interventional mean μ(i) is considered. At steady state, μ = Λ−1b and μ(i) = ( eΛ(i))−1b. Let E := eΛ(i) − Λ; only the i-th row of E is nonzero, with Eij = −Λij 
+
+for j̸ = i. By the following equation, 
+
+∆μ := μ − μ(i) = Λ−1E ( eΛ(i))−1b = Λ−1E μ(i). (14) Since only row i of E is nonzero, Ev = s(v) ei for any vector v, where 
+
+s(v) := − X 
+
+> j̸=i
+
+Λij vj .
+
+Applying this to v = μ(i) in equation 14 gives 
+
+∆μ = s μ(i) Λ−1ei. (15) Permute coordinates by some permutation matrix that orders the SCCs topologically. Let L be the block lower–triangular drift matrix after topologically ordering the SCCs, 
+
+L =
+
+
+
+L(1) 0 · · · 0
+
+L(2 ,1) L(2) . . . ...... . . . . . . 0
+
+L(K, 1) · · · L(K,K −1) L(K)
+
+ ,
+
+with each diagonal block L(u) invertible. Fix a block r and a coordinate i in block r.Let R be the union of the SCCs reachable from the component containing i, including that component. No allowed edge leads from R to Rc. Ordering Rc before R therefore gives a block lower–triangular drift with zero (Rc, R ) block, and its 13 One Intervention Per Component Is Enough 
+
+inverse has the same zero block. Consequently (L−1ei)j = 0 whenever j / ∈ R. It remains to show that the entries for descendant coordinates are generically nonzero. We show that if t is a descendant of r in the DAG over SCCs and j is a coordinate in block t, then there exists an admissible parameter value θ⋆ ∈ ΘG such that  L(θ⋆)−1ei
+
+
+
+> j
+
+̸ = 0 . Indeed, by the adjugate formula, this entry can be written as  L(θ)−1ei
+
+ 
+
+> j
+
+= pj,i (θ)det L(θ) , where pj,i (θ) is a polynomial in the free entries of 
+
+L(θ). Since det L(θ)̸ = 0 on the admissible parameter space, showing one admissible point where the entry is nonzero shows that pj,i is not identically zero. Hence the zero set of the entry is contained in the zero set of a nonzero polynomial, and therefore has Lebesgue measure zero. Since j lies in a descendant block of the block containing i, there exists a coordinate-level directed path in G from i to j,say i = v0 → v1 → · · · → vℓ = j. If necessary, remove cycles so that the path is simple. We construct a one-parameter family L(ε) as follows. Choose α > 0 sufficiently large. Set all diagonal entries of L(ε) equal to α. For each edge 
+
+vq−1 → vq on the selected path, set the corresponding entry Lvq ,v q−1 (ε) equal to 1. Set every other allowed off-diagonal entry of L(ε) equal to ε, and keep all forbidden entries equal to zero. For every ε > 0, every allowed off-diagonal entry is nonzero, so L(ε) has the exact support prescribed by G. Moreover, by choosing α large and ε sufficiently small, L(ε) is strictly row-diagonally dominant with positive diagonal entries, hence positive stable and in particular invertible. Thus, after choosing arbitrary admissible b and any d ≻ 0, this construction gives a point θ(ε) ∈ ΘG for all sufficiently small ε > 0.Let Ppath be the matrix containing only the selected path entries, i.e., (Ppath )vq ,v q−1 = 1 for q = 1 , . . . , ℓ and all other entries zero. At ε = 0 , L(0) = αI + Ppath . Since the selected path is simple, Ppath is nilpotent, 6 and 
+
+(αI + Ppath )−1 = α−1 X
+
+> q≥0
+
+(−α−1Ppath )q ,
+
+where the sum is finite. Because Pℓ
+
+> path
+
+ei = ej , while no lower power maps ei to ej , we get 
+
+ L(0) −1ei
+
+ 
+
+> j
+
+= ( −1) ℓα−(ℓ+1) ̸ = 0 .
+
+By continuity,  L(ε)−1ei
+
+
+
+> j
+
+̸ = 0 for all sufficiently small ε > 0. Hence we have exhibited admissible parameters with 
+
+(L−1ei)j̸ = 0 .It follows that, for each fixed descendant coordinate j ∈ Desc( C), the exceptional set on which (L−1ei)j = 0 has Lebesgue measure zero in ΘG. Since there are only finitely many coordinates, taking the union over all descendant coordinates still gives a Lebesgue-measure-zero exceptional set. Therefore, generically, 
+
+ L−1ei
+
+
+
+> j
+
+̸ = 0 for every j ∈ Desc( C),
+
+where Desc( C) includes the component C itself. On the other hand, as shown above, for j / ∈ Desc( C), the descendant-block argument gives  L−1ei
+
+ 
+
+> j
+
+= 0 deterministically. If for some j̸ = i, we have Λij ̸ = 0 , then s μ(i) = − P  
+
+> j̸=i
+
+Λij μ(i) 
+
+> j
+
+. This is an analytic function of (Λ, b). Moreover, if the i-th row is non-null, then the row vector r⊤ 
+
+> i
+
+:= − P  
+
+> j̸=i
+
+Λij e⊤ 
+
+> j
+
+is nonzero. Since s μ(i) = r⊤ 
+
+> i
+
+( eΛ(i))−1b, and ( eΛ(i))−1
+
+is invertible, the row vector r⊤ 
+
+> i
+
+( eΛ(i))−1 is nonzero. Thus, for fixed Λ, s(μ(i)) is a nonzero linear function of b. Hence it is not identically zero as a function of (Λ, b), and its zero set has Lebesgue measure zero in the admissible free-coordinate space. Therefore s(μ(i))̸ = 0 generically. Combining with equation 15, the support of ∆μ matches that of Λ−1ei whenever s(μ(i))̸ = 0 . Thus, if for some j̸ = i,
+
+Λij ̸ = 0 , generically, 
+
+μ(i)
+
+> k
+
+̸ = μk ⇐⇒ k ∈ Desc( C),
+
+where Desc( C) includes C itself. If Λij = 0 for all j̸ = i, then E = 0, so s(μ(i)) = 0 and ∆μ = 0. Hence μ(i) = μ.
+
+> 6
+
+A square matrix A is nilpotent if there exists an integer m ≥ 1 such that Am = 0. In this proof, Ppath is nilpotent because it only moves forward along the finite simple path i = v0 → v1 → · · · → vℓ = j, so Pℓ+1 path = 0.
+
+14 One Intervention Per Component Is Enough 
+
+A.4. Proof of Theorem 3.3 under a soft row intervention 
+
+We only indicate the changes relative to the proof of Theorem 3.3 for the hard intervention. The argument showing the generic support of Λ−1ei is unchanged. At steady state, μ = Λ−1b, μ(i) = ( eΛ(i))−1b. For a soft row intervention, eΛ(i) differs from Λ only in row i. The entries in row i, including the diagonal entry, may change. Let E := eΛ(i) − Λ. Then only row i of E is nonzero. Denote this row change by δ⊤ 
+
+> i
+
+:= e⊤ 
+
+> i
+
+E = e⊤
+
+> i
+
+  eΛ(i) − Λ. We assume the intervention is non-null, i.e., δi̸ = 0 . The row change is fixed independently of b.As before, 
+
+∆μ := μ − μ(i) = Λ−1E( eΛ(i))−1b = Λ−1Eμ(i). (16) Since only row i of E is nonzero, for any vector v, Ev = η(v)ei, where 
+
+η(v) := δ⊤ 
+
+> i
+
+v =
+
+> n
+
+X
+
+> j=1
+
+eΛ(i) 
+
+> ij
+
+− Λij 
+
+
+
+vj .
+
+Applying this to v = μ(i) in equation 16 gives 
+
+∆μ = η(μ(i))Λ−1ei. (17) The rest of the proof uses the same generic-support claim proved in the hard intervention case: for the SCC C containing i,
+
+(Λ−1ei)k = 0 deterministically for k / ∈ Desc( C),
+
+and 
+
+(Λ−1ei)k̸ = 0 generically for every k ∈ Desc( C),
+
+where Desc( C) includes C itself. It remains only to check that the scalar factor in equation 17 is generically nonzero. We have η(μ(i)) = δ⊤ 
+
+> i
+
+( eΛ(i))−1b.Since δi̸ = 0 and eΛ(i) is invertible, the row vector δ⊤ 
+
+> i
+
+( eΛ(i))−1 is nonzero. Hence, for fixed (Λ, eΛ(i)), η(μ(i)) is a nonzero linear function of b. Therefore its zero set is a Lebesgue-measure-zero exceptional set, and η(μ(i))̸ = 0 generically. The exceptional set is measurable, and its section in b at every fixed admissible drift/perturbation pair is a hyperplane of measure zero. Fubini-Tonelli theorem (Folland, 2009) (Theorem 2.16 (b)), applied to the indicator of this set, therefore makes it jointly null in the drift, perturbation, and input parameters. Combining this with equation 17, the support of ∆μ generically agrees with the support of Λ−1ei. Therefore, for a non-null soft row intervention on coordinate i,
+
+μ(i)
+
+> k
+
+̸ = μk ⇐⇒ k ∈ Desc( C)
+
+generically, where Desc( C) includes C itself. If the soft intervention is null, i.e., δi = 0, then E = 0, so ∆μ = 0 and μ(i) = μ.
+
+A.5. Recovering SCCs and a topological order over SCCs from mean changes 
+
+Assume at least one intervention is performed in every SCC. For each intervention on i, set 
+
+Ri := { j : μ(i)
+
+> j
+
+̸ = μj }.
+
+By Theorem 3.3, generically, 
+
+Ri = Desc( Ci) if the intervention on i is non-null , Ri = ∅ if it is null ,
+
+where Ci is the SCC containing i and Desc( C) is the set of nodes lying in SCCs reachable from C in the SCC–DAG, including C itself. 
+
+Procedure. 
+
+15 One Intervention Per Component Is Enough 
+
+1. Singleton sources (null interventions). If Ri = ∅, declare {i} a singleton SCC with no incoming edges, i.e., a source SCC. Do not merge different i with Ri = ∅.2. Group non-null response sets. For the remaining interventions, group by equality of response sets: i ∼ i′ iff Ri = Ri′ .Each distinct nonempty response set corresponds to exactly one non-null SCC, but the equivalence class of intervention targets is not necessarily the whole SCC. We therefore use the distinct nonempty response sets as temporary SCC labels. 3. Recover the node set of each non-null SCC. Let R be the collection of distinct nonempty response sets obtained in step 2. For each R ∈ R , define C(R) := R \ SR′∈R 
+
+> R′⊊R
+
+R′. Then C(R) is exactly the SCC whose descendant set is R.4. Reachability order among non-null SCCs. For two recovered non-null SCCs C(R) and C(R′),
+
+C(R) reaches C(R′) ⇐⇒ R ⊇ R′. Thus strict reverse inclusion of response sets recovers the SCC-level reach-ability partial order. If desired, one may draw the cover relation by adding an edge from C(R) to C(R′) when R ⊋ R′
+
+and there is no R′′ ∈ R such that R ⊋ R′′ ⊋ R′. Among these non-null SCCs, reachability is a partial order. The full condensation DAG may also have direct edges whose reachability is already implied by a longer path. The procedure recovers the SCCs and a compatible topological order, without identifying every direct edge between them. 5. Topological order. Output all singleton sources from step 1 first, in any arbitrary order, and then output the recovered non-null SCCs in any order consistent with reverse inclusion of their response sets, i.e., larger response sets before smaller response sets. This yields a valid topological ordering of the SCCs. 
+
+A.6. Proof of Theorem 3.1 
+
+Throughout this proof, genericity is understood with respect to the admissible parameter space ΘG for any fixed graph G, as defined in the genericity convention in Appendix A.2. Consider the following two admissible triples satisfying the linear system equation 13: • True underlying triple: (Λ⋆, b⋆, D⋆).• Alternative admissible triple: (Λ′, b′, D′).Define 
+
+∆Θ := 
+
+
+
+vec(∆ Λ)∆b
+
+∆d
+
+ , ∆Λ := Λ′ − Λ⋆, ∆b := b′ − b⋆, ∆D := D′ − D⋆,
+
+where ∆d is the diagonal of ∆D. Since AΘ ⋆ = 0 and AΘ ′ = 0 , we have A∆Θ = 0 . Our goal is to show that the alternative triple is a scalar multiple of the true triple, i.e., Λ′ = cΛ⋆, b′ = cb⋆, D′ = cD⋆ for some scalar c > 0.Fix the intervened row index i. The observational blocks M0 and K0 yield 
+
+∆Λμ = ∆ b, ∆ΛΣ + Σ∆Λ⊤ = ∆ D, (18) where μ and Σ are the true observational mean and covariance. Since the intervention zeros out row i off-diagonals, 
+
+eΛ(i) 
+
+> ⋆
+
+= Ji ⊙ Λ⋆, eΛ′(i) = Ji ⊙ Λ′, Ji := 11 ⊤ − ei1⊤ + eie⊤ 
+
+> i
+
+.
+
+Thus the interventional blocks M1 and K1 give 
+
+(Ji ⊙ ∆Λ)μ(i) = ∆ b, (Ji ⊙ ∆Λ)Σ(i) + Σ(i)(∆ Λ⊤ ⊙ J⊤ 
+
+> i
+
+) = ∆ D. (19) Taking the i-th row of the first equation gives 
+
+(∆ Λ)ii μ(i) 
+
+> i
+
+= ∆ bi. (20) Outside the measure-zero exceptional set where b⋆i = 0 , define c := b′ 
+
+> i
+> b⋆i
+
+. Define the scaled-difference variables 
+
+Λ∆ := Λ′ − cΛ⋆, b∆ := b′ − cb⋆, D∆ := D′ − cD⋆.
+
+16 One Intervention Per Component Is Enough 
+
+Then (Λ∆, b∆, D∆) still satisfies the homogeneous linear system, and (b∆)i = 0 . In what follows, all moments 
+
+μ, Σ, μ(i), Σ(i) remain the true moments generated by (Λ⋆, b⋆, D⋆).For the true intervened system, the i-th row gives Λ⋆,ii μ(i) 
+
+> i
+
+= b⋆i . Since b⋆i ̸ = 0 , we have μ(i)
+
+> i
+
+̸ = 0 . Applying equation 20 to the ambiguity triple and using (b∆)i = 0 , we get (Λ∆)ii = 0 . Moreover, the (i, i ) entry of the interventional covariance equation gives 2Σ (i) 
+
+> ii
+
+(Λ∆)ii = ( D∆)ii , and hence (D∆)ii = 0 .
+
+For the ambiguity triple, write 
+
+eΛ(i)∆ = Ji ⊙ Λ∆ =
+
+ 0 0(Λ∆)−i,i (Λ∆)−i, −i
+
+
+
+.
+
+Using the (−i, i ) block of the interventional covariance equation and the fact that D∆ is diagonal, we obtain 
+
+(Λ∆)−i,i Σ(i) 
+
+> ii
+
++ ( Λ∆)−i, −iΣ(i) 
+
+> −i,i
+
+= 0 .
+
+Thus 
+
+(Λ∆)−i,i = − (Λ∆)−i, −iΣ(i)
+
+> −i,i
+
+Σ(i)
+
+> ii
+
+. (21) The (−i, −i) block then gives 
+
+(Λ∆)−i, −iZ + Z(Λ∆)⊤−i, −i = ( D∆)−i, −i, (22) where 
+
+Z := Σ(i) 
+
+> −i, −i
+
+− Σ(i)
+
+> −i,i
+
+Σ(i)
+
+> i, −i
+
+Σ(i)
+
+> ii
+
+.
+
+The matrix Z is positive definite, since it is the Schur complement of Σ(i) 
+
+> ii
+
+in Σ(i) ≻ 0.Next, the observational and interventional covariance equations for the ambiguity variables are 
+
+Λ∆Σ + ΣΛ ⊤ 
+
+> ∆
+
+= D∆, (23) 
+
+eΛ(i)∆ Σ(i) + Σ(i) eΛ(i)⊤ 
+
+> ∆
+
+= D∆. (24) Define w∆ ∈ Rn by (w∆)i = 0 and (w∆)−i = ( Λ∆)⊤
+
+> i, −i
+
+, so that eΛ(i)∆ = Λ∆ − eiw⊤
+
+> ∆
+
+. Subtracting equation 24 from equation 23, with Γ := Σ − Σ(i), gives 
+
+Λ∆Γ + ΓΛ ⊤ 
+
+> ∆
+
++ eiw⊤
+
+> ∆
+
+Σ(i) + Σ(i)w∆e⊤ 
+
+> i
+
+= 0 . (25) Substituting Λ∆ = eΛ(i)∆ + eiw⊤ 
+
+> ∆
+
+into equation 25, and then taking the (−i, −i) block, removes all terms containing ei and gives  eΛ(i)∆ Γ + Γ eΛ(i)⊤
+
+> ∆
+
+
+
+> −i, −i
+
+= 0 . (26) Expanding this block, 
+
+(Λ∆)−i,i Γi, −i + ( Λ∆)−i, −iΓ−i, −i + Γ−i,i (Λ∆)⊤−i,i + Γ−i, −i(Λ∆)⊤−i, −i = 0 . (27) Using equation 21, we obtain 
+
+(Λ∆)−i, −iΞ + Ξ⊤(Λ∆)⊤−i, −i = 0 , (28) where 
+
+Ξ := Γ−i, −i − Σ(i)
+
+> −i,i
+
+Γi, −i
+
+Σ(i)
+
+> ii
+
+. (29) This Schur-type expression need not be symmetric or a covariance matrix. By Lemma A.3, Ξ is invertible. Define 
+
+A := Ξ−1Z, S := ( Λ∆)−i, −iΞ.
+
+17 One Intervention Per Component Is Enough 
+
+Then equation 28 implies S⊤ = −S. Moreover, 
+
+SA − A⊤S = ( Λ∆)−i, −iZ + Z(Λ∆)⊤−i, −i = ( D∆)−i, −i,
+
+where the last equality follows from equation 22. Since (D∆)−i, −i is diagonal, 
+
+offdiag( SA − A⊤S) = 0 .
+
+Assumption A.1. Let A := Ξ−1Z and let m = n − 1 be the reduced block dimension (or m = |T | − 1 for a target SCC T ). Here m is local to this assumption. Consider the linear map LA : Km → Rm×m 
+
+> off
+
+, where the codomain consists of matrices with zero diagonal and Km := {S ∈ Rm×m : S⊤ = −S}, defined by 
+
+LA(S) = offdiag  SA − A⊤S.
+
+Let LA be the matrix representation of LA in any basis of Km. Write σ(M ) for the spectrum (set of complex eigenvalues) of M (please note that this differs from the diffusion matrix σ). We assume 0 /∈ σ(L⊤
+
+> A
+
+LA). Equivalently, the only skew-symmetric matrix S satisfying offdiag  SA − A⊤S = 0 is S = 0 .This is an injectivity condition: the kernel of the map, namely the set of inputs mapped to zero, is {0}. Equivalently, LA
+
+has full column rank and L⊤
+
+> A
+
+LA is positive definite. It therefore rules out a nonzero skew-symmetric ambiguity in the moments. By Assumption A.1, S = 0 . Since S = ( Λ∆)−i, −iΞ and Ξ is invertible, (Λ∆)−i, −i = 0 . Using equation 21, we also obtain (Λ∆)−i,i = 0 . Together with (Λ∆)ii = 0 , this shows that the only possibly nonzero entries of Λ∆ are the off-diagonal entries in row i. Moreover, from equation 22, we get (D∆)−i, −i = 0 . Since we already showed (D∆)ii = 0 , it follows that D∆ = 0 .
+
+Now the observational covariance equation gives Λ∆Σ + ΣΛ ⊤ 
+
+> ∆
+
+= 0 . Because only row i of Λ∆ can be nonzero, write 
+
+Λ∆ = eiu⊤, u i = 0 . Then eiu⊤Σ + Σue ⊤ 
+
+> i
+
+= 0 . Taking the i-th row gives u⊤Σ + ( Σu )ie⊤ 
+
+> i
+
+= 0 . For every j̸ = i, this implies (u⊤Σ)j = 0 , while the (i, i ) entry gives 2( u⊤Σ)i = 0 . Therefore u⊤Σ = 0 . Since Σ ≻ 0 is invertible, u = 0 , and hence Λ∆ = 0 . Finally, the observational mean equation gives Λ∆μ = b∆, so b∆ = 0 . Hence the scaled-difference triple is zero: Λ′ = cΛ⋆, b′ = cb⋆, D′ = cD⋆. Since D′ and D⋆ are positive diagonal matrices, we have c > 0. This completes the proof. 
+
+Assumption A.2. Consider right/left eigenbases of the true drift Λ⋆: Λ⋆r⋆,ℓ = λ⋆,ℓ r⋆,ℓ , ρ⊤
+
+> ⋆,k
+
+Λ⋆ = λ⋆,k ρ⊤
+
+> ⋆,k
+
+, ρ⊤
+
+> ⋆,k
+
+r⋆,ℓ = δkℓ .
+
+Let R⋆ := [ r⋆, 1 · · · r⋆,n ], P⋆ := [ ρ⋆, 1 · · · ρ⋆,n ], so that P⊤ 
+
+> ⋆
+
+R⋆ = I. Since the eigenvalues are distinct, R⋆ is invertible. We choose the rows of R−1 
+
+> ⋆
+
+as the left eigenvectors. Here ⊤ denotes ordinary transpose, without complex conjugation. Let 
+
+w⋆ ∈ Rn be the true intervened-row vector, defined by (w⋆)i = 0 and (w⋆)−i = ( Λ⋆)⊤
+
+> i, −i
+
+, so that eΛ(i) 
+
+> ⋆
+
+= Λ⋆ − eiw⊤ 
+
+> ⋆
+
+.
+
+1. We assume that Λ⋆ has simple spectrum, i.e., λ⋆,k ̸ = λ⋆,ℓ for k̸ = ℓ.2. Let W⋆ ∈ Cn×n be defined by 
+
+(W⋆)kℓ := (ρ⊤
+
+> ⋆,k
+
+ei) w⊤ 
+
+> ⋆
+
+Σ(i)ρ⋆,ℓ 
+
+
+
+λ⋆,k + λ⋆,ℓ 
+
+.
+
+We assume 
+
+0 /∈ σ(W⋆ + W⊤ 
+
+> ⋆
+
+).
+
+3. With Γ := Σ − Σ(i), we assume: e⊤ 
+
+> i
+
+Γ−1Σ(i)ei̸ = 0 .
+
+Lemma A.3. Under Assumption A.2, the matrix Ξ is invertible. Proof. Since eΛ(i) 
+
+> ⋆
+
+= Λ⋆ − eiw⊤ 
+
+> ⋆
+
+, subtracting the true observational and interventional Lyapunov equations gives 
+
+Λ⋆Γ + ΓΛ ⊤ 
+
+> ⋆
+
++ eiw⊤ 
+
+> ⋆
+
+Σ(i) + Σ(i)w⋆e⊤ 
+
+> i
+
+= 0 . (30) Let U solve the Sylvester equation 
+
+Λ⋆U + UΛ ⊤ 
+
+> ⋆
+
+= −ei
+
+ w⊤ 
+
+> ⋆
+
+Σ(i). (31) 18 One Intervention Per Component Is Enough 
+
+The Sylvester operator X 7 → AX + XB is invertible precisely when A and −B have disjoint spectra. Here A = Λ⋆ and 
+
+B = Λ⊤ 
+
+> ⋆
+
+; positive stability makes every eigenvalue sum nonzero. Thus this operator is invertible. Transposing equation 31 and adding gives 
+
+Λ⋆(U + U⊤) + ( U + U⊤)Λ⊤ 
+
+> ⋆
+
+= −eiw⊤ 
+
+> ⋆
+
+Σ(i) − Σ(i)w⋆e⊤ 
+
+> i
+
+.
+
+Comparing with equation 30 and using uniqueness gives 
+
+Γ = U + U⊤. (32) Expand U in the right-eigenvector basis on both sides: 
+
+U = X
+
+> k,ℓ
+
+ukℓ r⋆,k r⊤
+
+> ⋆,ℓ
+
+,
+
+where ukℓ = ρ⊤
+
+> ⋆,k
+
+Uρ⋆,ℓ . Multiplying equation 31 on the left by ρ⊤ 
+
+> ⋆,k
+
+and on the right by ρ⋆,ℓ gives 
+
+(λ⋆,k + λ⋆,ℓ )ukℓ = −(ρ⊤
+
+> ⋆,k
+
+ei) w⊤ 
+
+> ⋆
+
+Σ(i)ρ⋆,ℓ 
+
+.
+
+Thus ukℓ = −(W⋆)kℓ , and 
+
+U = −R⋆W⋆R⊤ 
+
+> ⋆
+
+. (33) Using equation 32, 
+
+Γ = −R⋆(W⋆ + W⊤ 
+
+> ⋆
+
+)R⊤ 
+
+> ⋆
+
+.
+
+By Assumption A.2(2), W⋆ + W⊤ 
+
+> ⋆
+
+is invertible. Since R⋆ is invertible, Γ is invertible. Let J = {1, . . . , n } \ { i}. Define 
+
+Mi := 
+
+"Σ(i) 
+
+> ii
+
+Γi,J 
+
+Σ(i) 
+
+> J,i
+
+ΓJ,J 
+
+#
+
+.
+
+This matrix is obtained from Γ by replacing its i-th column with Σ(i)ei, followed by the same row and column permutation placing i first; this permutation leaves the determinant unchanged. By Cramer’s rule, 
+
+det( Mi) = det( Γ) e⊤ 
+
+> i
+
+Γ−1Σ(i)ei.
+
+By Assumption A.2(3), det( Mi)̸ = 0 . On the other hand, the Schur determinant identity gives, 
+
+det( Mi) = Σ(i) 
+
+> ii
+
+det( Ξ).
+
+Since Σ(i) 
+
+> ii
+
+> 0, we get det( Ξ)̸ = 0 . Thus Ξ is invertible. 
+
+A.7. Proof of Theorem 3.6 
+
+Let T be the target block. For a nonsingleton root SCC, its observational and interventional marginals are sub-blocks of the observed moments. The isolated-realization hypothesis makes the Ξ invertibility and skew-kernel conditions used in the proof of Theorem 3.1 generic, by the rational-rank argument below. That proof therefore identifies the root parameters up to a positive common scale. If the root SCC is a singleton, its observational equations λμ = b and 2λΣ = d, with λ > 0, give the same conclusion. Suppose the parameters of block P satisfy bP = c ¯bP and DP = c ¯DP for a scalar c > 0 and known representatives ¯bP, ¯DP. Define the residual covariances and cross terms 
+
+Z := ΣT|P, Z(i) := Σ(i)
+
+> T|P
+
+, B := ΣTP Σ−1
+
+> PP
+
+, B(i) := Σ(i)
+
+> TP
+
+ Σ(i)
+
+> PP
+
+−1.
+
+Define the parent mean contribution hP := ¯bP − ¯DPΣ−1
+
+> PP
+
+μP. Then set 
+
+v := Bh P, v(i) := B(i)hP, Q := B ¯DP B⊤, Q(i) := B(i) ¯DP B(i)⊤.
+
+Here we used that the intervention is inside the target block T, so the upstream parent moments μP and ΣPP are unchanged by the intervention. Indeed, under the hard intervention, row i of the full drift has no off-diagonal entries. In particular, 19 One Intervention Per Component Is Enough 
+
+the i-th row of eΛ(i) 
+
+> TP
+
+is zero and the i-th row of eΛ(i) 
+
+> TT
+
+is (λii , 0) . Taking the i-th row of the interventional cross-covariance Lyapunov block gives 
+
+λii Σ(i) 
+
+> i, P
+
++ Σ(i)
+
+> i, P
+
+Λ⊤ 
+
+> PP
+
+= 0 .
+
+Since λii I + Λ⊤ 
+
+> PP
+
+is invertible, we obtain Σ(i) 
+
+> i, P
+
+= 0 . Hence the i-th row of B(i) = Σ(i)
+
+> TP
+
+(Σ(i)
+
+> PP
+
+)−1 is zero, and therefore 
+
+(Q(i))i, −i = ( Q(i))−i,i = 0 .Partition the drift on T as 
+
+ΛTT =
+
+ λii λi, −i
+
+λ−i,i Λ−i, −i
+
+
+
+, eΛ(i) 
+
+> TT
+
+=
+
+ λii 0
+
+λ−i,i Λ−i, −i
+
+
+
+,
+
+with unknown diagonal DT and vector bT.We first justify the residual mean equation. From the block mean equations 
+
+ΛPP μP = bP, ΛTP μP + ΛTT μT = bT,
+
+and from 
+
+μT = μT|P + BμP,
+
+we obtain 
+
+ΛTT μT|P = bT − (ΛTP + ΛTT B)μP.
+
+The cross-covariance block of the Lyapunov equation gives 
+
+ΛTP ΣPP + ΛTT ΣTP + ΣTP Λ⊤ 
+
+> PP
+
+= 0 .
+
+Using B = ΣTP Σ−1
+
+> PP
+
+, this implies 
+
+ΛTP + ΛTT B = −BΣ PP Λ⊤
+
+> PP
+
+Σ−1
+
+> PP
+
+.
+
+The parent Lyapunov equation 
+
+ΛPP ΣPP + ΣPP Λ⊤ 
+
+> PP
+
+= DP
+
+then gives 
+
+ΛTP + ΛTT B = BΛ PP − BD PΣ−1
+
+> PP
+
+.
+
+Since bP = c¯bP and DP = c ¯DP, we get 
+
+ΛTT μT|P = bT − c B  ¯bP − ¯DPΣ−1
+
+> PP
+
+μP
+
+ = bT − cv.
+
+On T, the stationary equations are 
+
+ΛTT Z + ZΛ ⊤ 
+
+> TT
+
+= DT + c Q, ΛTT μT|P = bT − c v,
+
+and, under intervention, 
+
+eΛ(i)
+
+> TT
+
+Z(i) + Z(i) eΛ(i)⊤ 
+
+> TT
+
+= DT + c Q(i), eΛ(i)
+
+> TT
+
+μ(i) 
+
+> T|P
+
+= bT − c v(i). (34) Subtracting gives the difference relations 
+
+ΛTT Z + ZΛ ⊤ 
+
+> TT
+
+−   eΛ(i)
+
+> TT
+
+Z(i) + Z(i) eΛ(i)⊤
+
+> TT
+
+ = c (Q − Q(i)),
+
+ΛTT μT|P − eΛ(i)
+
+> TT
+
+μ(i) 
+
+> T|P
+
+= c (v(i) − v).
+
+Interventional (−i, i ) block. Taking the (−i, i ) block of the interventional Lyapunov equation and using that DT is diagonal and (Q(i))−i,i = 0 yields 
+
+λii Z(i) 
+
+> −i,i
+
++ λ−i,i Z(i) 
+
+> ii
+
++ Λ−i, −i Z(i) 
+
+> −i,i
+
+= 0 .
+
+Since Z(i) 
+
+> ii
+
+> 0, write 
+
+u := Z(i)
+
+> −i,i
+
+Z(i)
+
+> ii
+
+to obtain 
+
+λ−i,i + ( Λ−i, −i + λii I) u = 0 . (35) 20 One Intervention Per Component Is Enough 
+
+The Ξ-equation on (−i, −i). Let Γ := Z − Z(i) and define the data-only matrix 
+
+Ξ := Γ−i, −i − u Γi, −i.
+
+From the (−i, −i) block of the difference Lyapunov equation and the identity above, 
+
+Λ−i, −i Ξ + Ξ⊤Λ⊤−i, −i = c (Q − Q(i))−i, −i + λii 
+
+
+
+u Γi, −i + Γ−i,i u⊤
+
+. (36) From equation 34 and equation 35, we derive 
+
+offdiag 
+
+
+
+Λ−i, −i S(i) + S(i) Λ⊤−i, −i
+
+
+
+− λii offdiag 
+
+
+
+u Z(i) 
+
+> i, −i
+
++ Z(i) 
+
+> −i,i
+
+u⊤
+
+= offdiag  c Q(i)
+
+> −i, −i
+
+, (37) with 
+
+S(i) := Z(i) 
+
+> −i, −i
+
+− u Z(i) 
+
+> i, −i
+
+≻ 0.
+
+Define the linear maps 
+
+AS (X) := offdiag( XS (i) + S(i)X⊤), AΞ(X) := XΞ + Ξ⊤X⊤.
+
+Equations equation 36 and equation 37 form a stacked linear system in Λ−i, −i,
+
+AS
+
+AΞ
+
+
+
+(Λ−i, −i) = c
+
+"
+
+offdiag( Q(i)
+
+> −i, −i
+
+)(Q − Q(i))−i, −i
+
+#
+
++ λii 
+
+"
+
+offdiag  u Z(i) 
+
+> i, −i
+
++ Z(i) 
+
+> −i,i
+
+u⊤
+
+u Γi, −i + Γ−i,i u⊤
+
+#
+
+.
+
+Since both the true and competing drift matrices are compatible with the fixed graph G, their relevant blocks belong to the same allowed linear space. Let VG be the linear space of matrices with the allowed sparsity pattern of Λ−i, −i. Define 
+
+Lblk (X) := 
+
+offdiag( XS (i) + S(i)X⊤)
+
+XΞ + Ξ⊤X⊤
+
+
+
+, X ∈ V G.
+
+For a nonsingleton target SCC, choose the isolated realization supplied by the theorem’s hypothesis and set its incoming couplings to zero. Embed it in the full graph by taking the remaining variables to be independent scalar OU processes. The residual target moments then equal the isolated moments. For a singleton target, VG has dimension zero, so the stacked operator is injective automatically. Let Lblk be any matrix representation of Lblk . At the point ΛTP = 0 , the residual target-block equations reduce to the single-SCC equations. Hence, under the single-SCC nondegeneracy assumptions, the stacked operator Lblk is injective at this point. Since the entries of a matrix representation of Lblk depend continuously, indeed rationally, on the model parameters, this full-column-rank condition is not identically violated and therefore holds generically. Thus, generically, the stacked linear system uniquely determines Λ−i, −i from its right-hand side. A rank certificate here is one nonzero maximal minor of Lblk , and the genericity conclusion uses the rational-witness argument in Appendix A.2. The single-SCC assumptions in fact give injectivity on the full reduced matrix space at the isolated witness, and hence on its subspace VG.Since the right-hand side is affine in c and λii , there exist data-dependent matrices K0, K2 such that 
+
+Λ−i, −i = c K0 + λii K2. (38) For a fixed parent scale c, this is affine dependence on λii . From equation 35, 
+
+λ−i,i = − cK0 + λii K2 + λii Iu.
+
+Using the observational (i, −i) block of the Lyapunov equation, 
+
+λii Zi, −i + λi, −iZ−i, −i + Zii λ⊤−i,i + Zi, −iΛ⊤−i, −i = cQi, −i.
+
+Since Z−i, −i ≻ 0, we obtain 
+
+λi, −i =  cQi, −i − λii Zi, −i − Zii λ⊤−i,i − Zi, −iΛ⊤−i, −i
+
+Z−1
+
+> −i, −i
+
+.
+
+21 One Intervention Per Component Is Enough 
+
+Substituting the expressions for Λ−i, −i and λ−i,i gives 
+
+λi, −i = A0 + λii A1, (39) where 
+
+A0 = c
+
+
+
+Qi, −i + Zii u⊤K⊤ 
+
+> 0
+
+− Zi, −iK⊤
+
+> 0
+
+
+
+Z−1
+
+> −i, −i
+
+,
+
+and 
+
+A1 =
+
+
+
+− Zi, −i + Zii u⊤(I + K⊤ 
+
+> 2
+
+) − Zi, −iK⊤
+
+> 2
+
+
+
+Z−1
+
+> −i, −i
+
+.
+
+Thus A0 scales linearly with c, while K2 and A1 are data-dependent and do not scale with c.From the i-th component of the mean difference, let 
+
+∆μi := ( μT|P)i − (μ(i)
+
+> T|P
+
+)i, ∆vi := v(i) 
+
+> i
+
+− vi.
+
+Then 
+
+λii ∆μi + λi, −i(μT|P)−i = c ∆vi.
+
+Insert λi, −i = A0 + λii A1 and group the terms to obtain 
+
+λii 
+
+ ∆μi + A1(μT|P)−i
+
+ = c∆vi − A0(μT|P)−i.
+
+The denominator below is generically nonzero. To justify the parameter choice, write A = ΛPP and S = ΣPP and normalize the parent scale to one for this witness. The parent Lyapunov equation gives 
+
+hP =  I − DPS−1A−1bP = −SA ⊤S−1A−1bP.
+
+This map is invertible. An allowed incoming edge followed by a simple directed path inside T to i gives a stable sparse realization with Bij ̸ = 0 for some j ∈ P.7 Both this entry and a full-column-rank certificate of Lblk are rational and have nonzero witnesses, which may be different parameter choices. By Appendix A.2, their nonvanishing can be made simultaneous in an arbitrarily small admissible neighborhood of the decoupled rank witness. Fix such covariance parameters, choose bP so that vi̸ = 0 , and take bT = v. Then μT|P = 0 , while v(i) 
+
+> i
+
+= 0 and the interventional mean equation give λii (μ(i)
+
+> T|P
+
+)i = vi. Consequently the denominator equals −vi/λ ii ̸ = 0 . The denominator is rational on the full-rank admissible domain, so its zero set is nongeneric. Restoring a parent scale c gives −cv i/λ ii at the corresponding witness. Hence λii is identified as 
+
+λii = c∆vi − A0(μT|P)−i
+
+∆μi + A1(μT|P)−i
+
+,
+
+where it is determined up to the same scale c.With λii identified, the previous equations give 
+
+Λ−i, −i = cK0 + λii K2, λ−i,i = −
+
+
+
+cK0 + λii K2 + λii I
+
+
+
+u, λi, −i = A0 + λii A1.
+
+Thus the entire ΛTT is determined with the same scaling c.Finally, 
+
+DT = diag  ΛTT Z + ZΛ ⊤ 
+
+> TT
+
+− c Q,
+
+and 
+
+bT = ΛTT μT|P + c v.
+
+Thus (ΛTT , DT, bT) are identified up to the same multiplicative scale c.
+
+> 7
+
+For the sparse path realization, take the parent drift and covariance to be I, with parent diffusion 2I, and target drift 2I − N , where 
+
+N has unit entries along the chosen path k = k0 → · · · → km = i and is zero elsewhere. Set ΛTP = −ηe k e⊤ 
+
+> j
+
+with η̸ = 0 and use positive diagonal target diffusion. These drifts, including hard-intervened drifts, are triangular after ordering the path vertices and have positive diagonals. The cross-covariance equation gives Bij = η/ 3m+1 ̸ = 0 .
+
+22 One Intervention Per Component Is Enough 
+
+A.8. An Example with Multiple Root SCCs 
+
+Consider an OU process with state indices 1, 2, 3, 4, where 1, 2, 3 are root singletons and 4 is a child singleton. Let 
+
+Λ =
+
+
+
+λ1 0 0 00 λ2 0 00 0 λ3 0
+
+a1 a2 a3 λ4
+
+ , D = diag( d1, d 2, d 3, d 4),
+
+and assume D is diagonal and each λi > 0. Suppose we observe the steady-state mean and covariance (μ, Σ) and also the interventional moments (μ(4) , Σ(4) ) under an intervention on node 4 that zeros the entries ais (please note that interventions on root give the same mean and covariance as the observational ones). For each root i ∈ { 1, 2, 3}, the scalar OU gives 
+
+μi = bi
+
+λi
+
+, si := Σ ii = di
+
+2λi
+
+.
+
+Let ti := Σ i4 denote the observed cross-covariances with the child. The off-diagonal Lyapunov equations yield 
+
+(λi + λ4)ti + siai = 0 ⇐⇒ ai = − λi + λ4
+
+si
+
+ti. (40) The child’s observed mean and variance satisfy 
+
+λ4μ4 +
+
+> 3
+
+X
+
+> i=1
+
+aiμi = b4, (41) 
+
+2λ4s4 + 2 
+
+> 3
+
+X
+
+> i=1
+
+aiti = d4. (42) Under the intervention on 4 (which zeros the ais), we also observe 
+
+μ(4) 4 = b4
+
+λ4
+
+, 2λ4s(4) 4 = d4, t(4)  
+
+> i
+
+= 0 . (43) Now, fix any positive (u1, u 2, u 3) and a positive v (to be chosen). Define 
+
+λ′ 
+
+> i
+
+= uiλi, b′ 
+
+> i
+
+= uibi, d′ 
+
+> i
+
+= uidi (i = 1 , 2, 3) , λ′ 
+
+> 4
+
+= vλ 4, b′ 
+
+> 4
+
+= vb 4, d′ 
+
+> 4
+
+= vd 4,
+
+and choose a′ 
+
+> i
+
+to preserve the observed ti:
+
+(λ′ 
+
+> i
+
++ λ′
+
+> 4
+
+)ti + sia′ 
+
+> i
+
+= 0 ⇐⇒ a′ 
+
+> i
+
+= − uiλi + vλ 4
+
+si
+
+ti. (44) Then for each root, μ′ 
+
+> i
+
+= b′
+
+> i
+> λ′
+> i
+
+= μi and s′ 
+
+> i
+
+= d′
+
+> i
+> 2λ′
+> i
+
+= si, while equation 44 ensures the same ti.For the interventional moments on 4, scaling (λ4, b 4, d 4) by the common factor v preserves μ(4) 4 = b4 
+
+> λ4
+
+and s(4) 4 = d4 
+
+> 2λ4
+
+, and 
+
+t(4)  
+
+> i
+
+= 0 still holds since the ai are zeroed under intervention. Thus all interventional moments match equation 43. It remains to enforce that the primed parameters also satisfy the child’s observational equations equation 41–equation 42. Subtracting v times the original equation 42 from the primed version gives 
+
+2λ′
+
+> 4
+
+s4 − 2vλ 4s4 + 2 
+
+> 3
+
+X
+
+> i=1
+
+(a′ 
+
+> i
+
+− va i)ti = 0 ⇐⇒ 
+
+> 3
+
+X
+
+> i=1
+
+(a′ 
+
+> i
+
+− va i)ti = 0 .
+
+Using equation 40 and equation 44, 
+
+a′ 
+
+> i
+
+− va i = − uiλi + vλ 4
+
+si
+
+ti + v λi + λ4
+
+si
+
+ti = (v − ui)λi
+
+si
+
+ti.
+
+23 One Intervention Per Component Is Enough 
+
+Hence 3X
+
+> i=1
+
+(v − ui) λi
+
+t2
+
+> i
+
+si
+
+= 0 ⇐⇒ v
+
+> 3
+
+X
+
+> i=1
+
+αi =
+
+> 3
+
+X
+
+> i=1
+
+uiαi, αi := λi
+
+t2
+
+> i
+
+si
+
+> 0. (45) Thus 
+
+v =
+
+P 
+
+> i
+
+uiαi
+
+P 
+
+> i
+
+αi
+
+. (46) Similarly, subtracting v times equation 41 from the primed version gives 
+
+λ′
+
+> 4
+
+μ4 − vλ 4μ4 +
+
+> 3
+
+X
+
+> i=1
+
+(a′ 
+
+> i
+
+− va i)μi = 0 ⇐⇒ 
+
+> 3
+
+X
+
+> i=1
+
+(v − ui) λi
+
+ti
+
+si
+
+μi = 0 ,
+
+i.e., 
+
+v
+
+> 3
+
+X
+
+> i=1
+
+βi =
+
+> 3
+
+X
+
+> i=1
+
+uiβi, βi := λi
+
+ti
+
+si
+
+μi = biti
+
+si
+
+. (47) Thus also 
+
+v =
+
+P 
+
+> i
+
+uiβi
+
+P 
+
+> i
+
+βi
+
+. (48) Equating equation 46 and equation 48 yields a single linear constraint on (u1, u 2, u 3):
+
+P 
+
+> i
+
+uiαi
+
+P 
+
+> i
+
+αi
+
+=
+
+P 
+
+> i
+
+uiβi
+
+P 
+
+> i
+
+βi
+
+⇐⇒ 
+
+> 3
+
+X
+
+> i=1
+
+ui
+
+
+
+αi
+
+X
+
+> j
+
+βj − βi
+
+X
+
+> j
+
+αj
+
+
+
+= 0 . (49) Let γi := αi
+
+P 
+
+> j
+
+βj − βi
+
+P 
+
+> j
+
+αj . Unless (γ1, γ 2, γ 3) = (0 , 0, 0) , equation 49 defines a nontrivial hyperplane in R3, namely the two-dimensional solution space of one nonzero linear equation (Note that the condition γi = 0 for all i is nongeneric). Indeed, it requires β1 
+
+> α1
+
+= β2 
+
+> α2
+
+= β3 
+
+> α3
+
+, i.e., bi 
+
+> λiti
+
+is constant across i. Moreover, P 
+
+> i
+
+γi = 0 , so the hyperplane contains 
+
+(1 , 1, 1) . Therefore it contains positive choices of (u1, u 2, u 3) arbitrarily close to (1 , 1, 1) , including choices that are not all equal. This imposes two independent algebraic constraints on the continuous parameters (bi, λ i, t i), hence holds only on a measure-zero subset of the parameter space. Therefore, the set of positive (u1, u 2, u 3) satisfying equation 49 has (at least) two degrees of freedom. For any such (u1, u 2, u 3), take v from equation 46 (which equals equation 48) and define 
+
+a′ 
+
+> i
+
+by equation 44. Unless u1 = u2 = u3 = v, the transformation is not a global rescaling of (Λ, b, D), yet all moments (observational and interventional under node-4 intervention) coincide. Hence, identifiability up to a single global scale fails. 
+
+# B. Details of Experiments 
+
+B.1. Synthetic Data 
+
+We generate synthetic datasets from a stable OU model. For each setup |I| ∈ { 0, 2, 4, 6, 8, 10 } (number of single-node interventions) and 40 instances, we fix n = 10 variables and sample: • Drift matrix Λ: start from zeros; for i̸ = j, set Λij ∼ N (0 .2, σ 2) with probability ρ and 0 otherwise (default ρ = 0 .3,
+
+σ = 0 .8). Enforce positive stability by making each row strictly diagonally dominant: 
+
+Λii ← max  DIAG MIN , X
+
+> j
+
+|Λij | + 0 .2 + ui
+
+, ui ∼ Unif[0 , 0.3] , DIAG MIN = 0 .8.
+
+• Bias vector and diffusion matrix : b ∼ Unif[0 .2, 1.5] n; D = diag( d) with dk ∼ Unif[0 .2, 0.4] .Observational moments are computed via μ = Λ−1b and ΛΣ + ΣΛ ⊤ = D (continuous-time Lyapunov). An intervention on node k is implemented by zeroing row k of Λ and restoring its diagonal entry (self-regulation preserved), leaving b and 
+
+D unchanged; intervened moments (μ(k), Σ(k)) are computed analogously. We then draw snapshots from the corresponding Gaussians (by default 40 ,000 observational samples and 20 ,000 samples per intervention). 24 One Intervention Per Component Is Enough 
+
+B.2. Real Data Library-size normalization. For each cell k ∈ { 1, . . . , T c} in context/intervention c with raw counts {x ik}Ni=1 (genes 
+
+i = 1 , . . . , N ), define the library size sk = PNi=1 x ik. We normalize by fractions f ik = x ik/s k and then scale to a common size 
+
+˜x ik = 10 4 f ik = 10 4 x ik
+
+sk
+
+.
+
+All downstream statistics are computed on ˜x ik. We denote the cell vector ˜xk = (˜ x 1 
+
+> k
+
+, . . . , ˜x Nk )⊤ ∈ RN .
+
+Empirical moments with shrinkage. Given a context c with Tc cells {˜xk}Tc
+
+> k=1
+
+, the empirical mean and (shrunk) covariance are 
+
+ˆμc = 1
+
+TcTcX
+
+> k=1
+
+˜xk, ˆΣc = (1 − ηc) ˆΣc, sample + ηc diag   ˆΣc, sample 
+
+,
+
+where ˆΣc, sample = 1
+
+> Tc−1
+
+PTc
+
+> k=1
+
+(˜ xk − ˆμc)(˜ xk − ˆμc)⊤ and ηc = min  0.3, 10 /(Tc − 1) .
+
+Model. We fit an OU model with parameters (Λ, b, D) on wild-type and interventional data. 
+
+Train/test split and metrics. Similar to previous work (Rohbeck et al., 2024), interventions are split into train context IDs 
+
+{0, . . . , 54 } and held-out test context IDs {55 , . . . , 60 }.
+
+B.3. Empirical study of graphical conditions 
+
+We emphasize that our identifiability result provides sufficient conditions. Thus, there may exist linear SDEs whose parameters are identifiable up to a global scaling even if they do not satisfy the graphical conditions in Theorem 3.6. To empirically study the conservativeness of the sufficient conditions in Theorem 3.6, we constructed a family of OU models whose condensation graph forms a star over SCCs. Each SCC consists of a two-node directed cycle, with a single root SCC and m leaf SCCs. For each leaf SCC, we add exactly one directed edge from a randomly chosen node in the root SCC to a randomly chosen node in the leaf SCC. Interventions are restricted to leaf SCCs and are applied only to the node within each leaf SCC that does not receive the incoming edge from the root SCC. For a fixed number of interventions |I| = k,we randomly select k distinct leaf SCCs and apply one hard intervention per selected SCC. For each configuration, we evaluate whether the model parameters are identifiable up to a global scaling by analyzing the stacked linear system induced by the stationary first- and second-moment equations across all observational and interventional settings. Identifiability is assessed numerically via a spectral-gap criterion where we compute the singular values of the stacked system and declare identifiability if there is a clear separation between the smallest singular value and the remaining spectrum, corresponding to a one-dimensional nullspace. In all experiments, we used a threshold of 10 10 for the ratio between the second-smallest and smallest singular values. Figure 2 shows the fraction of identifiable instances as a function of the number of interventions. We observe a sharp transition from non-identifiability to full identifiability when the number of interventions becomes equal to the number of leaf components (The dashed vertical lines shows the number of leaf SCCs). This result indicates that the theoretical bound from Theorem 3.6 is close to tight in this setting. 
+
+B.4. Effect of sample size on relative error 
+
+To assess the sensitivity of our estimator to the number of steady-state samples, we conducted an experiment in which we varied the number of observational samples used to estimate ( ˆ μ, ˆΣ). For each trial, the number of samples per intervention was set to half of the observational sample size. We evaluated the relative error of recovering Λ for observational sample sizes {5k , 10k , 20k , 40k } over 30 random instances with n = 10 . As shown in Fig. 3, the estimation error decreases markedly when increasing the number of samples from 5k to 20k and then stabilizes, indicating that the estimator achieves accurate recovery with a moderate number of steady-state samples. This behavior is expected, since both empirical means and covariances become sufficiently accurate in this regime, after which additional samples yield diminishing returns. 25 One Intervention Per Component Is Enough 
+
+Figure 2. Identifiability versus number of interventions in the star condensation DAG. 
+
+Figure 3. The average relative error for recovering Λ (up to some global scaling) versus the sample size (observational data). 
+
+26 One Intervention Per Component Is Enough               
+
+> (a) Min. eigenvalue spacing of Λ(b) Min. singular value of LA(c) Assum. A.2(2). (d) Assum. A.2(3).
+> Figure 4. Numerical probe of spectral/rank assumptions: a) The histogram of minimum pairwise eigenvalue spacing of Λ. b) The histogram of minimum singular of LA. c) The condition in Assumption A.2(2) d) The condition in Assumption A.2(3) (The values on the x-axis are in log 10 scale)
+
+B.5. Finite-sample SCC recovery 
+
+We evaluate the SCC-recovery procedure implied by Theorem 3.3 and Remark 3.4 in a finite-sample setting. For each trial, we generate a random OU system with n = 10 nodes. The nodes are first partitioned into random SCCs of size between 1
+
+and 3. The condensation graph is then generated as a random DAG by allowing edges only from earlier SCCs to later SCCs, with edge probability 0.3. Within each non-singleton SCC, we include a directed cycle to ensure strong connectivity and add extra within-SCC edges with probability 0.2. For each edge in the condensation DAG, we add one randomly selected inter-SCC edge. The drift matrix Λ is made positive stable by strict row diagonal dominance: after assigning all off-diagonal weights, we set 
+
+Λii = P  
+
+> j̸=i
+
+|Λij | + 0 .5. The input vector is sampled as bi ∼ Unif[0 .5, 1.5] , and the diagonal diffusion entries are sampled as di ∼ Unif[0 .2, 0.5] . The observational stationary mean and covariance are computed from μ = Λ−1b and the Lyapunov equation ΛΣ + ΣΛ ⊤ = D.We use one intervention target per SCC, chosen as one representative node from that SCC. For hard interventions, we zero all off-diagonal entries in the intervened row while keeping the diagonal entry fixed. For soft interventions, we multiply the off-diagonal entries in the intervened row by a factor α = 0 .4, again keeping the diagonal entry fixed. For both observational and interventional settings, samples are drawn from the corresponding stationary Gaussian distributions. To estimate the response set Ri = {j : μ(i)
+
+> j
+
+̸ = μj }, we perform coordinate-wise two-sample z-tests comparing observational and interventional samples. The estimated response sets are used to reconstruct SCCs as follows: empty response sets are treated as singleton source SCCs; identical non-empty response sets are grouped together; strict inclusions among response sets recover the SCC-level partial order; and subtracting descendant response sets recovers the individual SCC node sets. We repeat this procedure over 100 independently generated OU systems. The quality of the recovered SCC partition is measured by the Adjusted Rand Index (ARI), where 1 indicates exact recovery. We report results for both hard and soft interventions as a function of sample size. 
+
+B.6. Experiment with non-diagonal diffusion 
+
+In this experiment, the data generator was modified to sample a full positive definite diffusion matrix Ω instead of a diagonal 
+
+D. Specifically, we generated a random matrix A, formed AA ⊤, normalized its scale, and added a positive diagonal jitter. The steady-state covariance was then obtained by solving the full Lyapunov equation ΛΣ + ΣΛ ⊤ = Ω. Thus, the data-generating process no longer satisfies the diagonal diffusion assumption. The learning model was also modified to estimate a full positive definite diffusion matrix. We parameterized Ω as Ω = MM ⊤ + ϵI, where M is a learned lower-triangular matrix. Accordingly, the covariance loss was changed from separate diagonal and off-diagonal residuals to the full matrix residual Λ(c) bΣ(c) + bΣ(c)Λ(c)⊤ − Ω, summed over the observational and interventional contexts c. These changes ensure that both data generation and optimization use a full diffusion matrix, rather than treating diffusion as diagonal. 27 One Intervention Per Component Is Enough 
+
+# C. About the Spectral/Rank Assumptions 
+
+C.1. Numerical Analysis of Spectral/Rank Assumptions 
+
+We assessed the spectral nondegeneracy assumptions by Monte Carlo analysis on random, strongly connected OU models. In each of 250 trials, we sampled a drift matrix Λ ∈ R10 ×10 with off–diagonal pattern drawn i.i.d. at density 0.3 (Gaussian weights, standard deviation 0.8), and set each diagonal entry strictly larger than the ℓ1 row sum (ensuring positive stability). Strong connectivity was checked on the directed graph with edge j → i iff Λij ̸ = 0 . We drew a diagonal diffusion D
+
+with dk ∼ Unif[0 .2, 0.4] , selected an intervention coordinate i uniformly at random, and formed the intervened drift by zeroing row i’s off–diagonals (keeping Λii ). We then solved the continuous–time Lyapunov equations to obtain the observational and intervened covariances Σ and Σ(i), formed Γ := Σ − Σ(i), and built the (−i, −i) Schur blocks Ξ and 
+
+Z used in the proofs, with A := Ξ−1Z. We evaluated four quantities: (i) the simple-spectrum condition for Λ, measured by min k̸ =ℓ |λk − λℓ|; (ii) the single-SCC skew-kernel condition in Assumption A.1, measured by σmin (LA), where LA
+
+represents S 7 → offdiag( SA − A⊤S) on the skew-symmetric subspace; (iii) the condition in Assumption A.2(2) and (iv) the condition in Assumption A.2(3), measured by |e⊤ 
+
+> i
+
+Γ−1Σ(i)ei|. We report the resulting histograms in Figure 4. In all 250 
+
+trials, the four quantities were strictly separated from zero. This is numerical evidence for the sampled models, not a proof of genericity for every SCC pattern. 
+
+C.2. About the role of spectral/rank assumptions in the proofs 
+
+- Assumption A.1 holds on a nonempty open subset of the ambient A-space. For example, if A = diag( a1, . . . , a m) with 
+
+ap̸ = aq for p̸ = q, then for any skew-symmetric S, (SA − A⊤S)pq = ( aq − ap)Spq for p̸ = q. Hence offdiag( SA −
+
+A⊤S) = 0 implies Spq = 0 for all p̸ = q, and since S is skew-symmetric, this gives S = 0 . Moreover, this injectivity is stable under sufficiently small off-diagonal perturbations. Indeed, write A = D + E, where D = diag( a1, . . . , a m)
+
+and δ := min p̸=q |ap − aq | > 0. For any skew-symmetric S, ∥ offdiag( SD − DS )∥F ≥ δ∥S∥F , whereas ∥ offdiag( SE −
+
+E⊤S)∥F ≤ 2∥E∥2∥S∥F . Therefore, if 2∥E∥2 < δ , then offdiag( SA − A⊤S) = 0 forces S = 0 . Thus Assumption A.1 holds not only for diagonal matrices with separated diagonal entries, but also for all sufficiently small off-diagonal perturbations of such matrices. In the model, however, A is determined by the induced moments, so we state the condition directly as a checkable spectral condition on the induced operator LA. The perturbation argument above suggests a direction for finding a witnesses. For instance, one may look for parameter regimes in a single SCC with suitably tuned weights, where the moment-derived matrix Ξ−1Z becomes close to a diagonal matrix with separated diagonal entries. In such a regime, Assumption A.1 holds. For small SCCs the condition simplifies. When |C| = 2 , we have m = 1 , so the condition is vacuous. When |C| = 3 , we have m = 2 , and the condition reduces to the scalar requirement A22 ̸ = A11 .- Assumption A.2 guarantees invertibility of the covariance difference Γ = Σ − Σ(i). Its factors have a Popov–Belevitch– Hautus (PBH) (Hespanha et al., 2009) interpretation. The PBH criterion characterizes controllability and observability of a linear system 
+
+˙z = Mz + gu, y = h⊤z.
+
+The pair (M, g) is controllable if and only if ℓ⊤g̸ = 0 for every nonzero left eigenvector ℓ⊤ of M. Similarly, (h⊤, M) is observable if and only if h⊤r̸ = 0 for every nonzero right eigenvector r of M. These tests express whether the input can excite every mode and whether the output can detect every mode. The structural versions ask whether these properties hold generically when the permitted entries of the matrix/input/output pair vary independently. The graphical criterion for structural controllability requires that every state be reachable from an input and that the bipartite graph of [M g ] admit a matching of size n, where n is the number of states. The latter means selecting n permitted entries in distinct rows and distinct columns. Structural observability has the dual test: every state must have a directed path to an output, and the bipartite graph of [M⊤ h]⊤ must admit a matching of size n (Lin, 1974). In our setting, the first factor ρ⊤
+
+> ⋆,k
+
+ei in (W⋆)kℓ is the PBH controllability coefficient for (−Λ⋆, ei): it determines whether an input acting on the intervened coordinate i can excite drift mode k. For the second factor, set h = Σ(i)w⋆. Since 
+
+Λ⊤ 
+
+> ⋆
+
+ρ⋆,ℓ = λ⋆,ℓ ρ⋆,ℓ ,
+
+the coefficient w⊤ 
+
+> ⋆
+
+Σ(i)ρ⋆,ℓ = h⊤ρ⋆,ℓ is the PBH observability coefficient for (h⊤, −Λ⊤ 
+
+> ⋆
+
+): it determines whether this covariance-derived output detects mode ℓ of the transpose dynamics. Under the assumed simple spectrum, nonvanishing of all the first factors is equivalent to controllability of the first pair, and nonvanishing of all the second factors is equivalent to observability of the second pair. 28 One Intervention Per Component Is Enough 
+
+For these graphical tests, our independently free diagonal drift entries supply a self-loop at every state, so the matching conditions are automatic. Within a single SCC, every vertex is reachable from the intervened node i. Hence (−Λ⋆, ei) is structurally controllable, and the first PBH factors are generically nonzero under the assumed simple spectrum. For the transpose dynamics, reverse the drift edges and check that every vertex can reach a vertex connected to the output. In a single SCC this reachability condition holds for any nonempty output pattern. It establishes structural observability when the permitted output coefficients are independently free. These interpretations do not alone prove genericity of Assumption A.2. In particular, h = Σ(i)w⋆ depends on the model parameters and cannot be varied independently in a structural genericity argument. We retain the explicit condition 
+
+0 /∈ σ(W⋆ + W⊤ 
+
+> ⋆
+
+), which guarantees invertibility of Γ = Σ − Σ(i) through Γ = −R⋆(W⋆ + W⊤ 
+
+> ⋆
+
+)R⊤ 
+
+> ⋆
+
+.- The scalar condition e⊤ 
+
+> i
+
+Γ−1Σ(i)ei̸ = 0 is used in the proof to pass from invertibility of Γ := Σ − Σ(i) to invertibility of the Schur-type matrix Ξ. Consider this condition on the directed-cycle graph 1 → 2 → · · · → n → 1, with intervention on node 1. The intervention removes the edge n → 1, leaving the directed chain 1 → 2 → · · · → n. Thus the covariance effect generated by the intervention can propagate through all coordinates of the block. By Cramer’s rule, 
+
+e⊤ 
+
+> 1
+
+Γ−1Σ(1) e1 = det Σ(1) e1, Γe 2, . . . , Γe n
+
+
+
+det( Γ) .
+
+On the directed cycles, both the numerator and denominator are rational functions of the cycle weights, self-loops, and diffusion variances. Since the intervened graph contains a directed chain from the intervened node to all other nodes, the columns appearing in the Cramer numerator are not forced to vanish by the graph structure. However, this does not by itself prove that the determinant is nonzero. To prove genericity on directed cycles, or on general SCCs, one would still need to exhibit one admissible parameter value for which the condition holds. 
+
+Witness for directed cycle When comparing drifts supported on the same directed cycle, one can avoid the auxiliary 
+
+A = Ξ−1Z skew-kernel argument used in the general single-SCC proof. Instead, we work directly with the Ξ-equation 
+
+Λ∆,−i, −iΞ + Ξ⊤Λ⊤ 
+
+> ∆,−i, −i
+
+= 0 , which was derived in equation 28. When the SCC is the directed cycle 1 → 2 → · · · → 
+
+n → 1 and the intervention is on node 1, the hard intervention removes the edge n → 1. Hence, on the remaining nodes 
+
+2, . . . , n , the support of X := Λ∆,−1,−1 is lower bidiagonal, corresponding to the directed chain 2 → 3 → · · · → n. For this special support pattern, the adjacent-minor condition on Ξ given below forces X = 0 . This gives a direct injectivity argument for cycle-supported competitors; it does not establish Assumption A.1 for unrestricted competing drifts. Consider the directed cycle 1 → 2 → · · · → n → 1, with intervention on node 1. After the hard intervention, the edge 
+
+n → 1 is removed, and the remaining support on nodes 2, . . . , n is the directed chain 2 → 3 → · · · → n. Thus the ambiguity X := Λ∆,−1,−1 has lower-bidiagonal support in the natural ordering 2, . . . , n . That is, if m = n − 1, reduced index p corresponds to original node p + 1 , and Xpq = 0 unless p = q or p = q + 1 .
+
+Recall that the proof gives the equation XΞ + Ξ⊤X⊤ = 0 . The following lemma gives a direct condition under which this equation forces X = 0 .
+
+Lemma C.1. Let Ξ ∈ Rm×m be arbitrary, not necessarily symmetric. Suppose X ∈ Rm×m is lower bidiagonal: 
+
+Xpq = 0 unless p = q or p = q + 1 . If XΞ + Ξ⊤X⊤ = 0 , and Ξ11 ̸ = 0 , and, for every p = 1 , . . . , m − 1,
+
+∆p(Ξ) := Ξ pp Ξp+1 ,p +1 − Ξp,p +1 Ξp+1 ,p ̸ = 0 , then X = 0 .Proof. Write xp := Xpp , p = 1 , . . . , m, and ℓp := Xp+1 ,p , p = 1 , . . . , m − 1. These are the only possibly nonzero entries of X. Let E := XΞ + Ξ⊤X⊤. By assumption, E = 0 . The (1 , 1) -entry gives 0 = E11 = 2 x1Ξ11 . Since Ξ11 ̸ = 0 , we get 
+
+x1 = 0 .Now suppose, inductively, that for some p ∈ { 1, . . . , m − 1},
+
+x1 = · · · = xp = 0 , ℓ1 = · · · = ℓp−1 = 0 .
+
+Then row p of X is zero, while row p + 1 has only two possibly nonzero entries, ℓp in column p and xp+1 in column p + 1 .Hence the (p, p + 1) -entry of E = 0 gives 
+
+ℓpΞpp + xp+1 Ξp+1 ,p = 0 ,
+
+and the (p + 1 , p + 1) -entry gives 
+
+ℓpΞp,p +1 + xp+1 Ξp+1 ,p +1 = 0 .
+
+29 One Intervention Per Component Is Enough 
+
+Therefore,  Ξpp Ξp+1 ,p 
+
+Ξp,p +1 Ξp+1 ,p +1 
+
+  ℓp
+
+xp+1 
+
+
+
+= 0 .
+
+Its determinant is 
+
+∆p(Ξ) = Ξ pp Ξp+1 ,p +1 − Ξp,p +1 Ξp+1 ,p ,
+
+which is nonzero by assumption. Thus ℓp = 0 and xp+1 = 0 . The claim follows by induction. For a directed cycle, define 
+
+κΞ := Ξ 11 
+
+> m−1
+
+Y
+
+> p=1
+
+(Ξ pp Ξp+1 ,p +1 − Ξp,p +1 Ξp+1 ,p ) .
+
+By Lemma C.1, if κΞ̸ = 0 , then the Ξ-equation forces the directed-chain ambiguity Λ∆,−1,−1 to vanish. We now show that κΞ is not identically zero on the directed-cycle parameter space, for every cycle length n. Since Ξ
+
+is obtained from solutions of Lyapunov equations, its entries are rational functions of the cycle weights, self-loops, and diffusion variances. Hence each factor in κΞ is a rational function of the model parameters. For these rational witnesses, it suffices to work on the algebraic domain where both Lyapunov operators are nonsingular and Σ(1) 11 ̸ = 0 ; positivity is not required at the intermediate witness. A nonzero rational function cannot vanish on the nonempty open admissible parameter domain, so these witnesses imply the stated generic conclusion for stationary OU models. Here “algebraic domain” means only that the displayed rational expressions are defined; a Lyapunov solution there need not be a positive covariance. The witness establishes a nonzero numerator polynomial. Appendix A.2 then transfers its generic nonvanishing to the open admissible OU domain. We use induction on n. The base cases are direct. For n = 2 , take 
+
+Λ =
+
+2 11 2
+
+
+
+, D = diag(1 , 2) .
+
+A direct calculation gives 
+
+Ξ =
+
+ 364 
+
+
+
+,
+
+so κΞ̸ = 0 . For n = 3 , take 
+
+Λ =
+
+2 0 11 2 00 1 2
+
+ , D = diag(1 , 2, 3) .
+
+For the intervention on node 1, direct calculation gives 
+
+Ξ =
+
+" 14032 − 18064 19 384 − 265 21504 
+
+#
+
+.
+
+Thus 
+
+Ξ11 = 14032 ̸ = 0 , det( Ξ) = 89 28901376 ̸ = 0 .
+
+Hence κΞ̸ = 0 for the 3-cycle. Assume now that the claim holds for the n-cycle. We argue it for the (n + 1) -cycle. Let 
+
+P (n+1)  
+
+> p
+
+(θ) := Ξ (n+1)  
+
+> pp
+
+Ξ(n+1)  
+
+> p+1 ,p +1
+
+− Ξ(n+1)  
+
+> p,p +1
+
+Ξ(n+1)  
+
+> p+1 ,p
+
+, p = 1 , . . . , n − 1,
+
+and let P (n+1) 0 (θ) := Ξ (n+1) 11 . We will show that each P (n+1)  
+
+> p
+
+is not identically zero as a rational function of the (n+1) -cycle parameters. First consider p = 0 , . . . , n − 2, i.e., the factors involving only the old reduced nodes 2, . . . , n . By the induction hypothesis and rational genericity, choose an n-cycle in this nonsingular algebraic domain whose corresponding Ξ(n)-factors are all nonzero. We now insert node n + 1 as a fast relay between n and 1.30 One Intervention Per Component Is Enough 
+
+Let Λold ∈ Rn×n be the drift of the old n-cycle, and let ω := Λ old 1n be the closing-edge weight n → 1. Define 
+
+A := Λold − ωe1e⊤ 
+
+> n
+
+, so that A is the old drift with the closing edge removed. Write x := ( x1, . . . , x n)⊤, z := xn+1 . For parameters α, c > 0 and β ∈ R satisfying αβ c = ω, define the relay drift 
+
+Λε =
+
+ A βe1
+
+−αε −1e⊤ 
+
+> n
+
+cε −1
+
+
+
+.
+
+The relay coordinate has drift − cε z + αε xn = − cε
+
+ z − αc xn
+
+, so as ε → 0, the relay enforces z ≈ αc xn. Therefore the edge 
+
+n + 1 → 1 contributes −βz ≈ − αβ c xn = −ωx n, which is exactly the contribution of the old closing edge n → 1.We verify this at the covariance level. Let 
+
+Σε =
+
+Sε rε
+
+r⊤ 
+
+> ε
+
+sε
+
+
+
+be the solution of the Lyapunov equation for (x, z ), with Sε the old-variable block and rε the cross block. Keep the diagonal diffusion parameters fixed as ε → 0, with block form 
+
+Dε =
+
+Dx 00 dz
+
+
+
+.
+
+The (x, z )-block of the Lyapunov equation gives 
+
+Ar ε + βe1sε − αε −1Sεen + cε −1rε = 0 .
+
+Multiplying by ε and rearranging, 
+
+rε = αc Sεen − εc (Ar ε + βe1sε) .
+
+To justify boundedness, also multiply the (z, z )-equation by ε, obtaining 
+
+2cs ε − 2αe⊤ 
+
+> n
+
+rε = εd z .
+
+At ε = 0 , the scaled cross and scalar equations give r = ( α/c )Se n and s = ( α/c )2e⊤ 
+
+> n
+
+Se n. Substitution into the old-variable equation gives exactly the old Lyapunov equation. Its nonsingularity therefore makes the full scaled linear system nonsingular at zero: its homogeneous system has only the zero solution. In general, if K(ε) is continuous and K(0) 
+
+is invertible, then K(ε)−1 is continuous near zero, as follows from the adjugate formula and continuity of the nonzero determinant. Applied here to the matrix of the scaled linear equations, with its continuous right-hand side, this gives a bounded solution near zero. The invertible matrix in this argument is the equation operator, not the limiting covariance. For 
+
+ε̸ = 0 , scaling the equations is reversible. Hence 
+
+rε = αc Sεen + O(ε).
+
+Here Rε = O(ε) means ∥Rε∥ ≤ Cε for sufficiently small positive ε, with the other parameters fixed. We may use any fixed norm on this finite-dimensional space. The (x, x)-block of the Lyapunov equation is 
+
+AS ε + SεA⊤ + βe1r⊤ 
+
+> ε
+
++ βrεe⊤ 
+
+> 1
+
+= Dx.
+
+Substituting the previous relation gives 
+
+
+
+A + αβ c e1e⊤
+
+> n
+
+
+
+Sε + Sε
+
+
+
+A + αβ c e1e⊤
+
+> n
+
+⊤
+
+= Dx + O(ε).
+
+Since αβ/c = ω, the drift in parentheses is 
+
+A + ωe1e⊤ 
+
+> n
+
+= Λold .
+
+Therefore, by uniqueness and continuity of Lyapunov solutions, 
+
+Sε −→ Σold as ε → 0.
+
+31 One Intervention Per Component Is Enough 
+
+The same argument applies to the intervened covariance. Under the intervention on node 1, the edge n + 1 → 1 is removed, so the block βe1 is set to zero. Thus the effective closing edge also disappears, matching the intervened old n-cycle. Hence the observational and interventional covariance blocks on the old variables converge to those of the old n-cycle. Consequently, the corresponding old block of Ξε converges to the old Ξ(n)-matrix. Therefore, for p = 0 , . . . , n − 2, the factors P (n+1)  
+
+> p
+
+converge to the nonzero factors of the old n-cycle. Hence each P (n+1)  
+
+> p
+
+, p = 0 , . . . , n − 2, is not identically zero as a rational function of the (n + 1) -cycle parameters. It remains to show that the last factor 
+
+P (n+1)  
+
+> n−1
+
+= Ξ (n+1) 
+
+> n−1,n −1
+
+Ξ(n+1)  
+
+> n,n
+
+− Ξ(n+1) 
+
+> n−1,n
+
+Ξ(n+1) 
+
+> n,n −1
+
+is not identically zero. Start from the displayed 3-cycle on the retained nodes {1, n, n + 1 }, whose adjacent minor is nonzero. Insert the intermediate nodes 2, . . . , n − 1 one at a time along the edge from 1 to n. The same one-relay calculation applies to any subdivided edge: removing the incoming edge at node 1 commutes with this construction. Indeed, the inserted relays subdivide the outgoing path from 1 to n, leaving the incoming edge n + 1 → 1 untouched. Cutting that edge before or after insertion gives the same model, so the covariance convergence applies to both observational and interventional equations. At each insertion, choose a sufficiently small positive relay time after fixing the preceding parameters. Continuity preserves the nonzero minor on the two retained nodes {n, n + 1 }, together with the two Lyapunov nonsingularity conditions and the nonzero interventional variance at node 1. After the finitely many insertions, the graph is the (n + 1) -cycle and that retained minor is exactly P (n+1)  
+
+> n−1
+
+: nodes {n, n + 1 } occupy reduced positions {n − 1, n }. Thus this final rational factor is not identically zero. We have shown that every factor P (n+1)  
+
+> p
+
+, p = 0 , . . . , n − 1, is a nonzero rational function. Since the product of finitely many nonzero rational functions is again nonzero, we conclude that 
+
+P (n+1) 0 P (n+1) 1 · · · P (n+1) 
+
+> n−1
+
+is not identically zero. Hence there exists an admissible (n + 1) -cycle parameter value for which all adjacent Ξ-minors are nonzero. This completes the induction. Consequently, for every directed cycle length n, the adjacent-Ξ condition holds generically on the directed-cycle parameter subfamily. By Lemma C.1, the equation 
+
+Λ∆,−1,−1Ξ + Ξ⊤Λ⊤ 
+
+> ∆,−1,−1
+
+= 0 
+
+has no nonzero solution with directed-chain support, generically on this subfamily. 32

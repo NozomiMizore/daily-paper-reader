@@ -6,29 +6,28 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-17
-- 运行时间：2026-09-17 22:27:51 UTC
+- 最新运行日期：2026-09-18
+- 运行时间：2026-09-18 21:24:29 UTC
 - 运行状态：成功
 - 本次总论文数：2
-- 精读区：0
-- 速读区：2
+- 精读区：1
+- 速读区：1
 
 ### 今日简报（AI）
-2026-09-17日报：共收录2篇单细胞分析论文，均为速读，精读0篇。  
-最值得关注的是7.0分的《Causal Path Analysis from Perturbational and Population-Scale Single-Cell Data with Multiscale Confounding and Measurement Error》和6.0分的《RAGCell: Retrieval-Augmented Generation as Supervision for Versatile Single-cell Analysis》，分别指向因果路径分析与检索增强生成用于单细胞分析。  
-普通读者可先读7分那篇了解因果推断思路，再浏览RAGCell看检索增强生成如何服务单细胞任务。
-- 详情：[/202609/17/README](/202609/17/README)
+2026-09-18日报：2篇论文，精读CellRFT（10.0）与速读线性随机动力学可辨识性（6.0）。
+最值得看的是CellRFT：用强化微调做单细胞扰动建模，拿下今日满分；速读篇则聚焦从稳态识别线性随机动力学的单组件干预条件。
+普通读者可优先读CellRFT了解单细胞扰动建模方法，若对动力学可辨识性感兴趣再翻速读篇。
+- 详情：[/202609/18/README](/202609/18/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [CellRFT: Reinforcement Fine-Tuning for Single-Cell Perturbation Modeling](/202609/18/2609.19970v1-cellrft-reinforcement-fine-tuning-for-single-cell-perturbation-modeling)  
+   标签：评分：10.0/10、query:virtual-cell
+   evidence：面向单细胞扰动响应预测的强化微调
 
 ### 速读区论文标签
-1. [Causal Path Analysis from Perturbational and Population-Scale Single-Cell Data with Multiscale Confounding and Measurement Error](/202609/17/2609.16510v1-causal-path-analysis-from-perturbational-and-population-scale-single-cell-data-with-multiscale-confounding-and-measurement-error)  
-   标签：评分：7.0/10、query:virtual-cell
-   evidence：整合单细胞扰动数据与群体尺度数据进行基因调控因果分析
-2. [RAGCell: Retrieval-Augmented Generation as Supervision for Versatile Single-cell Analysis](/202609/17/2609.14147v1-ragcell-retrieval-augmented-generation-as-supervision-for-versatile-single-cell-analysis)  
+1. [One Intervention per Component is Enough: Towards Identifiability in Linear Stochastic Dynamics from Steady State](/202609/18/2609.19955v1-one-intervention-per-component-is-enough-towards-identifiability-in-linear-stochastic-dynamics-from-steady-state)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：面向通用单细胞分析的单细胞基础模型框架
+   evidence：从基因扰动干预的稳态数据中恢复动力学参数
 
 
 <div class="dpr-home-promo-card">
