@@ -1,0 +1,1293 @@
+Title: Proxy-Adjusted Causal Discovery from Targeted Interventions
+
+URL Source: https://arxiv.org/pdf/2609.23897v1
+
+Published Time: Tue, 22 Sep 2026 01:53:38 GMT
+
+Number of Pages: 38
+
+Markdown Content:
+# Proxy-Adjusted Causal Discovery from Targeted Interventions 
+
+Li Chen 1, Wei Pan 2, and Xiaotong Shen ∗1 
+
+> 1
+
+School of Statistics, University of Minnesota, Minneapolis, MN 55455, USA 
+
+> 2
+
+Division of Biostatistics and Health Data Science, School of Public Health, University of Minnesota, Minneapolis, MN 55455, USA 
+
+Abstract 
+
+Randomized perturbations can reveal downstream responses without identifying which causal relationships are direct. Conditioning on intermediate responses may induce associations through unmeasured common causes, even when the source is randomized. We introduce Proxy-Adjusted Balanced Masking (PABM), a nonparametric framework for recovering directed acyclic graphs from targeted interventions, response data, and recorded proxies. PABM uses valid target-specific interventions to identify candidate ancestors. It then compares conditional target distributions with and without a candidate response and, when supported by the design, its intervention variable, adjusting for other ancestors and proxies. Each comparison uses matched observations, adjustment variables, and fitting procedures. Identification requires every included nonparent comparison to have zero conditional gain and each parent to have positive gain in at least one comparison. We establish population identification, finite-sample recovery conditions that accommodate incomplete adjustment and estimation error, and familywise error control under valid held-out p-values. Continuous-response simulations show favorable graph recovery relative to specified comparator pipelines; K562-calibrated count simulations reveal a selection–ranking tradeoff. Proxy ablations assess sensitivity to recorded information. An analysis of K562 Perturb-seq data illustrates descriptive candidate-network construction; proxy adequacy for unmeasured biological variation remains unresolved. 
+
+Keywords: causal discovery, directed acyclic graphs, targeted interventions, proxy adjustment, unmeasured confounding 
+
+# 1 Introduction 
+
+Perturbation experiments measure how a system responds when selected components are changed. Our goal is to determine which components directly affect others, rather than merely transmit an effect through intermediate variables. Perturb-seq provides a motivating example: CRISPR interference (CRISPRi) reduces expression of selected genes, and single-cell ribonucleic acid (RNA) sequencing measures the resulting expression profiles (Replogle et al., 2022). A response to an intervention on one gene can arise either through a direct effect on another gene or through a chain of intermediate genes. We seek a directed acyclic graph (DAG), a graph without directed cycles, whose edges represent direct causal relationships among the modeled responses (Pearl, 2009; Spirtes et al., 2001). A direct cause is called a parent ; a variable with a directed path to the target is an 
+
+ancestor . A strict ancestor excludes the target itself, and a nonparent lacks a direct edge to the target.  
+
+> ∗Corresponding author: xshen@umn.edu .
+
+1arXiv:2609.23897v1 [stat.ME] 20 Sep 2026 The difficulty persists even when the source variable is randomized directly. Suppose Xj affects 
+
+Xr only through an intermediate response M , and an unmeasured cell-state variable H affects both 
+
+M and Xr:
+
+Xj −→ M −→ Xr, H −→ M, H −→ Xr.
+
+Conditioning on M blocks the indirect path, but it can also make Xj associated with H: among cells with the same M , a larger contribution from Xj can be offset by a smaller contribution from 
+
+H. Because H also affects Xr, the adjusted comparison can suggest a direct relationship where none exists. This is conditioning on a common effect, often called collider bias. It does not require imperfect knockdown. In the assignment model Uj → Xj , the same conditioning can also associate the randomized assignment Uj with H. Conditioning on an observed response is distinct from experimentally setting its value. In an additive linear structural model, valid instrumental variables (IVs), such as suitable randomized interventions, can identify direct-effect coefficients using regressors predicted from the instruments. This requires enough independent instrumental variation to distinguish the coefficients of Xj and M . Simply substituting predicted means is insufficient for general nonlinear relationships: a quadratic term in M , for example, requires E(M 2 | Z), rather than {E(M | Z)}2, where Z denotes the valid instruments. We seek graph recovery without specifying these structural functions. We study whether recorded auxiliary measurements that carry information about the unmeasured causes, called proxies, can support this adjustment. Our method, Proxy-Adjusted Balanced Masking (PABM), provides a nonparametric framework: the structural functions are not restricted to a prespecified parametric family. PABM first uses target-specific interventions to identify candidate upstream variables. This step requires intervention variables independent of relevant unmeasured causes after adjustment, effects confined to the assigned target’s mechanism, remaining variation in those intervention variables, and detectable propagation along the relevant paths. PABM then adjusts for other upstream responses and the recorded measurements, comparing the target distribution with and without the candidate response and, when supported by the design, its recorded intervention variable. Masking means omitting the candidate variable; balanced means that its addition is the only change in the data inputs and fitting protocol within each comparison. The reported implementations use Gaussian or Poisson working distributions with estimated conditional means. Detecting changes in variance or distributional shape requires richer fitted distributions and a suitable ancestor screen, as discussed in Section 3.3. For these comparisons to identify direct edges, every comparison used for an indirect candidate must show conditional independence from the target after adjustment, while each direct parent must remain detectable in at least one comparison. A measurement’s correlation with cell state does not by itself ensure this requirement. We state the identifying conditions and quantify sensitivity to incomplete adjustment. In the K562 illustration, the recorded block contains experimental-group indicators and mitochondrial-read percentage; whether these adequately account for the relevant unmeasured biological variation is unresolved. The analysis therefore illustrates construction and descriptive assessment of a candidate network. Standard observational procedures provide important baselines, while this task requires additional intervention and proxy conditions. The PC algorithm, which uses conditional-independence tests, Greedy Equivalence Search, NOTEARS, Structural Agnostic Modeling, and Masked Gradient-Based Causal Structure Learning are commonly formulated under causal sufficiency, the absence of unmeasured common causes among the modeled variables (Kalisch and Bühlmann, 2007; Chickering, 2002; Zheng et al., 2018; Kalainathan et al., 2022; Ng et al., 2022). Fast Causal Inference allows latent variables but generally represents multiple causal graphs compatible with the observed conditional independences, leaving some directions unresolved (Zhang, 2008). Intervention-based structural 2learning and invariant prediction add directional information (Peters et al., 2016; Brouillard et al., 2020; Lippe et al., 2022), yet exact recovery under unmeasured confounding still requires assumptions connecting the assignment mechanism, latent variables, and direct structural relations. Nonlinear hidden-confounder procedures instead impose structured equations or latent-error models, such as correlated Gaussian errors in DeFuSE and a nonlinear latent-confounding model in NOCADILAC (Li et al., 2024; Kaltenpoth and Vreeken, 2023). IV methods use intervention variables that change a source variable, are independent of relevant unmeasured causes after adjustment, and affect other responses only through that source. These requirements are called relevance, conditional exogeneity, and exclusion, respectively. GrIVET combines uncertain additive interventions with a Gaussian DAG, screening ancestral relations before estimating direct effects with candidate instruments; GAMPI uses a related strategy for identifying ancestors before direct effects with generalized-linear structural equations (Chen et al., 2024; Wang et al., 2024). For Perturb-seq, ARGEN (Park and Li, 2026) uses differential-expression information to recover descendants and a two-stage quasi-likelihood procedure to recover parents. It constructs a model-based expression predictor in a first stage from intervention variables and observed covariates, with the intervention variables serving as instruments. This construction uses a count measurement model and a log-linear structural model. These procedures identify direct edges through structural coefficients under their specified models. Nonparametric IV methods also estimate unknown structural functions by requiring, for example, that the structural error have mean zero conditional on the instruments, together with restrictions ensuring identification (Newey and Powell, 2003). PABM targets graph structure through proxy-adjusted conditional-distribution comparisons under the intervention, conditional-independence, and detectability requirements described above. A second line of work uses recorded proxies and restrictions on their conditional distributions. Nonparametric proxy-based tests address a local causal null or the causal direction between two variables through restrictions linking the distributions of recorded proxies, hidden causes, and outcomes (Liu et al., 2024; Wu et al., 2025). Proximal methods identify causal effects using additional restrictions on these distributions (Miao et al., 2018; Cui et al., 2024), and linear proxy-selection methods address causal-effect estimation (Xie et al., 2024). The confounder-blanket framework recovers causal ordering from background covariates under restrictions on their graphical relation to the responses (Watson and Silva, 2022). These approaches establish that flexible inference with proxy information is possible under appropriate identifying conditions. Our question is how recorded proxies and target-specific interventions can jointly support direct-parent discovery within an ancestor family. Recent perturbation-specific procedures estimate linear DAGs from hard interventions, which replace a source variable’s generating mechanism, for example by setting its value externally. Other procedures infer cyclic networks, invert intervention-response matrices, model latent Gaussian DAGs with Poisson measurements, or use Bayesian and likelihood-based interventional graph models (Xue et al., 2025; Rohbeck et al., 2024; Brown et al., 2025; Zhang and Li, 2026; Han et al., 2025; Viñas Torné et al., 2026). The diversity of these targets and models motivates a formulation that separates the identifying restrictions from the choice of regression model used to estimate each conditional distribution. Conditional predictive impact provides a related predictive-relevance construction (Watson and Wright, 2021); PABM’s causal interpretation additionally relies on the ancestor restriction and comparison-specific separation conditions. The contributions are threefold. (i) PABM combines target-specific interventions and recorded proxies in a direct-parent identi-3fication framework. For an eligible nonparent, every available comparison must satisfy its conditional-independence null; a parent may be detected by either the response or intervention-assignment comparison. This joint-null/either-alternative structure accommodates general target distributions under strong, pair-specific proxy-adjustment requirements. (ii) The analysis separates residual dependence after proxy adjustment from working-family approxi-mation, conditional-distribution estimation, and held-out validation error. It gives population identification, finite-sample graph-recovery conditions, and familywise error rate (FWER) control when the comparisons selected in training have valid held-out p-values. Sample splitting and multiple-testing adjustment alone do not establish that validity. (iii) Gaussian, continuous-response, and K562-calibrated count simulations examine selection, cal-ibration, graph recovery, and sensitivity to recorded proxy information. A K562 Perturb-seq analysis illustrates descriptive candidate-network construction without a reference DAG. The experiments distinguish the proved specializations from the empirical adaptive implementation and reveal a selection–ranking tradeoff in the count setting. The pair-specific requirements neither imply nor follow generally from the structural and mea-surement assumptions of model-based IV methods. They also distinguish a recorded proxy for unmeasured confounding from ARGEN’s model-generated expression predictor. The framework applies more broadly to targeted-intervention studies with linked pre-intervention covariates or auxiliary measurements whose causal role supports the required adjustment. Section 2 defines the statistical model, graph targets, and population identification conditions. Section 3 develops the PABM procedure. Section 4 gives graph-recovery and calibration guarantees. Section 5 presents the numerical studies and Perturb-seq analysis, and Section 6 discusses the scope of the resulting framework. 
+
+# 2 Data, Identifying Conditions, and Causal Targets 
+
+The data provide two complementary forms of information. Valid interventions can identify which responses are upstream of a target; recorded proxies can help separate direct parents from indirect ancestors. This section states the conditions required for these two roles and defines the conditional-likelihood gains that PABM estimates. The structural DAG is the primary target. Assignment comparisons also describe which of its edges respond under the observed design. 
+
+2.1 Structural Model and Graph-Recovery Target 
+
+Consider observed responses, intervention assignments, recorded covariates and proxy measure-ments, and unmeasured common causes. The following notation separates these four roles and defines the graph-recovery target. Let [p] = {1, . . . , p }, let X = ( X1, . . . , X p) denote the variables whose causal relations are of interest, and let H = ( H1, . . . , H q) collect shared unmeasured confounders that may affect several components of X. Let W denote the recorded covariate and proxy block. For each r ∈ [p], let Wr denote the possibly empty subvector whose observed inputs enter the mechanism for Xr, and suppose 
+
+Xr = fr
+
+ Xpa( r), H, U r, W r, ε r
+
+, (1) where pa( r) ⊆ [p] \ { r} is the minimal observed parent set of Xr, Ur is its observed target-specific intervention assignment, with ∅ denoting no intervention (numerically encoded as a binary indicator or quantitative dose), Wr contains the recorded covariates and proxy measurements 4that directly enter this mechanism, εr is variable-specific noise, and fr is an otherwise general structural mechanism. Components of W outside Wr may still be used for adjustment. We call a component a proxy measurement for unmeasured confounding when it carries information about the unmeasured confounders relevant to a comparison; other components of W may be ordinary observed covariates. The errors ε1, . . . , ε p are mutually independent and independent of (H, U, W ),where U = ( U1, . . . , U p). Minimality means that, after fixing the intervention assignment, recorded exogenous inputs, and unobserved inputs, no proper subset of pa( r) yields the same structural mechanism almost surely. Thus each j ∈ pa( r) makes a nonredundant direct contribution to Xr.The recorded Ur is an intervention-assignment variable, such as a guide indicator; it is distinct from the post-intervention value of Xr. Identification therefore compares observable conditional distributions across levels of the candidate assignment after conditioning on the remaining assignment design U−r. When Ur shifts the distribution of Xr and satisfies the conditional-exogeneity and target-specific exclusion conditions below, it has the conventional role of an instrument for Xr.The assignments U and the recorded block W have complementary roles. Source-specific intervention variation identifies whether Xj lies upstream of Xr. Within the resulting ancestor set, the same assignment provides an intervention-assignment comparison, alongside the expression comparison based on Xj . PABM evaluates both through conditional-distribution comparisons without an edge-specific coefficient moment equation. The block W is included in both fitted models. Its components may enter the target mechanism, track H, or do both. In a randomized perturbation study, W may contain baseline cell state, assay controls, batch measurements, technical covariates, or measurements from another modality. The structural equations define an acyclic observed-variable graph on [p], with edge set E =
+
+{(j, r ) : j ∈ pa( r)}; its causal order may be unknown. We write A → B when A is a direct cause, or parent, of B; the arrow points from cause to effect. Thus graph recovery is equivalent to recovering 
+
+pa(1) , . . . , pa( p). Hidden confounding obstructs this task because a nonparent can remain highly predictive of Xr by tracking H. Graph recovery must therefore distinguish a direct contribution to the mechanism for Xr from predictability induced by the shared unmeasured confounders. Section 2.2 defines a second target ER ⊆ E, the structural edges that respond to the supported intervention design. The observable data are (X, U, W ). Only the components of X are graph nodes. The assignment vector U supplies directional and intervention-response information, while W is included in the two models fitted for each candidate–target pair. The latent confounder H is never observed or supplied to the estimator. Any component of W used in the ancestor screen must preserve the conditional exogeneity in Assumption 1(a); variables used in a direct intervention-assignment comparison must support the separation in Assumption 2(b). Pre-intervention covariates are natural candidates, whereas variables jointly affected by assignment and an unmeasured confounder can violate these requirements. 
+
+2.2 Ancestor Identification and Proxy-Adjusted Parent Identification 
+
+For each target Xr, let Cr ⊆ [p]\{ r} denote its initial candidate-parent set. Temporal information, perturbation design, scientific knowledge, or an independent screening rule may restrict Cr; without such information, take Cr = [ p] \ { r}. Full recovery of pa( r) requires candidate coverage , pa( r) ⊆ C r.Without coverage, the identifiable local target is the subset of parents retained in Cr. The finite-sample result for comparisons that adjust for the other candidates while omitting the candidate under test additionally requires ancestral coverage , Anc( r) ⊆ C r, so that every intermediate ancestor included in the population comparison is also included in the sample comparison. 5Step 1: training-only intervention screen Step 2: held-out direct-edge comparison         
+
+> intervention assignment Uj
+> source node
+> Xj
+> target node
+> Xr
+> assigned perturbation directed path
+> intervention-based ancestor screen
+> UjXr
+> Retain candidate ancestors; validation data remain untouched.
+> candidate
+> Xj
+> adjustment variables other screened ancestors
+> Wand Ur
+> target
+> Xr
+> reveal Xj
+> held-out paired conditional log-likelihood ratio
+> A positive calibrated score supports the candidate edge jr.
+
+Figure 1: Two-stage PABM construction. In the left panel, under Assumption 1, changing a possible source Xj through its assigned intervention Uj reveals whether the target Xr lies downstream, equivalently whether Xj is an ancestor of Xr. This training-only screen establishes ancestral eligibility; Stage B evaluates the direct edge Xj → Xr. In the right panel, for every screened candidate, the held-out conditional-likelihood comparison evaluates whether Xj contributes directly to Xr after the other training-selected candidates, the recorded covariate and proxy block W ,and the target assignment Ur are held fixed. Identification requires the conditional-independence requirements in Assumption 2; a noisy proxy alone generally leaves an unmeasured-confounding path open. The right panel depicts the expression comparison. The intervention-assignment comparison analogously reveals the source assignment when the design-support condition holds. Candidate eligibility and adjustment have different purposes. A scientific restriction may exclude a variable as a possible parent without making it dispensable for adjustment. For example, along a mediated path Xj → Xk → Xℓ → Xr, scientific knowledge may rule out Xk → Xr as a direct edge while Xk remains an ancestor that can be retained in the adjustment set when assessing 
+
+j → r. Candidate restrictions alone therefore do not justify removing variables from adjustment. Our implementation uses the screened ancestor set for both purposes; the theory therefore states candidate and ancestral coverage separately. We refine Cr in two stages. The ancestor-screening stage compares the conditional distribution of Xr with and without the source assignment Uj . Its expected conditional log-likelihood-ratio gain, equivalently a conditional Kullback–Leibler (KL) divergence, a measure of the difference between conditional distributions, is positive exactly when Xj is an ancestor of Xr under the intervention conditions stated below. The parent-identification stage then separates direct parents from indirect ancestors. It uses an expression comparison that reveals Xj . When the design supports the candidate assignment contrast, it also uses an intervention-assignment comparison that reveals Uj . Each comparison conditions on the other ancestors to block indirect directed paths, adds the recorded covariate and proxy block for adjustment, and retains the assignment terms required by its nonedge argument. The maximum of the two direct-edge gains provides structural evidence, while the intervention-assignment gain also records responsiveness under the observed design. 6Stage A: Intervention-based ancestor identification. For a fixed target Xr, this step asks which source assignments Uj change the conditional distribution of Xr. Under the conditional exogeneity assumption below, the observed-data comparison represents an intervention contrast across supported levels of do( Uj = u), conditional on the remaining assignment design. Because Uj
+
+directly perturbs only Xj , any incremental association between Uj and Xr must propagate along a directed path from Xj to Xr. Under intervention validity, remaining assignment variation after conditioning (nondegenerate support), and ancestor detectability, such an association is present exactly when Xj is a strict ancestor of Xr.Formally, let U−j denote the subvector of U excluding Uj , and omit W when no covariate or proxy block is recorded. Because the assignment coordinates may be correlated, Stage A measures the incremental information in Uj after conditioning on (U−j , W ). Let pr( · | · ) denote the true conditional density of Xr. For probability measures P and Q, write K(P, Q ) = R log( dP/dQ ) dP 
+
+when P is absolutely continuous with respect to Q, and K(P, Q ) = + ∞ otherwise. For densities 
+
+p and q with respect to a common measure, this becomes K(p, q ) = R log( p/q ) p dμ . All displayed gains are assumed finite. For j̸ = r, define 
+
+∆anc  
+
+> jr
+
+:= E[K(pr( · | U, W ), p r( · | U−j , W ))] . (2) The inner divergence integrates over Xr conditional on (U, W ); the outer expectation is taken with respect to the joint distribution of (U, W ). Thus ∆anc  
+
+> jr
+
+is the expected conditional log-likelihood-ratio gain from adding Uj after conditioning on (U−j , W ), and it equals zero precisely when adding Uj
+
+leaves the conditional distribution of Xr unchanged almost surely. Define 
+
+Ar := {j ∈ [p] \ { r} : ∆ anc  
+
+> jr
+
+> 0}.
+
+Assumption 1 (Intervention validity, nondegenerate support, and ancestor detectability) . For the fixed target r and every possible intervention site j̸ = r, the recorded assignments satisfy the following conditions. (a) Conditional exogeneity and nondegenerate support. Given the remaining assignments 
+
+U−j and the recorded covariate and proxy block W , the source assignment is independent of the unmeasured confounders, 
+
+Uj ⊥ H | (U−j , W ).
+
+Here and below, ⊥ denotes independence, conditional on the variables following |. The conditional distribution of Uj is nondegenerate on a positive-probability subset of the support. For a numerical encoding, a sufficient formulation is 
+
+P{Var( Uj | U−j , W ) > 0} > 0.
+
+Here and below, conditional variance is taken over the displayed variable given the variables following the vertical bar, and the outer probability is taken over those variables. This is a weak, identification-level support condition: a candidate assignment contrast exists on a positive-probability set. Stable estimation may require sufficient conditional assignment variation throughout the relevant part of the covariate distribution. Ancestor detectability in part (c) is required over this varying subset. (b) Target-specific intervention and structural invariance (exclusion restriction). Under (1), Uj enters only the structural equation for Xj . For every k̸ = j, the mechanism fk and parent set pa( k) remain unchanged across values of Uj . Consequently, Uj can affect Xr only through a directed path from Xj to Xr.7(c) Pathwise relevance (ancestor detectability). Every strict ancestor of r produces detectable conditional intervention variation at Xr: for each j ∈ Anc( r), ∆anc  
+
+> jr
+
+> 0.Parts (a) and (b) imply ∆anc  
+
+> jr
+
+= 0 for every nonancestor of r, while part (c) gives ∆anc  
+
+> jr
+
+> 0 for every ancestor. Consequently, Ar = Anc( r). Equivalently, j ∈ Anc( r) if and only if r ∈ Dec( j); the ancestor screen is the transpose of the graph-wide intervention–response relation. In a randomized perturbation study, the assignment design can support conditional exogeneity and nondegenerate assignment support. Target specificity, structural invariance, and detectable propagation from every ancestor require additional scientific justification. A direct off-target action of Uj on another node can make Xr respond for a nonancestor Xj .The eligible candidate-parent set is CAr = Cr ∩ A r. Here the superscript (A) on CAr denotes ancestor eligibility. Because every parent is a strict ancestor of its child in a DAG, exact ancestor screening preserves every parent covered by Cr while removing descendants and causally unrelated nodes. 
+
+Stage B: Proxy-adjusted direct-parent identification. After Stage A, each j ∈ C Ar is a direct parent or an indirect ancestor of Xr. For I ⊆ [p], write XI = ( Xk : k ∈ I). The other ancestors and W form the common adjustment information. The block XAr \{ j} blocks every indirect directed path from an indirect ancestor through another ancestor of r, whereas W may reduce association with unmeasured confounding. Every directed j-to-r path of length at least two has an internal vertex in Ar \ { j}; conditioning on that vertex blocks the path. Assumption 2 requires the variables included together to establish the relevant conditional independence. The intervention-assignment comparison conditions on U−j to control nonfocal intervention arms that may be associated with 
+
+Uj and may affect Xr. For example, a one-hot single-guide experiment uses binary indicators for mutually exclusive guide assignments, with all indicators zero for controls. In this design, the stratum U−j = 0 leaves the guide-j-versus-control contrast in Uj ; in every other stratum Uj = 0 .The variables included in the reduced model for each comparison are 
+
+ZXjr = ( XAr \{ j}, W, U r), ZUjr = ( XAr \{ j}, W, U −j ).
+
+Write V Xj = Xj and V Uj = Uj . A simple graphical condition supplies the latent-adjusted independence used below for an eligible nonparent j / ∈ pa( r). In an augmented causal DAG for (X, U, W, H ),suppose the coordinates of Zcjr and V cj are nondescendants of Xr, and Zcjr together with H contains every parent of Xr. For c = U , also require the target-specific exclusion Uj̸ → Xr. The local Markov property states that a node is independent of its nondescendants given its parents. Applied to the augmented DAG, it gives Xr ⊥ V cj | (Zcjr , H ). Thus blocking the mediated directed paths is one part of the argument; admissibility of the additional recorded variables and target specificity are also required. The expression comparison fixes the target assignment Ur; the intervention-assignment comparison fixes the nonfocal assignments U−j . Under exhaustive binary one-hot assignment without a control state, Uj is determined by U−j , making the focal reveal unavailable. Define the two exact direct-edge gains 
+
+∆Xjr = EKpr( · | ZXjr , X j ), p r( · | ZXjr ) , ∆Ujr = EKpr( · | ZUjr , U j ), p r( · | ZUjr ) . (3) The first outer expectation is over the joint distribution of (ZXjr , X j ), and the second is over that of 
+
+(ZUjr , U j ); in each case, the inner divergence integrates over the conditional distribution of Xr. Both gains are nonnegative and are assumed finite. Each equals zero precisely when the corresponding revealed variable is conditionally independent of Xr after the variables in Zcjr have been included. The nonedge conditions below can be written either as conditional independences or as zero gains. The former state their causal content; the latter provide regression targets for PABM’s likelihood comparisons. 8The intervention-assignment comparison is scientifically interpretable only when the observed design contains a nondegenerate candidate assignment contrast. Record this condition with the binary availability indicator I{·} :
+
+aUjr = IPVar( Uj | ZUjr ) > 0 > 0 . (4) Here the conditional variance is taken under the distribution of Uj given ZUjr , and the outer probability is with respect to the marginal distribution of ZUjr . Accordingly, aUjr = 1 precisely when a nondegenerate candidate assignment contrast occurs for values of ZUjr having positive probability. The indicator records identification-level availability; stable finite-sample estimation additionally requires sufficient conditional assignment variation. A pair with aUjr = 0 has an unavailable intervention-assignment comparison. Its responsiveness status is unidentified under the observed design. In computation, availability must be assessed with a prespecified support diagnostic. The ridge residual-variance rule used in Section 5 measures assignment variation remaining after ridge-regression adjustment. It is only a diagnostic: positive linear residual variance need not imply positive conditional variance under nonlinear dependence. For example, if Uj = Z2 for Z ∼ N (0 , 1) , linear residualization on Z leaves variation even though Var( Uj | Z) = 0 . PABM omits the assignment comparison whenever its empirical support rule fails, and then uses the expression comparison alone. Assumption 2 gives the nonedge null for each conditional comparison. Part (a) says that Xj
+
+adds no information about Xr given ZXjr ; when available, part (b) says the same for Uj given ZUjr .Conditioning on XAr \{ j} blocks indirect paths such as Xj → Xk → Xr, but may leave or induce association through H. Sufficient conditions for the two nulls are 
+
+Xj ⊥ Xr | (ZXjr , H ), H ⊥ Xj | ZXjr =⇒ Xj ⊥ Xr | ZXjr (expression) ,Uj ⊥ Xr | (ZUjr , H ), H ⊥ Uj | ZUjr =⇒ Uj ⊥ Xr | ZUjr (intervention assignment) .
+
+In the expression line, structural blocking gives the first premise when the other-ancestor block contains the parents of Xr; the second is independence from the latent causes after adjustment. In the intervention-assignment line, the first premise requires target-specific exclusion; U−j can also remove association induced by a dependent assignment design, as required by the independence premise. Whether a nondegenerate candidate assignment contrast remains is recorded separately by 
+
+aUjr . The second premise requires independence from the latent causes after adjustment. Standard conditional-independence rules yield parts (a)–(b). These independence premises are additional identification requirements beyond proxy relevance and randomization. Part (c) separately requires a true parent to have positive gain in at least one available comparison. 
+
+Assumption 2 (Proxy-adjusted nonedge separation and parent detectability) . For every j ∈ C Ar ,the following conditions hold. (a) Expression nonedge separation. If j / ∈ pa( r),
+
+Xj ⊥ Xr | ZXjr , equivalently, ∆Xjr = 0 .
+
+(b) Intervention-assignment nonedge separation. If j / ∈ pa( r) and aUjr = 1 ,
+
+Uj ⊥ Xr | ZUjr , equivalently, ∆Ujr = 0 .
+
+(c) Parent detectability. If j ∈ pa( r), then 
+
+∆Xjr > 0 or {aUjr = 1 and ∆Ujr > 0}.
+
+9Parts (a)–(b) form the joint nonedge null, while part (c) allows either comparison to detect a parent alternative. A constructive sufficient class clarifies the proxy requirement. Suppose the target mechanism depends on H only through Br = br(H), and W determines Br. The independent node-specific noise 
+
+εr in model (1) is independent of the ancestors, assignments, W , and H; because Zcjr contains the target’s observed parents and required assignment terms, part (a) or (b) follows. Latent variation unrelated to the target after Br may remain unobserved. Exact recording is essential for this class; an ordinary noisy proxy generally yields approximate separation. Supplementary Section S2.1 gives the formal argument. 
+
+Remark 3 (Why Assumption 2 is needed and how it can be relaxed) . Causal discovery under unmeasured confounding requires an identifying restriction that distinguishes direct edges from observationally equivalent mediated or confounded associations. Indeed, if two causal structures induce the same distribution for the recorded data but disagree on j → r, no observed-data procedure can identify that edge. PABM expresses this requirement through local, pair-specific conditional-distribution separation. Model-based IV procedures encode identification through exclusion restrictions and structural or measurement models; neither formulation generally implies the other. Once Stage A has supplied the eligible ancestor family, Assumption 2 is the exact separation condition for PABM’s population zero-versus-positive rule. Parts (a)–(b) give zero available gain for every eligible nonparent, and part (c) gives positive gain in at least one available comparison for every eligible parent. They are necessary and sufficient for the score-level characterization in Theorem 6. Exact separation supplies the population nulls used for identification and error control. The approximate theory requires the smallest parent gain to exceed the largest nonparent gain by more than twice an upper bound on the largest score-estimation error across comparisons; see Supplementary Corollaries S9 and S10. PABM permits general conditional distributions for the target, while its local separation conditions remain substantive, pair-specific, and generally untestable from the observed distribution. They require conditional independence beyond proxy informativeness. Proposition 4 gives a sensitivity interpretation of departures from exact separation. 
+
+Proposition 4 (Residual latent-dependence bound) . Fix an eligible pair (j, r ) and a comparison 
+
+c ∈ { X, U }, where V Xj = Xj and V Uj = Uj . Suppose the structural and path-blocking argument gives 
+
+Xr ⊥ V cj | (Zcjr , H ).
+
+Assume the required regular conditional distributions exist, and let PH ( · | · ) denote a conditional distribution of H. Assume the expected divergence below is finite, and define the residual latent dependence 
+
+ξcjr = E KPH ( · | Zcjr , V cj ), P H ( · | Zcjr ) .
+
+The expectation is with respect to the joint distribution of (Zcjr , V cj ). Then 
+
+0 ≤ ∆cjr ≤ ξcjr .
+
+Consequently, for an eligible nonparent, the blocking premise and ξcjr = 0 imply the corresponding nonedge condition in Assumption 2. For c = U , the statement is needed only when the intervention-assignment comparison is available. 
+
+The bound gives a quantitative interpretation of proxy adjustment: a spurious nonparent gain is no larger than the latent dependence remaining after the recorded regression covariates have 10 been fixed. Exact latent independence makes this gain zero; remaining latent dependence leaves a positive upper bound. Because H is unmeasured, ξcjr is a sensitivity parameter. It may be defined using a target-relevant summary of H whenever that summary satisfies the blocking premise. A recorded block containing this summary gives a simple example of exact independence. The Gaussian calculation in Supplementary Section S2.2 shows how measurement noise can instead leave both nonparent gains positive. The proof of the proposition is in Supplementary Section S4; Corollary S10 connects its bound to recovery under approximate separation. 
+
+Remark 5 (Complementary comparisons and size–power tradeoff) . For each eligible pair, PABM makes two separate comparisons. The expression comparison conditions on ZXjr and reveals Xj ; the intervention-assignment comparison conditions on ZUjr and reveals Uj . The two choices of Zcjr define separate conditional likelihood-ratio comparisons. Residual variation in Xj may reveal a parent when assignment evidence is weak or unavailable, and supported variation in Uj may reveal a parent whose expression gain is weak after proxy adjustment. For an eligible nonparent, every available gain used must vanish; for a parent, one positive available gain suffices. We call this the joint-null/either-alternative structure. Assumption 2(a)–(b) supplies the joint nonedge null, and part (c) supplies the either-comparison parent alternative. Theorem 6 establishes DAG identification from this separation, and Theorem 11 establishes finite-sample recovery under uniform score accuracy and a positive population gap. The edgewise complementarity and its single-comparison special cases are stated in Corollary 7. Comparative size and power remain design-dependent operating characteristics, governed by signal strength, conditional assignment variation, estimator accuracy, proxy quality, and dependence between the two statistics. Adjusting for two comparisons can reduce power when assignment evidence is weak or redundant; the combined p-value rule is given in Section 3.4. 
+
+Returning to the example in the Introduction, we explain why both nonparent nulls are required after ancestor adjustment. Suppose the observed intermediate ancestor M satisfies 
+
+Uj → Xj → M → Xr, H → M, H → Xr,
+
+Each arrow points from a direct cause to its effect: M mediates the effect of Xj on Xr, while H
+
+is a common cause of M and Xr. Hence Xj is an indirect ancestor of Xr through M . Because 
+
+M ∈ A r \ { j}, the prescribed other-ancestor block conditions on M to block the indirect directed path Xj → M → Xr. The same conditioning opens the collider path Uj → Xj → M ← H → Xr
+
+and opens the corresponding path Xj → M ← H → Xr. Consequently, randomization of Uj alone leaves a conditional association with Xr in the intervention-assignment comparison, and Xj may remain conditionally associated with Xr in the expression comparison. Part (b) imposes the required zero-gain condition for the first comparison, and part (a) imposes it for the second. An off-target path from Uj to Xr separately violates the target-specific exclusion condition. The displayed sets of included variables define the population comparisons used throughout the article. Throughout, pair subscripts are source-first and target-last: jr denotes the candidate edge j → r.Using the Stage A ancestor gain in (2), define the population structural evidence by 
+
+Ωjr =
+
+(
+
+max {∆Xjr , a Ujr ∆Ujr }, j ∈ C r and ∆anc  
+
+> jr
+
+> 0,
+
+0, otherwise . (5) The responsive set contains structural edges with positive assignment gain; the concordant set contains structural edges with positive gains in both the expression and assignment comparisons: 
+
+ER = {(j, r ) ∈ E : aUjr = 1 , ∆Ujr > 0}, EC = {(j, r ) ∈ E : aUjr = 1 , ∆Xjr > 0, ∆Ujr > 0}. (6) 11 The superscript R refers to responsiveness under the recorded intervention design. The set changes with intervention type, dose, and support. The concordance set EC records positive gains in both comparisons; common violations of both nonedge conditions can still contaminate it. The candidate-specific conditions should be tied to the data-generating design. In a Perturb-seq or CRISPR screen, baseline cell-state measurements, batch and quality-control covariates, surrogate factors, control features, and other recorded modalities may contribute to W . For the expression comparison, this block must remove association between natural variation in Xj and the unmeasured confounders relevant to Xr. For the intervention-assignment comparison, it must remove the corresponding post-adjustment association while preserving sufficient conditional variation in the focal assignment. Proxy ablations, intervention-assignment ablations, negative-control analyses, assignment-support diagnostics, and split-sample stability assess these requirements without proving them from observed data alone. 
+
+2.3 Population Identification 
+
+PABM’s population identification argument decomposes graph recovery into five tasks. Assump-tion 1 and candidate coverage form the ancestor-eligible family; Assumption 2(a)–(b) separates eligible nonparents in every included comparison; part (c) detects each parent in at least one comparison; and the positive local gains determine the graph. Approximation within a chosen family of conditional-distribution models (the working family), estimation, and graph calibration enter later when these population quantities are estimated. 
+
+Theorem 6 (Population identification by PABM) . Let r ∈ [p] be a target node. If the ancestor gains in (2) are well defined and finite and Assumption 1 holds, then Stage A identifies 
+
+Ar = Anc( r), CAr = Cr ∩ Anc( r).
+
+If, in addition, the direct-edge gains in (3) are well defined and finite and Assumption 2 holds, then every j ∈ C Ar satisfies 
+
+j ∈ pa( r) ⇐⇒ Ωjr > 0.
+
+If pa( r) ⊆ C r, this equivalence identifies pa( r). If these conditions and candidate coverage hold for every target, then 
+
+E = {(j, r ) : Ω jr > 0, j ̸ = r}.
+
+Within this structural graph, equation (6) identifies the design-specific responsive and concordant edge sets. Pairs with aUjr = 0 retain an unknown response status. 
+
+The proof is in Supplementary Section S4. 
+
+Corollary 7 (Complementarity and randomized assignments) . Under the theorem’s nonedge condi-tions, PABM identifies every parent when each parent has a positive gain in at least one available comparison. Different parents may be detected by different comparisons. For example, one parent may be expression-detectable and another intervention-detectable. A training rule that omits the intervention component therefore requires positive expression gain for every parent retained in the graph-recovery target. This relaxation applies to Stage B only. Stage A still requires every structural parent to survive the intervention-based ancestor screen. Both direct-edge comparisons omit a parent removed by this screen. Any broader empirical candidate rule requires its own coverage and conditional-independence analysis. 
+
+12 If U is randomized independently of (H, W, ε 1, . . . , ε p), randomization supplies the baseline exogeneity used by Stage A. Assumption 2(b) additionally requires separation after conditioning on the other ancestors. Mutually exclusive interventions also require a nondegenerate control contrast: exhaustive one-hot coding without a control state makes Uj deterministic given U−j .
+
+Numerically, retaining both comparisons lowers structural Hamming distance (SHD), which counts missing, extra, and reversed edges, relative to using the expression comparison alone in the linear, nonadditive, and both count panels; the training-only selection rule retains only the expression comparison in the cosine panel (Supplementary Table S8 and Section 5.4). 
+
+# 3 DAG Reconstruction by PABM 
+
+Section 2 showed that the population score Ωjr separates parents from eligible nonparents under Assumptions 1–2. PABM estimates this score with a train–validation split. Training data determine the eligible pairs, the variables included in each comparison, comparison components selected for use, tuning choices, and fitted conditional distributions; all selection and fitting decisions therefore depend exclusively on the training sample. Validation data enter only through evaluation of the fixed reduced–augmented comparisons and graph calibration. The accepted directions are added in a prespecified order, skipping any edge that would create a directed cycle. This step is called acyclic projection. Retained edges are annotated by their intervention-response evidence. Before computation, the analyst prespecifies the design restrictions, split, candidate-selection rules, variables included in each fitted model, fitting procedures, component-selection and pairwise-availability rules, the calibration policy (the prespecified map from the training component decision to a calibration method), and any familywise error budgets. 
+
+Algorithm 1 (PABM). The procedure has four computational phases. 
+
+Phase 1. Candidate selection. Determine the eligible ordered pairs and the variables to be included in their fitted models from the training sample. 
+
+Phase 2. Model fitting. Select the active comparison components and fit each balanced pair of reduced and augmented conditional distributions. Here active means selected for use in training; supported means passing the empirical assignment-variation diagnostic; available refers to population conditional assignment variation, as defined in Section 2. 
+
+Phase 3. Validation. Compute held-out conditional log-likelihood-ratio scores and apply the calibration rule determined by the training-stage component selection to obtain accepted structural directions and any prespecified responsive or concordant directions. 
+
+Phase 4. DAG construction. Project the accepted structural directions onto a DAG and intersect the resulting edge set with the responsive and concordant decisions. The required output is the estimated DAG. A prespecified implementation may additionally re-port intervention-responsive and concordant annotations when those families are computed. The subsections below define the four phases and their train–validation separation. 
+
+3.1 Sample Splitting and Conditional-Distribution Estimation 
+
+For i ∈ [n], let Xi = ( Xi1, . . . , X ip ) and Ui = ( Ui1, . . . , U ip ). Write Dn = {(Xi, U i, W i) : i ∈ [n]},omitting Wi when no recorded covariate or proxy block is available. The units are independent and identically distributed, and the split is independent of their values. Let Itr ˙∪Ival = [ n], with sizes ntr 
+
+13 and nval , and let Dtr and Dval denote the corresponding observations. Training selects candidate pairs and the variables included in each fit, selects tuning parameters, and fits conditional distributions; validation is reserved for the held-out scores and graph calibration. Let Ftr represent all information fixed by training, formally the sigma-field generated by all training-stage objects, including the split, selected candidates and included variables, empirical support indicators, component-selection indicator, tuning choices, working families, and fitted distributions. For each comparison, the analyst chooses a conditional-distribution family and a fitting procedure appropriate for the response. A Gaussian model with a fitted mean, a Poisson regression, or a richer distributional regression gives different approximations to the target distribution. Section 3.3 gives the fitted comparisons used in the numerical studies. Section 4 shows how their approximation and estimation errors enter graph recovery. 
+
+3.2 Training-Stage Candidate Selection and Model Specification 
+
+For target Xr, let Jr ⊆ [p] \ { r} contain sources whose assignments can be used for intervention screening, and let Cr ⊆ [p] \ { r} contain variables scientifically admissible as parents. These sets answer different questions and need not be equal; without design, temporal, or scientific restrictions, both equal [p] \ { r}.
+
+Training-stage eligibility. Let bCr = SC,r (Dtr ; ηC ) ⊆ C r denote the output of a prespecified training-only selection rule with fixed settings ηC . The theoretical rule estimates the population ancestor gain by a lower confidence bound (LCB) and intersects the result with Cr; Supplementary Proposition S1 gives sufficient conditions. For j ∈ bCr, collect the variables included in the reduced fit for observation i as 
+
+bZXijr = ( Xi, bCr \{ j}, W i, U ir ), bZUijr = ( Xi, bCr \{ j}, W i, U i, −j ).
+
+Let bgtr = Sg(Dtr ; ηg) ∈ { 0, 1} be the prespecified training-only component-selection map, with value one retaining the assignment comparison. For each eligible pair, let baUjr = SU,jr (Dtr ; ηU ) ∈ { 0, 1}
+
+be its empirical assignment-support indicator. Their product determines whether the assignment comparison is fitted. Section 5.3 summarizes the reported decision, and Supplementary Section S1.2 gives its exact data-to-output map, including the pilot tests, ridge-support rule, thresholds, and tested families. These training decisions fix the complete set of comparisons before validation outcomes are used. Candidate selection has two statistical roles: retaining the true parents and choosing the other responses used for adjustment. Omitting an intermediate response may leave a mediated association, whereas including an unsuitable response may induce an association through a collider. Consequently, parent coverage and nonedge separation must both be justified for the selected regression covariates. Sample splitting provides independent evaluation of the resulting comparisons. Section 4 separately states the coverage, separation, and assignment-support conditions needed to interpret them as direct-edge evidence. 
+
+3.3 Balanced Conditional-Likelihood Comparisons and Held-Out Scores 
+
+Definition 8 (Balanced reduced–augmented comparison) . For c ∈ { X, U }, write V Xj = Xj ,
+
+V Uj = Uj , and let V cij denote its value for unit i. Masking omits V cj from the reduced fit; the augmented fit adds it. The comparison is balanced when the two fits use the same observations and target, include the same variables bZcjr , and use the same working distribution, estimator, tuning rule, and split. The augmented fit adds only V cj . This comparability of the fitted models does not imply that adjustment has removed unmeasured confounding. 
+
+14 Candidate selection 
+
+> eligible pairs
+
+ˆ︁ Cr
+
+> variables in each fit
+
+ˆ︁ ZXjr ,ˆ︁ ZUjr 
+
+> Model fitting
+> component selection
+
+ˆ︁ g tr 
+
+> pairwise availability
+
+ˆ︁ a Ujr 
+
+> Expression comparison
+> reduced:
+
+ˆ︁ q X, 0  
+
+> jr (Xr|
+
+ˆ︁ ZXjr )
+
+> augmented:
+
+ˆ︁ q X, 1  
+
+> jr (Xr|
+
+ˆ︁ ZXjr , X j )
+
+> Assignment comparison
+> when available
+> reduced:
+
+ˆ︁ q U, 0  
+
+> jr (Xr|
+
+ˆ︁ ZUjr )
+
+> augmented:
+
+ˆ︁ q U, 1  
+
+> jr (Xr|
+
+ˆ︁ ZUjr , U j )
+
+> Validation
+> held-out gains
+
+ˆ︁  
+
+> ∆Xjr ,
+
+ˆ︁ ∆Ujr  
+
+> normal-reference tail areas and prespeci-fied calibration
+> DAG construction
+> accepted directions
+> −→ DAG responsive and concordant subgraphs
+
+Training sample: fix candidate pairs and fitted models 
+
+> Within each comparison, the reduced and augmented fits use the same target, observations, and included variables; they also use the same working family, estimator, tuning rule, and split. The augmented fit adds only the focal variable.
+
+Figure 2: PABM’s train–validation construction for a candidate direction j → r. Training data determine the eligible pair, the variables included in the two fitted models, the comparisons selected using training data, and the balanced reduced and augmented fits. The expression comparison adds 
+
+Xj ; an available assignment comparison adds Uj . Validation data evaluate the fixed conditional log-likelihood ratios, which are used for testing, followed by removal of edges that would create a directed cycle according to the prespecified ordering. Within each comparison, the two fits differ only by the candidate variable. For c ∈ { X, U }, a prespecified fitting map Lcjr returns the balanced pair of conditional-distribution estimates 
+
+(bqc, 0 
+
+> jr
+
+, bqc, 1 
+
+> jr
+
+) = Lcjr (Dtr ; bZcjr , V cj , η L). (7) The map specifies how the training data produce two conditional-distribution estimates, including the working family, tuning, and optimization. For example, in a unit-variance Gaussian model, estimate the reduced mean bmc, 0 
+
+> jr
+
+(z) by least-squares regression on bZcjr , and estimate the augmented mean bmc, 1 
+
+> jr
+
+(z, v ) by the same procedure with V cj added. Then bqc, 0 
+
+> jr
+
+(x | z) = ϕ{x − bmc, 0 
+
+> jr
+
+(z)} and 
+
+bqc, 1 
+
+> jr
+
+(x | z, v ) = ϕ{x − bmc, 1 
+
+> jr
+
+(z, v )}, where ϕ is the standard normal density. Section 5.1 uses ordinary least squares. The subsequent benchmarks and K562 analysis estimate means by histogram gradient boosting, which successively adds regression trees to reduce the training loss (Friedman, 2001; Ke et al., 2017). For counts, the same construction fits two Poisson means using the Poisson loss and the recorded exposure offset: log Li enters the log mean with coefficient fixed at one, equivalently multiplying the fitted rate by Li. Supplementary Section S1.2 specifies the offsets, constraints, and tuning. Linear or sparse regression and neural-network fitting provide other choices for the same construction. The nonparametric structural framework leaves the conditional-distribution estimator to be specified. A chosen working distribution may approximate rather than equal the true conditional distribution and determines which differences the fitted comparison can detect. The fitted Gaussian and Poisson models used here compare conditional means. For a simple variance effect, let a binary parent Xj take values zero and one with equal probability, and let Xr = (1 + Xj )εr, where 
+
+εr ∼ N (0 , 1) is independent of Xj . The conditional mean is zero in both groups, while the variance changes from one to four. With population-optimal fits, a Gaussian mean-only comparison has zero likelihood gain; allowing the variance to depend on the revealed variable gives a positive gain. Supplementary Section S2.4 derives both gains and the relation between mean-estimation error and likelihood-gain error. This local example isolates the choice of fitted distribution once a candidate is eligible. 15 For i ∈ Ival , define 
+
+dcijr = log bqc, 1 
+
+> jr
+
+(Xir | bZcijr , V cij )
+
+bqc, 0 
+
+> jr
+
+(Xir | bZcijr ) , b∆cjr = 1
+
+nval 
+
+X
+
+> i∈Ival
+
+dcijr . (8) We call the assignment component active when bgtr = 1 , an evaluated pair supported when baUjr = 1 ,and its population contrast available when aUjr = 1 . An assignment score is evaluated only when the component is active and the pair is supported. For a standardized continuous response under a unit-variance Gaussian working family, 
+
+b∆cjr = 12nval 
+
+X
+
+> i∈Ival
+
+h
+
+{Xir − bmc, 0 
+
+> jr
+
+( bZcijr )}2 − { Xir − bmc, 1 
+
+> jr
+
+( bZcijr , V cij )}2i
+
+. (9) The Poisson implementation uses the analogous paired log-likelihood gain. For score-separation analysis, define the raw structural score 
+
+bΩjr =
+
+
+
+max { b∆Xjr , b∆Ujr }, j ∈ bCr, bgtr baUjr = 1 ,
+
+b∆Xjr , j ∈ bCr, bgtr baUjr = 0 ,
+
+0, otherwise .
+
+(10) This piecewise definition never multiplies an unevaluated score by zero and preserves negative held-out evidence for an eligible pair. 
+
+3.4 Calibration and Acyclic Projection 
+
+Let dcjr and scjr be the mean and sample standard deviation of {dcijr : i ∈ Ival }. The one-sided normal-reference tail areas are 
+
+T cjr = dcjr 
+
+scjr /√nval 
+
+, πcjr = 1 − Φ( T cjr ).
+
+Here Φ is the standard normal cumulative distribution function. If scjr = 0 , set πcjr = 0 when dcjr > 0,and set πcjr = 1 when dcjr ≤ 0. The value one for an exactly zero score is the nonrejecting convention required for a valid null p-value. Such a p-value is called super-uniform: conditional on training, its probability of being at most t is no larger than t, for every t ∈ [0 , 1] . The numerical implementation uses 1/2 for an exactly zero score. Both conventions give identical reported rejections and graphs, because neither value can pass the Benjamini–Hochberg (BH) or Holm procedures at level 0.05 used here. We refer to these tail areas as working p-values when they enter a calibration rule; their inferential validity requires the conditions in Section 4. For each training-eligible pair, define 
+
+πSjr =
+
+(
+
+min {1, 2 min( πXjr , π Ujr )}, bgtr baUjr = 1 ,πXjr , bgtr baUjr = 0 , πRjr = πUjr , πCjr = max( πXjr , π Ujr ), (11) where πRjr and πCjr are defined only when bgtr baUjr = 1 . Their three roles are 
+
+S : structural evidence: at least one active component contributes ,R : intervention-responsive evidence: the assignment component contributes ,C : concordant evidence: both components contribute .
+
+16 The Bonferroni minimum permits structural evidence from either comparison, while adjusting for the two tests. The maximum requires evidence from both comparisons for concordance; it is an intersection–union test. The three tested hypothesis families are 
+
+HS 
+
+> tr
+
+= {(j, r ) : j ∈ bCr}, HR 
+
+> tr
+
+= HC 
+
+> tr
+
+= {(j, r ) ∈ H S 
+
+> tr
+
+: bgtr baUjr = 1 }.
+
+Conditional on Ftr , these families and their sizes MF = |H F
+
+> tr
+
+|, F ∈ { S, R, C }, are fixed. Under global Holm adjustment across all tested ordered pairs in each relevant graph family, prespecify separate familywise error budgets αS , α R, α C and apply Holm at the corresponding level to {πSjr : ( j, r ) ∈ H S
+
+> tr
+
+},
+
+{πRjr : ( j, r ) ∈ H R
+
+> tr
+
+}, and {πCjr : ( j, r ) ∈ H C
+
+> tr
+
+}, producing rejection sets bRS , bRR, and bRC . If family 
+
+F ∈ { S, R, C } contains MF tests, Holm orders its p-values and compares the kth smallest with 
+
+αF /(MF − k + 1) (Holm, 1979). The calibration route is fixed by the training component decision: 
+
+bgtr = 0 applies BH (Benjamini and Hochberg, 1995) separately to {πXjr : j ∈ bCr} for each target 
+
+r, whereas bgtr = 1 always applies global Holm to the structural family and, when prespecified as outputs, separately applies Holm to the responsive and concordance families. The reported continuous dual-route implementation computes all three families; the count study reports only the structural graph. Section 4 does not claim FWER control for the empirical targetwise-BH route. For graph-level error control, an analyst uses global Holm for the structural family, with either the expression comparison alone or both supported comparisons. This requires valid p-values for the comparisons selected in training; multiplicity adjustment cannot repair a failed nonedge restriction. The empirical expression-only implementation instead uses targetwise BH and carries no graph-level FWER claim. Table 1 and Supplementary Section S1.2 distinguish these procedures and their fitting details. Let bES denote the structural directions accepted by the method realized under the prespecified calibration policy. Thus bES = bRS under global Holm; a score threshold, lower confidence bound, or targetwise BH rule supplies its own accepted set. The projection ranking is prespecified with the calibration route. In the reported implementation, the continuous expression-only route ranks BH-accepted pairs by decreasing raw gain, the count expression-only route ranks by decreasing normal-reference statistic, and the dual route ranks by increasing combined p-value. Supplementary Section S1.1.2 records the branch-specific tie conventions used in the numerical implementation. Let KS = | bES |, and write the ranked directions as e1, . . . , e KS . Starting from bEDAG 0 = ∅, set 
+
+bEDAG  
+
+> ℓ
+
+=
+
+( bEDAG  
+
+> ℓ−1
+
+∪ { eℓ}, if the union is acyclic ,
+
+bEDAG  
+
+> ℓ−1
+
+, otherwise , (bΓ) jr = I{j → r ∈ bEDAG  
+
+> KS
+
+}. (12) Write bEDAG = bEDAG  
+
+> KS
+
+and define the intervention-responsive and concordant subgraphs by 
+
+bER = bEDAG ∩ bRR, bEC = bEDAG ∩ bRC ,
+
+when those families are included in the prespecified calibration policy. The responsive and concordant families do not add structural directions; their rejections label structurally retained edges through these intersections. When the assignment component is inactive, or active but the pair lacks adequate training support, responsiveness is not classified; nonrejection of an evaluated comparison records a failure to detect a response. Acyclic projection is an output constraint shared by all calibration methods. Under exact recovery it is inert because the accepted set already equals the true DAG. With selection errors, projection enforces acyclicity and may remove directions according to their ranking; it has no separate identification claim. 17 The structural, responsive, and concordance rejection sets are formal outputs of separate tested families. Their intersections may be reported as descriptive evidence patterns. An assignment-only pattern may indicate off-target effects, collider bias, or loss of expression-comparison variation; an inactive component or unsupported pair is not evidence of nonresponsiveness, and population unavailability leaves responsiveness unidentified under the observed design. At most twice P 
+
+> r
+
+| bCr| balanced comparisons are fitted. Each comparison ordinarily requires a reduced and an augmented fit, whose cost depends on the dimension of the selected regression covariates. The comparison count alone therefore does not imply low fitting cost: a sparse DAG may have large ancestor sets, and an assignment comparison can contain p − 1 nonfocal assignments. Scientific restrictions or a known order can reduce this number; otherwise graph assembly performs one cycle check per accepted structural direction. 
+
+# 4 Statistical Guarantees for Graph Recovery 
+
+The statistical question is how accurately the fitted conditional-likelihood gains must approximate their population counterparts to recover the graph. Proposition 9 answers this question for a training-selected family that contains every true edge. Theorem 11 then expresses the required accuracy in terms of working-model approximation, estimation error, and held-out variability when training recovers the population ancestor sets and assignment availability. Together with Proposition 4, these results distinguish the effects of incomplete proxy adjustment from those of estimating the conditional distributions. Theorem 12 addresses the separate question of simultaneous false-positive control under valid component p-values. Both conclusions depend on the comparisons selected from training: recovery requires a sufficient parent–nonparent score gap, whereas error control requires valid nonedge p-values for the selected regression covariates. The results below state these requirements conditionally and show how training-stage failure enters the unconditional guarantees. Table 1 connects the population construction, training-stage choices, and numerical implementa-tion. Applying a recovery result requires coverage of true parents, separation under the selected regression covariates, and accurate fitted gains. Simultaneous error control additionally requires valid p-values for those comparisons. These requirements can be studied separately for a chosen conditional-distribution estimator and training-stage selection rule. Let Γ◦ denote the true adjacency matrix under the source-first convention, Γ◦ 
+
+> jr
+
+= I{j ∈ pa( r)}.The technical screening, estimator-risk, concentration, robustness, and additional training-stage selection results appear in Supplementary Section S3; all proofs are in Supplementary Section S4. 
+
+4.1 Graph Recovery after Training-Stage Selection 
+
+The training sample selects the candidate pairs, the variables included in each reduced and augmented fit, and whether the assignment comparison is used. Conditional on Ftr , all these choices are fixed. Let bK = {(j, r ) : j ∈ bCr}. For an independent observation from the study population, let 
+
+bZcjr collect the coordinates selected by training. For each selected pair define 
+
+∆c, sel  
+
+> jr
+
+= E
+
+h
+
+K
+
+n
+
+pr( · | bZcjr , V cj , Ftr ), p r( · | bZcjr , Ftr )
+
+o
+
+Ftr 
+
+i
+
+,aU, sel  
+
+> jr
+
+= I
+
+h
+
+P
+
+n
+
+Var( Uj | bZUjr , Ftr ) > 0 Ftr 
+
+o
+
+> 0
+
+i
+
+. (13) The expectation and probability are over this fresh observation, conditional on the realized training selection; pr denotes its true conditional distribution. Define 
+
+Ωsel  
+
+> jr
+
+= max 
+
+n
+
+∆X, sel  
+
+> jr
+
+, bgtr aU, sel  
+
+> jr
+
+∆U, sel 
+
+> jr
+
+o
+
+.
+
+18 Table 1: Scope of PABM’s identification, recovery, and testing results. All rows use the same pairwise comparison construction. 
+
+Analysis Candidate and decision requirements Conclusion Population target Population ancestors and prescribed regression covariates; Assumptions 1–2; positive gains Direct-parent identification (Theorem 6). Realized training choices Parent coverage; a parent–nonparent gain gap under the selected covariates; uniform score accuracy; a separating threshold Conditional graph-recovery implication (Proposition 9) and unconditional transfer after accounting for training-stage failure (Corollary 10). Exact training-stage selection Population candidate sets, regression covariates, and active support indicators recovered; fitting-risk and validation bounds Explicit recovery probability (Theorem 11); supplementary lower-confidence-bound rules give one sufficient selection route. Inferential implementation Training-fixed candidates and fits; valid held-out p-values; global Holm, using expression alone or both supported comparisons Conditional graph-level FWER (Theorem 12); exact Gaussian least-squares calibration is one finite-sample instance. Numerical implementation Candidates from the empirical residual-association screen or its replacement rule; boosting fits; working normal p-values; targetwise BH or global Holm selected in training Empirical recovery evidence (Section 5). The stated coverage and calibration conditions remain to be established for these choices. 
+
+> The empirical expression-only route uses targetwise BH and therefore has no graph-level FWER guarantee. Acyclic projection preserves exact recovery and can only delete accepted directions.
+
+Proposition 9 (Recovery after training-stage selection) . Let E be the true edge set defined in Section 2. Suppose E ⊆ bK and when bgtr = 1 , baUjr = aU, sel  
+
+> jr
+
+for every selected pair. Let Bsel be a nonnegative, training-measurable radius satisfying 
+
+P
+
+(
+
+max  
+
+> (j,r )∈bK
+
+|bΩjr − Ωsel  
+
+> jr
+
+| ≤ Bsel Ftr 
+
+)
+
+≥ 1 − δsel .
+
+Define 
+
+ηsel = max  
+
+> (j,r )∈bK\ E
+
+Ωsel  
+
+> jr
+
+, κsel = min  
+
+> (j,r )∈E
+
+Ωsel  
+
+> jr
+
+,
+
+where max ∅ = −∞ and min ∅ = + ∞. If κsel − ηsel > 2Bsel , then every threshold satisfying 
+
+ηsel + Bsel < λ S < κ sel − Bsel 
+
+gives 
+
+{(j, r ) ∈ bK : bΩjr > λ S } = E
+
+on the uniform-accuracy event. Greedy acyclic projection then returns Γ◦. Thus the conditional probability of exact recovery is at least 1 − δsel whenever the displayed gap and threshold conditions hold for the realized training sample. 
+
+Corollary 10 (Unconditional recovery after training-stage selection) . Let Grec be the training-measurable event on which the coverage and availability conditions of Proposition 9 hold, the threshold 
+
+λS is fixed or Ftr -measurable, and 
+
+κsel − ηsel > 2Bsel , ηsel + Bsel < λ S < κ sel − Bsel .
+
+19 For deterministic δsel , δ rec ∈ [0 , 1] , suppose the proposition’s conditional score-accuracy probability is at least 1 − δsel for almost every training realization in Grec , and P(Gc
+
+> rec
+
+) ≤ δrec . Then 
+
+P( bEλS̸ = E) ≤ δrec + (1 − δrec )δsel ≤ δrec + δsel .
+
+The same bound applies after greedy acyclic projection. 
+
+The proposition and corollary separate four requirements: the selected family covers the true edges; empirical and population assignment availability agree when that comparison is active; the population parent–nonparent gap is positive; and the score error is smaller than half that gap. The quantity δrec bounds the probability that training fails at least one of these requirements. Assumption 2 makes the nonparent term zero when the population candidate and model variables are used. The proposition is a post-selection score-separation implication; it supplies no validity result for any particular empirical selector. A useful bound on δrec therefore requires a separate analysis of that selector. The proofs are in Supplementary Section S4. 
+
+4.2 Explicit Score Accuracy under Exact Training-Stage Selection 
+
+Define the theoretical sets of comparisons using the true ancestor sets and population assignment availability. We call these oracle sets because they use population information unavailable to the estimator: 
+
+KX = {(j, r ) : j ∈ C r ∩ Anc( r)}, KU = {(j, r ) ∈ K X : aUjr = 1 },
+
+with sizes MX and MU , each at most p(p − 1) . The exact-selection analysis uses the good training event 
+
+Gtr =
+
+n bCr = Cr ∩ Anc( r) for every r
+
+o
+
+∩ {bgtr = 0 } ∪ bgtr = 1 , baUjr = aUjr for every (j, r ) ∈ K X
+
+ .
+
+(14) All maxima over an empty comparison library are defined as zero; the corresponding score-error requirement is then vacuous. On this event and under ancestral coverage, every held-out compar-ison uses its population candidate set and the corresponding other-ancestor variables. When the assignment component is active, empirical training support also agrees with population availability. For c ∈ { X, U }, the four score levels are: the true gain ∆cjr , the gain ∆c, proj  
+
+> jr
+
+obtained from the best KL approximations to the reduced and augmented conditional distributions within the chosen working families, the conditional mean of the fitted score ∆c, fit  
+
+> jr
+
+, and the proof-only held-out score 
+
+b∆c, orc  
+
+> jr
+
+evaluated with the population variables Zcjr . They satisfy the exact decomposition 
+
+b∆c, orc  
+
+> jr
+
+− ∆cjr = ∆c, proj  
+
+> jr
+
+− ∆cjr 
+
+| {z }
+
+> working-family approximation
+
++ ∆ c, fit  
+
+> jr
+
+− ∆c, proj 
+
+> jr
+
+| {z }
+
+> estimator fitting
+
++ b∆c, orc  
+
+> jr
+
+− ∆c, fit 
+
+> jr
+
+| {z }
+
+> held-out evaluation
+
+. (15) Here ∆c, fit  
+
+> jr
+
+= E( b∆c, orc  
+
+> jr
+
+| F tr ). Let εapp  
+
+> c
+
+uniformly bound the first term over Kc and all selectable working families. For δ ∈ (0 , 1) , let the deterministic estimator-specific fitting-error radius satisfy 
+
+P
+
+
+
+max 
+
+> (j,r )∈K c
+
+|∆c, fit  
+
+> jr
+
+− ∆c, proj  
+
+> jr
+
+| ≤ ρc,n tr (δ)
+
+
+
+≥ 1 − δ. 
+
+Conditional on Ftr , suppose the independent centered validation contributions obey a Bernstein tail-probability bound for their average, with deterministic parameters νc, b c > 0. Allocating δc/2 to 20 estimator fitting and δc/2 to held-out evaluation, define 
+
+Vc,n val (δc) = νc
+
+s
+
+2 log {4 max(1 , M c)/δ c}
+
+nval 
+
++ bc log {4 max(1 , M c)/δ c}
+
+nval 
+
+,Bc(δc) = εapp 
+
+> c
+
+|{z} 
+
+> approximation
+
++ ρc,n tr (δc/2) 
+
+| {z }
+
+> fitting
+
++ Vc,n val (δc)
+
+| {z }
+
+> validation
+
+. (16) Only the last component has the generic split-sample order plog( Mc)/n val ; the fitting rate is supplied by the chosen estimator, and approximation error may persist under misspecification. For the training-sample component-selection indicator, define 
+
+Ωtr  
+
+> jr
+
+=
+
+(
+
+max {∆Xjr , ∆Ujr }, bgtr aUjr = 1 ,
+
+∆Xjr , bgtr aUjr = 0 , BS =
+
+(
+
+max {BX (δX ), B U (δU )}, bgtr = 1 ,BX (δX ), bgtr = 0 ,
+
+on the oracle candidate family, and set the score to zero otherwise. If the assignment component is inactive, its accuracy requirement is vacuous. Because the component-selection indicator is training-measurable, Ωtr 
+
+> jr
+
+, BS , and the minimum active-edge signal below are training-random. For a nonempty true edge set, ancestral coverage gives E ⊆ K X , and we define κtr  
+
+> S
+
+= min (j,r )∈E Ωtr 
+
+> jr
+
+. For the assignment component, define the active-score accuracy event 
+
+Gact  
+
+> U
+
+= {bgtr = 0 } ∪ 
+
+bgtr = 1 , max 
+
+> (j,r )∈K U
+
+| b∆U, orc  
+
+> jr
+
+− ∆Ujr | ≤ BU (δU )
+
+
+
+.
+
+It holds automatically on every training realization with bgtr = 0 . If the assignment component is identically inactive, remove the assignment component, use BS = BX (δX ), and set its failure contribution to zero; BU then need not be defined. Otherwise, (Gact  
+
+> U
+
+)c is precisely the intersection of the event that the assignment component is retained and failure of the U-score bound. For a fixed or Ftr -measurable threshold λS , write 
+
+bEλS = {j → r : j ∈ bCr, bΩjr > λ S }
+
+and define the joint selection-and-score accuracy event 
+
+AS = Gtr ∩
+
+
+
+max  
+
+> r
+
+max   
+
+> j∈C r∩Anc( r)
+
+|bΩjr − Ωtr 
+
+> jr
+
+| ≤ BS
+
+
+
+.
+
+Theorem 11 (Finite-sample PABM graph recovery) . Suppose Assumptions 1 and 2 hold, each 
+
+Cr has ancestral coverage, and every ancestor belongs to Jr. Assume P(Gtr ) ≥ 1 − δtr , that the uniform expression-score event with radius BX (δX ) in (16) has failure probability at most δX , and that P{(Gact  
+
+> U
+
+)c} ≤ δU . Then 
+
+P(AcS ) ≤ δtr + δX + δU .
+
+On AS , if E̸ = ∅, 2BS < κ tr  
+
+> S
+
+, and 
+
+BS < λ S < κ tr  
+
+> S
+
+− BS ,
+
+then bEλS = E, and ranked greedy projection returns Γ◦. If E = ∅, any λS > B S recovers the empty graph on AS .
+
+Under exact selection, the projection is inert because the recovered edge set is already the true DAG. For nonempty E, the pointwise implication gives 
+
+P{ bEλS̸ = E} ≤ P(AcS ) + P AS ∩ { λS ≤ BS or λS ≥ κtr  
+
+> S
+
+− BS }
+
+≤ δtr + δX + δU + PλS ≤ BS or λS ≥ κtr  
+
+> S
+
+− BS .
+
+21 Thus, if the separating inequalities hold with probability at least 1 − δS for some δS ∈ [0 , 1] , the graph-recovery error probability is at most δtr + δX + δU + δS .
+
+Interpretation of the recovery bound. The terms on the right-hand side have different roles. The levels δX and δU are prespecified confidence allocations for the two component-score bounds. Their associated radii become explicit after valid bounds are supplied for working-family approximation, estimation error, and validation tails. The quantity δtr is a repeated-sampling upper bound on failure of the training-stage screen, the variables included in each fit, and active support classifications. For the theoretical LCB screen, Supplementary Proposition S1 and a separate design argument provide its screening and support components. The threshold λS is fixed or selected from training data, whereas κtr  
+
+> S
+
+is a minimum population edge gain and is generally unknown. The final probability is therefore a signal–threshold separation term. The display is a sufficient repeated-sampling recovery guarantee; a data-computable certificate would additionally require numerical upper bounds for the score radii and a lower bound for the edge signal. The first line of the bound retains the intersection between score accuracy and separation failure and is at least as sharp as its union-bound form in the second line. Neither bound requires independence among the events. A uniform signal condition that places λS inside the separating interval makes the final term zero. For any empirical training-stage selection, the finite-sample theorem applies directly only when it returns the population candidate sets and model variables; Proposition 9 instead treats the realized training choices under coverage, accuracy, and gap conditions. The conditional-distribution estimator determines the fitting component of the recovery radius through an exact risk identity. For one comparison, suppress the pair and component indices and let 
+
+K0 and K1 be the expected conditional KL risks of the reduced and augmented fitted distributions relative to their true counterparts, conditional on training. Then Supplementary Proposition S2 gives 
+
+E( b∆ | F tr ) − ∆ = K0 − K1, E( b∆ | F tr ) − ∆ ≤ K0 + K1.
+
+The expectations defining these risks are over a fresh observation from the study population. Thus the bias depends on the difference in fit quality; using the same fitting procedure in both models promotes comparability while leaving their risk difference to be controlled. If their summed risk is uniformly bounded by rfit  
+
+> c,n tr
+
+(δc/2) , that quantity may replace εapp  
+
+> c
+
++ ρc,n tr (δc/2) in Bc. An estimator with a uniform risk rate rn yields score error of order rn + plog( Mc)/n val , up to the Bernstein remainder, and exact recovery follows when the minimum active-edge signal dominates twice this radius. Supplementary Corollary S4 states the resulting graph-error probability. For a nonempty edge set, the same reasoning quantifies the effect of approximate proxy adjustment. Replace the exact nonedge nulls by the blocking premise of Proposition 4, and let ξmax bound ξcjr 
+
+over the eligible nonparents and all included comparisons, taking ξmax = 0 when there are no eligible nonparents. On the exact-selection and uniform-accuracy events, every estimated nonparent gain is at most ξmax + BS , while every estimated parent gain is at least κtr  
+
+> S
+
+− BS . Hence 
+
+κtr  
+
+> S
+
+> ξ max + 2 BS , ξmax + BS < λ S < κ tr  
+
+> S
+
+− BS (17) is sufficient for exact graph recovery, as formalized in Supplementary Corollary S10. More accurate density estimation reduces BS ; better proxy adjustment can reduce ξmax . Increasing the sample size addresses estimation error, whereas a positive residual-dependence bound remains a distinct identification limitation. This recovery condition permits approximate separation; the null-based testing guarantee below requires its own component-null validity. Equation (17) also gives an operational sensitivity analysis. Let b ≥ 0 be a scientifically prespecified upper bound on the largest nonparent gain and let BS be a justified uniform score-error radius. Retain an eligible direction when bΩjr > b + BS , followed by acyclic projection. On the 22 candidate-coverage and uniform score-accuracy events for the prescribed comparison variables, this rule recovers the graph whenever b bounds the nonparent scores and every parent gain exceeds 
+
+b + 2 BS . Varying b reports how the graph depends on the allowed departure from exact proxy separation. Because latent dependence is unobserved, b is a sensitivity input rather than an estimate; without a numerical error radius, the resulting graph path is descriptive. This threshold analysis is distinct from the implemented zero-null BH/Holm rules. The supplementary theory separates five extensions: lower-confidence-bound ancestor screening (Proposition S1), lower-confidence-bound edge selection and responsive-edge recovery (Corollary S6), approximate nonedge separation (Corollary S10), training-stage selection (Proposition 9), and a fixed-dimensional logistic risk illustration (Corollary S11). The last is specific to the stated fixed-dimensional logistic setting; flexible estimators require their own risk-rate analysis. 
+
+4.3 Simultaneous Error Control after Training-Stage Selection 
+
+The global Holm method uses the three families that are fixed conditional on Ftr , HS
+
+> tr
+
+, HR
+
+> tr
+
+, and 
+
+HC 
+
+> tr
+
+defined in Section 3. Conditional on Ftr , a component p-value is super-uniform when 
+
+P(πcjr ≤ t | F tr ) ≤ t for every t ∈ [0 , 1] . (18) For a pair with an active assignment comparison, the fitted comparisons test the training-selected population nulls HX, sel 0,jr : ∆ X, sel  
+
+> jr
+
+= 0 and HU, sel 0,jr : ∆ U, sel  
+
+> jr
+
+= 0 . The structural and concordance nulls are, respectively, 
+
+HS, sel 0,jr = HX, sel 0,jr ∩ HU, sel 0,jr , HC, sel 0,jr = HX, sel 0,jr ∪ HU, sel 0,jr .
+
+Therefore 2 min( πXjr , π Ujr ), truncated at one, is valid for the structural null when both component p-values are valid; πUjr tests intervention responsiveness; and max( πXjr , π Ujr ) is valid for the concordance null when at least one null component p-value is valid. If the assignment comparison is inactive, the structural null reduces to HX, sel 0,jr . On the exact-selection event, Assumption 2 maps every graph nonedge to these selected-comparison nulls. The theorem below uses a training-measurable event to state the corresponding requirement for general training-stage selection. 
+
+Theorem 12 (Familywise error control) . Suppose the tested families and all objects generating Ftr 
+
+are fixed before validation outcomes are used. Let Gcal ∈ F tr be an event such that, for almost every training realization in Gcal , the following conditions hold conditional on Ftr :(i) for each training-eligible structural nonedge in HS
+
+> tr
+
+, πXjr is super-uniform and, when bgtr baUjr = 1 ,
+
+πUjr is also super-uniform; (ii) for each tested pair in HR 
+
+> tr
+
+\ ER, πRjr = πUjr is super-uniform; and (iii) for each tested pair in HC 
+
+> tr
+
+\ EC , at least one of πXjr and πUjr is super-uniform. Then, for prespecified αS , α R, α C ∈ (0 , 1) , and almost every training realization in Gcal , Holm adjustment controls conditional FWER at αS for bRS , at αR for bRR, and at αC for bRC . Acyclic projection preserves structural FWER. The conditional probability of any false declaration across the three families is at most αΣ = min {1, α S + αR + αC }. If, for a deterministic δcal ∈ [0 , 1] ,
+
+P(Gc
+
+> cal
+
+) ≤ δcal , then structural FWER is at most 
+
+δcal + (1 − δcal )αS ,
+
+23 and the probability of any false declaration across the three families is at most 
+
+δcal + (1 − δcal )αΣ.
+
+When bgtr = 0 , the responsive and concordance families are empty. 
+
+Conditional on Gcal , family budgets satisfying αS + αR + αC ≤ α control the probability of any false declaration at level α. Unconditional level-α control also requires 
+
+δcal + (1 − δcal )αΣ ≤ α. 
+
+For δcal < 1, a useful sufficient allocation has δcal ≤ α and αS + αR + αC ≤ (α − δcal )/(1 − δcal ).When the families are reported separately, each unconditional guarantee has the corresponding calibration-failure allowance. Holm adjustment does not require independence among the p-values. Acyclic projection preserves structural FWER because it only removes accepted directions. When the population variables Zcjr 
+
+are used, Assumption 2(a)–(b) supplies the component nulls; after training-stage selection, validity is required for the actual fixed families of comparisons. The failure probability δcal measures how often training produces at least one comparison for which a graph nonedge lacks the required component null or its p-value calibration. Such a failure can arise from omitted path-blocking variables, an incompatible proxy-adjustment set, inadequate assignment support, or a misspecified calibration model. Sample splitting and Holm adjustment do not bound this probability. Exact recovery of the population ancestor sets, together with Assumptions 1–2 and valid component tests, is one sufficient route to Gcal ; it is stronger than the theorem requires. Other selection rules need their own bound on δcal .
+
+Remark 13 (Normal-reference validity) . Under a nonedge null, consistent reduced and augmented fits approach the same conditional distribution, so their log-likelihood-ratio variance may shrink. Normal-reference validity therefore requires control after division by the estimated standard error. Let 
+
+μcjr,n and (σcjr,n )2 denote the conditional mean and variance of one validation log-likelihood ratio, given training. Supplementary Corollary S8 gives fixed-p asymptotic validity under a conditional central limit theorem, relative consistency of the standard-deviation estimator, and √nval (μcjr,n )+/σ cjr,n = op(1) 
+
+uniformly over component nulls, where x+ = max( x, 0) . Only upward bias requires this control for a one-sided test; downward bias can make the test conservative. The absolute score-risk bound above is sufficient when it is negligible relative to σcjr,n /√nval . More sharply, under a component null the relevant bias is (K0 − K1)+, the positive difference between the two conditional KL risks. The supplement gives a Gaussian regression example in which the reduced distribution is known and the condition holds even as the score variance vanishes. With two estimated distributions, vanishing KL risks alone are insufficient: if their positive difference and the score standard deviation have orders 
+
+n−1tr and n−1/2tr , respectively, the standardized bias has order pnval /n tr . A fixed training–validation ratio therefore requires additional control of this positive risk difference. Establishing the one-sided risk condition and the conditional limit remains specific to the fitting procedure, including the boosting implementation studied here. 
+
+Gaussian linear nulls also admit an exact conditional calibration of likelihood comparisons whose fitted models are fixed using training data, with both means estimated from training. Supplementary Section S2.5 derives this reference distribution; Section 5.1 examines the resulting graph decisions. For a training-fixed comparison, it is the one-sided partial-regression t test whose direction is selected by the sign of the training coefficient. It assumes a linear Gaussian null, independent validation errors with constant variance, a full-rank reduced design, and at least two residual degrees of freedom; 24 the reference is conditional on the validation design and nuisance sufficient statistics. The fitted coefficient magnitude and the reduced fitted coefficients cancel from this conditional reference. This exact calibration differs from applying a normal tail directly to the mean held-out likelihood gain. 
+
+# 5 Simulation Studies and K562 Perturb-seq Analysis 
+
+Scope of numerical evidence. The paired continuous diagnostic in Section 5.3 evaluates the two fixed component/calibration settings together with PABM’s training-selected setting. The displayed experiments assess full-DAG recovery in their stated designs. Section 5.1 additionally evaluates structural false-edge control for a Gaussian implementation. The responsive and concordance Holm families are computed in the continuous implementation, but their recovery and error-control performance are not assessed in the reported experiments. We evaluate full-DAG recovery using simulations with unmeasured confounding and illustrate the procedure in K562 CRISPRi Perturb-seq data. The simulation evidence consists of low-dimensional continuous models and a measurement-layer count benchmark with structural log-rate DAGs observed through Poisson counts. When a reference DAG is known, our primary measure is structural Hamming distance (SHD), which counts missing, extra, and reversed directed edges in the reconstructed graph. A reversal costs one SHD operation. In directed precision and recall, the incorrectly oriented arrow is a false positive and the absent correct orientation is a false negative. We also report directed F1, the harmonic mean of directed-edge precision and recall, as a secondary selected-graph diagnostic. For the count study, average precision (AP) evaluates the directed-edge ranking before edges are selected. Average precision summarizes precision across recall levels; nonfinite or unevaluated scores are assigned the same score below all finite scores. Thus SHD is the principal recovery criterion, directed F1 corroborates selected directed-edge retrieval, and AP assesses ranking before graph selection. 
+
+5.1 Simulations with Gaussian Responses: Selection and Error Control 
+
+We first examine a fully specified Gaussian implementation of PABM and the adaptive implemen-tation used in the subsequent benchmarks. The six-node DAG has the paths X1 → X2 → X3 → X6
+
+and X1 → X4 → X5 → X6. Generate Xr = 0 .8 P 
+
+> j∈pa( r)
+
+Xj + Ur + 0 .7H + εr, with mutually independent standard normal assignments, confounder, and node-specific noise terms. The exact-adjustment reference records W = H; the matched noisy-proxy setting records W = H + 0 .75 ζ,with an independent standard normal ζ. Each uses 400 paired replicates with 700 training and 300 validation observations. Assumptions 1–2 hold for the population ancestor comparisons in the exact-adjustment setting. The noisy setting examines departure from nonedge separation. The Gaussian implementation uses training-only lower confidence bounds for ancestor gains, least-squares conditional means, both direct-edge comparisons, and global Holm adjustment at level 0.05 . We compare conditional Gaussian calibration of the held-out gains from training-fixed models with their working normal-reference calibration, keeping the candidates and fits identical. Supplementary Section S2.5 derives the confidence bounds and the exact conditional reference distribution. The adaptive boosting implementation uses the candidate, tuning, component-selection, and BH/Holm rules. All three receive the same observations; truth is used only after fitting for evaluation. With exact adjustment, the Gaussian implementation recovered all ancestor sets in every repetition. Conditional calibration gave a false-edge frequency of 0.050 , with interval [0 .033 , 0.076] ,and mean SHD 0.050 . The matched normal-reference rule had a lower observed false-edge frequency. For this specified design, the analytic union bound in Supplementary Section S2.5 is δanc ≤ 0.00793 :25 Proxy Fit and calibration SHD (SE) Any false edge [95% CI] Exact final ancestor sets Exact Gaussian, conditional 0.050 (0.011) 0.050 [0.033, 0.076] 400/400 Gaussian, normal 0.033 (0.009) 0.033 [0.019, 0.055] 400/400 Adaptive boosting 0.843 (0.035) 0.693 [0.646, 0.736] 0/400 Noisy Gaussian, conditional 0.802 (0.045) 0.542 [0.494, 0.591] 390/400 Gaussian, normal 0.235 (0.023) 0.215 [0.178, 0.258] 390/400 Adaptive boosting 0.985 (0.037) 0.767 [0.724, 0.806] 0/400 
+
+Table 2: Gaussian validation on a six-edge DAG. SHD entries are means with Monte Carlo standard errors conditional on the fixed graph and coefficients. Here SE denotes Monte Carlo standard error and CI denotes confidence interval. The false-edge column is the frequency of at least one false edge after acyclic projection, with Wilson 95% intervals; the last column counts repetitions whose final candidate sets equal all population ancestor sets. Every candidate set contained all true parents in every repetition. Gaussian rows use the same LCB selection and global Holm; adaptive boosting uses its prespecified empirical selection and adjustment rules. its extra-ancestor term is 19 /2400 = 0 .00792 , and the sum of the 11 noncentral-t ancestor-miss probabilities is 4.38 × 10 −6. The resulting unconditional structural-FWER bound is 0.05 + 0 .95 δanc ≤
+
+0.0576 . The observed 400/400 selections are consistent with this calculation but do not establish selection probability one. The adaptive implementation had mean SHD 0.843 and a false-edge frequency of 0.693 . It used the expression-only, targetwise-BH route throughout, used the replacement candidate rule in 298 of 400 repetitions, which selects the top-ranked candidates when the initial screen retains too few on average, and never recovered all ancestor sets. This zero frequency is forced by the fallback policy rather than evidence that the initial residual screen always failed. The six targets have 0, 1, 2, 1, 2, 5 strict ancestors, totaling 11. An exact initial screen therefore averages 
+
+11 /6 < 2 candidates and activates the fallback, which uses min(20 , p − 1) = 5 candidates per target and returns all 30 ordered pairs. If the initial screen instead averages at least two, retaining it gives at least 12 pairs. Under either branch, the final family cannot equal the 11-pair ancestor family. Although its candidate sets contained every parent, its selected regression covariates left a mean largest nonparent population gain of 0.117 . Its mean targetwise false-discovery proportion, averaging equally over targets and repetitions, was 0.066 (Monte Carlo SE 0.004); this is the error criterion corresponding most closely to its targetwise BH rule and exceeds the nominal 0.05 level. The fallback admits descendants among the regression covariates; conditioning on a common descendant of modeled responses can open a collider path even after exact adjustment for H. For example, conditioning on X6 in the subgraph X3 → X6 ← X5 can associate the nonadjacent variables X3 and 
+
+X5. Such induced associations yield positive nonparent gains and invalidate the BH null p-values. The 69.3% graph-level false-edge frequency is a separate summary and is not a test of a targetwise false discovery rate (FDR) claim. Thus parent coverage alone can leave graph nonedges conditionally associated. These configurations differ in selection, fitting, and adjustment; the comparison does not isolate the effect of boosting. With noisy proxies, the Gaussian selector recovered all ancestor sets in 390 repetitions, yet conditional calibration gave a false-edge frequency of 210 /390 = 0 .538 among those repetitions. Residual dependence violates the graph nonedge nulls even with the correct ancestor sets. This diagnostic connects a concrete Gaussian implementation to the calibration guarantee and separates its requirements from empirical graph-recovery performance. The adaptive route’s mean targetwise false-discovery proportion was 0.077 (Monte Carlo SE 0.004). 26 5.2 Full-DAG Recovery: Protocol and Results 
+
+Common protocol. Every method is evaluated on the same seed-specific replicate and sample budget, using the inputs supported by its documented interface. The continuous panels use a common 70%/30% training–validation split. In the K562-calibrated count panels, PABM uses its prespecified guide-stratified 70%/30% roles, splitting cells separately within each guide-assignment group: training data construct and fit the candidate-specific comparisons, and validation data evaluate the direct conditional log-likelihood ratio statistics. ARGEN and the released GAMPI implementation used here (GAMPI-DRI) receive all rows through their documented released interfaces; NOTEARS uses the same prespecified split for its validation-based graph tuning. When a PABM conditional estimator has tuning parameters, selection uses training observations only. The continuous studies use three-fold cross-validation; the count study uses a deterministic 80%/20% split within the training sample. Both select one direct-edge configuration per replicate, which is then refitted on all training observations. Each competitor retains its documented model class and is evaluated through the method-specific pipeline specified in the supplement, with fitting and graph selection performed without using the true graph or its edge count. ARGEN and GAMPI-DRI use released interfaces; DeFuSE, NOCADILAC, and NOTEARS use documented validation or threshold-selection procedures needed to produce automatic DAG estimates. The comparison therefore concerns these specified pipelines rather than unmodified native selection rules. We use the authors’ released code when available and document the implementation changes needed to run the released code and the automatic-DAG rules in Supplementary Section S1.1.2. No procedure uses the true graph or true edge count during fitting or automatic graph selection. In the following benchmark panels, for every training-selected candidate, PABM fits the balanced comparisons of Section 3 using histogram gradient boosting with a Gaussian or Poisson working distribution and evaluates their conditional log-likelihood ratio scores on validation data (Friedman, 2001; Ke et al., 2017). The reported candidate selector uses the empirical residual-association screen. When that screen averages fewer than two candidates per target, we use the empirical top-min(20 , p − 1) fallback candidate selector, which replaces each target’s residual-screen set by its top-min(20 , p − 1) training-only nonlinear-association set. The expression-only branch uses targetwise BH; the dual branch uses Bonferroni-minimum component p-values with global Holm; both use greedy acyclic projection. These are empirical implementation choices distinct from the lower-confidence-bound screen and formal calibration assumptions. Supplementary Section S1.2 gives the transformations, thresholds, included variables, fitting grids, and tie rules. No screening or graph-recovery theorem is asserted for this fallback variant. The comparison includes NOTEARS as an observed-variable linear-DAG baseline (Zheng et al., 2018). We use GAMPI-DRI as the representative IV-based comparator because it extends the GrIVET framework to generalized-linear outcomes and adjusts for unmeasured confounding (Chen et al., 2024; Wang et al., 2024). DeFuSE represents nonlinear discovery with correlated Gaussian confounding (Li et al., 2024), and NOCADILAC represents nonlinear unmeasured-confounder modeling (Kaltenpoth and Vreeken, 2023). ARGEN is included in the count study, where its perturbation inputs are appropriate (Park and Li, 2026). The simulation tables report Monte Carlo means with standard errors s/ √R in parentheses. Paired simulation comparisons use the same seeds and report paired 95% t-intervals. Throughout the following benchmarks, Hi denotes the unobserved shared confounder block, Ui
+
+the recorded intervention-assignment block, and Wi the recorded covariate and proxy block. Proxy measurements are components of Wi, never components of Hi. Thus PABM receives (Xi, U i, W i),whereas Hi appears only in the data-generating mechanism. 27 Continuous designs. The low-dimensional comparison uses p = 50 , n = 1000 , and 20 paired seeds. Table 3 reports the training-selected PABM setting; Supplementary Table S8 compares the two fixed ablations on separate paired cases. All three continuous panels follow 
+
+Xir = gr
+
+ Xi, pa( r)
+
+ + 0 .65 Hi + 0 .60 Uir + εir ,
+
+The linear and cosine panels share a generated DAG and its structural coefficients and differ in the causal function gr. The nonadditive panel uses a separate DAG from the same ordered maximum-indegree-two generator: 
+
+glin  
+
+> r
+
+(Xi, pa( r)) = X
+
+> j∈pa( r)
+
+Ajr Xij , linear , (19) 
+
+gcos  
+
+> r
+
+(Xi, pa( r)) = 2 X
+
+> j∈pa( r)
+
+Ajr cos( Xij ), nonlinear additive , (20) 
+
+gint  
+
+> r
+
+(Xi, pa( r)) = 1 .5
+
+ X
+
+> j∈pa( r)
+
+Ajr tanh( Xij ) + γr
+
+> 2
+
+Y
+
+> ℓ=1
+
+tanh( Xij rℓ )
+
+ , nonlinear nonadditive , (21) Conditional on Xi, pa( r), H i, U ir , this is a Gaussian additive-noise structural equation model (SEM): 
+
+Xir | Xi, pa( r), H i, U ir ∼ N  gr(Xi, pa( r)) + 0 .65 Hi + 0 .60 Uir , 0.55 2 .
+
+Thus the first panel is a linear-Gaussian SEM, whereas the cosine and interaction panels are nonlinear Gaussian additive-noise SEMs whose observed joint distributions may be non-Gaussian. Here, Hi, U ir ∼ N (0 , 1) , εir ∼ N (0 , 0.55 2), and the nonzero Ajr have random signs and magnitudes drawn uniformly between 0.80 and 0.95. In the third mechanism, jr1 and jr2 are the two parents of node r, and every two-parent node has a signed interaction coefficient with |γr| drawn uniformly between 0.60 and 0.80; γr = 0 otherwise. The multiplicative term makes the contribution of either parent depend on the value of the other and therefore violates additivity across parents. The recorded auxiliary block is Wi = ( Wi1, W i2), with proxy coordinates Wi1 = Hi + 0 .35 ηi1 and 
+
+Wi2 = 0 .70 Hi + 0 .35 ηi2, where ηi1, η i2 iid 
+
+∼ N (0 , 1) independently of Hi, Ui, and εi. Within each replicate, the means and standard deviations of the nodes, intervention assignments, and proxy measurements are computed from the training observations; the same training values are used to standardize validation observations. PABM uses X, U, W . GAMPI-DRI receives X, U and treats U
+
+as IVs; its released interface does not accept W . DeFuSE, NOCADILAC, and NOTEARS receive the observed nodes X. The same histogram-boosting estimator class and tuning grid are prespecified for PABM throughout these three continuous panels. Within each replicate, cross-validation selects one direct-edge configuration from prespecified representative targets and refits it for every evaluated target–candidate pair. Supplementary Figure S1 displays the 97-edge DAG shared by the linear and cosine panels. The nonadditive panel uses a separately drawn DAG from the same generator. All three panels use the same sample size, split ratio, and five methods. Table 3 evaluates automatically selected DAGs at a common data budget. PABM is used in the linear and nonadditive panels and PABM with the empirical top-20 fallback candidate selector in the cosine panel; these rows have the lowest mean SHD and the highest mean directed F1 in their respective panels. It retains both comparisons in all 20 linear and all 20 nonadditive fits; all 20 cosine fits use only the expression comparison. The component-and-calibration-route rule is computed on training data exclusively, leaving the held-out direct conditional log-likelihood ratio scores for edge evaluation. Supplementary Table S8 reports a separate configuration comparison. 28 Structural mechanism Method Mean SHD (SE) ↓ Mean F1 (SE) ↑                                 
+
+> Linear Gaussian PABM 24.55 (0.93) 0.868 (0.005)
+> GAMPI-DRI 121.00 (4.53) 0.527 (0.016) DeFuSE 97.00 (0.00) 0.000 (0.000) NOCADILAC 274.60 (12.35) 0.039 (0.005) NOTEARS 182.40 (4.76) 0.353 (0.008) Nonlinear cosine PABM + empirical top-20 fallback 26.40 (0.92) 0.856 (0.005)
+> GAMPI-DRI 96.40 (1.26) 0.230 (0.011) DeFuSE 87.85 (0.88) 0.170 (0.015) NOCADILAC 272.45 (12.98) 0.040 (0.005) NOTEARS 284.90 (6.83) 0.108 (0.005) Nonadditive interaction PABM 9.00 (0.48) 0.952 (0.003)
+> GAMPI-DRI 65.30 (3.32) 0.733 (0.012) DeFuSE 97.00 (0.00) 0.000 (0.000) NOCADILAC 252.10 (4.25) 0.056 (0.004) NOTEARS 194.15 (1.96) 0.361 (0.004)
+
+Table 3: PABM low-dimensional graph-recovery comparison for five methods with graph size p = 50 ,sample size n = 1000 , a common 70%/30% training–validation split, and 20 paired simulation replicates for each row. The PABM rows use the training-only empirical residual-association screen and component-and-calibration-route rule; the cosine panel uses the explicitly labeled PABM variant with the empirical top-20 fallback candidate selector. The rows then use held-out direct conditional log-likelihood ratio scoring; comparator rows use their prespecified fitting and graph-selection procedures, which do not use the true graph. Each method uses its prespecified automatic graph-selection rule without access to the true graph. Values are Monte Carlo means with standard errors in parentheses. SHD denotes structural Hamming distance, and F1 is the harmonic mean of directed-edge precision and recall. Boldface marks the best mean within each structural mechanism. The Monte Carlo variation is conditional on the fixed graph and coefficients used for each mechanism. 29 Structural mechanism Diagnostic minus full W ∆SHD ∆F1 Linear Gaussian Permuted W 20.70 [17.99, 23.41] −.113 [−.127 , −.099 ]Omitted W 19.15 [16.13, 22.17] −.105 [−.121 , −.090 ]Nonlinear cosine Permuted W 6.90 [3.01, 10.79] −.032 [−.050 , −.013 ]Omitted W 8.00 [4.46, 11.54] −.036 [−.052 , −.020 ]Nonadditive interaction Permuted W 13.45 [11.10, 15.80] −.073 [−.086 , −.059 ]Omitted W 13.95 [11.41, 16.49] −.076 [−.090 , −.062 ]
+
+Table 4: Paired sensitivity to recorded proxy information over 20 prespecified replicates per mechanism. Entries are mean diagnostic-minus-full-W differences with paired 95% intervals. Positive ∆SHD and negative ∆F1 favor full W . The full-W arm is PABM; permuted and omitted W are complete-procedure diagnostics. Monte Carlo variation is conditional on the fixed graph and coefficients. Supplementary Table S1 reports absolute metrics, standard errors, false positives, recall, precision, and selected graph sizes. The DeFuSE selection adapter returns an empty graph for every linear and nonadditive replicate: all retained threshold candidates are empty, although the archive does not establish that the unthresholded network weights vanish. The NOCADILAC adapter returns its final iterate because its released code has no compatible best-iterate checkpoint. These rows therefore describe the specified pipelines rather than intrinsic failure of the underlying model classes; the supplement gives the relevant implementation details. To assess recorded proxy information, we rerun PABM after permuting W within each sample split and after omitting W . Cases, splits, tuning, and seeds remain fixed; each diagnostic recomputes every data-dependent choice. Table 4 shows that both diagnostics raise SHD and reduce directed F1 in every mechanism; all six SHD and six F1 intervals exclude zero. In the cosine mechanism, recall is nearly unchanged and the SHD increase is driven primarily by additional false positives. Proxy degradation reduces both recall and precision in the linear and nonadditive mechanisms. Because W enters the ancestor screen and parent comparisons, the experiment measures complete-procedure sensitivity to recorded proxy information. It neither isolates one stage, estimates the latent dependence in Proposition 4, nor verifies Assumption 2. 
+
+5.3 Training-Based Selection of Comparisons and Calibration Rules 
+
+This diagnostic compares the training-selected component and calibration route with two fixed ablations. The expression route uses targetwise BH and greedy projection; the dual route uses Bonferroni-minimum p-values, global Holm, and p-value-ranked projection. Each panel has 20 cases with p = 50 , n = 1000 , and a 70%/30% split. The empirical training rule and all preprocessing details appear in Supplementary Section S1.2. The training rule selects the lower-SHD route in all three designs: dual/global-Holm in the linear and nonadditive panels, and expression/targetwise-BH in the cosine panel. Supplementary Table S8 gives the SHD, F1, and paired changes. Holding global Holm fixed in the paired linear and cosine cases likewise shows that adding assignment evidence improves the former and worsens the latter. Its incremental value is therefore design-dependent and retains the stated exclusion, support, and nonedge-validity requirements. 
+
+5.4 Simulations with Count Responses Calibrated to K562 
+
+These simulations retain the observed study design and covariates while generating a known 30 graph of unobserved expression rates and new counts. The retained inputs come from the released ARGEN chromosome-6 K562 Perturb-seq panel (Park and Li, 2026). It retains all 19,251 released cell rows, 45 selected genes, 45 one-hot guide assignments, 10,691 non-targeting controls, the released exposure offset, the 47-column gel bead-in-emulsion (GEM) auxiliary-measurement block, and the mitochondrial-percentage technical covariate. The observed target-arm sizes range from 101 to 485 cells. Thus the benchmark retains the cell count, guide imbalance, depth variation, and recorded covariate and proxy information of this Perturb-seq design, while generating a known structural graph independently of the real-data analysis. Its reference DAG is defined over latent log rates R, whereas Theorem 6 targets a graph over the observed variables X. The results therefore measure recovery of the latent-rate graph through a noisy count layer, a target distinct from the observed-variable graph in the identification theorem. Accordingly, every SHD, F1, and AP value in this subsection is computed against the latent-rate reference DAG. These metrics quantify recovery through the Poisson observation layer; no equivalence with the observed-variable target of Theorem 6 is asserted. For cell i and gene r, let Rir be a structural log expression rate and let Xir be the observed count. The fixed truth is a 45-node, 65-edge DAG of the rates Rir , with maximum indegree two. Given the released exposure Li, the observation distribution is 
+
+Xir | (Rir , L i) ∼ Poisson Li exp( Rir ) , Rir = min {5.8, max( −7, R ir )},Rir = αr + X
+
+> j∈pa( r)
+
+bjr gjr (Rij − αj ) + λT 
+
+> r
+
+Hi + τ U ir + ψr fW tech  
+
+> i
+
++ εir + hr(Ri, pa( r)). (22) The count comparisons condition explicitly on Li: their reduced and augmented fitted distribu-tions are qr( · | Zcijr , L i) and qr( · | Zcijr , V cij , L i). In this semi-synthetic study the observed exposure vector L is held fixed across simulated replicates. In the K562 analysis it is an additional observed cell-level quantity. The general identification argument extends by appending L to each displayed regression-covariate block, provided assignment exogeneity, nonedge separation, and support continue to hold after conditioning on it. Because L is retained, X 7 → log(1 + X/L ) is invertible for each 
+
+L > 0; normalizing by an unrecorded random exposure would change the statistical target. Here αr is the fixed control log-rate intercept, Hi is a three-dimensional unmeasured confounder, 
+
+λr and ψr are fixed confounder-loading and technical-covariate coefficients, fW tech  
+
+> i
+
+is the standardized technical covariate, and εir is fresh structural noise. The assigned-intervention indicator Uir has fixed targeted-gene effect τ = −0.85 . The parent log-rate coefficients have magnitudes from 0.45 to 0.65. In the log-linear panel, gjr is the identity. In the nonlinear panel, gjr is a prespecified bounded 
+
+tanh or sine transformation, and two-parent rates also include the bounded interaction 
+
+hr(Ri, pa( r)) = γr tanh( Rij 1 − αj1 ) sin {1.5( Rij 2 − αj2 )}, pa( r) = {j1, j 2}, j 1 < j 2.
+
+Here hr = 0 for all log-linear rates and for nonlinear rates with fewer than two parents; γr is fixed before fitting as specified in Supplementary Section S1.3. The topology, signs, transformations, and hidden loadings are fixed before fitting and unavailable to every method. The latent-confounder distribution is calibrated from control-cell log rates. Its three leading empirical components retain their observed association with released GEM groups; fresh latent confounders, structural noise, and Poisson draws are generated for each replicate. The complete recorded covariate and proxy block is Wi = ( W GEM  
+
+> i
+
+, W tech  
+
+> i
+
+). The GEM measurements serve as proxy measurements for unmeasured confounding to the extent that they track the latent confounders, whereas the technical coordinate enters the rate mechanism directly. The benchmark therefore evaluates recovery of a structural log-rate DAG observed through Poisson counts. The unknown K562 gene network lies outside this truth-known benchmark. The log-linear panel is the closest 31 Structural mechanism Method Mean SHD (SE)                                 
+
+> ↓
+> Mean F1 (SE)
+> ↑
+> Mean AP (SE)
+> ↑
+> Log-linear PABM 70.75 (1.15) 0.473 (0.006) 0.416 (0.006) ARGEN 365.95 (38.38) 0.281 (0.019) 0.941 (0.006)
+> GAMPI-DRI 234.95 (5.52) 0.153 (0.004) 0.080 (0.004) NOTEARS 67.45 (0.17) 0.001 (0.001) 0.081 (0.001) Empty-graph reference 65.00 0.000 –Nonlinear PABM 68.50 (1.16) 0.445 (0.006) 0.358 (0.008) ARGEN 241.65 (21.73) 0.334 (0.017) 0.822 (0.007)
+> GAMPI-DRI 237.90 (6.54) 0.129 (0.003) 0.070 (0.002) NOTEARS 68.05 (0.05) 0.000 (0.000) 0.095 (0.001) Empty-graph reference 65.00 0.000 –
+
+Table 5: K562-calibrated measurement-layer recovery of the latent-rate reference DAG through observed Poisson counts for four methods. Each panel has 45 structural log-rate nodes, 65 true arrows, 19,251 cells, and 20 matched final seeds. PABM uses a guide-stratified training–validation split; ARGEN and GAMPI-DRI use their released all-row interfaces, and NOTEARS uses normalized counts with split-based tuning. Values are Monte Carlo means with standard errors in parentheses. SHD denotes structural Hamming distance, F1 is the harmonic mean of directed-edge precision and recall, and AP is average precision of the directed-edge ranking. Boldface marks the best mean among fitted procedures within each structural mechanism. The empty graph is an evaluation reference rather than a fitted procedure. Monte Carlo uncertainty is conditional on the fixed latent-rate graph and coefficients. comparison to ARGEN’s stated structural model, whereas the nonlinear panel assesses workflow robustness after departure from that log-linear specification. Each panel uses 20 matched final seeds. Within each guide stratum, a generator initialized at replicate seed plus 8,000,003 permutes the rows; the first ⌊0.70 nh⌋ enter training and the remainder enter validation. This yields 13,451 training and 5,800 validation cells, with 70–339 training and 31–146 validation cells per targeted gene. PABM receives (X, U, W ) and the exposure offset. It forms candidate sets on training cells using the empirical residual-association screen; if that screen averages fewer than two candidates per target, it substitutes the prespecified empirical top-20 fallback candidate selector. It then computes Poisson reduced–augmented conditional log-likelihood ratio scores on validation cells. ARGEN receives counts, guide assignments, exposure, and the same recorded covariate matrix denoted by W in this paper through its released covariate interface. PABM treats eligible coordinates as recorded proxy measurements; ARGEN then constructs its own first-stage expression proxies from the assignments and observed covariates; these generated regressors are distinct from the recorded proxy measurements in W . GAMPI-DRI receives counts and guide assignments through its released Poisson interface, and NOTEARS is fitted to log(1+ count /exposure ),standardized using training means and standard deviations. Their documented interfaces omit W .The training-only component-and-calibration-route rule selects the expression-plus-assignment/global-Holm route in all 20 final replicates in each panel. The empirical residual-association screen retains 141.55 and 107.95 directed candidates on average in the log-linear and nonlinear panels, respectively. No graph-selection rule uses the true graph or its edge count. Figure 3 and Table 5 summarize the 40-case comparison. Relative to the fixed expression/BH ablation, PABM’s selected expression-plus-assignment setting with global Holm lowers mean SHD by 8.05 (0.92) in the log-linear panel and 4.40 (0.97) in the nonlinear panel, and raises AP by 0.017 (0.001) and 0.010 (0.001), respectively. Its directed F1 is lower by 0.020 (0.007) and 0.024 32 PABM ARGEN GAMPI-DRI NOTEARS  
+
+> 050 100 150 200 250 300 350 400
+> SHD (lower is better)
+> PABM ARGEN GAMPI-DRI NOTEARS
+> 0.0 0.1 0.2 0.3 0.4 0.5
+> Directed F1 (higher is better)
+> PABM ARGEN GAMPI-DRI NOTEARS
+> 0.0 0.2 0.4 0.6 0.8
+> Average precision (higher is better)
+> Log-linear SEM Nonlinear SEM
+
+Figure 3: K562-calibrated measurement-layer graph-recovery results. Bars are Monte Carlo means and error bars are standard errors over 20 matched seeds, conditional on the fixed latent-rate graph and coefficients. PABM has the largest directed F1 among the four displayed methods under both structural mechanisms. ARGEN has the largest AP. NOTEARS has the smallest SHD, close to the empty-graph value of 65, and its automatic graphs contain very few arrows; the accompanying directed F1 panel shows their negligible directed-edge retrieval. (0.008). Because both the comparison set and the multiple-testing rule change, these differences evaluate complete numerical settings and conflate the component-set and calibration changes. In these K562-calibrated panels, PABM has much lower SHD than ARGEN and the largest directed F1, while ARGEN has the largest AP. NOTEARS selects only 2.65 and 3.10 arrows on average; its mean SHD of 67.45 and 68.05 lies near the empty-graph value of 65, and its directed F1 is essentially zero. All four methods have mean SHD above the empty-graph reference of 65. PABM’s more selective graphs have higher precision and directed F1 than ARGEN’s, whereas ARGEN recovers more true arrows and has substantially better ranking before edge selection. These results separate automatic edge selection from ranking and show why SHD, directed-edge retrieval, and AP are informative together. Evaluation-only diagnostics separate ranking from automatic selection. At the true graph size of 65, ARGEN has substantially lower SHD than PABM; PABM’s training candidates retain 88.8% and 72.4% of the true edges in the two panels. NOTEARS’ selected size is highly sensitive to the dimension scaling of its edge penalty. Supplementary Table S7 reports the curves at common selected graph sizes and penalty sensitivity analysis. These diagnostics support a selection–ranking tradeoff rather than a uniform ordering of PABM and ARGEN. 
+
+5.5 K562 CRISPRi Perturb-seq Illustration 
+
+We use ARGEN’s released chromosome-6 panel of 19,251 K562 cells and 45 genes (Park and Li, 2026). One row is one cell: Xi is its 45-gene post-perturbation raw-count vector, and Ui is the mutually exclusive 45-guide assignment vector, with 10,691 non-targeting cells as the reference state. The released exposure is the normalized guide unique molecular identifier (UMI) count, 33 Li = guide_UMI_sum i/guide_UMI_sum and is kept separate from Wi. We preserve this ARGEN-release definition to align the Poisson offset across the two workflows. It is a guide-capture quantity rather than the total RNA UMI count, so treating it as a proportional gene-count exposure is a working measurement assumption. The 48-coordinate Wi contains a 47-column one-hot encoding of the released GEM-group label and the mitochondrial-read percentage. GEM group is a recorded partition label; mitochondrial percentage is a contemporaneous quality-control quantity derived from the same cell-level assay. Both variables lie outside the 45 graph-node counts. Targeted arm sizes range from 101 to 485 cells. These covariates may capture experimental-group and assay-related variation, but their ability to remove the unmeasured biological dependence relevant to each candidate edge is not established. The 47 indicator columns encode one group label, so their number does not establish proxy adequacy. The contemporaneous mitochondrial measurement also requires justification as an adjustment variable. Measurements outside the graph-node panel can still respond to intervention. We therefore use this analysis to illustrate candidate-network construction and descriptive assessment; it does not validate the proxy-separation assumptions or establish the selected edges as direct regulatory relationships. The analysis has no reference DAG. PABM uses a guide-stratified 70%/30% split, its empirical residual-association candidate rule, both supported comparisons, and global Holm; the supplement gives the complete regression covariates and thresholds. ARGEN uses its released all-cell Poisson workflow and generated expression proxy. Both methods receive the counts, guides, exposure, and mitochondrial percentage; PABM additionally receives 47 GEM indicators. In the synthetic count benchmark ARGEN instead receives the generated complete W block, so the real-data sensitivity aligns inputs by removing GEM indicators from PABM. An ARGEN refit adding them was not performed. Method-specific sample roles and selection remain different. Cell-level dependence within experimental groups and the contemporaneous mitochondrial covariate make the reported p-values descriptive and add application assumptions beyond intervention randomization. The complete-data split has 13,475 training and 5,776 validation cells, including 7,483 and 3,208 controls. Target-specific source arms contain 71–339 training and 30–146 validation cells. Every source cell belongs to a GEM group represented among controls; depending on the target, 35–48 training and 20–46 validation GEM groups contain both source and control cells. Across the 378 eligible pairs, the ridge residual-variance ratio ranges from 0.860 to 0.991, so none is removed by the 
+
+10 −6 rule. These summaries establish empirical overlap for the observed categorical groups but do not certify positive conditional variance under arbitrary nonlinear adjustment. If the support rule fails, PABM omits the assignment comparison for that pair. A five-fold guide-stratified diagnostic fits the same held-out Poisson perturbation–control associ-ation to every method-selected direction and its reverse. Table 6 reports the resulting directional statistics and within-fold BH summaries. Supplementary Section S1.4 gives the model, folds, standard errors, and multiplicity rule. Because the folds are cell-level and their training portions overlap, this diagnostic measures within-panel stability rather than transport to a new GEM group or experimental batch. A leave-group-out analysis would require adequate source–control support for every retained intervention in each training split and is not part of the reported study. The analysis also does not isolate the effect of omitting mitochondrial percentage from adjustment. Supplementary Figure S2 displays the complete graphs. They share 28 arrows; two of 30 common adjacencies have opposite orientations. PABM selects 52 complete-data arrows and 45.2 per outer fold, versus 168 and 121.8 for ARGEN. ARGEN has greater pairwise fold overlap (mean pairwise Jaccard overlap 0.636 versus 0.588, where Jaccard overlap is the number of shared directed edges divided by the number present in either graph), whereas PABM’s selected pairs have larger held-out directional-association summaries (Table 6). A common query of STRING, a database of protein associations, supplies undirected external evidence for 13 of 52 PABM pairs and 31 of 168 ARGEN 34 Procedure Constructed edges Outer-fold edges Median             
+
+> |Zfwd |
+> Forward stronger Held-out BH <0.05
+> PABM 52 45.2 5.07 0.787 0.876 ARGEN 168 121.8 2.79 0.714 0.616
+
+Table 6: Chromosome-6 K562 comparison on 45 genes. Constructed edges are obtained from the complete released panel. The outer-fold columns average over five guide-stratified folds, each of which excludes its test cells before graph selection. PABM selects the empirical residual-association screen and retains both comparisons in the complete fit and all five outer-fold fits. For each selected direction, separate Poisson perturbation–control association statistics are calculated in the displayed and reversed directions. Zfwd is the forward association statistic, “Forward stronger” is the fraction of selected pairs whose forward absolute statistic exceeds its reverse absolute statistic, and the final column is the fraction with a held-out Benjamini–Hochberg adjusted p-value below 0.05. These are post-selection directional-association diagnostics conditional on the method-selected pairs. Orientation accuracy and direct-edge recovery remain unidentified. pairs, versus 60 of all 990 panel pairs. These post-selection summaries address sparsity, stability, and undirected functional compatibility; direct-edge and orientation accuracy remain unidentified. Supplementary Section S1.4 gives the full protocol. After removing PABM’s 47 GEM indicators to align recorded covariates, its graph remains smaller and its within-selected-pair association summaries remain larger, while the STRING-supported fractions are nearly equal. This sensitivity retains method-specific sample roles and selection and therefore does not identify comparative causal accuracy. 
+
+# 6 Discussion 
+
+PABM separates two inferential tasks: valid interventions identify ancestry, while proxy-adjusted response and intervention comparisons distinguish a direct parent from an indirect ancestor. This separation permits target-specific conditional distributions and different regression estimators within one graph-recovery procedure. It also makes the identifying cost explicit. The model-based IV procedures compared here impose models for measurements and edge coefficients; PABM imposes local conditional-distribution restrictions for the candidate pairs. Neither these strong, generally untestable requirements nor ARGEN’s assumptions generally imply the other. PABM’s requirements allow measurements informative about unmeasured confounding to enter without a global parametric measurement model. Their plausibility must be assessed for the regression covariates actually used. Equation (17) separates persistent nonparent gain from score-estimation error. Better proxy adjustment addresses the first; an appropriate working family, accurate fitting, and adequate validation size address the second. The population framework allows distribution-sensitive models, whereas the reported Gaussian and Poisson fits compare conditional means. Detecting variance or shape effects requires corresponding estimators and a distribution-sensitive ancestor procedure. In the continuous simulations, omitting or permuting the proxy block worsens SHD and directed F1 in every mechanism, and the reported PABM settings have the best mean values of both metrics. Assignment evidence helps in two designs and hurts in one. In the count study, PABM’s automatic graphs have higher directed F1 and much smaller SHD than ARGEN’s, whereas ARGEN has higher recall, average precision, and markedly better SHD at common graph sizes; NOTEARS’ near-empty selection is penalty-scale sensitive. These findings show a selection–ranking tradeoff rather than uniform dominance. 35 Without a reference DAG, the K562 results remain descriptive: PABM gives a smaller network and stronger held-out perturbation associations, ARGEN has greater fold-to-fold overlap, and their STRING-supported fractions are similar after input alignment. Independent experiments are needed to establish direct effects and orientation. The Gaussian study likewise separates three issues: exact adjustment permits exact conditional calibration, selected candidates can induce positive nonparent gains, and noisy proxies can preserve residual dependence even under exact ancestral selection. The proxy-removal comparisons evaluate the complete procedure, whereas the Gaussian example isolates a failure of adjustment. Neither establishes the adequacy of the recorded K562 covariates. Future studies should record linked pre-intervention covariates or auxiliary measurements with a scientifically justified adjustment role. Additional measurements or separate assays do not by themselves guarantee the required independence; their timing and possible responses to intervention must be considered. Further work should develop estimable sensitivity bounds, scientifically justified smaller regression covariate sets, and estimator-specific calibration for flexible conditional distributions. 
+
+# Acknowledgments and Disclosure of Funding 
+
+This work was supported in part by NSF Grant DMS–2513668 and NIH Grants R01AG069895, R01AG065636, and R01AG074858. The authors declare no competing financial interests. 
+
+# References 
+
+Yoav Benjamini and Yosef Hochberg. Controlling the false discovery rate: A practical and powerful approach to multiple testing. Journal of the Royal Statistical Society: Series B (Methodological) ,57(1):289–300, 1995. doi: 10.1111/j.2517-6161.1995.tb02031.x. Philippe Brouillard, Sébastien Lachapelle, Alexandre Lacoste, Simon Lacoste-Julien, and Alexandre Drouin. Differentiable causal discovery from interventional data. In Advances in Neural Information Processing Systems , 2020. Brielin C. Brown, Alex Tokolyi, John A. Morris, Tuuli Lappalainen, and David A. Knowles. Large-scale causal discovery using interventional data sheds light on gene network structure in K562 cells. Nature Communications , 16:9628, 2025. doi: 10.1038/s41467-025-64353-7. Li Chen, Chunlin Li, Xiaotong Shen, and Wei Pan. Discovery and inference of a causal network with hidden confounding. Journal of the American Statistical Association , 119(548):2572–2584, 2024. doi: 10.1080/01621459.2023.2261658. David Maxwell Chickering. Optimal structure identification with greedy search. Journal of Machine Learning Research , 3:507–554, 2002. Yifan Cui, Hongming Pu, Xu Shi, Wang Miao, and Eric Tchetgen Tchetgen. Semiparametric proximal causal inference. Journal of the American Statistical Association , 119(546):1348–1359, 2024. doi: 10.1080/01621459.2023.2191817. Jerome H. Friedman. Greedy function approximation: A gradient boosting machine. The Annals of Statistics , 29(5):1189–1232, 2001. doi: 10.1214/aos/1013203451. Seong Woo Han, Daniel Duy Vo, and Brielin C. Brown. Large-scale bayesian causal discovery with interventional data. arXiv preprint arXiv:2510.01562 , 2025. doi: 10.48550/arXiv.2510.01562. 36 Sture Holm. A simple sequentially rejective multiple test procedure. Scandinavian Journal of Statistics , 6(2):65–70, 1979. URL https://www.jstor.org/stable/4615733 .Diviyan Kalainathan, Olivier Goudet, Isabelle Guyon, David Lopez-Paz, and Michèle Sebag. Struc-tural agnostic modeling: Adversarial learning of causal graphs. Journal of Machine Learning Research , 23(219):1–62, 2022. Markus Kalisch and Peter Bühlmann. Estimating high-dimensional directed acyclic graphs with the PC-algorithm. Journal of Machine Learning Research , 8:613–636, 2007. David Kaltenpoth and Jilles Vreeken. Nonlinear causal discovery with latent confounders. In 
+
+Proceedings of the 40th International Conference on Machine Learning , volume 202 of Proceedings of Machine Learning Research , pages 15639–15654, 2023. Guolin Ke, Qi Meng, Thomas Finley, Taifeng Wang, Wei Chen, Weidong Ma, Qiwei Ye, and Tie-Yan Liu. LightGBM: A highly efficient gradient boosting decision tree. In Advances in Neural Information Processing Systems , volume 30, 2017. URL https://proceedings.neurips. cc/paper_files/paper/2017/hash/6449f44a102fde848669bdd9eb6b76fa-Abstract.html .Chunlin Li, Xiaotong Shen, and Wei Pan. Nonlinear causal discovery with confounders. Journal of the American Statistical Association , 119(546):1205–1214, 2024. doi: 10.1080/01621459.2023.2179490. Phillip Lippe, Taco Cohen, and Efstratios Gavves. Efficient neural causal discovery without acyclicity constraints. In International Conference on Learning Representations , 2022. Mingzhou Liu, Xinwei Sun, Yu Qiao, and Yizhou Wang. Causal discovery via conditional independence testing with proxy variables. In Proceedings of the 41st International Conference on Machine Learning , volume 235 of Proceedings of Machine Learning Research , pages 31866–31889, 2024. Wang Miao, Zhi Geng, and Eric J. Tchetgen Tchetgen. Identifying causal effects with proxy variables of an unmeasured confounder. Biometrika , 105(4):987–993, 2018. doi: 10.1093/biomet/asy038. Whitney K. Newey and James L. Powell. Instrumental variable estimation of nonparametric models. 
+
+Econometrica , 71(5):1565–1578, 2003. doi: 10.1111/1468-0262.00459. Ignavier Ng, Shengyu Zhu, Zhuangyan Fang, Haoyang Li, Zhitang Chen, and Jun Wang. Masked gradient-based causal structure learning. In Proceedings of the 2022 SIAM International Conference on Data Mining , pages 424–432, 2022. doi: 10.1137/1.9781611977172.48. Kwangmoon Park and Hongzhe Li. Confounder-robust causal discovery and inference in Perturb-seq using proxy and instrumental variables. arXiv preprint arXiv:2601.01830 , 2026. doi: 10.48550/ arXiv.2601.01830. URL https://arxiv.org/abs/2601.01830v3 .Judea Pearl. Causality: Models, Reasoning, and Inference . Cambridge University Press, Cambridge, 2 edition, 2009. doi: 10.1017/CBO9780511803161. Jonas Peters, Peter Bühlmann, and Nicolai Meinshausen. Causal inference by using invariant prediction: Identification and confidence intervals. Journal of the Royal Statistical Society: Series B (Statistical Methodology) , 78(5):947–1012, 2016. doi: 10.1111/rssb.12167. Joseph M. Replogle, Reuben A. Saunders, Angela N. Pogson, Jeffrey A. Hussmann, Alexander Lenail, Alina Guna, Lauren Mascibroda, Eric J. Wagner, Karen Adelman, Gila Lithwick-Yanai, Nika Iremadze, Florian Oberstrass, Doron Lipson, Jessica L. Bonnar, Marco Jost, Thomas M. 37 Norman, and Jonathan S. Weissman. Mapping information-rich genotype-phenotype landscapes with genome-scale Perturb-seq. Cell , 185(14):2559–2575.e28, 2022. doi: 10.1016/j.cell.2022.05.013. Martin Rohbeck, Brian Clarke, Katharina Mikulik, Alexandra Pettet, Oliver Stegle, and Kai Ueltzhöffer. Bicycle: Intervention-based causal discovery with cycles. In Proceedings of the Third Conference on Causal Learning and Reasoning , volume 236 of Proceedings of Machine Learning Research , pages 209–242, 2024. Peter Spirtes, Clark Glymour, and Richard Scheines. Causation, Prediction, and Search . MIT Press, Cambridge, Massachusetts, 2 edition, 2001. Ramon Viñas Torné, Sílvia Fàbregas Salazar, Soyon Park, Ivo Alexander Ban, Artyom Gadetsky, Nikita Doikov, and Maria Brbić. PACER: Acyclic causal discovery from large-scale interventional data. arXiv preprint arXiv:2605.15353 , 2026. doi: 10.48550/arXiv.2605.15353. Minjie Wang, Xiaotong Shen, and Wei Pan. Causal discovery with generalized linear models through peeling algorithms. Journal of Machine Learning Research , 25(310):1–49, 2024. URL 
+
+https://www.jmlr.org/papers/v25/23-1228.html .David S. Watson and Ricardo Silva. Causal discovery under a confounder blanket. In Proceedings of the Thirty-Eighth Conference on Uncertainty in Artificial Intelligence , volume 180 of Proceedings of Machine Learning Research , pages 2096–2106. PMLR, 2022. URL https://proceedings.mlr. press/v180/watson22a.html .David S. Watson and Marvin N. Wright. Testing conditional independence in supervised learning algorithms. Machine Learning , 110(8):2107–2129, 2021. doi: 10.1007/s10994-021-06030-6. Yong Wu, Yanwei Fu, Shouyan Wang, and Xinwei Sun. Bivariate causal discovery with proxy variables: Integral solving and beyond. In Proceedings of the 42nd International Conference on Machine Learning , volume 267 of Proceedings of Machine Learning Research , pages 67202–67259, 2025. Feng Xie, Zhengming Chen, Shanshan Luo, Wang Miao, Ruichu Cai, and Zhi Geng. Automating the selection of proxy variables of unmeasured confounders. In Proceedings of the 41st International Conference on Machine Learning , volume 235 of Proceedings of Machine Learning Research , pages 54430–54459, 2024. Albert Xue, Jingyou Rao, Sriram Sankararaman, and Harold Pimentel. dotears: Scalable and consistent directed acyclic graph estimation using observational and interventional data. iScience ,28(2):111673, 2025. doi: 10.1016/j.isci.2024.111673. Jiji Zhang. On the completeness of orientation rules for causal discovery in the presence of latent confounders and selection bias. Artificial Intelligence , 172(16–17):1873–1896, 2008. doi: 10.1016/j. artint.2008.08.001. Yijiao Zhang and Hongzhe Li. Causal network discovery from interventional count data with latent linear DAGs. arXiv preprint arXiv:2603.25838 , 2026. doi: 10.48550/arXiv.2603.25838. Xun Zheng, Bryon Aragam, Pradeep Ravikumar, and Eric P. Xing. DAGs with NO TEARS: Continuous optimization for structure learning. In Advances in Neural Information Processing Systems , 2018. 38
