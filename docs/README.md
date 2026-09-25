@@ -6,25 +6,25 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-24
-- 运行时间：2026-09-24 22:09:46 UTC
+- 最新运行日期：2026-09-25
+- 运行时间：2026-09-25 22:25:10 UTC
 - 运行状态：成功
 - 本次总论文数：1
 - 精读区：1
 - 速读区：0
 
 ### 今日简报（AI）
-今天精读1篇、速读0篇，全部注意力给到9.0分的《Discover, Falsify, Revise》。
+今天精读 1 篇满分（10.0）论文《PRAXIS-VirtualCell: A Programmable and Trustworthy Framework for Agentic Virtual Cell Experiments》，速读 0 篇。
 
-值得看的是它提出的一套审计思路：对智能体自动发现的细胞模型，用"发现—证伪—修正"核查其"用了哪些输入"的说法，并把溯源从源代码一路追到预测贡献。
+值得关注的方向是"可编程 + 可信"的智能体虚拟细胞实验框架，即用智能体驱动虚拟细胞实验并兼顾可控性与可信度。
 
-普通读者不妨记住一点：面对AI自动生成的模型，先别信它自称用了什么输入，照这条思路验证一遍再采用。
-- 详情：[/202609/24/README](/202609/24/README)
+普通读者可先了解"虚拟细胞 + AI 智能体"这一交叉概念，再顺着该框架的可编程与可信设计思路延伸阅读。
+- 详情：[/202609/25/README](/202609/25/README)
 
 ### 精读区论文标签
-1. [Discover, Falsify, Revise: Auditing Input-Use Claims from Source Code to Predictive Contribution in Agent-Discovered Cell Models](/202609/24/2609.27234v1-discover-falsify-revise-auditing-input-use-claims-from-source-code-to-predictive-contribution-in-agent-discovered-cell-models)  
-   标签：评分：9.0/10、query:virtual-cell
-   evidence：AI虚拟细胞预测细胞对指定干预的响应
+1. [PRAXIS-VirtualCell: A Programmable and Trustworthy Framework for Agentic Virtual Cell Experiments](/202609/25/2609.29221v1-praxis-virtualcell-a-programmable-and-trustworthy-framework-for-agentic-virtual-cell-experiments)  
+   标签：评分：10.0/10、query:virtual-cell
+   evidence：组织虚拟细胞模型与扰动的可编程框架
 
 ### 速读区论文标签
 - 本次无速读推荐。
