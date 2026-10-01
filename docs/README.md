@@ -6,28 +6,24 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-30
-- 运行时间：2026-09-30 23:11:18 UTC
+- 最新运行日期：2026-10-01
+- 运行时间：2026-10-01 23:05:33 UTC
 - 运行状态：成功
 - 本次总论文数：1
 - 精读区：0
 - 速读区：1
 
 ### 今日简报（AI）
-今日速读 1 篇（精读 0），聚焦用 Koopman 算子从分布快照中学习单细胞动力学的生成模型 KoopCell。
-
-最值得看的方向是把 Koopman 算子与生成模型结合，尝试仅凭不同时间点的细胞分布"快照"、而非配对单细胞轨迹，来推断细胞状态演化。
-
-该文评分 6.0 属中等，普通读者可先读摘要里对所需数据条件和方法直觉的说明，再决定是否深入。
-- 详情：[/202609/30/README](/202609/30/README)
+今日速读 1 篇：CRNDiff 尝试用化学反应网络驱动扩散生成框架（6.0/10），精读为零。值得关注的是它把"计数/离散结构"原生嵌入扩散过程，而非事后修正。普通读者可先看它的核心机制图，判断该思路能否迁移到自己关心的离散生成任务。
+- 详情：[/202610/01/README](/202610/01/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [KoopCell: Koopman-Based Generative Model for Learning Single-Cell Dynamics from Distribution Snapshots](/202609/30/2609.33350v1-koopcell-koopman-based-generative-model-for-learning-single-cell-dynamics-from-distribution-snapshots)  
+1. [CRNDiff: Count-Native Diffusion Framework via Chemical Reaction Networks](/202610/01/2609.31149v1-crndiff-count-native-diffusion-framework-via-chemical-reaction-networks)  
    标签：评分：6.0/10、query:virtual-cell
-   evidence：从分布快照学习单细胞群体动力学的生成模型
+   evidence：面向单细胞RNA计数的计数原生生成扩散，可用于虚拟细胞建模
 
 
 <div class="dpr-home-promo-card">
