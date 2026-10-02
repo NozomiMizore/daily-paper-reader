@@ -1,0 +1,3302 @@
+Title: KoopCell: Koopman-Based Generative Model for Learning Single-Cell Dynamics from Distribution Snapshots
+
+URL Source: https://arxiv.org/pdf/2609.33350v1
+
+Published Time: Tue, 29 Sep 2026 02:35:26 GMT
+
+Number of Pages: 57
+
+Markdown Content:
+# KOOP CELL : K OOPMAN -B ASED GENERATIVE MODEL FOR LEARNING SINGLE -C ELL DYNAMICS FROM DISTRIBUTION SNAPSHOTS 
+
+Wanfeng Lu 1,2, ∗ Yutong Zhang 2, ∗ Keyi Zhou 2 Chenxin Ge 2 Wei Lin 1,2,3,4 Qunxi Zhu 2,3,4, †
+
+> 1
+
+School of Mathematical Sciences, SCMS, SCAM, and CCSB, Fudan University, China 
+
+> 2
+
+Research Institute of Intelligent Complex Systems, Fudan University, China 
+
+> 3
+
+State Key Laboratory of Medical Neurobiology and MOE Frontiers Center for Brain Science, Institutes of Brain Science, Fudan University, China 
+
+> 4
+
+Shanghai Artificial Intelligence Laboratory, China 
+
+## ABSTRACT 
+
+Learning population dynamics from temporally sparse, unpaired distribution snap-shots is a fundamental challenge in developmental biology. Recent approaches based on neural differential equations and flow matching can interpolate between observed population snapshots, but may struggle to extrapolate beyond the training horizon and often lack an explicit mechanism for modeling developmental branch-ing. We propose KoopCell, a unified generative framework based on Koopman– Mori–Zwanzig theory that jointly learns representations and predictive linear latent dynamics. Theoretically, using the weak continuity equation, we derive a closed-form least-squares estimator for the Koopman generator from distribution snapshots and establish convergence guarantees under suitable assumptions. To model branch-ing dynamics, we further develop KoopCell-M, which incorporates non-Markovian memory into the latent Koopman dynamics through a Markovian embedding. Ex-periments on synthetic systems and three scRNA-seq datasets demonstrate the ability of our framework to recover Koopman spectra, model branching through memory, and scale to predicting high-dimensional gene expression distributions, achieving state-of-the-art performance among the evaluated methods. 
+
+## 1 INTRODUCTION 
+
+Inferring population dynamics from temporally sparse, unpaired distribution snapshots is a fundamen-tal challenge in machine learning and the natural sciences, with applications in biology (Schiebinger et al., 2019; Moon et al., 2019), ecology (Ayala et al., 1973), and epidemiology (Wang et al., 2021; Kosma et al., 2023). In particular, advances in high-throughput single-cell RNA sequencing (scRNA-seq) (Hwang et al., 2018; Chen et al., 2019) have made this problem increasingly important in single-cell biology. By profiling population-level gene expression at multiple time points, scRNA-seq enables the study of cellular developmental dynamics, the identification of key driver genes, and the prediction of future states. However, due to the destructive nature of scRNA-seq measurements, only a cross-sectional sample from the population-level gene-expression distribution is available, without cell-level correspondence across time. Inferring the underlying continuous population dynamics from such observations therefore remains a substantial computational challenge. Neural dynamical systems have been widely used to model cellular dynamics from population snapshots. Huguet et al. (2022); Zhang et al. (2024) use neural ordinary differential equations (ODEs) (Chen et al., 2018), whereas Yeo et al. (2021); Jiang & Wan (2024) employ neural stochastic differential equations (SDEs) to capture biological stochasticity in latent space. More recently, Zhang et al. (2025); Wang et al. (2025); Ling et al. (2026) have introduced unbalanced dynamical optimal transport to model cell proliferation and death. Although these methods perform well under their respective dynamical assumptions and can interpolate missing distributions within the observed time 
+
+> ∗
+
+Equal contribution. 
+
+> †
+
+Corresponding author: qxzhu@fudan.edu.cn .
+
+1arXiv:2609.33350v1 [cs.LG] 27 Sep 2026 horizon, they do not effectively extrapolate beyond the observed time points or explicitly account for branching dynamics. Both capabilities are essential for predicting future cell-population states and representing the lineage differentiation that is crucial for understanding cellular development. In this work, we propose KoopCell, a Koopman-based generative model for population dynamics. Koopman theory (Koopman, 1931; Koopman & von Neumann, 1932) provides a unifying perspective for modeling nonlinear dynamics by lifting the system state into a space of observables (functions of the system state), in which the evolution is governed by a linear operator. Neural Koopman methods (Lusch et al., 2018) approximate these observables with an encoder and represent their evolution using a finite-dimensional linear operator, but they generally rely on paired state transitions or trajectories. In contrast, KoopCell jointly learns the observable representation and its linear dynamics directly from temporally sparse, unpaired distribution snapshots. We theoretically formulate the estimation of the latent linear propagator through the weak continuity equation (Lu et al., 2024) and integrate it with a generative VAE model in an alternating learning procedure, enabling population prediction both within and beyond the observed time horizon. A single Markovian linear flow, however, may be insufficient to represent branching processes such as the differentiation of stem cells into multiple specialized cell types. We therefore extend KoopCell using the Mori–Zwanzig formalism, which accounts for the influence of unresolved variables through non-Markovian memory (Mori, 1965; Zwanzig, 1973). By embedding the suggested memory dynamics into an augmented latent space (Hijón et al., 2010; Menier et al., 2025), we develop tractable variational inference for the hidden memory and a corresponding alternating learning algorithm for the memory-augmented model, KoopCell-M. This memory mechanism enables KoopCell-M to model the divergence of a population into distinct developmental branches. Our main contributions are summarized as follows: • We develop a theoretical and computational framework for identifying a finite-dimensional Koopman representation from unpaired distribution snapshots. Based on the weak continuity equation, we characterize the closed-form estimator, establish its convergence properties, and jointly learn the associated observable representation within a generative model. • Furthermore, we introduce KoopCell-M, a Mori–Zwanzig-inspired extension that represents non-Markovian memory in an augmented latent space, providing a mechanistic formulation and a practical learning algorithm for population dynamics with branching. • We evaluate KoopCell and KoopCell-M on synthetic toy systems and three high-dimensional scRNA-seq datasets. The experiments validate Koopman spectral recovery and the ability to model branching dynamics, while demonstrating state-of-the-art extrapolation performance in predicting cellular population distributions from sparse, unpaired measurements. 
+
+## 2 PRELIMINARIES 
+
+Problem Formulation and Notation. We consider a time series of data distributions ρt (t ∈ T ⊂ 
+
+R+), from each of which we observe nt independent samples (e.g., cells) {xt,i }nt
+
+> i=1
+
+, with xt,i ∼ ρt
+
+and xt,i ∈ X = RG. We aim to learn the population dynamics that explain the evolution of these distribution snapshots. A typical application is to recover cellular developmental dynamics from time-series scRNA-seq data, where cells sampled from ρt form a gene expression matrix Xt ∈ Rnt×G,and G is the number of genes. Given the high dimensionality of the observations, a common approach is to model temporal dynamics in a D-dimensional latent space Z = RD , with D ≪ G. Rather than specifying a heuristic dynamical structure in the latent space, we use Koopman theory to guide the learning of latent coordinates with approximately linear evolution. Throughout, we use uppercase state symbols for random variables and lowercase symbols for their realizations. 
+
+Koopman Theory and Koopman Learning. For an autonomous system ˙x = f (x) with flow Ft, an observable is a function g : X → R of the system state. For non-autonomous systems, augmenting the state with time ( ˙t = 1 ) yields an autonomous formulation. The Koopman operator evolves observables by [U (t)g]( x) = g(Ftx) and is linear even when the state-space dynamics are nonlinear (Koopman, 1931; Koopman & von Neumann, 1932). We assume that the operators U (t) : H → H form a strongly continuous semigroup on a Hilbert space H of observables, with generator L and domain D(L).For sufficiently smooth g ∈ D(L), Lg = f · ∇ g and ddt U (t)g = U (t)Lg . Let Xt = FtX0 with 
+
+X0 ∼ ρ0. If HD = span {g1, . . . , g D } ⊂ D(L) is invariant under L, then Lg = Ag for a matrix A,so Zt = g(Xt) satisfies ˙Zt = AZ t, where g = ( g1, . . . , g D )⊤. With the observable map g fixed, 2extended dynamic mode decomposition (EDMD) (Williams et al., 2015) estimates a propagator from paired states (xi, yi), yi = F∆xi, by solving a regression problem min K
+
+P 
+
+> i
+
+∥g(yi) − Kg (xi)∥22.Koopman representation learning extends EDMD by learning the observable map together with the latent dynamics. Specifically, an encoder x 7 → z = g(x) ∈ RD is jointly trained with a linear latent propagator and a decoder to obtain coordinates that support both approximately linear evolution and state reconstruction (Otto & Rowley, 2019; Lusch et al., 2018). Our work extends this framework to learning generative latent linear dynamics from temporally sparse, unpaired distribution snapshots. 
+
+Mori–Zwanzig Formalism and Memory Embedding. The reduced finite-dimensional linear dynamics above are exact when the span of the chosen observables is invariant under the Koopman generator L. When this linear closure fails, the evolution of the resolved coordinates Zt = g(Xt) ∈
+
+RD generally involves unresolved observables outside the chosen observable subspace HD. The Mori–Zwanzig formalism, originally developed in statistical mechanics, accounts for their influence through memory and forcing terms (Mori, 1965; Zwanzig, 1973). Specifically, under suitable regularity, Mori’s linear projection onto HD yields a generalized Langevin equation (Lin et al., 2021): 
+
+˙Zt = AZ t +
+
+Z t
+
+> 0
+
+K(t − s)Zs ds + ηt.
+
+Here A describes the instantaneous linear contribution, K is the memory kernel, and ηt carries the influence of unresolved initial conditions. A tractable closure approximates the kernel by 
+
+K(u) ≈ BeΛuC and represents the unresolved influence through auxiliary hidden memory variables 
+
+Ht ∈ Rdh (Lei et al., 2016; Menier et al., 2025). This leads to the augmented dynamics dZt =(AZ t + BH t) d t and dHt = ( CZ t + ΛHt) d t + Σh dWt, where Wt is standard Brownian motion and Σh controls the hidden noise. Eliminating Ht yields the kernel K(u) = BeΛuC and a temporally correlated forcing determined by H0 and the hidden noise. The augmented state (Zt, Ht)
+
+thus evolves as a Markovian system, while Zt alone generally retains memory. This Markovian embedding provides the underlying mechanism for modeling branching dynamics in our framework. 
+
+Wasserstein Flow and Optimal Transport. Time series of distribution snapshots are often modeled as probability flows in Wasserstein space. We write P2(RD ) for the space of proba-bility measures with finite second moment and W2 for the Wasserstein-2 distance, defined by 
+
+W 22 (μ, ν ) = inf π∈Π( μ,ν )
+
+R ∥z − y∥2dπ(z, y), where Π( μ, ν ) is the set of couplings. We use 
+
+μ[ψ] = R ψ(z) d μ(z) and write F#μ for the distribution of F (Z) when Z ∼ μ. The Wasserstein flow t 7 → μt, with μ· ∈ AC 2([0 , T ]; P2(RD )) , is an absolutely continuous curve in Wasserstein space that describes the evolution of probability measures over time. For almost every t, there exists a unique canonical velocity vt ∈ Tμt P2(RD )1 satisfying ∂tμt + ∇ · (vtμt) = 0 in the distributional sense (Ambrosio et al., 2008). Among all velocity fields generating the same measure curve, vt
+
+has minimum L2(μt) norm  R ∥vt∥2dμt
+
+1/2. We denote by Pμ : L2(μ; RD ) → TμP2(RD ) the 
+
+L2(μ)-orthogonal projection onto this tangent space. For a zero-mass distribution σ, we define the negative Sobolev norm ∥σ∥−1,μ = sup R ∥∇ φ∥2dμ≤1
+
+⟨σ, φ ⟩. Here ⟨σ, φ ⟩ denotes the duality pairing of a distribution with a test function. Equivalently, when finite, ∥σ∥−1,μ is the minimum L2(μ) norm of a tangent field w satisfying σ = −∇ · (wμ); see Lemma A.2 in Appendix A.1. 
+
+## 3 METHODS 
+
+3.1 KOOPMAN -BASED VAE FOR GENERATIVE MODELING OF POPULATION DYNAMICS 
+
+Motivated by Koopman theory, we jointly learn an encoder that maps cellular states to observables with approximately linear evolution, a linear propagator governing their dynamics, and a decoder reconstructing the cellular states from latent representations. Specifically, we use a VAE (Kingma & Welling, 2014), widely used for single-cell gene expression modeling (Grønbech et al., 2020), with encoder qθ (· | x, t ) = N (mθ (x, t ), Sθ (x, t )) and decoder Dec ϕ, where z ∈ RD . We concatenate t
+
+with x to encode the augmented state. Including the constant observable 1 yields affine dynamics 
+
+˙Zt = AZ t + bz . For simplicity, we use ˙Zt = AZ t below and describe the detailed implementation in Appendix B.1.           
+
+> 1Here, TμP2={∇ φ:φ∈C∞
+> c(RD)}L2(μ)
+> is the tangent space; the overline denotes closure in L2(μ).
+
+3Unlike traditional settings where the Koopman model is learned from densely sampled, paired trajectories, we are given only temporally sparse, unpaired distribution snapshots. We address the challenge of ......... learning ..... the ............ Koopman .......... operator ...... from ............ snapshots through the following two alternating steps: (1) with the observables (latent coordinates) fixed, we estimate the linear matrix that best fits the evolution of the latent distributions, providing an analogue of EDMD estimation for population snapshots; (2) with the estimated linear propagator fixed, we refine the latent representation to better fit the dynamics. By alternating between propagator estimation and representation refinement, we ultimately learn the Koopman representation and its linear dynamics generator simultaneously. 
+
+Estimation of the linear propagator. We fix a set of observables {g1, . . . , g D }, which induces a Wasserstein flow of latent distributions μt = g#ρt ∈ P 2(RD ), t ∈ [0 , T ]. We aim to find a linear generator A such that (eA∆t)#μt ≈ μt+∆ t. Exact propagation under this linear flow satisfies the continuity equation ∂tμt + ∇z · (Az μt) = 0 . Accordingly, we introduce the weak population residual rA(t) = ∂tμt + ∇z · (Az μt) to quantify the mismatch between the linear dynamics and the evolution of μt. We then seek an A minimizing Jμ(A) = 12
+
+R T 
+
+> 0
+
+∥rA(t)∥2 
+
+> −1,μ t
+
+dt. However, directly minimizing the residual is intractable, as it requires the density derivative ∂tμt. To this end, we use the equivalent min–max formulation in the dual test space, as established in Theorem A.3 (Appendix A.1): 
+
+A∗ = arg min  
+
+> A
+
+Jμ(A) = arg min  
+
+> A
+
+sup 
+
+> φ∈VD
+
+
+
+RD (A; φ) − 12 ∥φ∥2
+
+> VD
+
+
+
+,
+
+where RD (A; φ) = μT [φ(T, ·)] − μ0[φ(0 , ·)] −
+
+Z T
+
+> 0
+
+μt
+
+∂tφ(t, z) + ∇z φ(t, z)⊤Az  dt. 
+
+(1) Here VD = L2(0 , T ; ˙H1(μt)) is the Hilbert space with ∥φ∥2 
+
+> VD
+
+= R T 
+
+> 0
+
+μt[∥∇ z φ∥2]d t. The following theorem shows that minimizing Jμ gives the best approximation of the canonical Wasserstein velocity 
+
+vt by projected linear fields in L2(d t dμt). Furthermore, restricting the test space VD to finitely many functions yields a least-squares problem which admits a closed-form solution. 
+
+Theorem 3.1. Assume μ· ∈ AC 2([0 , T ]; P2(RD )) , and let vt be its canonical velocity. Then, for every A ∈ RD×D,
+
+Jμ(A) = sup 
+
+> φ∈VD
+
+RD (A; φ) − 12 ∥φ∥2 
+
+> VD
+
+= 12
+
+Z T
+
+> 0
+
+∥vt − Pμt (Az )∥2
+
+> L2(μt)
+
+dt. (2) 
+
+Hence the minimization gives the orthogonal best approximation of the canonical velocity by projected linear velocity fields. Furthermore, restrict the supremum to VD,m = span {φ1, . . . , φ m} and define 
+
+yj = μT [φj (T )] − μ0[φj (0)] −
+
+Z T
+
+> 0
+
+μt[∂tφj (t)]d t, 
+
+Hj =
+
+Z T
+
+> 0
+
+μt[∇z φj (t, z)z⊤]d t, Mij =
+
+Z T
+
+> 0
+
+μt[∇z φi(t, z)⊤∇z φj (t, z)]d t. 
+
+(3) 
+
+Let a = vec( A), let row j of G be vec( Hj )⊤, and let y = ( y1, . . . , y m)⊤. If M ≻ 0, restricting Equation (1) to VD,m gives the weighted least-squares objective JD,m (A) = 12 (y−Ga )⊤M −1(y−
+
+Ga ). If G has full column rank, its unique minimizer is vec( bAD,m ) = ( G⊤M −1G)−1G⊤M −1y.Finally, under the test-enrichment and uniqueness assumptions in Appendix A.2, these minimizers converge to A∗, the unique population minimizer of Equation (1) as m → ∞ .
+
+We provide the proof of Theorem 3.1 in Appendices A.1 and A.2. In practice, we use random Fourier tests to construct VD,m , reducing the min–max optimization to a weighted least-squares problem. For irregular snapshots at 0 = t0 < t 1 < · · · < t N = T , we formulate weak equations on each adjacent interval Ik = [ tk, t k+1 ] and approximate the integrals by the trapezoidal rule, R 
+
+> Ik
+
+f (t)d t ≃ tk+1 −tk 
+
+> 2
+
+{f (tk) + f (tk+1 )}. The integrands f (·) = μ·[·] are expectations under the latent distributions, approximated by empirical averages over the encoded snapshots. Finally, equations over different intervals are combined to form the overall regression problem, with ridge regularization used to stabilize the solve. Implementation details are provided in Appendix B.1.2. We further show in a Koopman-invariant RKHS that the minimum weak population residual vanishes as D → ∞ (Appendix A.3.2), derive Wasserstein prediction bounds (Appendix A.4.1), and prove 4locally uniform strong semigroup convergence (Appendix A.4.4), under the stated approximation, stability, and identifiability assumptions. We also discuss theoretical limitations in Appendix A.4.4. 
+
+Updating the representation under the linear flow. Given the estimated propagator A = bAD,m ,we update the representation to better fit the linear dynamics. To regularize the VAE representation, we use a prior transported by the linear flow: the initial prior p0 = N (0, ID ) evolves into pt =
+
+N (0, e AteA⊤t). We thus combine squared reconstruction error with the KL divergence (Csiszár, 1975) between the encoder posterior and this dynamic prior: 
+
+LVAE = Et, x
+
+ 12σ2
+
+> x
+
+dx
+
+EZ∼qθ (·| x,t )∥x − Dec ϕ(Z)∥2 + β KL  qθ (· | x, t ) ∥ pt
+
+
+
+. (4) Here dx is the expression dimension, σ2 
+
+> x
+
+is the fixed observation variance, and Et, x averages over training times and cells. To encourage accurate population prediction in both latent and expression space, we augment LVAE with the population-matching loss Lpop = Es<t ∈T [λz Sε(μt, bμs→t) + 
+
+λxSε(ρt, bρs→t)] , where μt = R qθ (· | x, t )d ρt(x) is the encoder-induced population, bμs→t =(eA(t−s))#μs is the latent distribution propagated from μs to time t, and bρs→t = (Dec ϕ)# bμs→t is the decoded prediction. The expectation averages over all forward pairs of training times, and Sε is the debiased Sinkhorn divergence with quadratic cost. We further regularize the encoder with the weak population residual loss Lweak = JD,m ( bAD,m ), which penalizes violations of the weak continuity equation and encourages latent coordinates in which population evolution is better approximated by the estimated linear dynamics (Appendix B.1.2). The linear flow is evaluated by matrix exponentials, enabling prediction at arbitrary times without costly numerical ODE integration. 
+
+Training. Following Zhang et al. (2024), we pretrain the VAE with a standard-normal Gaussian prior, then alternate between generator estimation and representation learning. During each representation update, we hold A fixed and minimize LKC = LVAE + Lpop + λweak Lweak over the VAE parameters 
+
+θ, ϕ. Algorithm 1 summarizes the training procedure of KoopCell. 3.2 KOOP CELL -M: M EMORY -A UGMENTED KOOPMAN DYNAMICS FOR BRANCHING 
+
+Learning a linear latent flow is appealing, but it constrains the modeling of branching during cellular differentiation, in which an initially homogeneous population differentiates into multiple cell types. Specifically, an ODE with a Lipschitz vector field cannot exactly transport a source distribution supported on M disjoint, compact, path-connected components to a target with N̸ = M such components (Zhao et al., 2026, Proposition 3.3). Thus, when the initial population has connected latent support, the linear dynamics followed by a Lipschitz decoder cannot produce fate populations with disconnected support. Moreover, the linear flow itself cannot create new latent density modes. Although nonlinear decoding can introduce additional modes, bounding the decoder Lipschitz constant limits the amplification of latent separation (Appendix B.2.1). To model branching through an explicit dynamical mechanism, Zhao et al. (2026) introduce non-Markovian delay dynamics with distinct initial histories for the same state, allowing trajectories to diverge. Such non-Markovian dynamics also arise within Koopman theory through the Mori–Zwanzig formalism (Section 2), which describes how unresolved observables contribute memory to the resolved linear dynamics. In cellular differentiation, such unresolved influences may reflect heritable fate biases that are not fully captured by scRNA-seq (Weinreb et al., 2020). This connection motivates us to introduce memory into KoopCell, using non-Markovian dynamics to model branching within the same Koopman framework. 
+
+Memory embedding and branching. To obtain a tractable formulation of this non-Markovian model, we use the Markovian embedding from Section 2 to evolve the augmented latent state (Zt, Ht):
+
+dZt = ( AZ t + BH t + bz ) d t, dHt = ( CZ t + ΛHt + bh) d t + Σh dWt. (5) Here Zt ∈ RD is the visible latent state encoded from cellular gene expression, and Ht ∈ Rdh
+
+contains auxiliary memory variables. A joint Gaussian initialization of (Z0, H0) yields Gaussian visible Z-marginals. To enable branching in the latent distribution, we parameterize hidden initial distributions by a discrete variable R ∈ R. Each value of R indexes a candidate root-to-terminal path in a directed acyclic graph (DAG) of coarse biological states. We detail the state annotations and graph construction in Appendix B.2.1 and show the resulting DAG for the mouse cell reprogramming dataset (SC; Schiebinger et al., 2019) in Figure 5. With R specifying the developmental path, we define a generative model with latent variables (R, Zt, Ht). We specify the initial distribution of the 5augmented dynamics in Equation (5) as 
+
+R ∼ Cat( π), Z0 | R = r ∼ N (0, ID ), H0 | Z0 = z, R = r ∼ N (Fr z + ar , Sr ). (6) Under this parametrization, the augmented process is Gaussian conditional on R. The marginal distribution of Zt is therefore a Gaussian mixture, pt(z) = P 
+
+> r∈R
+
+πr N (z; mzt,r , V zz t,r ), with propa-gated means mzt,r and covariances V zz t,r (Appendix B.2.2). Although all paths share the same visible initial distribution p0, coupling through BH t can turn hidden heterogeneity into visible separation, producing multiple density modes when component means become sufficiently separated relative to their spread. We construct a toy example in Section 4.2 to illustrate how introducing memory enables the dynamics to generate distinct branches from an initially unimodal population (Figure 2). 
+
+Learning the representation and memory dynamics. As in KoopCell, we first pretrain the VAE, then alternate between dynamics estimation and representation learning. With the representation and memory statistics fixed, we estimate A, bz in closed form using the same least-squares formulation, after subtracting the memory contribution from the weak continuity equations (Appendix B.2.3). With A, bz fixed, we jointly update the representation and remaining memory parameters using the distribution-matching objective Lpop over all training pairs s < t , as in KoopCell. Prediction from a snapshot at s additionally requires inferring R and Hs. Our generative model supports tractable variational inference: given z ∼ qθ (· | x, s ), we compute the path probabilities qs(r |
+
+z, x) and Gaussian memory conditionals p(Hs | Zs = z, R = r) analytically (Appendix B.2.2). We propagate the inferred augmented population under Equation (5), with transition means and covariances evaluated by matrix exponentials. The predicted Zt-marginal is bμs→t, and decoding gives bρs→t = (Dec ϕ)# bμs→t. To encourage rollouts to follow the biological pathway specified by R,we introduce a state classifier cω (c | z). We jointly train the VAE and classifier using the snapshot objective Lsnap , which combines reconstruction, KL regularization, and supervised classification on annotated training cells (Appendix B.2.1). We then evaluate cω along each rollout and use the predicted state probabilities to compute the path consistency loss Lpath , which encourages progression through biological states in the order specified by R (Equation (77) in Appendix B.2.2). The overall training objective is Lsnap + Lpop + λRLpath + λweak Lweak . Appendix B.2.2 derives these objectives, and Algorithm 2 summarizes the alternating learning procedure. 
+
+## 4 EXPERIMENTS 
+
+We evaluate our models on synthetic systems and three single-cell RNA-sequencing datasets. Through these experiments, we answer the following three questions: Q1. Can KoopCell recover the under-lying Koopman spectrum from sparse, unpaired snapshots, and does this recovery support stable extrapolation? Q2. How does incorporating memory improve the modeling of branching dynamics? 
+
+Q3. Can our models scale to high-dimensional scRNA-seq data and learn from sparse, irregular snapshots to accurately predict gene expression distributions within and beyond the training horizon? 4.1 SPECTRAL RECOVERY FROM UNPAIRED SNAPSHOTS 
+
+To test whether KoopCell can recover the underlying Koopman operator from unpaired snapshots, and whether the recovered spectral structure translates into more accurate temporal prediction, we consider two toy systems with known Koopman spectra that are widely studied in the literature: (Toy I) Following Tu et al. (2014), we consider ˙x1 = −0.2x1 and ˙x2 = −(x2 −x21). The system has the attracting slow manifold x2 = 53 x21 and admits the exact Koopman observables Ψ1 = x1,
+
+Ψ2 = x2 − 53 x21, and Ψ3 = x21. Consequently, ˙Ψ = AΨ with A = diag( −0.2, −1, −0.4) .(Toy II) Following Otto & Rowley (2019), we consider the unforced Duffing equation ¨q = −δ ˙q −
+
+q(β + αq 2) with δ = 0 .5, β = −1, and α = 1 . The system has two stable equilibria at 
+
+q = ±1, with the conjugate intrawell eigenpair λ1,2 = ( −1 ± √31 i)/4. Across the two wells, it also admits an eigenfunction with zero eigenvalue that separates the invariant basins. We generate 2D unpaired snapshots by solving these equations over short training horizons during which the populations remain far from equilibrium. For Toy I, training comprises 9 snapshots at 
+
+t ∈ [0 , 1.2] , and extrapolation is evaluated at 0.2-time-unit intervals from t = 1 .4 to 4.0. For 6Table 1: Hard-task Wasserstein-2 distance ( ↓) at held-out time points (mean ± sample standard deviation over three training seeds). Shaded labels distinguish interpolation from extrapolation within each dataset. The best and second-best means are shaded green (bold) and blue, respectively.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+
+> Prediction Data tscNODE LGP-OT MIOFlow PRESCIENT PI-SDE VGFM KoopCell KoopCell-M ZB 3577 .71 ±3.69 577 .91 ±0.64 594 .71 ±32 .03 597 .49 ±1.76 567 .30 ±1.41 575 .86 ±3.22 572 .32 ±2.14 588 .91 ±6.04
+> ZB 5511 .58 ±5.63 504 .45 ±1.73 519 .32 ±7.48 540 .72 ±1.52 492 .43 ±2.19 499 .66 ±0.81 497 .80 ±3.83 488 .84 ±9.27
+> ZB 7440 .65 ±6.47 411 .20 ±3.07 452 .30 ±0.77 476 .68 ±1.16 416 .80 ±3.36 434 .99 ±1.37 412 .99 ±1.50 408 .79 ±1.57
+> Interpolation ZB 9514 .24 ±5.97 475 .65 ±2.60 539 .92 ±11 .44 527 .09 ±1.25 474 .41 ±3.51 522 .60 ±2.83 474 .92 ±1.55 468 .53 ±2.72
+> ZB 11 653 .56 ±8.98 605 .14 ±1.78 654 .64 ±2.17 656 .41 ±4.17 612 .74 ±3.51 635 .96 ±2.73 595 .82 ±0.48 588 .73 ±0.77
+> Extrapolation ZB 12 719 .28 ±12 .36 665 .78 ±4.77 720 .67 ±17 .25 700 .68 ±4.58 679 .61 ±4.11 720 .54 ±10 .97 648 .91 ±2.47 639 .78 ±0.72
+> DR 3443 .40 ±5.78 433 .15 ±2.43 446 .21 ±8.45 475 .42 ±1.27 432 .23 ±2.64 455 .79 ±6.96 429 .70 ±3.54 430 .41 ±3.72
+> DR 5468 .39 ±0.68 465 .22 ±1.10 468 .02 ±1.97 492 .41 ±1.06 457 .57 ±2.85 466 .01 ±0.99 463 .32 ±0.60 466 .04 ±1.46 Interpolation DR 7534 .69 ±8.30 519 .13 ±0.49 533 .38 ±1.03 541 .43 ±0.77 519 .12 ±0.67 526 .89 ±0.67 522 .50 ±2.41 518 .49 ±1.41
+> DR 9602 .99 ±5.41 567 .25 ±0.94 617 .05 ±5.86 604 .33 ±0.80 577 .97 ±0.83 592 .17 ±5.07 558 .89 ±2.21 556 .80 ±1.27
+> DR 10 593 .05 ±2.68 570 .52 ±5.15 673 .08 ±24 .93 565 .45 ±0.37 603 .87 ±2.94 653 .24 ±19 .74 563 .86 ±3.26 557 .68 ±3.56 Extrapolation DR 11 726 .16 ±5.89 713 .37 ±4.70 860 .26 ±87 .00 716 .82 ±0.96 751 .16 ±5.70 851 .07 ±22 .16 694 .53 ±4.21 699 .49 ±4.56
+> SC 654 .44 ±0.28 48 .66 ±0.47 53 .87 ±4.29 64 .70 ±0.88 47 .35 ±0.04 48 .94 ±0.34 50 .20 ±1.58 49 .49 ±0.63
+> SC 858 .45 ±0.94 52 .79 ±0.22 63 .28 ±3.71 66 .35 ±0.52 53 .03 ±0.26 53 .68 ±0.80 54 .00 ±0.68 53 .44 ±0.28
+> SC 10 103 .23 ±1.21 96 .40 ±0.28 110 .39 ±5.17 108 .01 ±0.22 95 .14 ±1.39 108 .46 ±1.37 96 .72 ±0.35 96 .99 ±0.32
+> Interpolation SC 12 142 .30 ±1.36 128 .31 ±1.26 156 .91 ±7.55 152 .00 ±2.76 137 .35 ±0.78 166 .69 ±3.40 127 .47 ±0.92 127 .33 ±0.37
+> SC 16 128 .25 ±3.90 108 .53 ±1.37 160 .34 ±21 .35 134 .07 ±0.64 125 .81 ±1.99 159 .34 ±1.88 109 .78 ±1.73 105 .61 ±1.48
+> SC 17 142 .40 ±4.78 114 .45 ±1.06 195 .20 ±44 .48 142 .04 ±1.57 147 .12 ±3.60 161 .57 ±2.74 118 .54 ±4.86 111 .87 ±0.64
+> SC 18 131 .79 ±5.62 118 .72 ±3.29 203 .72 ±60 .02 131 .42 ±1.30 140 .50 ±5.75 169 .55 ±4.90 109 .89 ±5.23 108 .69 ±2.28
+> Extrapolation SC 19 145 .91 ±8.78 132 .99 ±4.67 243 .97 ±92 .21 136 .76 ±1.76 160 .55 ±7.53 181 .55 ±9.57 121 .87 ±8.65 117 .16 ±3.84
+
+Toy II, training comprises 10 snapshots at t = 0 , 0.5, . . . , 4.5, and extrapolation is evaluated at 
+
+t ∈ { 5, 6, 8, 10 , 12 }. We also synthesize a 64D version of each dataset using y = softplus( W x +
+
+c) + ϵ ∈ R64 , with x ∈ R2 and Gaussian observation noise ϵ. Since the underlying systems are autonomous, we omit t from the encoder input. We compare KoopCell with scNODE (Zhang et al., 2024), which parameterizes the latent dynamics with a neural ODE. Both methods use the same latent dimension of D = 3 across all experiments. After training, we roll out each model from the observed initial distribution beyond the training horizon and report the mean sliced Wasserstein distance (SWD) to the ground-truth snapshots. Complete protocols and full results are provided in Appendix C. 
+
+Spectral recovery. Table 2 reports the recovered continuous-time spectrum of the learned matrix A,while Figure 1 shows the corresponding eigenfunctions. KoopCell consistently recovers the Koopman spectrum with low MAE, and, for Toy I, the learned observables reproduce the level-set geometry of the ground-truth observables. For Toy II, we visualize the learned complex eigenfunction through its magnitude |Ψ| and phase ∠Ψ (Figure 1(b), left and middle). The magnitude decays toward zero at both attractors, q = ±1, while the phase reveals the oscillatory relaxation within each basin. Meanwhile, the eigenmode associated with the zero eigenvalue acts as an indicator that separates the two basins of attraction. Overall, these results demonstrate KoopCell’s ability to recover the underlying spectral structure from unpaired, temporally sparse distribution snapshots. 
+
+Spectral structure supports stable extrapolation. Across all settings, KoopCell achieves lower extrapolation SWD than scNODE (Table 2). Together with the spectral recovery results, this suggests that learning the underlying Koopman spectral structure helps capture the long-term evolution of the system and supports more stable extrapolation beyond the training horizon. 4.2 MODELING BRANCHING DYNAMICS WITH KOOP CELL -M We compare KoopCell and KoopCell-M on a stochastic pitchfork system in which an initially unimodal population separates into two branches. A fixed nonlinear map produces 64D noisy observations at nine training times. We initialize both models with the same pretrained autoencoder and jointly train their autoencoders and dynamics using the same population-matching objective. We impose the same Lipschitz bound on both decoders to limit the amplification of latent separation during decoding. Figure 2 overlays the population rollouts, while Table 3 summarizes SWD and branch-coordinate W1 over all held-out times; definitions of both metrics and experimental details are provided in Appendix D. KoopCell-M more closely reproduces the separation of the two branches and achieves lower errors on both metrics, as expected. 7−1 0 1                             
+
+> x1
+> 012
+> x2
+> ψ1=x1
+> λ= −0.2
+> −1 01
+> x1
+> ψ2=x2−53x21
+> λ= −1
+> −1 01
+> x1
+> ψ3=x21
+> λ= −0.4
+> −1.397 0.000 1.397 −3.308 0.000 3.308 −1.916 0.000 1.916 (a) Toy I: learned eigenfunctions aligned with {x1, x 2−53x21, x 21}.−1 01
+> q
+> −1 01
+> p
+> Magnitude
+> ¸=¡0:298 + 1 :481 i
+> −1 01
+> q
+> Phase
+> −1 01
+> q
+> Basin mode
+> ¸= 0 :010
+> 0.0 0.5 1.0
+> ¡¼
+> 0
+> ¼
+> −1.486 0.000 1.486
+> (b) Toy II: learned oscillatory and basin eigenmodes.
+
+Table 2: Spectral recovery (MAE) and extrap-olation comparison with scNODE (SWD ↓).                       
+
+> Toy I Toy II Recovered Spectrum
+> {− 0.195 ,−0.423 ,−0.977 }{0.010 ,−0.298 ±1.481 i}
+> Spectrum MAE
+> 0.0167 0.0710
+> Model Toy I Toy II
+> 2D 64D 2D 64D
+> SWD scNODE 0.1936 0.2011 0.1076 0.0277
+> KoopCell 0.0665 0.0641 0.0592 0.0175
+
+Figure 1: Koopman eigenmodes learned from unpaired 2D snapshots. In (a), colors show the learned modes and black contours show the analytic eigenfunctions. In (b), the complex mode separates intrawell amplitude and phase, whereas the near-zero mode separates the two attraction basins; sink and saddle markers are included only for visualization. −2 0 2    
+
+> PC 1
+> −2 02
+> PC 2
+> Ground truth
+> −2 02
+> PC 1
+> KoopCell-M
+> −2 02
+> PC 1
+> KoopCell
+
+Table 3: Distributional prediction errors averaged over held-out times (mean ± SD over three optimization seeds).                  
+
+> Model SWD ↓Branch W1↓
+> KoopCell 0.1557 ±0.0146 0.2245 ±0.0069
+> KoopCell-M 0.1124 ±0.0046 0.0866 ±0.0026
+
+Figure 2: Population rollouts at all nine training times in a shared PCA plane (1,024 cells per time). Colors progress from purple to yellow with time; all panels use identical axes. 4.3 MODELING HIGH -DIMENSIONAL SINGLE -C ELL POPULATION DYNAMICS 
+
+To assess the scalability of KoopCell and KoopCell-M, we evaluate them on three high-dimensional single-cell RNA-sequencing datasets: zebrafish embryogenesis (ZB) (Farrell et al., 2018), Drosophila embryogenesis (DR) (Calderon et al., 2022), and mouse iPSC reprogramming (SC) (Schiebinger et al., 2019). Dataset descriptions, preprocessing, and visualizations are provided in Appendix E.1. 
+
+Tasks and evaluation protocol. Following Zhang et al. (2024), we evaluate our models on three tasks of increasing difficulty to assess their ability to predict gene expression distributions at held-out time points, both within and beyond the training horizon. For each task, we train on the populations at the retained time points. At evaluation, we sample cells from the initial snapshot, propagate their encoded states forward, and decode the predicted populations at the held-out times. Generated and observed distributions are compared in gene-expression space using the Wasserstein distance 
+
+W2. The tasks differ in which snapshots are withheld: (1) Easy (interpolation) removes selected intermediate snapshots to assess prediction within the training horizon; (2) Medium (extrapolation) 
+
+removes several final snapshots to assess prediction beyond that horizon; and (3) Hard (interpolation and extrapolation) removes both intermediate and several final snapshots to assess the ability to recover population dynamics from highly sparse, unpaired distribution snapshots. Figure 12 shows the training and held-out time points. 
+
+Baselines. We compare against several representative models for temporal dynamics of single-cell populations, including scNODE (Zhang et al., 2024), LGP-OT (Balik & Lähdesmäki, 2026), 
+
+MIOFlow (Huguet et al., 2022), PRESCIENT (Yeo et al., 2021), PI-SDE (Jiang & Wan, 2024), and VGFM (Wang et al., 2025). KoopCell(-M), scNODE and LGP-OT jointly learn an informative latent representation and the latent dynamics, while other models learn dynamics in a fixed latent space obtained by dimensionality reduction. We tune all models to their optimal hyperparameters (Appendix E.2) and report the mean and std over three training seeds. 8Interpolation and extrapolation performance. KoopCell achieves strong predictive performance across all three datasets and tasks (Table 1; Appendix Tables 10 and 11). While some baselines attain comparable or slightly lower errors at individual interpolation times, KoopCell achieves lower average 
+
+W2 distances than all baselines on both the medium task and the extrapolation portion of the hard task. Incorporating memory further enhances predictive performance compared to the linear model (KoopCell). Relative to the strongest baseline for each dataset, KoopCell-M reduces the average error by 3.6–7.3% on the medium task and 2.0–6.6% on the extrapolation portion of the hard task. These results highlight the ability of our models to learn population dynamics from highly sparse, unpaired snapshots and extrapolate reliably beyond the training horizon. Appendix Figures 13–15 provide the corresponding visualization comparisons of predicted cell distributions. KoopCell ⋆     
+
+> (50D)
+> KoopCell-M ⋆
+> (50D)
+> 1510 15 19
+> Cell state Time
+
+Figure 3: Latent representations of SC cells colored by reference state (top; stromal: green, iPSC: red) and snapshot index (bottom). 
+
+Dynamics Shapes Representation. Figure 3 compares la-tent representations learned by KoopCell and KoopCell-M on the SC dataset under the hard-task setting. The com-plete comparison of latent representations, including those from PCA, scNODE, and MIOFlow, appears in Appendix Fig-ure 16. We match cells to published Waddington-OT reference states and label the initial population as mouse embryonic fibroblasts (MEFs), leaving unmatched or ambiguous cells gray. Reprogramming involves divergence toward stromal states or mesenchymal-to-epithelial transition (MET), from which iPSCs and alternative neural- and trophoblast-like states emerge (Schiebinger et al., 2019). KoopCell-M more clearly separates stromal and iPSC populations with distinct temporal progressions, whereas these late populations overlap substan-tially in KoopCell. These qualitative patterns are consistent with the branching structure of the memory-augmented model. 
+
+Biological Downstream Analysis. Following Zhang et al. (2024), we examine lineage-associated genes in ZB using KoopCell-M fitted to all snapshots, focusing on Presomitic Mesoderm (PSM) and Hindbrain. Using the driver-gene statis-tic from CellRank (Weiler et al., 2024), we correlate preter-minal gene expression with predicted fate probabilities and recover TBX16 /MSGN1 for PSM and SOX3 /SOX19A for Hindbrain (Appendix Figure 17). We further characterize dynamic gene-expression programs along model-predicted trajectories over 8–12 hours post fertilization (hpf). Gene modules with similar predicted expression-rate profiles are enriched for muscle and neural development in the PSM and Hindbrain lineages, respectively. Appendix E.5 pro-vides methods and additional results. Together, these analyses support the biological interpretability of our model. 
+
+## 5 RELATED WORK 
+
+Learning scRNA-seq dynamics from distribution snapshots. Several approaches have been proposed to infer temporal dynamics from unpaired distributions. TrajectoryNet (Tong et al., 2020) fits continuous normalizing flows regularized by dynamic OT in fixed PCA coordinates, while PRESCIENT and PI-SDE (Yeo et al., 2021; Jiang & Wan, 2024) model potential-driven and Hamilton– Jacobi-regularized SDEs, respectively. MIOFlow (Huguet et al., 2022) fits neural ODEs in a pretrained geodesic embedding; scNODE (Zhang et al., 2024) jointly trains a VAE and latent neural ODE through dynamic regularization, and LGP-OT (Balik & Lähdesmäki, 2026) learns a latent Gaussian process and a decoder using an OT objective. Additionally, proliferation and death are accommodated through unbalanced OT (Zhang et al., 2025; Sha et al., 2024; Sun et al., 2025). VGFM (Wang et al., 2025) and WFR-FM (Peng et al., 2026) further combine unbalanced OT with flow matching (Lipman et al., 2023; Tong et al., 2024a;b) for scalable joint velocity and growth estimation. 
+
+Koopman learning and memory. Koopman theory (Koopman, 1931) describes nonlinear dynamics through the linear evolution of observables, motivating the joint learning of autoencoders and latent linear propagators for dynamical prediction and time-series generation (Otto & Rowley, 2019; Lusch et al., 2018; Liu et al., 2023; Naiman et al., 2024). While these methods learn from paired time-series 9data, we develop theory and algorithms for generative Koopman learning from unpaired distribution snapshots. Finding observables with exact linear closure remains challenging. Recent work uses the Mori–Zwanzig formalism (Mori, 1965; Zwanzig, 1961) to learn non-Markovian memory closures to account for unresolved variables and improve dynamical prediction (Lin et al., 2021; Menier et al., 2025; Gupta et al., 2025; Lu et al., 2026). Building on this principle, we learn a memory closure through an augmented Markovian system to model branching population dynamics from snapshots. 
+
+## 6 CONCLUSIONS 
+
+We introduced KoopCell, a unified framework for learning Koopman generative dynamics from unpaired distribution snapshots. The weak population residual in Wasserstein space yields a closed-form least-squares estimator of the linear generator with convergence guarantees, while a Markovian memory embedding further enables KoopCell-M to capture branching dynamics. Our theoretical and empirical findings demonstrate the ability to recover Koopman spectra and improve extrapolation of gene-expression distributions from sparse, unpaired measurements, supporting quantitative analysis of developmental dynamics beyond the observed time window. Future directions include applications to multi-omics data and learning stochastic Koopman operators from distribution snapshots. AI USE STATEMENT 
+
+In this work, we used generative AI tools to assist with code implementation and debugging, including baseline implementations. We also used these tools to help verify the correctness and technical details of our mathematical arguments and algorithms, and to support synthetic data generation, experimental visualizations, and language polishing. We did not use generative AI tools to generate research ideas, develop the theoretical framework, formulate the main mathematical results, or design the core algorithms. We reviewed all AI-assisted work and take full responsibility for the final content, including the mathematical arguments, code, data, figures, and text. ETHICS STATEMENT 
+
+This work develops computational methods for modeling cellular population dynamics. Our experi-ments use synthetic data and publicly available single-cell datasets from zebrafish, Drosophila, and mouse, and involve no new biological sample collection or human participants. We anticipate no foreseeable adverse societal effects from this work. REPRODUCIBILITY STATEMENT 
+
+We facilitate reproducibility by documenting the assumptions and proofs of our theoretical results in Appendix A, and the estimation and training procedures for KoopCell and KoopCell-M, including pseudocode, in Appendix B. Synthetic data generation and experimental protocols are described in Appendices C and D. Single-cell dataset sources and preprocessing are provided in Appendix E.1, with training and held-out time points, evaluation metrics in Appendix E.1.1. Baseline configurations and model-selection procedures are documented in Appendix E.2, and the biological downstream analyses are detailed in Appendix E.5. We will release our code as open source upon acceptance of the paper. 
+
+## REFERENCES 
+
+Luigi Ambrosio, Nicola Gigli, and Giuseppe Savaré. Gradient Flows in Metric Spaces and in the Space of Probability Measures . Lectures in Mathematics ETH Zürich. Springer, 2. ed edition, 2008. ISBN 978-3-7643-8722-8 978-3-7643-8721-1. OCLC: 254181287. Nachman Aronszajn. Theory of reproducing kernels. Transactions of the American Mathematical Society , 68(3):337–404, 1950. Francisco J Ayala, Michael E Gilpin, and Joan G Ehrenfeld. Competition between species: theoretical models and experimental tests. Theoretical Population Biology , 4(3):331–356, 1973. 10 Mehmet Yigit Balik and Harri Lähdesmäki. Modeling temporal scRNA-seq data with latent Gaussian process and optimal transport. In Forty-Third International Conference on Machine Learning ,2026. URL https://openreview.net/forum?id=8RE5i7g4uB .Yoav Benjamini and Yosef Hochberg. Controlling the false discovery rate: A practical and powerful approach to multiple testing. Journal of the Royal Statistical Society Series B: Statistical Method-ology , 57(1):289–300, January 1995. ISSN 1467-9868. doi: 10.1111/j.2517-6161.1995.tb02031.x. URL http://dx.doi.org/10.1111/j.2517-6161.1995.tb02031.x .Elizabeth I. Boyle, Shuai Weng, Jeremy Gollub, Heng Jin, David Botstein, J. Michael Cherry, and Gavin Sherlock. GO::TermFinder—open source software for accessing Gene Ontology information and finding significantly enriched Gene Ontology terms associated with a list of genes. 
+
+Bioinformatics , 20(18):3710–3715, August 2004. ISSN 1367-4803. doi: 10.1093/bioinformatics/ bth456. URL http://dx.doi.org/10.1093/bioinformatics/bth456 .Diego Calderon, Ronnie Blecher-Gonen, Xingfan Huang, Stefano Secchia, James Kentro, Riza M. Daza, Beth Martin, Alessandro Dulja, Christoph Schaub, Cole Trapnell, Erica Larschan, Kate M. O’Connor-Giles, Eileen E. M. Furlong, and Jay Shendure. The continuum of Drosophila embry-onic development at single-cell resolution. Science , 377(6606):eabn5800, 2022. doi: 10.1126/ science.abn5800. URL https://www.science.org/doi/abs/10.1126/science. abn5800 .Geng Chen, Baitang Ning, and Tieliu Shi. Single-cell RNA-Seq technologies and related computa-tional data analysis. Frontiers in Genetics , 10:317, 2019. Ricky TQ Chen, Yulia Rubanova, Jesse Bettencourt, and David K Duvenaud. Neural ordinary differential equations. Advances in Neural Information Processing Systems , 31, 2018. Shawn J Cokus, Maricruz De La Torre, Eric F Medina, Jeffrey P Rasmussen, Joselyn Ramirez-Gutierrez, Alvaro Sagasti, and Fang Wang. Tissue-specific transcriptomes reveal gene expression trajectories in two maturing skin epithelial layers in zebrafish embryos. G3 Genes|Genomes|Genetics , 9(10):3439–3452, October 2019. ISSN 2160-1836. doi: 10.1534/ g3.119.400402. URL http://dx.doi.org/10.1534/g3.119.400402 .Imre Csiszár. I-divergence geometry of probability distributions and minimization problems. The Annals of Probability , pp. 146–158, 1975. C. Domínguez Conde, C. Xu, L. B. Jarvis, D. B. Rainbow, S. B. Wells, T. Gomes, S. K. Howlett, O. Suchanek, K. Polanski, H. W. King, L. Mamanova, N. Huang, P. A. Szabo, L. Richardson, L. Bolt, E. S. Fasouli, K. T. Mahbubani, M. Prete, L. Tuck, N. Richoz, Z. K. Tuong, L. Campos, H. S. Mousa, E. J. Needham, S. Pritchard, T. Li, R. Elmentaite, J. Park, E. Rahmani, D. Chen, D. K. Menon, O. A. Bayraktar, L. K. James, K. B. Meyer, N. Yosef, M. R. Clatworthy, P. A. Sims, D. L. Farber, K. Saeb-Parsy, J. L. Jones, and S. A. Teichmann. Cross-tissue immune cell analysis reveals tissue-specific features in humans. Science , 376(6594), May 2022. ISSN 1095-9203. doi: 10.1126/science.abl5197. URL https://doi.org/10.1126/science.abl5197 .Klaus-Jochen Engel and Rainer Nagel. One-Parameter Semigroups for Linear Evolution Equations ,volume 194 of Graduate Texts in Mathematics . Springer, 2000. doi: 10.1007/b97696. Jeffrey A. Farrell, Yiqun Wang, Samantha J. Riesenfeld, Karthik Shekhar, Aviv Regev, and Alexander F. Schier. Single-cell reconstruction of developmental trajectories during zebrafish embryogenesis. Science , 360(6392):eaar3131, 2018. doi: 10.1126/science.aar3131. URL 
+
+https://www.science.org/doi/abs/10.1126/science.aar3131 .Gene Ontology Consortium. The Gene Ontology knowledgebase in 2026. Nucleic Acids Research ,54(D1):D1779–D1792, January 2026. ISSN 1362-4962. doi: 10.1093/nar/gkaf1292. URL 
+
+http://dx.doi.org/10.1093/nar/gkaf1292 .Alex Graves, Santiago Fernández, Faustino Gomez, and Jürgen Schmidhuber. Connectionist temporal classification: labelling unsegmented sequence data with recurrent neural networks. In Proceedings of the 23rd International Conference on Machine Learning – ICML ’06 , ICML ’06, pp. 369–376. ACM Press, 2006. doi: 10.1145/1143844.1143891. URL http://dx.doi.org/10.1145/ 1143844.1143891 .11 Christopher Heje Grønbech, Maximillian Fornitz Vording, Pascal N Timshel, Casper Kaae Sønderby, Tune H Pers, and Ole Winther. scVAE: variational auto-encoders for single-cell gene expression data. Bioinformatics , 36(16):4415–4422, 2020. Vincent Guan, Joseph Janssen, Hossein Rahmani, Andrew Warren, Stephen Zhang, Elina Robeva, and Geoffrey Schiebinger. Identifying drift, diffusion, and causal structure from temporal snapshots. 
+
+arXiv preprint arXiv:2410.22729 , 2024. Priyam Gupta, Peter Schmid, Denis Sipp, Taraneh Sayadi, and Georgios Rigas. Mori–Zwanzig latent space Koopman closure for nonlinear autoencoder. Proceedings of the Royal Society A , 481(2313): 20240259, 2025. Carmen Hijón, Pep Español, Eric Vanden-Eijnden, and Rafael Delgado-Buscalioni. Mori–Zwanzig formalism as a practical computational tool. Faraday Discussions , 144:301–322, 2010. doi: 10.1039/B902479B. Guillaume Huguet, Daniel Sumner Magruder, Alexander Tong, Oluwadamilola Fasina, Manik Kuchroo, Guy Wolf, and Smita Krishnaswamy. Manifold interpolating optimal-transport flows for trajectory inference. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and Kyunghyun Cho (eds.), 
+
+Advances in Neural Information Processing Systems , 2022. URL https://openreview. net/forum?id=ahAEhOtVif .Byungjin Hwang, Ji Hyun Lee, and Duhee Bang. Single-cell RNA sequencing technologies and bioinformatics pipelines. Experimental & Molecular Medicine , 50(8):1–14, 2018. Masahiro Ikeda, Isao Ishikawa, and Corbinian Schlosser. Koopman and Perron–Frobenius operators on reproducing kernel Banach spaces. Chaos: An Interdisciplinary Journal of Nonlinear Science ,32(12), 2022. Qi Jiang and Lin Wan. A physics-informed neural SDE network for learning cellular dynam-ics from time-series scRNA-seq data. Bioinformatics , 40(Supplement_2):ii120–ii127, 09 2024. ISSN 1367-4811. doi: 10.1093/bioinformatics/btae400. URL https://doi.org/10.1093/ bioinformatics/btae400 .Diederik P. Kingma and Max Welling. Auto-Encoding Variational Bayes. In 2nd International Conference on Learning Representations, ICLR 2014, Banff, AB, Canada, April 14-16, 2014, Conference Track Proceedings , 2014. Frederik Köhne, Friedrich M. Philipp, Manuel Schaller, Anton Schiela, and Karl Worthmann. L∞-error bounds for approximations of the Koopman operator by kernel extended dynamic mode decomposition. SIAM Journal on Applied Dynamical Systems , 24(1):501–529, 2025. doi: 10.1137/ 24M1650120. URL https://doi.org/10.1137/24M1650120 .Bernard O Koopman. Hamiltonian systems and transformation in Hilbert space. Proceedings of the National Academy of Sciences , 17(5):315–318, 1931. Bernard O Koopman and J. von Neumann. Dynamical systems of continuous spectra. Proceedings of the National Academy of Sciences , 18(3):255–263, 1932. Milan Korda and Igor Mezi´ c. On convergence of extended dynamic mode decomposition to the Koopman operator. Journal of Nonlinear Science , 28(2):687–710, 2018. ISSN 1432-1467. doi: 10. 1007/s00332-017-9423-0. URL https://doi.org/10.1007/s00332-017-9423-0 .Chrysoula Kosma, Giannis Nikolentzos, George Panagopoulos, Jean-Marc Steyaert, and Michalis Vazirgiannis. Neural ordinary differential equations for modeling epidemic spreading. Transactions on Machine Learning Research , 2023. Vladimir R Kostic, Pietro Novelli, Andreas Maurer, Carlo Ciliberto, Lorenzo Rosasco, and Massimiliano Pontil. Learning dynamical systems via Koopman operator regression in re-producing kernel Hilbert spaces. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and Kyunghyun Cho (eds.), Advances in Neural Information Processing Systems , 2022. URL 
+
+https://openreview.net/forum?id=Tz1lknIPVfp .12 Huan Lei, Nathan A. Baker, and Xiantao Li. Data-driven parameterization of the generalized Langevin equation. Proceedings of the National Academy of Sciences , 113(50):14183–14188, November 2016. ISSN 1091-6490. doi: 10.1073/pnas.1609587113. URL http://dx.doi.org/10. 1073/pnas.1609587113 .Yen Ting Lin, Yifeng Tian, Daniel Livescu, and Marian Anghel. Data-driven learning for the Mori– Zwanzig formalism: A generalization of the Koopman learning framework. SIAM Journal on Applied Dynamical Systems , 20(4):2558–2601, 2021. Yue Ling, Peiqi Zhang, Zhenyi Zhang, and Peijie Zhou. CellStream: Dynamical optimal transport informed embeddings for reconstructing cellular trajectories from snapshots data. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, pp. 746–754, 2026. Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow matching for generative modeling. In The Eleventh International Conference on Learning Repre-sentations , 2023. URL https://openreview.net/forum?id=PqvMRDCJT9t .Yong Liu, Chenyu Li, Jianmin Wang, and Mingsheng Long. Koopa: Learning non-stationary time series dynamics with Koopman predictors. Advances in Neural Information Processing Systems ,36:12271–12290, 2023. Liwei Lu, Zhijun Zeng, Yan Jiang, Yi Zhu, and Pipi Hu. Weak collocation regression method: fast reveal hidden stochastic dynamics from high-dimensional aggregate data. Journal of Computational Physics , 502:112799, 2024. Wanfeng Lu, He Ma, Wei Lin, and Qunxi Zhu. Interpretable functional Koopman learning with non-Markovian closure for spatiotemporal systems. In Forty-Third International Conference on Machine Learning , 2026. URL https://openreview.net/forum?id=lquDiBCgNJ .Bethany Lusch, J Nathan Kutz, and Steven L Brunton. Deep learning for universal linear embeddings of nonlinear dynamics. Nature Communications , 9(1):4950, 2018. Alyssa J. Manning and David Kimelman. Tbx16 and Msgn1 are required to establish directional cell migration of zebrafish mesodermal progenitors. Developmental Biology , 406(2):172–185, October 2015. ISSN 0012-1606. doi: 10.1016/j.ydbio.2015.09.001. URL http://dx.doi.org/10. 1016/j.ydbio.2015.09.001 .Emmanuel Menier, Sebastian Kaltenbach, Mouadh Yagoubi, Marc Schoenauer, and Petros Koumout-sakos. Interpretable learning of effective dynamics for multiscale systems. Proceedings of the Royal Society A: Mathematical, Physical and Engineering Sciences , 481(2306), 2025. Kevin R Moon, David Van Dijk, Zheng Wang, Scott Gigante, Daniel B Burkhardt, William S Chen, Kristina Yim, Antonia van den Elzen, Matthew J Hirn, Ronald R Coifman, et al. Visualizing structure and transitions in high-dimensional biological data. Nature Biotechnology , 37(12): 1482–1492, 2019. Hazime Mori. Transport, collective motion, and Brownian motion. Progress of Theoretical Physics ,33(3):423–455, 1965. Ilan Naiman, N Benjamin Erichson, Pu Ren, Michael W Mahoney, and Omri Azencot. Generative modeling of regular and irregular time series data via Koopman VAEs. In International Conference on Learning Representations , volume 2024, pp. 50547–50573, 2024. Daniel P. S. Osborn, Kuoyu Li, Stephen J. Cutty, Andrew C. Nelson, Fiona C. Wardle, Yaniv Hinits, and Simon M. Hughes. Fgf-driven Tbx protein activities directly induce myf5 and myod to initiate zebrafish myogenesis. Development , 147(8):dev184689, April 2020. ISSN 0950-1991. doi: 10.1242/dev.184689. URL http://dx.doi.org/10.1242/dev.184689 .Samuel E. Otto and Clarence W. Rowley. Linearly recurrent autoencoder networks for learning dynamics. SIAM Journal on Applied Dynamical Systems , 18(1):558–593, 2019. doi: 10.1137/ 18M1177846. URL https://doi.org/10.1137/18M1177846 .13 Qiangwei Peng, Zihan Wang, Junda Ying, Yuhao Sun, Qing Nie, Lei Zhang, Tiejun Li, and Peijie Zhou. WFR-FM: Simulation-free dynamic unbalanced optimal transport. In The Fourteenth International Conference on Learning Representations , 2026. URL https://openreview. net/forum?id=1nqu7bK1mm .Christy Cortez Rossi, Takao Kaji, and Kristin Bruk Artinger. Transcriptional control of Rohon–Beard sensory neuron development at the neural plate border. Developmental Dynamics , 238(4):931–943, March 2009. ISSN 1097-0177. doi: 10.1002/dvdy.21915. URL http://dx.doi.org/10. 1002/dvdy.21915 .Leyla Ruzicka, Douglas G Howe, Sridhar Ramachandran, Sabrina Toro, Ceri E Van Slyke, Yvonne M Bradford, Anne Eagle, David Fashena, Ken Frazer, Patrick Kalita, Prita Mani, Ryan Martin, Sierra Taylor Moxon, Holly Paddock, Christian Pich, Kevin Schaper, Xiang Shao, Amy Singer, and Monte Westerfield. The Zebrafish Information Network: new support for non-coding genes, richer Gene Ontology annotations and the Alliance of Genome Resources. Nucleic Acids Research ,47(D1):D867–D873, January 2019. ISSN 1362-4962. doi: 10.1093/nar/gky1090. URL http: //dx.doi.org/10.1093/nar/gky1090 .Geoffrey Schiebinger, Jian Shu, Marcin Tabaka, Brian Cleary, Vidya Subramanian, Aryeh Solomon, Joshua Gould, Siyan Liu, Stacie Lin, Peter Berube, et al. Optimal-transport analysis of single-cell gene expression identifies developmental trajectories in reprogramming. Cell , 176(4):928–943, 2019. Yutong Sha, Yuchi Qiu, Peijie Zhou, and Qing Nie. Reconstructing growth and dynamic trajectories from single-cell transcriptomics data. Nature Machine Intelligence , 6(1):25–39, 2024. Yuhao Sun, Zhenyi Zhang, Zihan Wang, Tiejun Li, and Peijie Zhou. Variational regularized unbal-anced optimal transport: Single network, least action. In The Thirty-Ninth Annual Conference on Neural Information Processing Systems , 2025. URL https://openreview.net/forum? id=Iguyg0LULD .Monica Tambalo, Richard Mitter, and David G. Wilkinson. A single cell transcriptome atlas of the developing zebrafish hindbrain. Development , 147(6):dev184143, March 2020. ISSN 0950-1991. doi: 10.1242/dev.184143. URL http://dx.doi.org/10.1242/dev.184143 .Alexander Tong, Jessie Huang, Guy Wolf, David van Dijk, and Smita Krishnaswamy. TrajectoryNet: A dynamic optimal transport network for modeling cellular dynamics. In Proceedings of the 37th International Conference on Machine Learning , 2020. Alexander Tong, Kilian FATRAS, Nikolay Malkin, Guillaume Huguet, Yanlei Zhang, Jarrid Rector-Brooks, Guy Wolf, and Yoshua Bengio. Improving and generalizing flow-based generative models with minibatch optimal transport. Transactions on Machine Learning Research , 2024a. ISSN 2835-8856. URL https://openreview.net/forum?id=CD9Snc73AW . Expert Certification. Alexander Y. Tong, Nikolay Malkin, Kilian Fatras, Lazar Atanackovic, Yanlei Zhang, Guillaume Huguet, Guy Wolf, and Yoshua Bengio. Simulation-free Schrödinger bridges via score and flow matching. In Sanjoy Dasgupta, Stephan Mandt, and Yingzhen Li (eds.), Proceedings of the 27th International Conference on Artificial Intelligence and Statistics , volume 238 of Proceedings of Machine Learning Research , pp. 1279–1287. PMLR, 02–04 May 2024b. URL https:// proceedings.mlr.press/v238/tong24a.html .Jonathan H. Tu, Clarence W. Rowley, Dirk M. Luchtenburg, Steven L. Brunton, and J. Nathan Kutz. On dynamic mode decomposition: Theory and applications. Journal of Computational Dynamics ,1(2):391–421, 2014. ISSN 2158-2491. doi: 10.3934/jcd.2014.1.391. URL https://www. aimsciences.org/article/id/1dfebc20-876d-4da7-8034-7cd3c7ae1161 .Dongyi Wang, Yuanwei Jiang, Zhenyi Zhang, Xiang Gu, Peijie Zhou, and Jian Sun. Joint velocity-growth flow matching for single-cell dynamics modeling. In Ad-vances in Neural Information Processing Systems , volume 38, Main Conference, pp. 160552–160588. Curran Associates, Inc., 2025. doi: 10.52202/085713-5363. URL 
+
+https://proceedings.neurips.cc/paper_files/paper/2025/file/ eb1bad7a84ef68a64f1afd6577725d45-Paper-Conference.pdf .14 Xiaomei Wang, Qi An, Zilong He, and Wei Fang. A literature review of social network analysis in epidemic prevention and control. Complexity , 2021(1):3816221, 2021. Philipp Weiler, Marius Lange, Michal Klein, Dana Pe’er, and Fabian Theis. CellRank 2: unified fate mapping in multiview single-cell data. Nature Methods , 21(7):1196–1205, 2024. ISSN 1548-7105. doi: 10.1038/s41592-024-02303-9. URL http://dx.doi.org/10.1038/ s41592-024-02303-9 .Caleb Weinreb, Alejo Rodriguez-Fraticelli, Fernando D. Camargo, and Allon M. Klein. Lineage tracing on transcriptional landscapes links state to fate during differentiation. Science , 367(6479), February 2020. ISSN 1095-9203. doi: 10.1126/science.aaw3381. URL http://dx.doi.org/ 10.1126/science.aaw3381 .Matthew O Williams, Ioannis G Kevrekidis, and Clarence W Rowley. A data–driven approximation of the Koopman operator: Extending dynamic mode decomposition. Journal of Nonlinear Science ,25(6):1307–1346, 2015. Grace Hui Ting Yeo, Sachit D Saksena, and David K Gifford. Generative modeling of single-cell time series with PRESCIENT enables prediction of cell trajectories with interventions. Nature Communications , 12(1):3222, 2021. Jiaqi Zhang, Erica Larschan, Jeremy Bigness, and Ritambhara Singh. scNODE: generative model for temporal single cell transcriptomic data prediction. Bioinformatics , 40(Supplement_2):ii146–ii154, 2024. Zhenyi Zhang, Tiejun Li, and Peijie Zhou. Learning stochastic dynamics from snapshots through reg-ularized unbalanced optimal transport. In International Conference on Learning Representations ,volume 2025, pp. 19888–19919, 2025. Bolin Zhao, Xiaoyu Zhang, Yuting Dong, Xin Lu, Wei Lin, and Qunxi Zhu. Delay flow matching. In The Fourteenth International Conference on Learning Representations , 2026. URL https: //openreview.net/forum?id=6lH1XblLpo .Robert Zwanzig. Memory effects in irreversible thermodynamics. Physical Review , 124(4):983, 1961. Robert Zwanzig. Nonlinear generalized Langevin equations. Journal of Statistical Physics , 9(3): 215–220, 1973. 15 APPENDIX CONTENTS 
+
+A Theory 17 
+
+A.1 Dual formulation and geometry of the weak population residual . . . . . . . . . . 17 A.1.1 Canonical velocity and the space–time test space . . . . . . . . . . . . . . 17 A.1.2 Residual functional and minimum-flux geometry . . . . . . . . . . . . . . 18 A.2 Finite tests, closed-form regression, and convergence under test enrichment . . . . 19 A.3 Convergence of the weak population residual . . . . . . . . . . . . . . . . . . . . 22 A.3.1 Preliminaries: Koopman-invariant RKHS and linear feature dynamics . . . 22 A.3.2 Convergence of the weak population residual . . . . . . . . . . . . . . . . 22 A.4 From weak residual consistency to strong semigroup convergence . . . . . . . . . 24 A.4.1 The weak residual controls probability prediction . . . . . . . . . . . . . . 24 A.4.2 Distributional identifiability of the linear propagator . . . . . . . . . . . . 25 A.4.3 From distributional compactness to strong operator compactness . . . . . . 26 A.4.4 Locally uniform strong convergence of the learned propagators . . . . . . . 27 
+
+B Algorithmic Details 29 
+
+B.1 KoopCell: Koopman dynamics and alternating training . . . . . . . . . . . . . . . 29 B.1.1 VAE representation learning . . . . . . . . . . . . . . . . . . . . . . . . . 29 B.1.2 Empirical weak residual and closed-form dynamics estimation . . . . . . . 30 B.2 KoopCell-M: memory-augmented branching dynamics and alternating training . . 32 B.2.1 Memory-augmented dynamics and developmental paths . . . . . . . . . . 32 B.2.2 Variational inference and representation learning . . . . . . . . . . . . . . 34 B.2.3 Closed-form dynamics estimation and alternating training . . . . . . . . . 38 
+
+C Spectral Recovery Experiments 39 
+
+C.1 Toy 1: finite-dimensional nonlinear flow . . . . . . . . . . . . . . . . . . . . . . . 39 C.2 Toy 2: damped Duffing flow . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 42 C.3 Rollout-error accumulation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 43 
+
+D Branching Dynamics Experiments 44 E Single-Cell Experimental Details 45 
+
+E.1 Single-cell datasets and preprocessing . . . . . . . . . . . . . . . . . . . . . . . . 45 E.1.1 Population prediction and evaluation . . . . . . . . . . . . . . . . . . . . . 46 E.2 Implementation of Baseline Models . . . . . . . . . . . . . . . . . . . . . . . . . 46 E.3 Model configurations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 48 E.4 Additional Single-Cell Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . 49 E.4.1 Predicted cell populations at held-out time points . . . . . . . . . . . . . . 50 E.4.2 Visualization of the learned latent representations . . . . . . . . . . . . . . 54 E.5 Biological Downstream Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . 54 16 A THEORY 
+
+This appendix develops the theoretical foundations of estimating the linear generator based on the weak population residual, introduced in Section 3.1. Sections A.1–A.2 prove Theorem 3.1: mini-mizing the weak population residual gives the best projected linear approximation to the canonical Wasserstein velocity, and finite tests yield a least-squares regression problem whose minimizers converge under dense test enrichment and uniqueness. We then consider increasing the observable dimension in a Koopman-invariant RKHS. Section A.3 shows that the minimum weak population residual vanishes as D → ∞ ; Section A.4 relates this consistency to Wasserstein prediction bounds and locally uniform strong convergence of the learned propagators, under the respective approxima-tion, stability, and identifiability assumptions. Algorithmic details and pseudocode are provided in Appendix B. A.1 DUAL FORMULATION AND GEOMETRY OF THE WEAK POPULATION RESIDUAL 
+
+Throughout Sections A.1–A.2, the observable dimension D is fixed. Following Section 3.1, we write 
+
+μt ∈ P 2(RD ) for the latent distribution induced by the chosen observables at time t. We work over real Hilbert spaces; complex-valued tests can be handled by separating real and imaginary parts. A.1.1 CANONICAL VELOCITY AND THE SPACE –TIME TEST SPACE 
+
+Assume 
+
+μ· ∈ AC 2([0 , T ]; P2(RD )) . (7) Then there is a unique minimum-norm velocity vt ∈ Tμt P2 such that 
+
+∂tμt + ∇· (vtμt) = 0 ,
+
+Z T
+
+> 0
+
+∥vt∥2
+
+> L2(μt)
+
+dt < ∞. (8) Here 
+
+TμP2 = {∇ ϕ : ϕ ∈ C∞ 
+
+> c
+
+(RD )}L2(μ)
+
+, (9) and Pμ denotes the L2(μ)-orthogonal projection onto this tangent space. We collect these spaces along the curve in 
+
+Tμ = L2(0 , T ; Tμt P2) , ∥q∥2 
+
+> Tμ
+
+=
+
+Z T
+
+> 0
+
+Z
+
+∥qt(z)∥2dμt(z)d t. (10) Let D consist of C1 space–time potentials compactly supported in space uniformly in t. We identify two potentials whose spatial gradients agree in L2(d t dμt) and define VD as the completion under 
+
+∥φ∥2 
+
+> VD
+
+=
+
+Z T
+
+> 0
+
+Z
+
+∥∇ z φ(t, z)∥2dμt(z)d t. (11) 
+
+Lemma A.1 (Density of smooth space–time gradients) . The map φ 7 → ∇ z φ extends to an isometric isomorphism from VD onto Tμ. In particular, finite sums 
+
+> L
+
+X
+
+> ℓ=1
+
+ηℓ(t)∇ψℓ(z), ηℓ ∈ C1([0 , T ]) , ψℓ ∈ C∞ 
+
+> c
+
+(RD ), (12) 
+
+are dense in Tμ.Proof. The gradient map is an isometry from the quotient of D into Tμ: spatial mollification approximates each C1 
+
+> c
+
+potential by smooth compactly supported potentials with uniformly convergent gradients. To prove density, let q ∈ Tμ be orthogonal to every field in Equation (12). For fixed 
+
+ψ ∈ C∞ 
+
+> c
+
+, set 
+
+Fψ (t) = 
+
+Z
+
+qt(z)⊤∇ψ(z)d μt(z).
+
+Cauchy–Schwarz and boundedness of ∇ψ imply Fψ ∈ L1(0 , T ). Orthogonality to η(t)∇ψ(z) for every smooth η therefore implies Fψ (t) = 0 for almost every t.17 For each integer m ≥ 1, choose a countable C1-norm dense subset of C∞ 
+
+> c
+
+(Bm(0)) , viewing its members as functions on RD , and enumerate their union as {ψn}. Such subsets exist by separability of C1(Bm(0)) . Every ψ ∈ C∞ 
+
+> c
+
+(RD ) can then be approximated by members supported in one fixed ball, with ∥∇ ψn − ∇ ψ∥∞ → 0 along a suitable sequence. Since μt is a probability measure, 
+
+∥∇ ψn − ∇ ψ∥L2(μt) ≤ ∥∇ ψn − ∇ ψ∥∞. Thus the same countable family generates a dense gradient class for every t. Removing the union of the null sets obtained above, we have, for almost every t,
+
+Z
+
+q⊤ 
+
+> t
+
+∇ψn dμt = 0 for every n. 
+
+Since qt ∈ Tμt P2, density forces qt = 0 . Hence the orthogonal complement of the range is trivial, proving density and the claimed isomorphism after completion. This lemma allows optimization over completed test potentials to be identified with optimization over all square-integrable tangent velocity fields, as used in Theorem A.3 below. A.1.2 RESIDUAL FUNCTIONAL AND MINIMUM -FLUX GEOMETRY 
+
+For A ∈ RD×D define 
+
+rA(t) = ∂tμt + ∇· (Az μt). (13) For a smooth test φ ∈ D, define RD (A; φ) := ⟨rA, φ ⟩. Integration by parts gives 
+
+RD (A; φ) = μT [φ(T )] − μ0[φ(0)] −
+
+Z T
+
+> 0
+
+μt
+
+∂tφ(t) + ∇z φ(t)⊤Az  dt. (14) Using Equation (8), the same quantity is 
+
+RD (A; φ) = 
+
+Z T
+
+> 0
+
+Z
+
+∇z φ(t, z)⊤(vt(z) − Az )d μt(z)d t. (15) Thus it extends continuously to VD .For a zero-mass distribution σ, define 
+
+∥σ∥−1,μ = sup   
+
+> ϕ∈C∞
+> c(RD)
+
+
+
+⟨σ, ϕ ⟩ :
+
+Z
+
+∥∇ ϕ∥2dμ ≤ 1
+
+
+
+. (16) 
+
+Lemma A.2 (Minimum-flux representation) . If w ∈ L2(μ; RD ) and σ = −∇· (wμ), then 
+
+∥σ∥−1,μ = ∥Pμw∥L2(μ). (17) 
+
+Moreover, Pμw is the unique min-norm vector field among all L2(μ) fields satisfying −∇ · (qμ) = σ.Conversely, if ∥σ∥−1,μ < ∞, a tangent field satisfying this constraint exists. Proof. For every smooth ϕ,
+
+⟨σ, ϕ ⟩ =
+
+Z
+
+∇ϕ⊤w dμ =
+
+Z
+
+∇ϕ⊤Pμw dμ, 
+
+because w − Pμw is orthogonal to the tangent space. Cauchy–Schwarz proves the upper bound in Equation (17). Conversely, if Pμw̸ = 0 , choose gradients converging in L2(μ) to Pμw and normalize them. Their pairings converge to ∥Pμw∥, proving equality. If Pμw = 0 , all pairings vanish and equality is immediate. If q has the same weighted divergence, then q − w is orthogonal to all smooth gradients, hence 
+
+Pμq = Pμw. Orthogonal decomposition gives 
+
+∥q∥2 
+
+> L2(μ)
+
+= ∥Pμw∥2 
+
+> L2(μ)
+
++ ∥(I − Pμ)q∥2
+
+> L2(μ)
+
+.
+
+The minimum is therefore attained uniquely at q = Pμw.For the converse, finiteness of ∥σ∥−1,μ makes ∇ϕ 7 → ⟨ σ, ϕ ⟩ a well-defined bounded linear functional on smooth gradients. It extends continuously to TμP2, so the Riesz representation theorem gives a unique q ∈ TμP2 with ⟨σ, ϕ ⟩ = R q⊤∇ϕ dμ for every ϕ ∈ C∞ 
+
+> c
+
+(RD ). Thus σ = −∇ · (qμ), and the preceding argument applies. 18 Theorem A.3 (Dual representation, exact geometry, and population optimum) . For every A ∈
+
+RD×D,
+
+JD (A) := 12
+
+Z T
+
+> 0
+
+∥rA(t)∥2 
+
+> −1,μ t
+
+dt (18) 
+
+= sup 
+
+> φ∈VD
+
+
+
+RD (A; φ) − 12 ∥φ∥2
+
+> VD
+
+
+
+(19) 
+
+= 12
+
+Z T
+
+> 0
+
+∥vt − Pμt (Az )∥2
+
+> L2(μt)
+
+dt. (20) 
+
+A minimizer A† 
+
+> D
+
+exists. It satisfies 
+
+Z T
+
+> 0
+
+Z  vt(z) − Pμt (A† 
+
+> D
+
+z)z⊤dμt(z)d t = 0 . (21) 
+
+If 
+
+Pμt (Bz ) = 0 in L2(μt) for a.e. t =⇒ B = 0 , (22) 
+
+then the minimizing matrix is unique. Every minimizer satisfies 
+
+JD (A) = JD (A† 
+
+> D
+
+) + 12
+
+Z T
+
+> 0
+
+∥Pμt (( A − A† 
+
+> D
+
+)z)∥2
+
+> L2(μt)
+
+dt. (23) 
+
+Proof. The canonical equation gives rA = −∇· (( vt − Az )μt). Lemma A.2 and Pμt vt = vt yield, for almost every t, ∥rA(t)∥−1,μ t = ∥vt − Pμt (Az )∥L2(μt). This proves Equation (20). To obtain Equation (19), set ht = vt − Pμt (Az ). For smooth φ, Equation (15) and orthogonal projection give RD (A; φ) = ⟨h, ∇z φ⟩Tμ , where the inner product integrates over both space and time. This identity extends continuously to VD. Lemma A.1 makes the correspondence φ 7 → q = ∇z φ an isometric isomorphism onto Tμ. Thus ∥φ∥VD = ∥q∥Tμ , and taking the supremum over φ ∈ VD is equivalent to taking it over all q ∈ Tμ. Completing the square gives 
+
+⟨h, q⟩Tμ − 12 ∥q∥2 
+
+> Tμ
+
+= 12 ∥h∥2 
+
+> Tμ
+
+− 12 ∥q − h∥2 
+
+> Tμ
+
+.
+
+The maximum is attained at q = h and equals 12 ∥h∥2 
+
+> Tμ
+
+= JD (A) by Equation (20), proving Equation (19). Define SD B = [ t 7 → Pμt (Bz )] ∈ Tμ. This is a bounded linear map because ∥SD B∥2 
+
+> Tμ
+
+≤∥B∥2
+
+> F
+
+R T
+
+> 0
+
+R ∥z∥2dμtdt. Its range is finite dimensional and closed, and JD (A) = 12 ∥v − SD A∥2 
+
+> Tμ
+
+.Projecting v onto this range therefore gives a minimizing matrix A†
+
+> D
+
+, whose projected velocity 
+
+SD A† 
+
+> D
+
+is unique. Orthogonality to every SD B gives 
+
+Z T
+
+> 0
+
+Z
+
+(vt − Pμt (A† 
+
+> D
+
+z)) ⊤Pμt (Bz )d μtdt = 0 .
+
+The first factor is tangent, so Pμt (Bz ) may be replaced by Bz . Since the last identity holds for every 
+
+B, it is equivalent to Equation (21). The Pythagorean theorem gives Equation (23); injectivity in Equation (22) makes the matrix representative unique. A.2 FINITE TESTS , CLOSED -FORM REGRESSION , AND CONVERGENCE UNDER TEST ENRICHMENT 
+
+Let 
+
+VD, 1 ⊂ VD, 2 ⊂ · · · ⊂ VD , [
+
+> m≥1
+
+VD,m = VD , (24) where VD,m = span {φ1, . . . , φ m}. We choose the test potentials φj from the class D defined above; such a dense family exists by Lemma A.1. 19 Define 
+
+yj = μT [φj (T )] − μ0[φj (0)] −
+
+Z T
+
+> 0
+
+μt[∂tφj (t)]d t, (25) 
+
+Hj =
+
+Z T
+
+> 0
+
+μt[∇z φj (t, z)z⊤]d t, (26) 
+
+Mij =
+
+Z T
+
+> 0
+
+μt[∇z φi(t, z)⊤∇z φj (t, z)]d t. (27) Let a = vec( A), let row j of G be vec( Hj )⊤, and set y = ( y1, . . . , y m)⊤.
+
+Lemma A.4. If M ≻ 0, then 
+
+sup 
+
+> φ∈VD,m
+
+
+
+RD (A; φ) − 12 ∥φ∥2
+
+> VD
+
+
+
+= 12 (y − Ga )⊤M −1(y − Ga ). (28) 
+
+The maximizing test is 
+
+φ⋆ 
+
+> A,m
+
+=
+
+> m
+
+X
+
+> j=1
+
+[M −1(y − Ga )] j φj . (29) 
+
+If G has full column rank, the unique matrix minimizer is 
+
+vec( AD,m ) = ( G⊤M −1G)−1G⊤M −1y. (30) 
+
+Proof. Write φ = Pmj=1 cj φj , with c = ( c1, . . . , c m)⊤. For each basis function, the definitions of 
+
+yj and Hj give 
+
+RD (A; φj ) = yj −
+
+Z T
+
+> 0
+
+μt
+
+∇z φj (t, z)⊤Az  dt
+
+= yj − ⟨ Hj , A⟩F = yj − vec( Hj )⊤a = yj − (Ga )j .
+
+Therefore, by linearity of RD (A; ·),
+
+RD (A; φ) = 
+
+> m
+
+X
+
+> j=1
+
+cj RD (A; φj ) = c⊤(y − Ga ).
+
+Moreover, since M is the Gram matrix of {φj }mj=1 under the VD inner product, 
+
+∥φ∥2 
+
+> VD
+
+=
+
+> m
+
+X
+
+> i,j =1
+
+cicj
+
+Z T
+
+> 0
+
+μt
+
+∇z φi(t, z)⊤∇z φj (t, z) dt = c⊤M c .
+
+Completing the square gives 
+
+c⊤(y − Ga ) − 12 c⊤M c = − 12 (c − M −1(y − Ga )) ⊤M (c − M −1(y − Ga )) + 12 (y − Ga )⊤M −1(y − Ga ).
+
+The first term is nonpositive and vanishes exactly at the coefficients in Equation (29), proving Equation (28). Differentiating the remaining quadratic in a gives G⊤M −1Ga = G⊤M −1y. Full column rank makes the normal matrix positive definite and yields Equation (30). 
+
+Remark (Weak population residuals as regression residuals) . For fixed A, RD (A; ·) is the continuous linear functional obtained by testing the continuity-equation residual rA in Equation (13). Its value RD (A; φj ) measures the signed discrepancy between the moment evolution of μt and the contribution of the candidate drift Az , as expressed in Equation (14). With the moments defined above, 
+
+RD (A; φj ) = yj − ⟨ Hj , A⟩F = yj − (Ga )j , j = 1 , . . . , m. 
+
+Thus y − Ga collects these scalar weak residuals, and y = Ga means that the continuity equation is satisfied against every test in VD,m . When M ≻ 0, Lemma A.4 gives the weighted least-squares objective 12 (y − Ga )⊤M −1(y − Ga ) for estimating A. In Appendix B.1.2, we implement this regression by approximating y, G, and M with empirical sample averages and temporal quadrature. 20 Lemma A.4 gives the estimator for a fixed finite test space. We next show that, as the nested test spaces become dense in VD , these estimators converge to the unique minimizer of the full weak population residual objective. To compare the two objectives, we use the Riesz representation of the continuous functional RD (A; ·): for each A, there is a unique hA ∈ VD satisfying RD (A; φ) = ⟨hA, φ ⟩VD
+
+for every φ ∈ VD .Writing a = vec( A) and letting h0 correspond to A = 0 , define the linear operator TD : RD2
+
+→ VD
+
+by 
+
+⟨TD a, φ ⟩VD =
+
+Z T
+
+> 0
+
+μt[∇z φ(t, z)⊤Az ]d t, φ ∈ VD . (31) Cauchy–Schwarz and the finite integrated second moment make this definition well posed by the Riesz theorem, with ∥TD a∥VD ≤ (R T 
+
+> 0
+
+μt[∥z∥2]d t)1/2∥a∥2. The residual is affine in A, so hA = h0 −
+
+TD a. Under the gradient identification of Lemma A.1, ∇z h0(t, ·) = vt, ∇z (TD a)( t, ·) = Pμt (Az ),and thus ∇z hA(t, ·) = vt − Pμt (Az ), with these identities understood in Tμ.The Riesz representation allows us to complete the square in the dual objective: 
+
+RD (A; φ) − 12 ∥φ∥2 
+
+> VD
+
+= 12 ∥hA∥2 
+
+> VD
+
+− 12 ∥φ − hA∥2 
+
+> VD
+
+.
+
+The supremum over VD is therefore attained at φ = hA. For the finite-test problem, let Qm : VD →
+
+VD,m be the orthogonal projection. Since hA − QmhA is orthogonal to VD,m , every φ ∈ VD,m 
+
+satisfies ⟨hA, φ ⟩VD = ⟨QmhA, φ ⟩VD . The same calculation with QmhA in place of hA shows that the restricted supremum is attained at φ = QmhA, which belongs to VD,m . Consequently, 
+
+JD (a) = 12 ∥hA∥2 
+
+> VD
+
+, JD,m (a) = 12 ∥QmhA∥2 
+
+> VD
+
+. (32) Thus increasing the test space approximates the full residual representative by its projections QmhA.To compare the minimizers, write C = T∗ 
+
+> D
+
+TD and d = T∗ 
+
+> D
+
+h0 for the normal-equation matrix and vector of the full problem, and Cm = T∗ 
+
+> D
+
+QmTD and dm = T∗ 
+
+> D
+
+Qmh0 for their finite-test counterparts. 
+
+Theorem A.5 (Convergence under test-space enrichment) . Suppose that the nested test spaces satisfy Equation (24) and that the population minimizer A† 
+
+> D
+
+is unique. Let AD,m minimize, over 
+
+A ∈ RD×D , the objective obtained by restricting the dual supremum to VD,m , and set a† = vec( A† 
+
+> D
+
+)
+
+and am = vec( AD,m ). Then C ≻ 0, and, for all sufficiently large m, Cm ≻ 0 and the finite-test minimizer is unique. For these m,
+
+∥am − a†∥2 ≤ 2
+
+λmin (C)
+
+ ∥dm − d∥2 + ∥Cm − C∥op ∥a†∥2
+
+ . (33) 
+
+Consequently, 
+
+AD,m −→ A† 
+
+> D
+
+as m → ∞ . (34) 
+
+Proof. For each m, the range of QmTD is finite dimensional and hence closed. Projecting Qmh0
+
+onto this range therefore yields a finite-test minimizer. The quadratic representations above yield the normal equations 
+
+Ca † = d, Cmam = dm. (35) Density in Equation (24) gives Qmq → q for every q ∈ VD . Since the domain of TD is finite dimen-sional, this convergence is uniform after composition with TD . To see it directly, let e1, . . . , eD2 be an orthonormal basis of RD2
+
+. For a = P 
+
+> q
+
+aq eq with ∥a∥2 = 1 ,
+
+∥(I − Qm)TD a∥ ≤ X
+
+> q
+
+|aq | ∥ (I − Qm)TD eq ∥≤ D max  
+
+> q
+
+∥(I − Qm)TD eq ∥ −→ 0.
+
+Consequently, 
+
+∥Cm − C∥op = ∥T∗ 
+
+> D
+
+(Qm − I)TD ∥op → 0, (36) 
+
+∥dm − d∥2 = ∥T∗ 
+
+> D
+
+(Qm − I)h0∥2 → 0. (37) 21 Uniqueness of A† 
+
+> D
+
+is equivalent to injectivity of TD. Because its domain is finite dimensional, 
+
+C = T∗ 
+
+> D
+
+TD ≻ 0. Put κ = λmin (C). For all sufficiently large m, ∥Cm − C∥ ≤ κ/ 2, and Weyl’s inequality gives Cm ⪰ (κ/ 2) I. Thus Cm is invertible and ∥C−1 
+
+> m
+
+∥ ≤ 2/κ .Subtracting the equations in Equation (35) yields 
+
+Cm(am − a†) = ( dm − d) − (Cm − C)a†.
+
+Multiplying by C−1 
+
+> m
+
+proves Equation (33). Its right-hand side tends to zero by Equation (36)– Equation (37), which proves Equation (34). A.3 CONVERGENCE OF THE WEAK POPULATION RESIDUAL 
+
+Our goal in this section is to prove that as the number of compatible observables increases, the 
+
+minimum weak population residual converges to zero. This is different from Section A.2, where the observable dimension D is fixed and only the test space is enlarged. As a beginning, we first define the observable space and the infinite-dimensional feature coordinates in which its dynamics become linear. A.3.1 PRELIMINARIES : K OOPMAN -INVARIANT RKHS AND LINEAR FEATURE DYNAMICS 
+
+Koopman operators on reproducing-kernel spaces have been studied from both operator-theoretic and statistical perspectives, including boundedness, spectral approximation, and learning from data (Ikeda et al., 2022; Kostic et al., 2022). From now on, let X be a separable metric space with a flow Ft, and let H be a separable real RKHS with kernel k (Aronszajn, 1950). The feature map Φ( x) := k(x, ·)
+
+satisfies f (x) = ⟨f, Φ( x)⟩H for every f ∈ H ; we assume that Φ is strongly measurable. Suppose the Koopman operators U (t)f = f ◦ Ft preserve H and form a C0-semigroup with generator L.Wendland native spaces provide a concrete example of Koopman invariance: these RKHSs are norm-equivalent to Sobolev spaces on bounded Lipschitz domains, and composition preserves them when the state map is a sufficiently smooth diffeomorphism with bounded derivatives and Jacobian determinant bounded away from zero (Köhne et al., 2025). Furthermore, write Z = H for the feature space. Since H is reflexive, T (t) := U (t)∗ is also a 
+
+C0-semigroup, with generator A = L∗ on its adjoint domain, possibly unbounded. The reproducing identity gives ⟨f, T (t)Φ( x)⟩H = ⟨U (t)f, Φ( x)⟩H = f (Ftx). As this holds for every f ∈ H , the features evolve linearly, following: 
+
+Φ( Ftx) = T (t)Φ( x).
+
+For an orthonormal basis {ej }j≥1 of H, let PD be the projector onto ZD = span {e1, . . . , e D }. Since 
+
+⟨ej , Φ( x)⟩H = ej (x),
+
+PD Φ( x) = 
+
+> D
+
+X
+
+> j=1
+
+ej (x)ej ←→ gD (x) =  e1(x), . . . , e D (x)⊤.
+
+Thus we may view the D-dimensional encoder as a projection of the same feature map Φ( x). For a random initial state X0, define μt := Law(Φ( FtX0)) and μDt := ( PD )#μt. Here μt denotes the full feature distribution, while μDt , identified with a measure on RD , corresponds to the latent distribution denoted by μt in Section 3.1 and Sections A.1–A.2. The superscript makes its dependence on the observable dimension explicit. These projected laws can be compared in the common space Z as D
+
+increases, with T (t) providing the exact linear evolution for the subsequent convergence analysis. A.3.2 CONVERGENCE OF THE WEAK POPULATION RESIDUAL 
+
+Fix τ > 0 and X0 ∼ ρ0 on (Ω , P). For t ∈ [0 , 2τ ], set Z0 = Φ( X0), Zt = T (t)Z0 = Φ( FtX0),
+
+μt = Law( Zt), and μDt = ( PD )#μt. Assume that Z0 ∈ D(A) almost surely and E(∥Z0∥2 +
+
+∥AZ0∥2) < ∞. We write ∥ · ∥ L2 for the norm on L2(Ω; Z) and ∥ · ∥ L for the norm on L =
+
+L2([0 , 2τ ] × Ω; Z).The semigroup preserves D(A) and satisfies AT (t)z = T (t)Az and T (t)z − z = R t 
+
+> 0
+
+T (r)Az dr
+
+for z ∈ D(A) (Engel & Nagel, 2000, Chapter II). Strong continuity and uniform boundedness give 22 Mτ := sup 0≤t≤2τ ∥T (t)∥ < ∞, so 
+
+Z 2τ
+
+> 0
+
+E(∥Zt∥2 + ∥AZt∥2) d t ≤ 2τ M 2 
+
+> τ
+
+E(∥Z0∥2 + ∥AZ0∥2) < ∞.
+
+The same bound and dominated convergence show that t 7 → Zt is continuous in L2(Ω; Z). For s ≤ t,coupling PD Zs and PD Zt and using Zt − Zs = R ts AZr dr yields 
+
+W2(μDs , μ Dt ) ≤ ∥ PD (Zt − Zs)∥L2 ≤
+
+Z ts
+
+∥AZr ∥L2 dr. 
+
+Since the last integrand belongs to L2(0 , 2τ ), μD 
+
+> ·
+
+∈ AC 2([0 , 2τ ]; P2(ZD )) . The weak-continuity framework of the preceding subsections therefore applies, with weak population objective 
+
+JD (B) = 12
+
+Z 2τ
+
+> 0
+
+∥∂tμDt + ∇ · (By μDt )∥2
+
+> −1,μ Dt
+
+dt. (38) Theorem A.3 ensures that a minimizer AD ∈ argmin B∈L (ZD ) JD (B) exists; uniqueness is unnec-essary for the statements below. 
+
+Lemma A.6 (Comparison with the projected path velocity) . Under the assumptions above, every 
+
+B ∈ L (ZD ) satisfies p2JD (B) ≤ ∥ PD AZ − BPD Z∥L.
+
+Proof. Set Yt = PD Zt and Vt = PD AZt. Conditioning V on (t, Yt) under the probability measure (2 τ )−1dt dP gives a jointly measurable field wDt (y) = E[Vt | Yt = y] for almost every t.Conditional Jensen’s inequality gives ∥wD (Y )∥L ≤ ∥ V ∥L < ∞. For ψ ∈ C∞ 
+
+> c
+
+(ZD ), the chain rule along Yt gives 
+
+Eψ(Yt) − Eψ(Ys) = 
+
+Z ts
+
+Z
+
+⟨∇ ψ(y), wDr (y)⟩ dμDr (y) d r. 
+
+Here Fubini’s theorem applies because ∇ψ is bounded and V ∈ L. Thus wD satisfies the projected continuity equation ∂tμDt + ∇y · (wDt μDt ) = 0 in the sense of distributions on (0 , 2τ ) × Z D . Writing 
+
+PμDt for the orthogonal projection onto its Wasserstein tangent space, the canonical velocity is 
+
+PμDt wDt . Theorem A.3 and contraction of this projection imply 
+
+2JD (B) = 
+
+Z 2τ
+
+> 0
+
+∥PμDt (wDt − By )∥2  
+
+> L2(μDt)
+
+dt ≤ ∥ wD (Y ) − BY ∥2
+
+> L
+
+.
+
+Since wDt (Yt) − BY t = E[Vt − BY t | Yt], another application of conditional Jensen gives 
+
+∥wD (Y ) − BY ∥L ≤ ∥ V − BY ∥L, proving the claim. To approximate the projected velocity, we use the bounded difference quotient Ch = ( T (h) − I)/h 
+
+before projecting onto ZD . This avoids applying the unbounded generator to PD Zt.
+
+Theorem A.7 (Convergence of the weak population residual) . Under the assumptions above, every choice of weak population minimizers AD satisfies JD (AD ) → 0 as D → ∞ . More precisely, define a(h) = ∥(A − Ch)Z∥L and bD = ∥(I − PD )Z∥L. Then a(h) → 0 as h ↓ 0, bD → 0 as 
+
+D → ∞ , and p2JD (AD ) ≤ a(h) + ∥Ch∥bD (h > 0) .
+
+Proof. For fixed h > 0, Ch is bounded on Z, so BD,h = PD Ch|ZD is an admissible comparison matrix. The velocity error decomposes as 
+
+PD AZ − PD ChPD Z = PD (A − Ch)Z + PD Ch(I − PD )Z.
+
+The preceding lemma, the triangle inequality in L, and ∥PD ∥ ≤ 1 therefore give 
+
+p2JD (AD ) ≤
+
+q
+
+2JD (BD,h ) ≤ a(h) + ∥Ch∥bD .
+
+Strong convergence of PD gives (I − PD )Zt → 0 pointwise, while ∥(I − PD )Zt∥2 ≤ ∥ Zt∥2 is integrable over time and probability. Dominated convergence yields bD → 0.23 For z ∈ D(A), Chz = h−1 R h 
+
+> 0
+
+T (r)Az dr → Az by strong continuity. Fix h0 > 0 and let 
+
+M0 = sup 0≤r≤h0 ∥T (r)∥ < ∞. For 0 < h ≤ h0, ∥Chz∥ ≤ M0∥Az∥, hence ∥(A − Ch)Zt∥2 ≤
+
+(1 + M0)2∥AZt∥2. The finite orbit energy established above makes this bound integrable, so dominated convergence gives a(h) → 0.The bound on the minimum now proves the result by first fixing h and then increasing D. Specifically, for any ε > 0, choose h with a(h) < ε/ 2, and then choose D sufficiently large that bD < ε/ [2(1 + 
+
+∥Ch∥)] . It follows that p2JD (AD ) < ε .A.4 FROM WEAK RESIDUAL CONSISTENCY TO STRONG SEMIGROUP CONVERGENCE 
+
+Section A.3.2 establishes JD (AD ) → 0 for the weak population minimizers AD. In this section, under a uniform stability bound on etAD , we first show that this vanishing weak residual implies uniform Wasserstein convergence of the predicted distributions on the training interval. The subse-quent subsections establish the stronger conclusion of semigroup convergence at every initial feature vector: compactness provides strong operator subsequences, and finite-time linear determinacy (FT) identifies their limits with T (t).
+
+Assumption A.8 (Finite-time stability of weak population minimizers) . For the selected minimizers 
+
+AD ∈ argmin B∈L (ZD ) JD (B), there exists M ≥ 1, independent of D, such that 
+
+sup 
+
+> D
+
+sup 
+
+> 0≤t≤τ
+
+∥etAD ∥L(ZD ) ≤ M. 
+
+This assumption bounds the finite-time evolution generated by the selected minimizers. It is an additional hypothesis beyond convergence of the weak residual and does not require a uniform bound on ∥AD ∥.A.4.1 THE WEAK RESIDUAL CONTROLS PROBABILITY PREDICTION 
+
+The weak residual measures the minimum correction to a candidate linear velocity needed to trans-port a prescribed distribution curve. Propagating this correction gives a prediction bound on any subinterval. 
+
+Lemma A.9 (The weak residual controls finite-time prediction) . Let α· ∈ AC 2([ s, t ]; P2(Rd)) and 
+
+B ∈ Rd×d. For r ∈ [s, t ], write rB (r) = ∂r αr + ∇y · (By αr ). Then 
+
+W2(( e(t−s)B )#αs, α t) ≤
+
+Z ts
+
+∥e(t−r)B ∥ ∥ rB (r)∥−1,α r dr. 
+
+Proof. Let vr be the canonical velocity of αr and set ur = vr − Pαr (By ), where Pαr is the orthogonal projection onto the Wasserstein tangent space. Lemma A.2 and Theorem A.3 give 
+
+−∇ y · (ur αr ) = rB (r) and ∥ur ∥L2(αr ) = ∥rB (r)∥−1,α r for almost every r. Hence ∂r αr + ∇y ·
+
+(( By + ur )αr ) = 0 in the sense of distributions. Choose a jointly Borel representative of u. The corrected velocity By + ur has finite squared energy because v ∈ L2(d r dαr ), tangent projection is contractive, and α· has bounded second moments on [s, t ].The superposition principle therefore gives a probability measure on absolutely continuous paths γ
+
+with marginals αr and ˙γr = Bγ r + ur (γr ) almost everywhere (Ambrosio et al., 2008, Theorem 8.2.1). Variation of constants yields 
+
+γt − e(t−s)B γs =
+
+Z ts
+
+e(t−r)B ur (γr ) d r. 
+
+The pair (e(t−s)B γs, γt) couples the two distributions in the claim. Minkowski’s integral inequality and the marginal identity Law( γr ) = αr give 
+
+
+
+E∥γt − e(t−s)B γs∥21/2
+
+≤
+
+Z ts
+
+∥e(t−r)B ∥ ∥ ur ∥L2(αr ) dr. 
+
+Substituting the weak residual norm proves the bound. 24 To compare the learned linear propagator in the common space Z, define 
+
+KD (t) = ιD etAD PD , SD (t) = KD (t) + ( I − PD ),
+
+where ιD : ZD ,→ Z is inclusion. KD (t) evolves the projected features, while SD (t) also retains the omitted unresolved feature space. On ZD ⊕ Z ⊥ 
+
+> D
+
+, SD (t) acts as etAD ⊕ I, so it is a C0-semigroup with SD (0) = I and ∥SD (t)∥ ≤ max {∥ etAD ∥, 1} ≤ M for 0 ≤ t ≤ τ . We use SD only for the subsequent operator-convergence argument; KD remains the propagator over the finite feature subspace, with KD (0) = PD .The following result combines the weak residual bound with the error from projecting Zt. It is uniform in both the starting time and the prediction lag, as needed later to compare operators on all source distribution laws. 
+
+Theorem A.10. Under Theorem A.7 and Assumption A.8, let qD = sup 0≤r≤2τ ∥(I − PD )Zr ∥L2 ,with the L2 norm defined in Section A.3.2. Then qD → 0 and 
+
+sup  
+
+> s,t ∈[0 ,τ ]
+
+W Z 
+
+> 2
+
+(KD (t)#μs, μ s+t) ≤ qD + M p2τ JD (AD ) −→ 0,
+
+sup  
+
+> s,t ∈[0 ,τ ]
+
+W Z 
+
+> 2
+
+(SD (t)#μs, μ s+t) ≤ 2qD + M p2τ JD (AD ) −→ 0.
+
+Prediction from the initial law over the full training interval satisfies 
+
+sup 
+
+> 0≤t≤2τ
+
+W Z 
+
+> 2
+
+(KD (t)#μ0, μ t) ≤ qD + M 2p4τ JD (AD ) −→ 0.
+
+Proof. Strong convergence of PD and dominated convergence imply ∥(I − PD )V ∥L2 → 0 for every V ∈ L2(Ω; Z). Since r 7 → Zr is continuous in this space, its image on [0 , 2τ ] is compact. For any ε > 0, choose a finite ε-net {Zrj }mj=1 of this image. Contraction of I − PD gives qD ≤
+
+ε + max j ∥(I − PD )Zrj ∥L2 ; letting D → ∞ and then ε ↓ 0 proves qD → 0.For s, t ∈ [0 , τ ], apply Lemma A.9 to μD 
+
+> ·
+
+on [s, s + t] ⊂ [0 , 2τ ]. With rAD (r) = ∂r μDr + ∇y ·
+
+(AD y μDr ), stability and Cauchy–Schwarz yield 
+
+W2(( etAD )#μDs , μ Ds+t) ≤ M
+
+Z s+ts
+
+∥rAD (r)∥−1,μ Dr dr ≤ M p2tJD (AD ).
+
+The last inequality uses R 2τ 
+
+> 0
+
+∥rAD (r)∥2
+
+> −1,μ Dr
+
+dr = 2 JD (AD ). Isometric inclusion into Z preserves this Wasserstein distance, and coupling PD Zs+t with Zs+t adds at most qD . This proves the bound for KD since t ≤ τ . Likewise, SD (t)Zs − KD (t)Zs = ( I − PD )Zs, so the coupling induced by 
+
+Zs adds at most another qD , proving the bound for SD .For 0 ≤ r ≤ 2τ , the semigroup law gives ∥erAD ∥ = ∥(e(r/ 2) AD )2∥ ≤ M 2. Applying the same argument on [0 , t ] therefore bounds the full-interval prediction error by qD +M 2p2tJD (AD ), which is at most the stated bound for t ≤ 2τ . All three bounds vanish because qD → 0 and JD (AD ) → 0
+
+by Theorem A.7. A.4.2 DISTRIBUTIONAL IDENTIFIABILITY OF THE LINEAR PROPAGATOR 
+
+Theorem A.10 shows that a vanishing weak residual yields convergent distribution predictions. To establish convergence of the linear propagators themselves, we also need the distribution dynamics to identify the underlying map. This is a fundamental issue when inferring dynamics from unpaired snapshots: distinct trajectories can produce the same distribution at every time. For linear SDEs with additive noise in finite dimensions, Guan et al. (2024) characterize the obstruction to identifiability through generalized rotational symmetries of the initial distribution. For example, a rotational flow and a stationary flow preserve the same isotropic Gaussian distribution, despite moving individual states differently. In our setting, the subsequent operator-convergence argument therefore requires the family {μs : 0 ≤
+
+s ≤ τ } to determine T (t) uniquely for each lag t ∈ [0 , τ ]. We impose this requirement directly on bounded linear maps on Z through the following assumption. 25 Assumption A.11 (Finite-time linear determinacy (FT)) . For every lag t ∈ [0 , τ ] and every bounded linear map B : Z → Z ,
+
+B#μs = μs+t for all s ∈ [0 , τ ] =⇒ B = T (t). (39) For a fixed lag, FT identifies the propagator from its action on the entire family of source distributions. At t = 0 , it rules out nonidentity linear symmetries shared by all these distributions. Allowing every bounded linear candidate B, including noninvertible ones, ensures that the condition applies to the operator limits considered below. FT supplies uniqueness; stability and compactness will provide the remaining ingredients for convergence. The next proposition relates FT to the linear span of the distribution supports and gives a sufficient condition in terms of their means. 
+
+Proposition A.12 (Total linear support and a sufficient criterion for FT) . Let ¯μ = τ −1 R τ 
+
+> 0
+
+μs ds.Under FT, 
+
+span(supp ¯ μ) = Z. (40) 
+
+A sufficient condition for FT is 
+
+span {ms : 0 ≤ s ≤ τ } = Z, ms =
+
+Z
+
+z dμs(z). (41) 
+
+Proof. If Equation (40) failed, there would be a nonzero h with ⟨h, z⟩ = 0 for ¯μ-almost every z.Consequently Z τ
+
+> 0
+
+E|⟨ h, Zs⟩| 2ds = 0 .
+
+The integrand is nonnegative and continuous in s, because Zs is L2-continuous. It is therefore zero for every s ∈ [0 , τ ]. The bounded linear map Bz = z + ⟨h, z⟩h fixes Zs almost surely for each s,and hence B#μs = μs for all s. But B̸ = I, contradicting FT at t = 0 . This proves the first claim. For the sufficient condition, take B satisfying the premise of FT for a fixed lag t. Finite second moments allow Bochner expectations, and bounded linear maps commute with them. Thus 
+
+Bms = ms+t = T (t)ms (0 ≤ s ≤ τ ).
+
+The bounded operator B − T (t) vanishes on the dense linear span in Equation (41), so it vanishes everywhere. This proves FT. A.4.3 FROM DISTRIBUTIONAL COMPACTNESS TO STRONG OPERATOR COMPACTNESS 
+
+Theorem A.10 establishes W2 convergence of the pushforward measures SD (t)#μs to μs+t as the weak residual vanishes. To obtain convergence of the linear propagators, we next show that relative compactness of {(Bn)#ν} in W2 yields strongly convergent operator subsequences when (Bn) is uniformly bounded and supp ν has dense linear span in Z. In our setting, stability supplies the bound, and Proposition A.12 establishes the support condition for the mixture ¯μ = τ −1 R τ 
+
+> 0
+
+μs ds.The following lemma provides the required compactness; the next subsection uses FT to identify each operator limit with the true propagator T (t).
+
+Lemma A.13 (From W2 compactness to strong operator compactness) . Let Z be a separable real Hilbert space and let ν ∈ P 2(Z) satisfy span(supp ν) = Z. Suppose Bn ∈ L (Z), sup n ∥Bn∥ ≤ 
+
+R < ∞, and {(Bn)#ν} is relatively compact in W2. Then every subsequence of (Bn) has a further subsequence and a bounded linear map B, ∥B∥ ≤ R, such that 
+
+∥Bnz − Bz∥ −→ 0 for every z ∈ Z (42) 
+
+along that further subsequence. Proof. Start with any subsequence and retain the index n. Choose a countable dense set {qj }
+
+in Z. The uniform operator bound allows a diagonal extraction for which ⟨Bnqi, qj ⟩ converges for every i, j . By density and the same bound, these limits extend to a bilinear form b(x, y) with 
+
+|b(x, y)| ≤ R∥x∥∥ y∥. Riesz representation gives B ∈ L (Z) with b(x, y) = ⟨Bx, y⟩ and ∥B∥ ≤ R,so Bn converges to B in the weak operator topology. Extracting once more using the W2 relative compactness gives 
+
+Bn
+
+> WOT
+
+−−−→ B, (Bn)#ν W2
+
+−−→ λ for some λ ∈ P 2(Z). (43) 26 For every h ∈ Z , weak operator convergence and dominated convergence imply 
+
+Z
+
+ei⟨h,y⟩ dλ(y) = lim 
+
+> n
+
+Z
+
+ei⟨h,B nz⟩ dν(z) = 
+
+Z
+
+ei⟨h,B z⟩ dν(z).
+
+The first equality follows from W2 convergence, which implies weak convergence of the measures 
+
+(Bn)#ν to λ. Thus λ and B#ν have the same characteristic functional. Restricting h to each finite span of an orthonormal basis gives equality of all finite-coordinate distributions. These coordinates generate the Borel sigma field of Z, since it is separable, and hence λ = B#ν.Convergence in W2 also gives convergence of second moments, so R ∥Bnz∥2 dν(z) →R ∥Bz∥2 dν(z). Indeed, the difference between the square roots of these moments is bounded by W2(( Bn)#ν, B #ν), by the reverse triangle inequality in any transport coupling. For each fixed z,weak operator convergence gives ⟨Bnz, B z⟩ → ∥ Bz∥2, and |⟨ Bnz, B z⟩| ≤ R2∥z∥2 is ν-integrable. Dominated convergence therefore gives convergence of the corresponding integrals. Expanding the square yields 
+
+Z
+
+∥(Bn − B)z∥2 dν(z) = 
+
+Z  ∥Bnz∥2 + ∥Bz∥2 − 2⟨Bnz, B z⟩ dν(z) −→ 0. (44) To deduce pointwise convergence on supp ν from convergence in L2(ν; Z), fix z ∈ supp ν and δ > 0.The open ball Bδ (z) has positive ν-measure. For y in this ball, ∥(Bn −B)z∥ ≤ 2Rδ +∥(Bn −B)y∥.Averaging over the ball and applying Cauchy–Schwarz gives 
+
+∥(Bn − B)z∥ ≤ 2Rδ +
+
+ R ∥(Bn − B)y∥2 dν(y)1/2
+
+ν(Bδ (z)) 1/2 .
+
+Letting n → ∞ and then δ ↓ 0 proves convergence at every point of supp ν along the same subsequence. Linearity extends it to the span of this support, which is dense by assumption. Finally, for any z ∈ Z and any x in this span, ∥(Bn − B)z∥ ≤ 2R∥z − x∥ + ∥(Bn − B)x∥. Approximating 
+
+z by such x proves Equation (42). The starting subsequence was arbitrary, so the asserted strong operator relative compactness follows. In the next subsection, we apply the lemma with ν = ¯ μ and Bn = SDn (tn). Theorem A.10 and W2
+
+continuity of t 7 → μt establish the required compactness of {(SDn (tn)) # ¯μ}, even when the time lags tn vary. Along subsequences with tn → t, FT identifies the strong operator limit B through the identities B#μs = μs+t for all s ∈ [0 , τ ].A.4.4 LOCALLY UNIFORM STRONG CONVERGENCE OF THE LEARNED PROPAGATORS 
+
+Theorem A.10 establishes convergence of the pushforward measures SD (t)#μs, and Lemma A.13 converts W2 compactness of these measures into strong operator subsequences. We now combine these results with the finite-time linear determinacy condition in Assumption A.11 to identify every subsequential limit with T (t). Allowing the time lags to vary along each subsequence will establish convergence uniformly on [0 , τ ] for every fixed z ∈ Z . The semigroup property then extends the result to any finite time interval. 
+
+Theorem A.14 (Locally uniform strong convergence under stability and FT) . In the setting of Sections A.3.1 and A.3.2, assume Z0 ∈ D(A) almost surely and E(∥Z0∥2 + ∥AZ0∥2) < ∞. Let PD
+
+be the increasing finite-rank orthogonal projections onto ZD, with PD z → z for every z ∈ Z , and choose AD ∈ argmin B∈L (ZD ) JD (B) for the weak population objective Equation (38) . Suppose the selected minimizers satisfy the finite-time stability condition in Assumption A.8, and the distribution family {μs}0≤s≤2τ satisfies FT (Assumption A.11). Then, for every z ∈ Z and H > 0,
+
+sup 
+
+> 0≤t≤H
+
+∥KD (t)z − T (t)z∥ −→ 0 (D → ∞ ). (45) 
+
+The same conclusion holds for SD (t) = KD (t) + ( I − PD ).Proof. Step 1: Wasserstein convergence of the averaged measures. Theorem A.10 gives 
+
+eD := sup  
+
+> s,t ∈[0 ,τ ]
+
+W2(SD (t)#μs, μ s+t) −→ 0. (46) 27 For t ∈ [0 , τ ], define 
+
+¯μ = 1
+
+τ
+
+Z τ
+
+> 0
+
+μs ds, ¯μt = 1
+
+τ
+
+Z τ
+
+> 0
+
+μs+t ds. 
+
+Both measures belong to P2(Z) because r 7 → Zr is continuous in L2(Ω; Z) on [0 , 2τ ]. Proposi-tion A.12 gives span(supp ¯ μ) = Z. For r, t ∈ [0 , τ ], using the same Z0 and an independent uniform time in [0 , τ ] to couple the averaged measures yields 
+
+W2(¯ μt, ¯μr )2 ≤ 1
+
+τ
+
+Z τ
+
+> 0
+
+∥Zs+t − Zs+r ∥2 
+
+> L2
+
+ds −→ 0 (t → r).
+
+Here the convergence follows from uniform L2 continuity of Zr on [0 , 2τ ]. Averaging the bounds in Equation (46) gives 
+
+W2(SD (t)# ¯μ, ¯μt)2 ≤ 1
+
+τ
+
+Z τ
+
+> 0
+
+W2(SD (t)#μs, μ s+t)2 ds ≤ e2 
+
+> D
+
+. (47) To justify this inequality, first approximate each time integral by a Riemann sum on a uniform partition. Averaging optimal couplings for the finitely many pairs of measures proves the inequality for these sums. For fixed D, t , the discrete averages converge in W2 to SD (t)# ¯μ and ¯μt: for s in a partition interval with left endpoint sj , use the pairs (SD (t)Zs, S D (t)Zsj ) and (Zs+t, Zsj +t),respectively. Uniform L2 continuity and boundedness of SD (t) make the coupling costs vanish. The integrand on the right is continuous in s, since both curves of measures are W2-continuous. Passing to the limit proves Equation (47). 
+
+Step 2: Strong operator subsequences for convergent time lags. Take arbitrary sequences Dn →∞ and tn ∈ [0 , τ ]. After passing to a subsequence, compactness of [0 , τ ] gives tn → t∗. By Equation (47) and continuity of t 7 → ¯μt,
+
+W2(( SDn (tn)) # ¯μ, ¯μt∗ ) ≤ eDn + W2(¯ μtn , ¯μt∗ ) −→ 0.
+
+Assumption A.8 gives ∥SDn (tn)∥ ≤ M . Since supp ¯ μ has dense linear span, Lemma A.13 applies and provides a further subsequence, with the same notation, such that 
+
+SDn (tn)z −→ Bz for every z ∈ Z , B ∈ L (Z), ∥B∥ ≤ M. (48) 
+
+Step 3: Identification of subsequential limits under FT. Fix s ∈ [0 , τ ]. The pair (SDn (tn)Zs, B Zs)
+
+gives 
+
+W2(( SDn (tn)) #μs, B #μs)2 ≤ E∥(SDn (tn) − B)Zs∥2 −→ 0.
+
+Indeed, Equation (48) gives pointwise convergence, and the integrand is bounded by 4M 2∥Zs∥2,which is integrable. Combining this limit with Equation (46) and W2 continuity of r 7 → μr gives 
+
+W2(B#μs, μ s+t∗ ) ≤ W2(B#μs, (SDn (tn)) #μs) + eDn + W2(μs+tn , μ s+t∗ ) −→ 0.
+
+The subsequence in Equation (48) is independent of s and converges at every z ∈ Z . Thus the same argument applies to every s ∈ [0 , τ ] without further extraction, establishing B#μs = μs+t∗ for all such s. Assumption A.11 therefore implies B = T (t∗), including B = I when t∗ = 0 .
+
+Step 4: Uniform strong convergence on [0 , τ ]. If convergence failed to be uniform for some fixed 
+
+z ∈ Z , there would exist ε > 0, Dn → ∞ , and tn ∈ [0 , τ ] with ∥SDn (tn)z − T (tn)z∥ ≥ ε. Steps 2–3 give a further subsequence for which tn → t∗ and SDn (tn)z → T (t∗)z. Strong continuity gives 
+
+T (tn)z → T (t∗)z, a contradiction. Consequently, 
+
+sup 
+
+> 0≤t≤τ
+
+∥SD (t)z − T (t)z∥ −→ 0 for every z ∈ Z . (49) 
+
+Step 5: Extension to arbitrary finite time intervals. For each fixed integer k ≥ 0, SD (τ )kz → T (τ )kz.This follows inductively from Equation (49) and ∥SD (τ )∥ ≤ M , using 
+
+SD (τ )k+1 z − T (τ )k+1 z = SD (τ ) SD (τ )kz − T (τ )kz +  SD (τ ) − T (τ )T (τ )kz.
+
+For t = kτ + r with 0 ≤ r < τ , the semigroup property gives 
+
+∥SD (t)z − T (t)z∥ ≤ M ∥SD (τ )kz − T (τ )kz∥ + ∥(SD (r) − T (r)) T (τ )kz∥.
+
+28 For t ∈ [0 , H ], only finitely many k occur. The first term tends to zero uniformly in r, and Equation (49), applied to the finitely many fixed vectors T (τ )kz, makes the second term vanish uniformly in r. Hence sup 0≤t≤H ∥SD (t)z − T (t)z∥ → 0. Finally, SD (t) − KD (t) = I − PD gives 
+
+sup 
+
+> 0≤t≤H
+
+∥KD (t)z − T (t)z∥ ≤ sup 
+
+> 0≤t≤H
+
+∥SD (t)z − T (t)z∥ + ∥(I − PD )z∥ −→ 0,
+
+which proves Equation (45). The theorem establishes strong operator convergence locally uniformly in time, including on finite intervals beyond [0 , 2τ ]. The extension relies on the global semigroup property after stability and FT have established convergence on [0 , τ ]. Korda & Mezi´ c (2018) analyze EDMD, which fits the Koopman action on a finite observable space by least squares from paired state observations. For a fixed observable space, the infinite-sample limit projects each evolved observable back onto that space in the L2 inner product induced by the sampling measure. Under their assumptions, strong operator convergence then follows as the observable space is enlarged. Here, convergence follows from the weak population objective, compactness of pushforward measures, and FT. 
+
+Limitations. Our convergence analysis as D → ∞ assumes an underlying autonomous vector field whose induced distributions form an absolutely continuous Wasserstein flow. It concerns minimizers of the exact weak population residual over a compatible family of observables obtained from nested projections of a fixed Koopman-invariant RKHS. Under the regularity conditions in Sections A.3.1–A.3.2, the stability condition in Assumption A.8, and finite-time linear determinacy (FT) in Assumption A.11, the feature propagators KD (t) and SD (t) converge strongly to T (t) = 
+
+U (t)∗, locally uniformly in time. In practice, only finite samples at sparse observation times are available, so we discretize the time integrals using trapezoidal quadrature. We further use ridge regularization and exponential moving average (EMA) updates to stabilize the estimated generator during alternating optimization of neural representations and dynamics (Appendix B). The analysis does not control the resulting sampling, quadrature, regularization, or optimization errors, nor establish convergence of this training procedure or of independently learned neural representations as 
+
+D increases. Strong convergence of the adjoints to U (t), operator-norm convergence, and spectral convergence also remain outside these guarantees. 
+
+## B ALGORITHMIC DETAILS 
+
+This appendix develops the training objectives and algorithms for KoopCell and its memory-augmented extension, KoopCell-M, introduced in Sections 3.1 and 3.2. We first describe how KoopCell alternates between VAE representation learning and closed-form estimation of the latent dy-namics. We then introduce the memory embedding and developmental-path conditioning in KoopCell-M, detailing the resulting inference and training procedures. Throughout, ρtk = n−1
+
+> k
+
+Pnk 
+
+> i=1
+
+δxk,i 
+
+denotes an observed snapshot, with xk,i ∈ Rdx and T = {0 = t0 < · · · < t N = T } the training times. We retain θ, ϕ for the encoder and decoder parameters and D for the latent dimension. Held-out snapshots are used only for evaluation. B.1 KOOP CELL : K OOPMAN DYNAMICS AND ALTERNATING TRAINING 
+
+KoopCell alternates between learning a VAE representation for a given latent dynamics generator and estimating the linear dynamics generator in the current latent coordinates. We describe the VAE objective first, then derive the empirical generator update from the finite-test formulation proposed in Theorem 3.1. B.1.1 VAE REPRESENTATION LEARNING 
+
+For a cell with expression x observed at time t, we use a posterior encoder qθ (· | x, t ) =
+
+N (mθ (x, t ), Sθ (x, t )) with diagonal covariance Sθ . A shared MLP takes (x, t ) as input and predicts the mean and log-variance. The observation model is pϕ(x | z) = N (x; Dec ϕ(z), σ 2
+
+> x
+
+Idx ),with fixed variance σ2
+
+> x
+
+. Reconstruction and population matching use reparameterized samples 
+
+z = mθ + S1/2 
+
+> θ
+
+ϵ, ϵ ∼ N (0, ID ), and predicted expression is given by Dec ϕ(z). The resulting encoded population is μt = R qθ (· | x, t )d ρt(x).29 Given the linear latent flow Ft(z) = Ftz + ct (Appendix B.1.2), we regularize the representation with the transported prior pt = ( Ft)#N (0, ID ) = N (ct, Γt), where Γt = FtF ⊤ 
+
+> t
+
+. Here μt denotes the encoder-induced population and pt the generative prior. We write qθ (· | x, t ) for the encoder distribution and qθ (z | x, t ) for its density at z. Within fixed-time expectations, we suppress time subscripts on random states. The resulting generative model pϕ,t (x, z) = pϕ(x | z)pt(z) yields 
+
+pϕ,t (x) = EZ∼qθ (·| x,t )[pϕ(x | Z)pt(Z)/q θ (Z | x, t )] . Jensen’s inequality therefore gives the evidence lower bound (ELBO) 
+
+log pϕ,t (x) ≥ E KC (x, t ) := Eqθ log pϕ(x | Z) − KL  qθ (· | x, t ) ∥ pt
+
+. (50) The Gaussian observation model gives a squared reconstruction error up to an additive constant. Fol-lowing Equation (4), we normalize it by the expression dimension: Lrec = −d−1 
+
+> x
+
+Et, xEqθ log pϕ(x |
+
+Z), where Et, x averages equally over training times and uniformly over cells within each time. Writing m = mθ (x, t ) and S = Sθ (x, t ), we compute the Gaussian KL divergence analytically: 
+
+KL  N (m, S) ∥ pt
+
+ = 12
+
+
+
+tr( Γ−1 
+
+> t
+
+S) + ( m − ct)⊤Γ−1 
+
+> t
+
+(m − ct) − D + log det Γt
+
+det S
+
+
+
+. (51) The training objective LVAE = Lrec + βEt, x KL( qθ (· | x, t ) ∥ pt) thus equals the negative ELBO divided by dx when β = 1 /d x; otherwise, β controls the strength of the variational regularization. To learn representations whose evolution under the latent flow matches the observed populations, we augment LVAE with prediction losses in latent and expression space. For every forward pair 
+
+(s, t ) ∈ P = {(s, t ) ∈ T 2 : s < t }, we form bμs→t = ( Ft−s)#μs and bρs→t = (Dec ϕ)# bμs→t, and average the prediction losses over these pairs: 
+
+Lpop = 1
+
+|P| 
+
+X
+
+> (s,t )∈P
+
+λz Sε(μt, bμs→t) + λxSε(ρt, bρs→t). (52) Here Sε is the debiased Sinkhorn divergence with quadratic cost. With the dynamics fixed, we update 
+
+θ, ϕ by minimizing LKC = LVAE + Lpop + λweak Lweak , where the weak-residual loss is defined below. Reconstruction and prediction losses update both the encoder and decoder; the weak-residual term updates only the encoder. To initialize the representation before alternating training, we first pretrain the VAE with a standard-normal prior at every training time, minimizing 
+
+Lpre = Lrec + βpre Et, x KL  qθ (· | x, t ) ∥ N (0, ID ), (53) with a gradually increased βpre . The pretrained encoder then provides the initial latent coordinates for the linear dynamics estimation described next. B.1.2 EMPIRICAL WEAK RESIDUAL AND CLOSED -FORM DYNAMICS ESTIMATION 
+
+With the representation fixed, we now derive a closed-form estimator for the linear generator that best fits the evolution of the latent distributions. For notational simplicity, Section 3.1 presents the method using ˙Zt = AZ t. In the implementation, we include the constant observable 1, giving ˙Zt =
+
+AZ t + bz and coefficients Θ = [ A, bz ] ∈ RD×(D+1) . Writing ez = ( z⊤, 1) ⊤ and eA =
+
+ A bz 
+
+> 0⊤0
+
+
+
+,we evaluate the flow through 
+
+exp(∆ eA) = 
+
+F∆ c∆
+
+0⊤ 1
+
+
+
+, F∆(z) = F∆z + c∆. (54) The constant coordinate stays equal to one, and only the upper D rows are estimated. Theorem 3.1 shows that restricting the dual supremum to a finite test space gives a least-squares regression objective for estimating the generator; Lemma A.4 in Appendix A.2 provides the corre-sponding derivation. For the linear drift Θez, the moment definitions in Equation (3) require only replacing z⊤ by ez⊤ in Hj ; y and M are unchanged. Thus, with a = vec( Θ), the residual vector remains y − Ga and the objective is 12 (y − Ga )⊤M −1(y − Ga ) when M ≻ 0. We next construct its empirical counterpart from the observed snapshots by forming these moments on adjacent time intervals. 30 Specifically, on each interval Ik = [ tk, t k+1 ], we use a smooth spatial test ψj with bounded values and gradients. The residual identity Equation (14) in Appendix A.1, applied to φkj (t, z) = 1Ik (t)ψj (z),gives 2
+
+RD (Θ; φkj ) = μtk+1 [ψj ] − μtk [ψj ] −
+
+
+
+Θ,
+
+Z
+
+> Ik
+
+μt[∇ψj (z)ez⊤]d t
+
+
+
+> F
+
+. (55) Here the endpoint difference supplies ykj , and the time integral supplies Hkj in the finite-test con-struction. The Gram matrix defined in Equation (27) is block diagonal, M = diag( M0, . . . , MN −1);each block is (Mk)ij = R 
+
+> Ik
+
+μt[∇ψ⊤ 
+
+> i
+
+∇ψj ]d t.In the implementation, we use random Fourier tests cos( ξ⊤ 
+
+> j
+
+z) and sin( ξ⊤ 
+
+> j
+
+z) to construct this finite test space. Frequencies are sampled once from N (0, s 2ID /D ) in equal-sized groups for s ∈{0.5, 1, 2, 4}, then held fixed during training. The standard bank contains 1,024 frequencies and hence 2,048 tests. Their gradients, −ξj sin( ξ⊤ 
+
+> j
+
+z) and ξj cos( ξ⊤ 
+
+> j
+
+z), allow all required moments to be evaluated directly from encoded cells. For the empirical regression, we choose the encoder means as the deterministic observables to which the theorem is applied. At each training time tk, we encode the observed cells as zk,i = mθ (xk,i , t k),yielding the empirical latent distribution μmean  
+
+> tk
+
+= ( mθ (·, t k)) #ρtk . With ezk,i = ( z⊤
+
+> k,i
+
+, 1) ⊤, the endpoint statistics are 
+
+ukj = 1
+
+nk
+
+X
+
+> i
+
+ψj (zk,i ), Dkj = 1
+
+nk
+
+X
+
+> i
+
+∇ψj (zk,i )ez⊤
+
+> k,i
+
+. (56) In Equation (55), ukj replaces the endpoint expectation μtk [ψj ], and Dkj replaces the integrand 
+
+μtk [∇ψj (z)ez⊤] at tk. Approximating the time integral by the trapezoidal rule, with ∆tk = tk+1 −tk,therefore gives 
+
+ykj = uk+1 ,j − ukj , Hkj = ∆tk
+
+2 (Dkj + Dk+1 ,j ), G(k,j ),: = vec( Hkj )⊤. (57) Following the regression interpretation in the remark after Lemma A.4, the empirical residual over interval Ik = [ tk, t k+1 ] is bRkj (Θ) = ykj − ⟨ Θ, Hkj ⟩F = ykj − (Ga )(k,j ). This is the empirical, time-discretized approximation of RD (Θ; φkj ) in Equation (55). The construction accommodates irregular observation times; further, if the moment integrand has two bounded time derivatives, the interval quadrature error is O(∆ t3
+
+> k
+
+). Applying the same quadrature to the Gram matrix gives 
+
+(Mk)ij = ∆tk
+
+2
+
+n
+
+μmean  
+
+> tk
+
+[∇ψ⊤ 
+
+> i
+
+∇ψj ] + μmean  
+
+> tk+1
+
+[∇ψ⊤ 
+
+> i
+
+∇ψj ]
+
+o
+
+. (58) Finally, we stack these empirical residuals over all interval–test pairs (k, j ) to obtain y − Ga , the residual vector in the finite-test objective of Equation (28). With these empirical quantities and W = ( M +ϵM I)−1, we define Lweak = ( Ga −y)⊤W (Ga −y).To stabilize the estimation when G is poorly conditioned, we additionally introduce a ridge penalty: 
+
+ba = arg min 
+
+> a
+
+ 12 (Ga − y)⊤W (Ga − y) + λ 
+
+> 2
+
+∥a∥22 = ( G⊤W G + λI)−1G⊤W y , λ > 0.
+
+(59) We form the regression statistics from all training cells and solve the normal equations using precon-ditioned conjugate gradients. The fitted coefficients bΘ = reshape( ba) are then used to update the dynamics before refining the representation. However, the pretrained latent distributions need not follow a common linear flow, so directly using bΘ in the representation objective can induce abrupt updates and distort the pretrained latent manifold. We therefore introduce the closed-form dynamics generator gradually through an exponential moving average, Θ ← αΘ + (1 − α) bΘ, with α = 0 .99 
+
+in the real single-cell dynamics learning procedure. With the updated Θ held fixed, we optimize the VAE with the objective in Appendix B.1.1, recom-puting the weak residual on minibatches. Algorithm 1 summarizes the alternating procedure. In both algorithms, sg stops gradients, ∥v∥2 
+
+> W
+
+= v⊤W v , and AdamW( w, ∇wL) denotes one optimizer 
+
+> 2
+
+The interval test is understood by smooth approximation in VD , using the continuous residual extension in Equation (15). 
+
+31 Algorithm 1 KoopCell: alternating closed-form generator estimation and representation learning 
+
+Input: Training snapshots {(tk , ρ tk )}Nk=0 ; fixed Fourier tests {ψj }mj=1 ;batch size nb; λ, ϵ M > 0; α ∈ [0 , 1) ; loss weights 
+
+Output: Encoder qθ , decoder Dec ϕ, and linear dynamics parameters Θ = [ A, bz ]
+
+Stage 1: VAE pretraining  
+
+> 1:
+
+for each pretraining iteration do  
+
+> 2:
+
+Bk ← Sample( ρtk , n b), k = 0 , . . . , N ▷ Independent sampling at each time  
+
+> 3:
+
+Lpre ← PretrainLoss( B; θ, ϕ, β pre ) ▷ Standard-normal VAE; Equation (53)  
+
+> 4:
+
+(θ, ϕ) ← AdamW(( θ, ϕ), ∇θ,ϕLpre ) ▷ Pretrain encoder and decoder  
+
+> 5:
+
+end for Stage 2: Alternating dynamics estimation and representation learning  
+
+> 6:
+
+Θ ← 0 
+
+> 7:
+
+for each training iteration do (a) Closed-form dynamics estimation  
+
+> 8:
+
+¯zk,i ← sg( mθ (xk,i , t k )) , k = 0 , . . . , N, i = 1 , . . . , n k 
+
+> 9:
+
+(G, y, M ) ← WeakStats( { ¯zk,i }; T , {ψj }); W ← (M + ϵM I)−1 
+
+> 10:
+
+ba ← PCG( G⊤W G + λI, G⊤W y ); bΘ ← reshape( ba) ▷ closed-form estimation; Equation (59)  
+
+> 11:
+
+Θ ← sg( αΘ + (1 − α) bΘ) ▷ EMA update 
+
+(b) Representation update  
+
+> 12:
+
+Bk ← Sample( ρtk , n b), k = 0 , . . . , N ▷ Fresh minibatches for VAE updates  
+
+> 13:
+
+¯zB 
+
+> k,i
+
+← mθ (xk,i , t k ), xk,i ∈ B k ; ϵk,i ∼ N (0, ID ) 
+
+> 14:
+
+zk,i ← ¯zB 
+
+> k,i
+
++ Sθ (xk,i , t k )1/2ϵk,i ▷ Reparameterized posterior samples  
+
+> 15:
+
+(F∆, c∆) ← Transition( Θ, ∆) , ∆ ∈ T ∪ { t − s : ( s, t ) ∈ P} ▷ Calculate the transition matrix  
+
+> 16:
+
+ptk ← N (ctk , Ftk F ⊤ 
+
+> tk
+
+) ▷ Transported Gaussian prior  
+
+> 17:
+
+LVAE ← VAELoss( B; θ, ϕ, {ptk }) ▷ Reconstruction + KL; Equation (4)  
+
+> 18:
+
+for each (s, t ) ∈ P in parallel do  
+
+> 19:
+
+bzs→t,i ← Ft−szs,i + ct−s; bxs→t,i ← Dec ϕ(bzs→t,i ) 
+
+> 20:
+
+end for  
+
+> 21:
+
+Lpop ← PopulationLoss( B, {zk,i }, {bzs→t,i , bxs→t,i }) ▷ Population matching; Equation (52)  
+
+> 22:
+
+(GB , yB , MB ) ← WeakStats( { ¯zB
+
+> k,i
+
+}; T , {ψj }) 
+
+> 23:
+
+WB ← (MB + ϵM I)−1; Lweak ← ∥ GB vec( Θ) − yB ∥2 
+
+> WB
+
+▷ Weak population residual loss  
+
+> 24:
+
+LKC ← L VAE + Lpop + λweak Lweak ▷ Combined training objective  
+
+> 25:
+
+(θ, ϕ) ← AdamW(( θ, ϕ), ∇θ,ϕLKC ) ▷ Update encoder and decoder  
+
+> 26:
+
+end for  
+
+> 27:
+
+return qθ , Dec ϕ, A, bz
+
+update of parameters w using the indicated gradient. In Algorithm 1, WeakStats( {zk,i }; T , {ψj })
+
+returns (G, y, M ) using Equation (56), Equation (57), and Equation (58); the same operation is used for full snapshots and minibatches. Transition( Θ, ∆) returns (F∆, c∆) via Equation (54), and 
+
+PCG( Q, r) solves Qa = r by preconditioned conjugate gradients. The loss routines evaluate the referenced objectives on the indicated minibatches B = {B k}Nk=0 . Sample draws nb cells indepen-dently from each snapshot. The pairwise predictions depend only on the source samples and fixed dynamics, so they can be computed in parallel. For evaluation, we sample Z0 from the encoder distribution of the initial observed population snapshot and return Dec ϕ(Ft(Z0)) at each requested time. B.2 KOOP CELL -M: MEMORY -AUGMENTED BRANCHING DYNAMICS AND ALTERNATING TRAINING 
+
+This section develops the memory extension introduced in Section 3.2. We first introduce the augmented latent dynamics for modeling branching, then derive the probabilistic model and training objectives. The resulting algorithm retains the two alternating steps of KoopCell: closed-form dynamics estimation followed by representation learning. B.2.1 MEMORY -AUGMENTED DYNAMICS AND DEVELOPMENTAL PATHS 
+
+Zhao et al. (2026, Proposition 3.3) establishes that an ODE with a Lipschitz vector field cannot exactly transport between distributions supported on different numbers of disjoint compact, path-connected components. In particular, a linear flow cannot split a connected initial population into disconnected 32 fate populations; continuous decoding also preserves connectedness. When branching is understood as the emergence of separated density modes, a linear latent flow has a further limitation: it preserves Gaussianity, so a single Gaussian population remains unimodal. Although nonlinear decoding can introduce additional density modes, a decoder with Lipschitz constant Ldec limits the amplification of latent separation: 
+
+∥ Dec ϕ(Ft(z)) − Dec ϕ(Ft(z′)) ∥ ≤ Ldec ∥eAt∥ ∥ z − z′∥. (60) To model branching in the latent dynamics, we draw on the Mori–Zwanzig formalism: unresolved observables influence the resolved dynamics through memory (Section 2). Specifically, we augment the visible latent state Zt ∈ RD , which represents gene expression, with memory variables Ht ∈ Rdh
+
+that influence the dynamics of Zt. The decoder reconstructs gene expression from Zt alone. The memory variables can represent fate-relevant influences not captured by the measured expression state (Weinreb et al., 2020). Further, a linear augmented process with a single joint Gaussian initialization would still have Gaussian marginals. To generate distinct developmental branches, we therefore introduce a discrete variable R ∈ R indexing heterogeneous hidden initial conditions: 
+
+R ∼ Cat( π), Z0 | R = r ∼ N (0, ID ), H0 | Z0 = z, R = r ∼ N (Fr z +ar , Sr ). (61) Here πr are normalized mixture weights and Sr ≻ 0. Conditional on R = r, we evolve the augmented state (Zt, Ht) by 
+
+dZt = ( AZ t + BH t + bz ) d t, dHt = ( CZ t + ΛHt + bh(r)) d t + Σh dWt, (62) where Wt is a standard Brownian motion. Motivated by the use of decaying memory in related models (Lei et al., 2016; Menier et al., 2025), we parameterize Λ = ( L − L⊤)/2 − diag( δ +softplus( d)) , with δ > 0, making the homogeneous H block dissipative. Through the coupling 
+
+BH t, cells with similar visible states but different hidden initial conditions can follow distinct latent evolution. Each component remains Gaussian, but their mixture can develop multiple modes when their separation exceeds their spread. With nondegenerate component covariances, the mixture retains connected support; branching here refers to the separation of latent density modes. To connect this augmented model with the Mori–Zwanzig formulation in Section 2, we eliminate Ht
+
+from Equation (62), obtaining a non-Markovian generalized Langevin equation for Zt:
+
+˙Zt = AZ t + bz +
+
+Z t
+
+> 0
+
+BeΛ(t−s)CZ s ds + ηr (t),
+
+ηr (t) = BeΛtH0 +
+
+Z t
+
+> 0
+
+BeΛ(t−s)bh(r) d s + B
+
+Z t
+
+> 0
+
+eΛ(t−s)Σh dWs.
+
+(63) The kernel K(u) = BeΛuC describes dependence on the past history, while ηr (t) collects the effects of the hidden initial state, bias, and noise. This decomposition into memory and forcing is motivated by Mori–Zwanzig reduction (Lin et al., 2021). 
+
+Example B.1 (Emergence of branching in the memory-augmented model) . Let R ∈ {− 1, 1} have equal probabilities, Z0 | R = r ∼ N (0 , 1) , and H0 | Z0 = z, R = r ∼ N (−z + ra, σ 2 
+
+> H
+
+), with 
+
+0 < σ H < a < p1 + σ2 
+
+> H
+
+. Both initial marginals are unimodal: Z0 is standard Gaussian, and H0 is an equal mixture of N (±a, 1 + σ2 
+
+> H
+
+). Consider the augmented dynamics dZt = ( −Zt + Ht) d t and 
+
+dHt = ( Zt − Ht) d t in Equation (62). Here A = Λ = −1 and B = C = 1 , so eliminating Ht gives the memory kernel K(u) = e−u.Writing κt = (1 − e−2t)/2, the solution is Zt = e−2tZ0 + κt(Z0 + H0). Conditional on R = r, the initialization makes Z0 + H0 independent of Z0, with law N (ra, σ 2 
+
+> H
+
+). Thus the visible density is 
+
+pt(z) = 12 N (z; −aκ t, v t) + 12 N (z; aκ t, v t), vt = e−4t + σ2 
+
+> H
+
+κ2 
+
+> t
+
+. (64) The components coincide at t = 0 . When a2κ2 
+
+> t
+
+> v t, p′′  
+
+> t
+
+(0) = ( a2κ2 
+
+> t
+
+− vt)v−2 
+
+> t
+
+N (0; aκ t, v t) > 0;symmetry and decay at infinity then imply a maximum on each side of zero. This condition holds for 
+
+t > 12 log(1 + 2 /pa2 − σ2 
+
+> H
+
+). As t → ∞ , the component means approach ±a/ 2 and their variance approaches σ2 
+
+> H
+
+/4, so the two modes persist. To isolate the role of memory feedback, set C = 0 while keeping the other coefficients and initializa-tion fixed. The component means then become ±ate −t, with common variance e−2t[(1 −t)2 +σ2 
+
+> H
+
+t2].33 −2 0 2                 
+
+> z
+> 0.0 0.2 0.4
+> Density
+> (a) t= 0
+> −0.5 0.0 0.5
+> z
+> 0123(b) t= 1
+> −0.5 0.0 0.5
+> z
+> 0123(c) t= 3
+> With feedback
+> R= − 1 contribution Without feedback ( C= 0 )
+> R= + 1 contribution
+
+Figure 4: Memory feedback sustains visible branching. Analytic densities in Example B.1, with 
+
+a = 0 .6 and σH = 0 .2. Both initial marginals are unimodal. The solid curve is the visible mixture with K(u) = e−u; colored dashed curves illustrate its weighted components. The gray dashed curve removes only the feedback ( C = 0 ), keeping the same initialization. Both models develop two modes at t = 1 , but the comparison returns to a single mode by t = 3 . Axis scales vary across panels. Since a2 < 1 + σ2 
+
+> H
+
+, this comparison becomes unimodal again for sufficiently large t, as illustrated in Figure 4. The joint initialization is non-Gaussian: R encodes latent fate information, and the memory feedback sustains the resulting visible modes. In this construction, R parameterizes hidden heterogeneity. For cellular development, we use R to represent candidate developmental pathways , whose progression is supervised using biological state annotations. 
+
+Biological state annotation. We use coarse biological states to model developmental paths, encom-passing broad cell identities and developmental-stage categories. Initial training labels are obtained by matching cell IDs to published annotations for DR (Calderon et al., 2022) and WOT cell sets for SC (Schiebinger et al., 2019). For ZB, we annotate Louvain clusters at the latest training time using marker expression, following the terminal-cluster annotation approach of Farrell et al. (2018). We also define early developmental states using sampling time. For example, the first two training snapshots are labeled Blastula progenitor in ZB and Blastoderm in DR; the initial SC population is labeled MEF. For ZB and SC, we fit a logistic regression classifier to the initially labeled training cells and predict states for the remaining training cells. Logistic regression is also used for supervised cell annotation in CellTypist (Domínguez Conde et al., 2022). We calibrate the predicted probabilities and use only assignments that pass confidence, support, and consistency filters as additional supervision. For DR, state supervision uses only labels obtained from the published annotations or assigned using sampling time. Classifier fitting and label supervision use only training cells. 
+
+Candidate developmental paths. We use these annotated biological states as nodes to define a candidate directed acyclic graph (DAG). We specify its core edges using published developmen-tal relationships (Farrell et al., 2018; Calderon et al., 2022; Schiebinger et al., 2019) and retain them as biological priors. Additional edges are selected using optimal transport between adjacent training snapshots, subject to biological compatibility and support criteria. An edge represents an admissible transition between coarse states. Enumerating root-to-terminal paths defines R, with 
+
+r = ( c1, . . . , c ℓr ) specifying an ordered developmental pathway. Each path parameterizes a hidden initial law in Equation (61). The path identity R remains fixed along a trajectory, while the biological state progresses along the pathway. We further introduce a path consistency loss to encourage gener-ated trajectories to follow the developmental order specified by R (Equation (77) in Appendix B.2.2). Figure 5 shows the graph for SC, whose four root-to-terminal paths define the candidate values of R.B.2.2 VARIATIONAL INFERENCE AND REPRESENTATION LEARNING 
+
+The augmented latent dynamics define a time-dependent prior for learning the VAE representation. At a known sampling time t, the observed variable is a single-cell expression vector Xt; the latent variables are the developmental path R, the visible state Zt, and the memory state Ht.34 MEF MET Stromal iPSC Epithelial Neural Trophoblast Figure 5: Candidate developmental paths for SC. Nodes represent seven coarse biological states, and edges represent the developmental transitions described by Schiebinger et al. (2019). The graph defines four root-to-terminal paths. The highlighted sequence MEF → MET → Epithelial → Neural illustrates one value of R. Each path parameterizes a hidden initial distribution and specifies the developmental order used in the path consistency loss (Equation (77)). 
+
+Generative model. We draw R ∼ Cat( π) and evolve Yt = ( Z⊤ 
+
+> t
+
+, H⊤ 
+
+> t
+
+)⊤ from the path-dependent initialization in Equation (61) under Equation (62). This gives the Gaussian prior pϑ,t (z, h | r).Gene expression is generated from Zt alone through the same observation model as KoopCell: 
+
+pϕ,ϑ,t (x, z, h, r ) = πr pϑ,t (z, h | r) pϕ(x | z),pϕ(x | z) = N  x; Dec ϕ(z), σ 2
+
+> x
+
+Idx
+
+. (65) Here σ2 
+
+> x
+
+is fixed, as in Appendix B.1.1, and ϑ collects memory and initial-distribution parameters; dependence of the prior on Θ = [ A, bz ] is left implicit. 
+
+Inference model. Given expression x at time t, we approximate the joint posterior pϕ,ϑ,t (z, h, r | x)
+
+by 
+
+qt(z, h, r | x) = qθ (z | x, t ) qt(r | z, x) qHt (h | z, r, x). (66) The Gaussian encoder qθ (· | x, t ) = N (mθ (x, t ), Sθ (x, t )) infers the visible latent state; qt(r |
+
+z, x) assigns path probabilities, and qHt (h | z, r, x) infers the memory state conditional on z and r.Using the factorization in Equation (65), Jensen’s inequality gives 
+
+log pϕ,ϑ,t (x) ≥ Eqt
+
+
+
+log pϕ,ϑ,t (x, Z, H, R )
+
+qt(Z, H, R | x)
+
+
+
+= Eqθ log pϕ(x | Z) − KL  qt(· | x) ∥ pϑ,t 
+
+,
+
+(67) where pϑ,t (z, h, r ) = πr pϑ,t (z, h | r). We next specify the memory and path posteriors in Equation (66) to evaluate this bound. Conditional on R = r, the Gaussian initialization and linear augmented dynamics give a jointly Gaussian prior for (Zt, Ht). The conditional distribution pϑ(h | z, r, t ) is therefore Gaussian and can be computed in closed form. Because the observation model depends only on Zt, Equation (65) implies p(Ht | Zt, R, Xt) = p(Ht | Zt, R ). We therefore use this Gaussian conditional as the memory posterior, setting qHt (h | z, r, x) = pϑ(h | z, r, t ). To derive its mean and covariance, write 
+
+K = ( A B C Λ ), br = ( b⊤ 
+
+> z
+
+, bh(r)⊤)⊤, and Σ = ( 0, Σ⊤ 
+
+> h
+
+)⊤. The transition is Yt+∆ | Yt, R = r ∼N (Φ∆Yt + J∆br , Q∆), with 
+
+Φ∆ = eK∆, J∆ =
+
+Z ∆0
+
+eKs ds, Q∆ =
+
+Z ∆0
+
+eKsΣΣ ⊤eK⊤s ds. (68) The initialization in Equation (61) gives 
+
+m0,r =
+
+ 0
+
+ar
+
+
+
+, V0,r =
+
+ID F ⊤
+
+> r
+
+Fr Fr F ⊤ 
+
+> r
+
++ Sr
+
+
+
+. (69) Hence Yt | R = r ∼ N (mt,r , Vt,r ), where mt,r = Φtm0,r + Jtbr and Vt,r = ΦtV0,r Φ⊤ 
+
+> t
+
++ Qt.Gaussian conditioning gives qHt = N (¯ht,r (z), V h|zt,r ), with 
+
+¯ht,r (z) = mht,r + V hz t,r (V zz t,r )−1(z − mzt,r ), V h|zt,r = V hh t,r − V hz t,r (V zz t,r )−1V zh t,r , (70) 35 Having specified the memory conditional qHt , we complete the inference model by defining the path probabilities qt(r | z, x). The same joint Gaussian prior gives the visible marginal pϑ,t (z | r) = 
+
+N (z; mzt,r , V zz t,r ). We combine this density with the path prior πr and an annotation weight for biological states, χr (x), then normalize over candidate paths: 
+
+qt(r | z, x) = πr pϑ,t (z | r)χr (x)
+
+P 
+
+> r′∈R
+
+πr′ pϑ,t (z | r′)χr′ (x) . (71) Here χr (x) sums the annotation probabilities over biological states on path r: an accepted state label restricts support to paths containing that state, soft annotations give soft weights, and an unlabeled cell uses χr (x) = 1 . At least one compatible path is required for an annotated cell. 
+
+ELBO and training objective. With both posteriors specified, we return to the bound in Equa-tion (67). Write qθ,t (z, r | x) = qθ (z | x, t )qt(r | z, x) and pϑ,t (z, r ) = πr pϑ,t (z | r). Since 
+
+qHt (h | z, r, x) = pϑ(h | z, r, t ), the joint-density ratio in the bound becomes 
+
+pϕ,ϑ,t (x, z, h, r )
+
+qt(z, h, r | x) = pϕ(x | z) pϑ,t (z, r ) pϑ(h | z, r, t )
+
+qθ,t (z, r | x) pϑ(h | z, r, t )= pϕ(x | z) pϑ,t (z, r )
+
+qθ,t (z, r | x) .
+
+(72) The common memory conditional cancels, so the ratio no longer depends on h. Taking its logarithm and expectation therefore integrates out H and gives 
+
+log pϕ,ϑ,t (x) ≥ E M(x, t ) := Eqθ log pϕ(x | Z) + Eqθ,t log pϑ,t (Z, R )
+
+qθ,t (Z, R | x)= Eqθ log pϕ(x | Z) − KL  qθ,t (· | x) ∥ pϑ,t 
+
+.
+
+(73) Expanding the remaining KL over the discrete paths yields 
+
+KL( qθ,t ∥ pϑ,t ) = EZ∼qθ
+
+X
+
+> r∈R
+
+qt(r | Z, x) log qθ (Z | x, t )qt(r | Z, x)
+
+πr N (Z; mzt,r , V zz t,r ) . (74) We enumerate the paths and estimate the expectation with reparameterized encoder samples. Thus the conditional hidden posterior is analytic, while the mixture KL is evaluated by sampling over Z.To encourage generated trajectories to follow the candidate developmental pathway represented by R,we introduce a path consistency loss based on the probabilities over biological states predicted by a latent state classifier cω (c | z). We train the classifier using the annotations above by minimizing the cross-entropy loss Lstate = −Et, x,c EZ∼qθ (·| x,t ) log cω (c | Z), where the outer expectation averages over training cells with supervised biological state labels c, and the inner expectation is over their encoder samples. We combine Lstate with the normalized reconstruction loss and KL regularization from Appendix B.1.1 to form the snapshot objective 
+
+Lsnap = Lrec + βEt, x KL  qθ,t (· | x) ∥ pϑ,t 
+
+ + λcLstate . (75) As in KoopCell, we also match predicted and observed populations over all forward training pairs 
+
+s < t . In KoopCell-M this requires inferring memory at the source time. The inferred augmented source population is 
+
+eμs(d z, dh, r ) = 
+
+Z
+
+qθ (d z | x, s ) qs(r | z, x) pϑ(d h | Zs = z, R = r) d ρs(x). (76) We propagate eμs to time t using Equation (68), keeping r fixed along each trajectory. We denote the predicted Zt-marginal by bμs→t and map this latent population to gene-expression space through the decoder: bρs→t = (Dec ϕ)# bμs→t. We compare these predictions with the corresponding populations at time t using Lpop defined in Equation (52). 
+
+Path consistency loss. For a candidate developmental pathway r = ( c1, . . . , c ℓr ), we sum over admissible timings of transitions between successive biological states. On a grid 0 = u1 < · · · <
+
+36 Algorithm 2 KoopCell-M: memory augmented latent dynamics for modeling branching 
+
+Input: Training snapshots D = {(tk , ρ tk )}Nk=0 with biological state annotations; candidate paths R; fixed Fourier tests {ψj }mj=1 ; batch size nb; λ, ϵ M > 0; α ∈ [0 , 1) ; loss weights 
+
+Output: Encoder qθ , decoder Dec ϕ, state classifier cω , and dynamics parameters Θ = [ A, bz ], ϑ
+
+Stage 1: VAE and state classifier pretraining  
+
+> 1:
+
+for each pretraining iteration do  
+
+> 2:
+
+Bk ← Sample( ρtk , n b), k = 0 , . . . , N ▷ Independent sampling at each time  
+
+> 3:
+
+L ← PretrainLoss( B; θ, ϕ) + λcStateLoss( B; θ, ω) ▷ VAE loss: Equation (53)  
+
+> 4:
+
+(θ, ϕ, ω) ← AdamW(( θ, ϕ, ω), ∇θ,ϕ,ω L) ▷ Pretrain the VAE and state classifier  
+
+> 5:
+
+end for Stage 2: Alternating dynamics estimation and representation learning  
+
+> 6:
+
+Θ ← 0; initialize B, C, Λ, Σh and {πr , Fr , ar , Sr , bh(r)}r∈R 
+
+> 7:
+
+η ← (θ, ϕ, ϑ, ω) ▷ Load pretrained encoder, decoder, and classifier from Stage 1  
+
+> 8:
+
+for each training iteration do (a) Closed-form dynamics estimation ( η fixed)  
+
+> 9:
+
+zall ← sg(Encode( D; θ)) ▷ Reparameterized samples from all training cells  
+
+> 10:
+
+(qall , Call ) ← Infer( D, zall ; sg( Θ, ϑ)) 
+
+▷ q: path probabilities (Equation (71)); C: Gaussian moments and conditional coefficients (Equation (70))  
+
+> 11:
+
+(G, yM, M ) ← MemoryStats( zall , qall , Call , sg( B)) 
+
+▷ Compute G, yM, M by sample averaging and trapezoidal quadrature; Equation (80), Equation (58)  
+
+> 12:
+
+W ← (M + ϵM I)−1; ba ← PCG( G⊤W G + λI, G⊤W y M) 
+
+> 13:
+
+bΘ ← reshape( ba); Θ ← sg( αΘ + (1 − α) bΘ) ▷ EMA update 
+
+(b) Representation and memory update ( Θ fixed)  
+
+> 14:
+
+Bk ← Sample( ρtk , n b), k = 0 , . . . , N ; ϵk,i ∼ N (0, ID ) 
+
+> 15:
+
+zk,i ← mθ (xk,i , t k ) + Sθ (xk,i , t k )1/2ϵk,i ▷ Reparameterized posterior samples  
+
+> 16:
+
+(Φ∆, J∆, Q∆) ← OUTransition( Θ, ϑ, ∆) , ∆ ∈ T ∪ { t − s : ( s, t ) ∈ P}  
+
+> 17:
+
+(q, C) ← Infer( B, z; Θ, ϑ) ▷ Path probabilities and Gaussian conditionals  
+
+> 18:
+
+Lsnap ← SnapshotLoss( B, z, q, C; η) ▷ Reconstruction, KL, state supervision; Equation (75)  
+
+> 19:
+
+for each (s, t ) ∈ P in parallel do  
+
+> 20:
+
+hs,i,r ∼ N (¯hs,r (zs,i ), V h|zs,r ) for all i, r ▷ Infer memory at the source time s 
+
+> 21:
+
+bys→t,i,r ← Φt−s(z⊤
+
+> s,i
+
+, h⊤ 
+
+> s,i,r
+
+)⊤ + Jt−sbr + ϵi,r , ϵi,r ∼ N (0, Qt−s) 
+
+> 22:
+
+bμs→t ← |B s|−1 P 
+
+> i,r
+
+qs,i,r δ[ bys→t,i,r ]z ; bρs→t ← (Dec ϕ)# bμs→t 
+
+> 23:
+
+end for  
+
+> 24:
+
+Lpop ← PopulationLoss( B, z, {bμs→t, bρs→t}) ▷ Population matching; Equation (52)  
+
+> 25:
+
+Z(r) 
+
+> u1:uM
+
+← PathRollout( B0, r ; θ, Θ, ϑ), r ∈ R 
+
+> 26:
+
+¯qT ← sg( |B N |−1 P 
+
+> i
+
+qN,i, ·); Lpath ← PathLoss( {Z(r) 
+
+> u1:uM
+
+}, ¯qT ; ω) 
+
+> 27:
+
+(GB , yM 
+
+> B
+
+, MB ) ← MemoryStats( z, sg( q), sg( C), sg( B)) ▷ Equation (80)  
+
+> 28:
+
+WB ← (MB + ϵM I)−1 
+
+> 29:
+
+Lweak ← ∥ yM 
+
+> B
+
+− GB vec( Θ)∥2 
+
+> WB
+
+▷ Retain encoder gradients through z 
+
+> 30:
+
+LM ← L snap + Lpop + λRLpath + λweak Lweak ▷ Combined objective; Equation (82)  
+
+> 31:
+
+η ← AdamW( η, ∇η LM) ▷ Update VAE, memory dynamics, and classifier  
+
+> 32:
+
+end for  
+
+> 33:
+
+return qθ , Dec ϕ, c ω , Θ, ϑ
+
+uM = T , let Ir contain index sequences with i1 = 1 , im − im−1 ∈ { 0, 1}, and 1 ≤ im ≤ ℓr. The classifier assigns the path-consistency probability 
+
+Pr (Zu1:uM ) = X 
+
+> (i1,...,i M)∈I r
+> M
+
+Y
+
+> m=1
+
+cω (cim | Zum ), (77) and we minimize Lpath = − P 
+
+> r
+
+¯qT (r)E log Pr (Zu1:uM ). Here trajectories start from uniformly sampled initial cells conditional on each path, and ¯qT (r) is the detached mean path probability at the latest training time. We evaluate Equation (77) by forward dynamic programming, adapting the alignment marginalization in connectionist temporal classification (CTC; Graves et al., 2006) to the constraints in Ir. The recursion uses no blank symbol and sums over all final path positions, allowing trajectories to end before the terminal state. The path loss updates both the classifier and the parameters governing the rollout. In Algorithm 2, Z(r) 
+
+> u1:uM
+
+denotes a batch of simulated visible trajectories conditional on R = r.37 B.2.3 CLOSED -FORM DYNAMICS ESTIMATION AND ALTERNATING TRAINING 
+
+We now derive the closed-form update of Θ = [ A, bz ] with the representation and memory statistics fixed. Let eμt be the inferred augmented population in Equation (76), whose Z-marginal is μt, and write ez = ( z⊤, 1) ⊤ and eZt = ( Z⊤ 
+
+> t
+
+, 1) ⊤. For a smooth test φ(t, z), substituting the visible drift 
+
+Θez + Bh into the definition of the weak population residual in Equation (14) (Appendix A.1) gives 
+
+RM 
+
+> D
+
+(Θ; φ) = μT [φ(T )] − μ0[φ(0)] 
+
+−
+
+Z T
+
+> 0
+
+X
+
+> r∈R
+
+Z ∂tφ(t, z) + ∇z φ(t, z)⊤(Θez + Bh ) eμt(d z, dh, r ) d t
+
+= RD (Θ; φ) −
+
+Z T
+
+> 0
+
+X
+
+> r∈R
+
+Z
+
+∇z φ(t, z)⊤Bh eμt(d z, dh, r ) d t, 
+
+(78) where RD (Θ; φ) is the population residual used in Appendix B.1.2. Using Equation (76) and the conditional mean R h pϑ(d h | z, r, t ) = ¯ht,r (z) from Equation (70) gives 
+
+X
+
+> r∈R
+
+Z
+
+∇z φ(t, z)⊤Bh eμt(d z, dh, r )=
+
+Z Z 
+
+∇z φ(t, z)⊤B
+
+"X
+
+> r∈R
+
+qt(r | z, x)¯ht,r (z)
+
+#
+
+qθ (d z | x, t ) ρt(d x)= E∇z φ(t, Zt)⊤B¯ht(Zt, Xt),
+
+(79) where ¯ht(z, x) = P 
+
+> r
+
+qt(r | z, x)¯ht,r (z) and the expectation is over Xt ∼ ρt, Zt ∼ qθ (· | Xt, t ).Applying the spatial test ψj on Ik = [ tk, t k+1 ], as in Equation (55), gives RM 
+
+> D
+
+(Θ; φkj ) = ykj −⟨Θ, Hkj ⟩F − ckj , where 
+
+ykj = μtk+1 [ψj ] − μtk [ψj ], Hkj =
+
+Z
+
+> Ik
+
+E[∇ψj (Zt) eZ⊤ 
+
+> t
+
+]d t, ckj =
+
+Z
+
+> Ik
+
+E[∇ψj (Zt)⊤B¯ht(Zt, Xt)]d t, yM 
+
+> kj
+
+= ykj − ckj .
+
+(80) We estimate the expectations from encoded cells and approximate the time integrals using the trapezoidal rule, as in KoopCell (Equation (57)). Stacking the interval–test pairs gives the residual vector yM − Ga , with a = vec( Θ) and G(k,j ),: = vec( Hkj )⊤. Similarly, we solve the regularized regression used in KoopCell, replacing y with yM = y − c:
+
+ba = arg min 
+
+> a
+
+ 12 ∥yM − Ga ∥2 
+
+> W
+
++ λ 
+
+> 2
+
+∥a∥22 = ( G⊤W G + λI)−1G⊤W y M. (81) We evaluate the path probabilities qt(r | z, x) and conditional memory means ¯ht,r (z) under the current model and hold them fixed together with the memory coupling matrix B when updating Θ.Finally, we combine this closed-form update of Θ with gradient-based learning of the representation and memory dynamics, following the alternating training scheme adopted in KoopCell (Algorithm 1). We first jointly pretrain the VAE and state classifier by minimizing Lpre + λcLstate , with Lpre defined in Equation (53). In Stage 2, we alternate between the following two updates. First, we form the weak statistics, solve Equation (81), and update Θ ← αΘ + (1 − α) bΘ. Second, with Θ fixed, we update η = ( θ, ϕ, ϑ, ω) by minimizing 
+
+LM = Lsnap + Lpop + λRLpath + λweak Lweak , Lweak = ∥yM − Ga ∥2 
+
+> W
+
+. (82) We summarize the training procedure in Algorithm 2. The routine StateLoss evaluates the super-vised classification loss Lstate in Equation (75). In Infer , we compute path probabilities q using Equation (71), and Gaussian moments and conditional coefficients C using Equation (68) and Equa-tion (70). In MemoryStats , we form (G, yM, M ) from Equation (80) and Equation (58) using empirical averages and the trapezoidal rule. For the minibatch weak loss, we hold (q, C, B) fixed while retaining gradients through z. Rollouts and the path consistency loss follow Equation (68) and Equation (77), respectively. The notation sg and PCG follows Algorithm 1. 38 C SPECTRAL RECOVERY EXPERIMENTS 
+
+This section gives the data-generation and evaluation protocols for the two deterministic toy models in Section 4.1. Let Φt denote the flow of the corresponding dynamical system and let ρ0 be its initial population distribution. For each toy model, the dataset consists of empirical population snapshots {X tk }Kk=0 , where each Xtk = {x(i) 
+
+> tk
+
+}Nk 
+
+> i=1
+
+contains independent samples from the time marginal ρtk = (Φ tk )#ρ0. To generate the empirical snapshot at time tk, we independently draw a population of initial states from ρ0, solve the governing ODE from time 0 to tk, and retain only the terminal states. Repeating this construction independently at every observation time removes cross-time cell correspondence and yields the unpaired population snapshots used for training and evaluation. C.1 TOY 1: FINITE -DIMENSIONAL NONLINEAR FLOW 
+
+Dynamics and snapshot data generation. We consider the two-dimensional nonlinear flow 
+
+˙x1 = μx 1, ˙x2 = λ(x2 − x21), (83) with (μ, λ ) = ( −0.2, −1) . The origin (0 , 0) is globally attracting, and the invariant parabola 
+
+x2 = λλ−2μ x21 = 53 x21 is an attracting slow manifold. Indeed, the observables 
+
+ψ1(x) = x1, ψ2(x) = x2 − 53 x21, ψ3(x) = x21 (84) form a finite-dimensional Koopman-invariant subspace and satisfy ˙ψj = λj ψj with (λ1, λ 2, λ 3) = (−0.2, −1, −0.4) . The transverse coordinate ψ2 therefore decays faster than the coordinates that parameterize the slow manifold. We define ρ0 by x1(0) ∼ 12 N (−1, 0.22) + 12 N (1 , 0.22) and x2(0) = x1(0) 2 + η, where 
+
+η ∼ N (0 , 0.82). For each selected time, 3,000 new initial states are sampled from this law and advanced with the analytic solution of Equation (83). The nine training snapshots are observed at 
+
+t ∈ { 0, 0.1, 0.2, 0.3, 0.4, 0.55 , 0.7, 0.9, 1.2}; independent target snapshots are generated every 0.2
+
+time units from t = 1 .4 to t = 4 .0 for extrapolation. Figure 6 illustrates the generated snapshots, where we observe a rapid contraction toward the slow manifold. 1 0 1          
+
+> x1
+> 02
+> x2
+> t= 0
+> 101
+> x1
+> t= 0.2
+> 101
+> x1
+> t= 0.55
+> 101
+> x1
+> t= 1.2
+
+Figure 6: Toy 1: generated population snapshots. Each panel is an independently generated sample from the corresponding time marginal. The dashed curve denotes the attracting slow manifold. 
+
+Experimental settings. We consider three settings. The learned-observable and high-dimensional settings are briefly described in Section 4.1, whereas the known-observable setting is presented only in this appendix due to space constraints. The first is the known-observable setting. Here we use the analytically specified observable map z = ( x1, x 2, x 21)⊤, whose components span a finite-dimensional Koopman-invariant subspace in which the dynamics are exactly linear. We therefore fix z as the encoder and estimate only the linear generator, thereby isolating spectral recovery from representation learning. Second, in the learned-observable setting, the model receives only the two physical coordinates (x1, x 2) and jointly learns a three-dimensional observable and its corresponding 39 linear propagator. Third, in the high-dimensional setting, we generate 64-dimensional observations by applying a fixed injective map: 
+
+Y = softplus( W x + c) + ϵY ∈ R64 , ϵY ∼ N (0, 0.03 2I). (85) Here x = ( x1, x 2)⊤ is the physical state and W ∈ R64 ×2 has full column rank. Only Y is provided to either model; x, W , and c remain unknown. This setting evaluates representation learning and population prediction in the observed 64D space, and we do not report an inferred spectrum for it. The learned-observable models use 2,048 multiscale random Fourier test functions and a three-dimensional latent space. KoopCell alternates the weak generator solve with representation updates for 500 epochs. scNODE receives the same snapshots and latent dimension, replacing the linear latent generator with an autonomous neural ODE. Table 4 reports the recovered spectrum only for the two settings in which the physical observable structure is available for an unambiguous comparison. The linear observable alignment used to compare learned and analytic eigenfunctions is applied only after training and does not enter either the objective or the rollout. Table 4: Toy 1 spectral recovery with known and learned observables. Parentheses contain absolute eigenvalue errors.         
+
+> λ⋆Known observable Learned observable
+> −0.2−0.1983 (0 .0017) −0.1952 (0 .0048)
+> −1.0−0.9949 (0 .0051) −0.9774 (0 .0226)
+> −0.4−0.3893 (0 .0107) −0.4227 (0 .0227)
+
+Rollout and evaluation. Each rollout starts from the observed population at t = 0 . KoopCell encodes this population, advances every latent state with the learned latent linear dynamics, and decodes at the requested time; scNODE instead integrates its learned latent neural ODE. At each horizon, we compute the sliced Wasserstein distance (SWD) between the predicted population and the independently generated target snapshot. We use physical-space SWD for the learned-observable setting and native observation-space SWD for the 64D setting, and average the metric over all extrapolation times. Figure 7 compares the population rollouts of KoopCell and scNODE. Predicted distributions from KoopCell agree more closely with the ground-truth distributions. 40 Predicted snapshots with KoopCell 012
+
+t = 0 
+
+> True Prediction
+
+t = 0.4 t = 1.2   
+
+> 101012
+
+t = 2   
+
+> 101
+
+t = 3   
+
+> 101
+
+t = 4 
+
+x1
+
+> x2
+
+Weak Koopman rollout from physical snapshots 
+
+## Predicted snapshots with scNODE 012
+
+t = 0 
+
+> True Prediction
+
+t = 0.4 t = 1.2   
+
+> 101012
+
+t = 2   
+
+> 101
+
+t = 3   
+
+> 101
+
+t = 4 
+
+x1
+
+> x2
+
+scNODE rollout from physical snapshots 
+
+Figure 7: Predicted snapshots with KoopCell/scNODE. Both rollouts start from the observed Toy 1 population at t = 0 . Blue circles denote independently generated target snapshots, and orange triangles denote predictions. Times after t = 1 .2 are extrapolations. 41 C.2 TOY 2: DAMPED DUFFING FLOW 
+
+Dynamics and snapshot data generation. We consider the damped, unforced Duffing system studied by Otto & Rowley (2019), 
+
+˙q = p, ˙p = −0.5p + q − q3. (86) Its energy H(q, p ) = 12 p2 − 12 q2 + 14 q4 satisfies ddt H(q(t), p (t)) = −0.5p(t)2 ≤ 0, so the flow is dissipative. The origin is a saddle point, while (q, p ) = ( ±1, 0) are stable spiral equilibria. The linearization at either stable equilibrium has eigenvalues (−1 ± √31 i)/4. The corresponding global Koopman eigenfunctions do not have closed-form expressions. As described by Otto & Rowley (2019), the magnitude and phase of the complex eigenfunction provide action–angle-like coordinates over each basin of attraction: the magnitude vanishes at the stable equilibrium, while the phase tracks the damped rotation. A further eigenfunction with eigenvalue zero is constant along trajectories and takes distinct values in the two basins of attraction. For the initial population, we assign equal mass to two connected annular sectors, one in each basin. For a sign s ∈ {− 1, +1 }, we sample θ ∼ U [−2.20 , 1.10] and r ∼ U [0 .16 , 0.48] , set (q, p ) = (s(1 + r cos θ), −1.35 sr sin θ), and retain samples with H(q, p ) < −0.025 . This construction covers a range of intrabasin amplitudes and phases while keeping the population away from the energy barrier. Each time marginal contains 3,000 independently resampled initial states propagated with a high-accuracy numerical solver. Training uses the ten marginals at t = 0 , 0.5, . . . , 4.5; evaluation uses independently generated extrapolation targets at t ∈ { 5, 6, 8, 10 , 12 }.q                                        
+
+> −1 01
+> p
+> Train: t= 0
+> q
+> Train: t= 0 :5
+> q
+> Train: t= 1
+> q
+> Train: t= 1 :5
+> q
+> Train: t= 2
+> −2 −1 012
+> q
+> −1 01
+> p
+> Extrapolation: t= 5
+> −2 −1 012
+> q
+> Extrapolation: t= 6
+> −2 −1 012
+> q
+> Extrapolation: t= 8
+> −2 −1 012
+> q
+> Extrapolation: t= 10
+> −2 −1 012
+> q
+> Extrapolation: t= 12
+> Duffing: generated population snapshots
+
+Figure 8: Toy 2 Duffing System: generated population snapshots. The first row shows training distribution marginals and the second row shows extrapolation ground truth. Each panel is generated independently from the same initial population law. 
+
+Experimental settings. We use two settings. In the learned-observable setting, KoopCell receives the physical snapshots (q, p ) and jointly learns a three-dimensional observable, its linear generator, and a nonlinear decoder. Both the encoder and decoder are two-layer MLPs with hidden widths 
+
+64 –64 , and training uses 2,048 multiscale random Fourier test functions for 500 epochs. Because the relevant eigenfunctions are not available analytically, the objective of this experiment is to determine whether snapshot data recover their characteristic behavior: a complex mode encoding decaying intrabasin amplitude and phase, and a near-zero mode that remains constant within each basin and distinguishes the two long-term outcomes. Figure 1 visualizes these learned modes, and Table 5 compares their eigenvalues with the values implied by the Duffing dynamics. In the high-dimensional setting, the same physical marginals are observed through a fixed injective map 
+
+Y = softplus( W [q, p ]⊤ + c) + ϵY ∈ R64 , ϵY ∼ N (0, 0.02 2I). (87) Neither method receives (q, p ) or the observation map during training. Both KoopCell and scNODE use a three-dimensional latent state and are evaluated by their population predictions in the native 64D observation space. 42 Table 5: Toy 2 spectral recovery in the learned-observable setting. 
+
+Mode Reference λ Estimated bλ Absolute error Oscillatory pair −0.2500 ± 1.3919 i −0.2979 ± 1.4811 i 0.1012 
+
+Basin mode 0 0.0105 0.0105 
+
+Rollout and evaluation. We follow the same protocol as in the Toy 1 experiment. Figure 9 compares the population rollouts produced by KoopCell and scNODE. KoopCell more faithfully reproduces the target population over the full prediction horizon through t = 12 .−0.5 0.0 0.5                                      
+
+> Ground truth
+> p
+> t= 0
+> Train t= 2
+> Train t= 4
+> Train t= 5
+> Extrapolation t= 6
+> Extrapolation t= 8
+> Extrapolation t= 10
+> Extrapolation t= 12
+> Extrapolation
+> −0.5 0.0 0.5
+> KoopCell
+> p
+> −1 01
+> q
+> −0.5 0.0 0.5
+> scNODE
+> p
+> −1 01
+> q−1 01
+> q−1 01
+> q−1 01
+> q−1 01
+> q−1 01
+> q−1 01
+> q
+
+Predicted snapshots with KoopCell/scNODE 
+
+Figure 9: Predicted Duffing snapshots with KoopCell/scNODE. Rows show independently generated ground truth, KoopCell predictions, and scNODE predictions; columns progress from training times to extrapolation through t = 12 .C.3 ROLLOUT -ERROR ACCUMULATION 
+
+Figure 10 compares the rollout errors of KoopCell and scNODE over time for both toy models. The vertical dotted line marks the final training snapshot, and the shaded region denotes extrapolation. On Toy 1, scNODE’s error increases steadily beyond the training window, whereas KoopCell’s error remains low throughout extrapolation. On Toy 2, KoopCell also maintains lower rollout errors than scNODE throughout the evaluated horizon. 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 
+
+> Rollout time
+> 0.05 0.10 0.15 0.20 0.25
+> Sliced Wasserstein distance
+
+(a) Toy 1       
+
+> 0246810 12
+> Rollout time
+> 0.000 0.025 0.050 0.075 0.100 0.125
+
+(b) Toy 2 
+
+> KoopCell scNODE
+
+Figure 10: Accumulation of population rollout error. Left: Toy 1. Right: Toy 2. Each curve reports the per-time SWD for a rollout initialized from the observed population at t = 0 .43 D BRANCHING DYNAMICS EXPERIMENTS 
+
+This section gives the data-generation, training, and evaluation protocols for the branching experiment in Section 4.2. 
+
+Dynamics and snapshot data generation. We generate a noisy pitchfork process with progression coordinate s and branch coordinate b:
+
+ds = 0 .21 d t, db = 1 .5(2 .4sb − b3) d t + 0 .15 d Wt, (88) where s0 ∼ N (−1.05 , 0.07 2) and b0 ∼ N (0 , 0.04 2) are independent. As s becomes positive, the central equilibrium of the branch drift loses stability and two stable branches emerge. We simulate 4,000 trajectories with an Euler–Maruyama step of 0.0025 , updating s before evaluating the branch drift. To simulate high-dimensional data from this two-dimensional process, we use the nonlinear observation map x = 2[ Qu + 0 .2{tanh( W u + c) − tanh( c)}] + ϵ ∈ R64 , where 
+
+u = ( s/ 1.2, b/ 1.8) ⊤, Q⊤Q = I2, ∥W ∥2 = 1 , cj ∼ U [−0.5, 0.5] , and ϵ ∼ N (0, 0.09 2I64 ) is independent observation noise. Each snapshot is independently shuffled, and training uses only unpaired populations, without trajectory correspondences or branch labels. The nine training times are 0, 1.2, 2.4, 3.6, 4.8, 5.8, 6.8, 7.8, 9.2; interpolation is evaluated at 4.2, 8.3 and extrapolation at 
+
+9.5, 10 .
+
+Models and training. At each training time, 3,000 cells are used for fitting, 500 for validation, and 500 are reserved for testing. We use the means and standard deviations estimated from fitting cells to standardize observations, and rescale time as τ = t/ 9.2. Both models use a Gaussian encoder with a 10-dimensional latent state. The encoder and decoder each have two hidden layers of width 128, with SiLU and tanh activation functions, respectively. Decoder weights are spectrally normalized with output scale 4 to control the decoder’s Lipschitz constant in both models and thus limit the amplification of latent differences during decoding. KoopCell uses the linear latent flow 
+
+˙Zτ = AZ τ + bz with a stable parameterization of A. KoopCell-M uses the augmented dynamics in Equation (62) (Appendix B.2.1), with visible state Zτ ∈ R10 and memory state Hτ ∈ R24 . In this experiment, Σh = 0 and the hidden bias bh is shared across components. Following the conditional-mixture construction in Equation (61), we use two hidden components with R ∼ Cat( π1, π 2) and 
+
+H0 | Z0 = z, R = r ∼ N (mr (z), S(z)) . Here the mixture probabilities πr are learned, and neural networks parameterize the conditional means mr (z) and diagonal covariance S(z).To isolate the effect of the dynamical model from that of the generator-estimation procedure, we use a common gradient-based training protocol for both models. For this controlled comparison, the closed-form generator updates in Algorithms 1 and 2 are replaced by joint optimization of the representation and dynamics, using the same reconstruction and population-matching objectives. We first pretrain a shared VAE for 2,400 Adam steps (learning rate 0.002 , 256 cells per time), then initialize both models from this VAE and train each for 8,000 steps, with 128 cells per time and a cosine-decayed learning rate starting at 0.001 .
+
+Evaluation. After training, we encode the initial observed population, propagate its latent states with the learned dynamics, and decode the predicted populations at the evaluation times. We compare these predictions with the corresponding ground-truth populations using the following metrics: • Sliced Wasserstein distance (SWD). The root mean square of one-dimensional W2 dis-tances along 512 shared random directions in standardized 64D observation space. • Energy distance. The energy distance between predicted and observed populations in the same standardized space, normalized by √64 = 8 .• Squared maximum mean discrepancy (MMD 2). We use an RBF kernel with bandwidth set to the median pairwise distance among fitting cells in standardized observation space. • Branch-coordinate W1. After branching, the two populations occupy positive and negative values of the branch coordinate b. We fit a linear probe bb(x) = w⊤x + c to training observations and their known b values, then apply it to the predicted 64D observations. The 
+
+W1 distance between the estimated and true b distributions measures discrepancies in branch locations, widths, and relative population sizes. 44 • Central mass error. The interval |b| < 0.5 defines a fixed central region around the initial, unbranched population. Using the same linear probe, we compute the absolute difference between predicted and true fractions of cells in this region. This measures whether the model reproduces the amount of population remaining between the two branches. Table 6 reports prediction errors averaged over the corresponding training, interpolation, and extrapo-lation times. Table 6: Detailed branching prediction errors (mean ± standard deviation across three optimization seeds). Lower is better; the better mean is shown in bold.                                                                                                        
+
+> Times Model SWD Energy ×10 3MMD 2×10 3Branch W1Mass error Training times KoopCell 0.0882 ±0.0047 2.281 ±0.561 0.831 ±0.225 0.068 ±0.003 0.0264 ±0.0007
+> KoopCell-M 0.0798 ±0.0004 1.273 ±0.022 0.410 ±0.011 0.044 ±0.002 0.0122 ±0.0017
+> Interpolation KoopCell 0.0994 ±0.0083 2.804 ±0.960 1.058 ±0.383 0.105 ±0.004 0.0519 ±0.0006
+> KoopCell-M 0.0848 ±0.0003 1.258 ±0.055 0.437 ±0.018 0.067 ±0.003 0.0201 ±0.0013
+> Extrapolation KoopCell 0.2120 ±0.0212 10 .790 ±2.713 4.359 ±0.952 0.344 ±0.010 0.0951 ±0.0049
+> KoopCell-M 0.1400 ±0.0089 2.393 ±0.568 1.012 ±0.267 0.106 ±0.006 0.0016 ±0.0002
+
+## E SINGLE -C ELL EXPERIMENTAL DETAILS 
+
+E.1 SINGLE -CELL DATASETS AND PREPROCESSING 
+
+We use the processed benchmark released with scNODE (Zhang et al., 2024) on Figshare 3, which contains three high-dimensional scRNA-seq datasets. ZB comprises 38,731 cells from 12 stages of zebrafish embryogenesis, spanning 3.3–12 hours post fertilization (Farrell et al., 2018). DR contains 27,386 cells from 11 overlapping collection windows spanning 0–20 hours of Drosophila embryogenesis (Calderon et al., 2022). SC follows the reprogramming of mouse embryonic fibroblasts toward induced pluripotent stem cells (Schiebinger et al., 2019); we use the reduced benchmark subset of 23,619 cells in 19 temporal groups, formed by pooling samples collected within each integer day from day 0 to day 18. Table 7 shows the number of cells at each time point in each dataset. We consider three prediction tasks of increasing difficulty: easy withholds intermediate snapshots for interpolation; medium withholds the final snapshots for extrapolation; and hard combines intermediate and final held-out snapshots, leaving sparser observations for training. Figure 12 shows the training and held-out snapshots for each dataset and task. For each task, we use the 2,000 highly variable genes (HVGs) selected in the benchmark. For ZB and DR, we normalize each cell’s counts over these genes to a total of 10 4 and apply a log transformation: 
+
+xig = log(1 + 10 4cig / P2000  
+
+> h=1
+
+cih ), where cig is the count for gene g in cell i. For SC, we use the normalized expression values provided in the benchmark. We index the observed populations in chronological order as t = 1 , . . . , T .Figure 11 visualizes all observed cells using the hard-task gene sets. For each dataset, we reduce the expression profiles to 50 principal components and then construct a two-dimensional UMAP embedding, with cells colored by snapshot index. Table 7: Number of observed cells at each time point. Indices start at t = 1 ; dashes indicate indices beyond the observed horizon.                                                                             
+
+> Dataset 12345678910 11 12 13 14 15 16 17 18 19 ZB 311 200 1158 1467 5716 1026 4101 6178 5442 7114 1614 4404 –––––––DR 3944 2801 947 3139 2074 2147 3311 1692 1856 1491 3984 ––––––––SC 800 560 1371 1413 1608 1377 1153 1156 2420 886 732 712 747 708 1444 2061 2106 1622 743
+> 3
+
+https://doi.org/10.6084/m9.figshare.25601610.v1 .
+
+45 38,731 cells · 12 time points       
+
+> (a) Zebrafish (ZB)
+> 1612
+> Time-point index
+> 27,386 cells · 11 time points
+> (b) Drosophila (DR)
+> 1611
+> Time-point index
+> 23,619 cells · 19 time points
+> (c) Mouse reprogramming (SC)
+> 110 19
+> Time-point index
+
+Figure 11: Observed populations in (a) ZB, (b) DR, and (c) SC. Each point represents a cell in a UMAP embedding of gene expression, colored by snapshot index. 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19            
+
+> Snapshot index ZB Easy ZB Medium ZB Hard DR Easy DR Medium DR Hard SC Easy SC Medium SC Hard
+> Training Held-out interpolation Held-out extrapolation
+
+Figure 12: Training and held-out snapshots for each prediction task. E.1.1 POPULATION PREDICTION AND EVALUATION 
+
+For a consistent evaluation across methods, KoopCell, KoopCell-M, and all baselines each generate 2,000 cells at every held-out time point. We compare these predicted populations with all observed cells at the corresponding time point in the processed 2,000-gene space. Every task retains the earliest observed population as the source for prediction. For KoopCell and KoopCell-M, we uniformly sample 2,000 cells from this population, with replacement when fewer than 2,000 cells are available, and draw their initial latent states from the encoder posterior. KoopCell propagates these states with its learned linear dynamics. KoopCell-M additionally samples a path R
+
+and memory state H0 for each initial latent state, then propagates the augmented state while keeping 
+
+R fixed. We decode the visible latent states at each evaluation time to obtain the predicted gene expression distribution. In the single-cell experiments, we evaluate predictions using the quadratic optimal transport cost 
+
+12 W 22 (μ, ν ) = inf 
+
+> π∈Π( μ,ν )
+
+Z 12 ∥x − y∥2 dπ(x, y).
+
+We report and summarize the results as mean ± sample standard deviation over three training seeds. E.2 IMPLEMENTATION OF BASELINE MODELS 
+
+We compare KoopCell and KoopCell-M with six representative models for modeling temporal single-cell population dynamics. For scNODE and LGP-OT, the released repositories provide tuned 46 configurations for the same datasets and prediction tasks, so we use those configurations directly. We select the hyperparameters of MIOFlow, PRESCIENT, PI-SDE and VGFM by training-only three-fold cross-validation, following the protocol adopted in the scNODE benchmark. Specifically, at every training time point, we randomly partition the cells into three approximately equal subsets, fit the model on two subsets, and validate on the remaining subset. We rotate the held-out subset over the three folds and select the configuration with the lowest mean validation optimal-transport distance across folds and training time points. The test time points defined by each prediction task remain inaccessible during model selection. After selecting a configuration, we retrain the model using all training cells and evaluate it on the held-out test time points. 
+
+scNODE. scNODE combines a variational autoencoder with a latent neural ordinary differential equation (ODE), and jointly optimizes the latent representation and continuous dynamics using population-level distribution matching and dynamic regularization (Zhang et al., 2024). We use the task-specific settings released as tunedOurPars : the latent dimension is fixed as 50, while the encoder, decoder, and ODE-network architectures depend on the dataset and prediction task. Because these settings were tuned on the same nine dataset–task combinations considered in our real world scRNA-seq experiments (section 4.3), we do not perform an additional search. 
+
+LGP-OT. LGP-OT represents population dynamics with a heteroscedastic Gaussian process in a learned latent space, approximates the process with Hilbert-space basis functions, and trains a decoder by matching generated and observed cell populations with a Sinkhorn optimal-transport objective (Balik & Lähdesmäki, 2026). We adopt the released task-specific modelParams configu-rations, which use a 32-dimensional latent space and select the decoder architecture and number of basis functions for each dataset and task. We therefore do not retune LGP-OT. 
+
+MIOFlow. MIOFlow first learns a geometry-preserving representation with a geodesic autoencoder and then fits neural-ODE dynamics using optimal-transport and density-regularization losses (Huguet et al., 2022). We select the geodesic-autoencoder dimension from {10 , 50 , 100 }, the partition-encoder architecture from {[50 , 100] , [50 , 100 , 100] }, the ODE architecture from {[16] , [16 , 16] , [16 , 32 , 16] },and the density-loss coefficient from {1, 25 , 50 , 75 , 100 } using three-fold cross-validation. 
+
+PRESCIENT. PRESCIENT learns a neural potential-energy landscape whose gradient defines the drift of a stochastic process, thereby generating cell-population trajectories in a fixed 50-dimensional PCA space (Yeo et al., 2021). We tune the Gaussian-noise standard deviation over [0 , 1] , the energy-regularization strength over [0 , 0.1] , the gradient-clipping threshold over [0 , 1] , and the number of hidden layers over {1, 2, 3} by three-fold cross-validation. 
+
+PI-SDE. PI-SDE learns a physics-informed stochastic differential equation in a fixed 50-dimensional PCA space by combining distribution matching with a potential-based action regu-larizer (Jiang & Wan, 2024). We fix the potential function to a two-layer fully connected network with 400 units per layer and Softplus activations. We tune only the diffusion parameterization among a fixed scalar ( const ), a learnable constant vector ( const_param ), and a state-dependent neural network ( Mlp ); the scalar initialization is fixed to 0.1. We also fix the learning rate to 0.005 , the action-regularization coefficient to 0.5, and the sampled-cell fraction per training time point to 0.1,and select the diffusion type by three-fold cross-validation. 
+
+VGFM. VGFM jointly models cellular velocity and growth through flow matching and unbalanced optimal transport (Wang et al., 2025). We fit PCA using training cells only and explore raw and stan-dardized PCA representations, dimensions in {50 , 100 }, Tanh and LeakyReLU activation functions, entropy regularization ϵ ∈ { 0.01 , 0.03 }, and source-marginal relaxation τ ∈ { 5, 10 }. The reported results use standardized PCA with 50 components for the easy and hard tasks and 100 components for the medium task. All reported configurations use Tanh activations, ϵ = 0 .01 , and τ = 10 . The velocity and growth networks have five and three hidden layers, respectively, with 512 units per hidden layer. Training comprises 2,000 pretraining epochs followed by 50 trajectory-training epochs, with learning rates 10 −3 and 10 −4, respectively. KoopCell(-M), scNODE, LGP-OT, MIOFlow, PRESCIENT, PI-SDE and VGFM are all implemented and trained on NVIDIA Tesla V100 GPUs with 32 GB of memory. 47 E.3 MODEL CONFIGURATIONS 
+
+Table 8: Settings shared across the three datasets and prediction tasks. Stage 1 and Stage 2 denote VAE pretraining and dynamics/representation alternating training stages, respectively. 
+
+Parameter KoopCell KoopCell-M 
+
+Visible latent dimension D 50 50 Encoder/decoder MLP activation ReLU ReLU Training epochs (Stage 1 / Stage 2) 500 / 4,000 500 / 4,000 Batch size (Stage 1 / Stage 2) 256 / 128 256 / 128 Variational coefficient β 0.01 0.01 Number of Fourier test functions 2,048 2,048 Sinkhorn batch size 512 256 State-classifier hidden width – 128 Path-loss coefficient λR – 0.1 
+
+Table 9: Selected MLP architectures and loss weights. Encoder and decoder entries list hidden-layer widths; dh is the memory dimension. 
+
+KoopCell Task Data Encoder MLP Decoder MLP dh λz λx λweak 
+
+Easy ZB 256–256–256 256–256–256 – 1 1.5 1DR 512–256–256 256–256–512 – 1 5 1SC 512–256–256 256–256–512 – 1 3 1Medium ZB 256–256–256 256–256–256 – 1 1.5 1DR 256–256–256 256–256–256 – 1 5 1SC 256–256–256 256–256–256 – 1 3 1Hard ZB 256–256–256 256–256–256 – 1 1.5 1DR 256–256–256 256–256–256 – 1 5 1SC 256–256–256 256–256–256 – 1 3 1
+
+KoopCell-M Task Data Encoder MLP Decoder MLP dh λz λx λweak 
+
+Easy ZB 512–256–256 256–256–512 16 5 10 10 5
+
+DR 512–256–256 256–256–512 32 2 10 10 4
+
+SC 512–256–256 256–256–512 16 10 10 7,500 Medium ZB 512–256–256 256–256–512 32 5 10 10 5
+
+DR 512–256–256 256–256–512 50 5 10 10 4
+
+SC 512–256–256 256–256–512 32 5 5 7,500 Hard ZB 256–256–256 256–256–256 16 5 10 10 5
+
+DR 256–256–256 256–256–256 32 2 10 10 4
+
+SC 256–256–256 256–256–256 16 1 3 7,500 
+
+48 E.4 ADDITIONAL SINGLE -C ELL RESULTS 
+
+Table 10: Easy-task Wasserstein-2 distance ( ↓) at held-out time points (mean ± sample standard deviation over three seeds). The best and second-best means are shaded green (bold) and blue, respectively. 
+
+Method ZB/easy task Interpolation 
+
+t = 5 t = 7 t = 9 
+
+scNODE 435 .03 ± 7.52 393 .17 ± 3.84 473 .80 ± 4.00 
+
+LGP-OT 436 .27 ± 3.20 362 .05 ± 2.20 432 .68 ± 1.19 
+
+MIOFlow 447 .71 ± 5.63 415 .37 ± 5.93 491 .57 ± 5.63 
+
+PRESCIENT 475 .52 ± 8.25 447 .97 ± 6.87 507 .70 ± 2.65 
+
+PI-SDE 422 .71 ± 1.60 369 .90 ± 2.79 435 .65 ± 3.68 
+
+VGFM 443 .05 ± 5.89 391 .59 ± 3.52 490 .49 ± 4.32 
+
+KoopCell 431 .53 ± 6.02 366 .01 ± 1.99 436 .71 ± 1.02 
+
+KoopCell-M 428 .05 ± 3.79 355 .84 ± 2.31 426 .25 ± 1.34 
+
+Method DR/easy task Interpolation 
+
+t = 5 t = 7 t = 9 
+
+scNODE 348 .05 ± 3.93 410 .98 ± 3.28 499 .14 ± 5.93 
+
+LGP-OT 346 .08 ± 0.54 400 .04 ± 0.63 471 .29 ± 2.28 
+
+MIOFlow 345 .69 ± 0.55 404 .59 ± 1.80 497 .52 ± 2.97 
+
+PRESCIENT 365 .36 ± 0.65 428 .44 ± 0.67 500 .78 ± 0.58 
+
+PI-SDE 335 .03 ± 1.02 392 .45 ± 0.72 474 .66 ± 1.54 
+
+VGFM 343 .37 ± 3.20 406 .06 ± 2.83 500 .79 ± 1.07 
+
+KoopCell 339 .74 ± 2.81 396 .39 ± 6.49 464 .00 ± 2.58 
+
+KoopCell-M 340 .94 ± 0.34 389 .83 ± 1.27 462 .52 ± 1.06 
+
+Method SC/easy task Interpolation 
+
+t = 6 t = 11 t = 16 
+
+scNODE 57 .42 ± 0.96 134 .96 ± 5.05 118 .18 ± 3.13 
+
+LGP-OT 51 .16 ± 0.31 124 .83 ± 0.71 100 .55 ± 1.35 
+
+MIOFlow 55 .96 ± 0.73 137 .79 ± 0.78 122 .78 ± 1.98 
+
+PRESCIENT 68 .12 ± 0.67 144 .99 ± 0.61 122 .43 ± 1.48 
+
+PI-SDE 50 .83 ± 0.18 128 .23 ± 1.44 101 .86 ± 1.09 
+
+VGFM 51 .94 ± 2.60 152 .69 ± 3.70 160 .06 ± 1.12 
+
+KoopCell 52 .40 ± 1.09 124 .38 ± 1.09 96 .33 ± 0.51 
+
+KoopCell-M 50 .52 ± 0.70 124 .65 ± 0.93 95 .54 ± 0.70 
+
+49 Table 11: Medium-task Wasserstein-2 distance ( ↓) at held-out time points (mean ± sample standard deviation over three seeds). The best and second-best means are shaded green (bold) and blue, respectively. 
+
+Method ZB/medium task Extrapolation 
+
+t = 11 t = 12 
+
+scNODE 611 .92 ± 5.22 692 .19 ± 5.75 
+
+LGP-OT 570 .90 ± 5.15 642 .06 ± 9.06 
+
+MIOFlow 630 .14 ± 13 .26 755 .77 ± 18 .34 
+
+PRESCIENT 629 .81 ± 3.64 677 .10 ± 3.37 
+
+PI-SDE 572 .99 ± 1.83 642 .34 ± 4.18 
+
+VGFM 607 .60 ± 4.59 665 .91 ± 12 .69 
+
+KoopCell 558 .09 ± 2.51 605 .61 ± 3.34 
+
+KoopCell-M 548 .66 ± 2.12 603 .10 ± 5.57 
+
+Method DR/medium task Extrapolation 
+
+t = 9 t = 10 t = 11 
+
+scNODE 561 .97 ± 16 .65 573 .46 ± 13 .14 715 .56 ± 24 .23 
+
+LGP-OT 514 .14 ± 1.59 520 .71 ± 15 .78 661 .35 ± 4.50 
+
+MIOFlow 558 .93 ± 5.41 614 .22 ± 21 .61 803 .22 ± 62 .71 
+
+PRESCIENT 551 .35 ± 0.75 511 .82 ± 0.22 669 .97 ± 1.78 
+
+PI-SDE 525 .17 ± 1.02 543 .32 ± 2.89 708 .72 ± 2.27 
+
+VGFM 554 .89 ± 5.43 670 .18 ± 41 .27 901 .81 ± 72 .49 
+
+KoopCell 505 .50 ± 4.18 521 .45 ± 12 .38 644 .53 ± 10 .65 
+
+KoopCell-M 495 .08 ± 1.65 496 .61 ± 3.11 643 .43 ± 5.02 
+
+Method SC/medium task Extrapolation 
+
+t = 17 t = 18 t = 19 
+
+scNODE 130 .31 ± 3.95 124 .75 ± 2.33 130 .34 ± 2.47 
+
+LGP-OT 115 .15 ± 1.66 122 .09 ± 3.98 126 .47 ± 3.44 
+
+MIOFlow 149 .96 ± 14 .49 154 .17 ± 23 .86 173 .96 ± 39 .70 
+
+PRESCIENT 145 .16 ± 2.48 135 .73 ± 2.14 136 .07 ± 2.06 
+
+PI-SDE 122 .47 ± 5.89 115 .87 ± 3.50 126 .16 ± 4.15 
+
+VGFM 164 .07 ± 1.59 168 .12 ± 1.03 174 .05 ± 1.34 
+
+KoopCell 110 .59 ± 0.65 111 .27 ± 5.20 115 .10 ± 5.88 
+
+KoopCell-M 114 .75 ± 0.39 109 .09 ± 2.17 113 .48 ± 2.22 
+
+E.4.1 PREDICTED CELL POPULATIONS AT HELD -OUT TIME POINTS 
+
+Figures 13–15 compare the predicted populations from individual training runs. All methods share the saved PCA–UMAP projection for each dataset and task. We display up to 2,000 cells per time point, resampling VGFM particles according to their normalized growth weights. 50 ⋄ Ground truth ⋆ KoopCell ⋆ KoopCell-M scNODE LGP-OT 
+
+MIOFlow PRESCIENT PI-SDE VGFM    
+
+> All observed cells
+> t= 5
+> t= 7
+> t= 9
+
+⋄ Ground truth ⋆ KoopCell ⋆ KoopCell-M scNODE LGP-OT 
+
+MIOFlow PRESCIENT PI-SDE VGFM    
+
+> All observed cells
+> t= 5
+> t= 7
+> t= 9
+
+⋄ Ground truth ⋆ KoopCell ⋆ KoopCell-M scNODE LGP-OT 
+
+MIOFlow PRESCIENT PI-SDE VGFM    
+
+> All observed cells
+> t= 6
+> t= 11
+> t= 16
+
+(a) Zebrafish (ZB) (b) Drosophila (DR) (c) Mouse reprogramming (SC) Figure 13: Easy-task predictions for ZB, DR, and SC. Colors indicate held-out time points; gray points show all observed cells. Diamonds and dark dashed frames identify ground truth; stars and orange frames mark KoopCell and KoopCell-M. All methods within each dataset share the same projection and axis ranges. 51 ⋄ Ground truth ⋆ KoopCell ⋆ KoopCell-M scNODE LGP-OT 
+
+MIOFlow PRESCIENT PI-SDE VGFM   
+
+> All observed cells
+> t= 11
+> t= 12
+
+⋄ Ground truth ⋆ KoopCell ⋆ KoopCell-M scNODE LGP-OT 
+
+MIOFlow PRESCIENT PI-SDE VGFM    
+
+> All observed cells
+> t= 9
+> t= 10
+> t= 11
+
+⋄ Ground truth ⋆ KoopCell ⋆ KoopCell-M scNODE LGP-OT 
+
+MIOFlow PRESCIENT PI-SDE VGFM    
+
+> All observed cells
+> t= 17
+> t= 18
+> t= 19
+
+(a) Zebrafish (ZB) (b) Drosophila (DR) (c) Mouse reprogramming (SC) Figure 14: Medium-task predictions for ZB, DR, and SC. Colors indicate held-out time points; gray points show all observed cells. Diamonds and dark dashed frames identify ground truth; stars and orange frames mark KoopCell and KoopCell-M. All methods within each dataset share the same projection and axis ranges. 52 ⋄ Ground truth ⋆ KoopCell ⋆ KoopCell-M scNODE LGP-OT 
+
+MIOFlow PRESCIENT PI-SDE VGFM       
+
+> All cells
+> t= 3
+> t= 5
+> t= 7
+> t= 9
+> t= 11
+> t= 12
+
+⋄ Ground truth ⋆ KoopCell ⋆ KoopCell-M scNODE LGP-OT 
+
+MIOFlow PRESCIENT PI-SDE VGFM       
+
+> All cells
+> t= 3
+> t= 5
+> t= 7
+> t= 9
+> t= 10
+> t= 11
+
+⋄ Ground truth ⋆ KoopCell ⋆ KoopCell-M scNODE LGP-OT 
+
+MIOFlow PRESCIENT PI-SDE VGFM         
+
+> All cells
+> t= 6
+> t= 8
+> t= 10
+> t= 12
+> t= 16
+> t= 17
+> t= 18
+> t= 19
+
+(a) Zebrafish (ZB) (b) Drosophila (DR) (c) Mouse reprogramming (SC) Figure 15: Hard-task predictions for ZB, DR, and SC, with all held-out interpolation and extrapolation time points overlaid in each panel. Colors indicate time points; gray points show all observed cells. Diamonds and dark dashed frames identify ground truth; stars and orange frames mark KoopCell and KoopCell-M. All methods within each dataset share the UMAP embedding used in Figure 11 and the same axis ranges. 53 E.4.2 VISUALIZATION OF THE LEARNED LATENT REPRESENTATIONS 
+
+Figure 16 compares the representations of all 23,619 observed SC cells under the hard-task setting. Each method has its own UMAP projection; both rows use the same coordinates for that method. Reference states are obtained by matching cell identifiers to the published Waddington-OT cell sets and labeling the initial population as MEF. Unmatched or ambiguous cells remain gray; classifier predictions are not used to color these panels. PCA (50D)       
+
+> scNODE (50D)
+> MIOFlow (10D)
+> KoopCell ⋆
+> (50D)
+> KoopCell-M ⋆
+> (50D)
+> 1510 15 19
+> (a) Cell state (b) Time
+> Snapshot index MEF MET Stromal iPSC Neural Trophoblast Epithelial Unlabelled
+
+Figure 16: Latent representations of SC cells under the hard-task setting, colored by (a) reference cell state and (b) snapshot time index. All five methods show the same observed cells. Each method uses its own UMAP coordinates, shared between the two rows. The KoopCell and KoopCell-M columns are also shown in Figure 3. E.5 BIOLOGICAL DOWNSTREAM ANALYSIS 
+
+We investigate how the population dynamics learned by KoopCell-M relate to lineage-associated genes and developmental expression programs. Using KoopCell-M trained on all ZB snapshots, we focus on Presomitic Mesoderm (PSM) and Hindbrain development, following Zhang et al. (2024). 
+
+Lineage-associated gene identification. We first estimate the probability that each cell contributes to a terminal cell type at 12 hpf. For a cell observed at time ti, we encode zi = mθ (xi, t i) and infer its path probabilities and conditional memory distribution from the generative model. We then construct a directed graph between successive snapshots by propagating augmented states (Z, H)
+
+with the Gaussian transition in Equation (68) and assigning the propagated mass to neighboring states. Distances are scaled by the corresponding model covariance, and the path identity is retained across transitions. Reference annotations of all terminal cell types define the endpoints. Let Pℓ,r denote the transition matrix from snapshot ℓ to ℓ + 1 along path r, and let Fℓ,r (j, L ) denote the probability of reaching terminal cell type L from augmented state j at snapshot ℓ, conditional on path r. The probability matrices satisfy 
+
+Fℓ,r = Pℓ,r Fℓ+1 ,r , FK,r (j, L ) = 1(cj = L), (89) where K indexes the terminal snapshot and cj is the reference label of terminal cell j. Averaging over the inferred memory and path distributions gives the cell-level fate probability fiL .Following the lineage-driver statistic of CellRank (Weiler et al., 2024), we rank genes by their Pearson correlation with the predicted probability of reaching lineage L:
+
+rgL = Corr i:ti<T (xig , f iL ), (90) 54 where xig is observed log-expression and T denotes the terminal time. To examine whether these fate-associated genes also distinguish the observed terminal populations, we compare log-normalized expression between 540 PSM and 511 Hindbrain cells at 12 hpf. Table 12 reports the mean expression difference ∆g (PSM minus Hindbrain) for the four highest-ranked genes per lineage, selected by rgL .Positive and negative values indicate higher expression in PSM and Hindbrain, respectively. 
+
+Recovery of developmental markers. MSGN1 and TBX16 rank first and fourth for PSM, with correlations of 0.665 and 0.500 , respectively (Table 12). Both genes participate in zebrafish meso-dermal morphogenesis and differentiation (Manning & Kimelman, 2015). For Hindbrain, SOX19A 
+
+and SOX3 rank first and second ( r = 0 .568 and 0.540 ), consistent with their expression in the developing neuroectoderm (Rossi et al., 2009). All eight genes show higher terminal expression in their corresponding lineage. APELA shows a modest terminal expression difference ( ∆g = −0.243 ). In the UMAP projection, the observed expression patterns of these genes align with the annotated PSM and Hindbrain populations (Figure 17). Table 12: Lineage-associated genes and terminal expression differences. The four highest-ranked genes are shown for each lineage. rgL is the preterminal expression–fate correlation used for ranking; 
+
+∆g is mean observed log-expression in PSM minus Hindbrain at 12 hpf. 
+
+Lineage Gene Rank rgL ∆g
+
+PSM MSGN1 1 0.665 4.388 
+
+PSM TBX6L 2 0.559 1.434 
+
+PSM RBM38 3 0.513 2.160 
+
+PSM TBX16 4 0.500 3.844 
+
+Hindbrain SOX19A 1 0.568 −3.670 
+
+Hindbrain SOX3 2 0.540 −3.552 
+
+Hindbrain SI:CH211-152C2.3 3 0.472 −3.770 
+
+Hindbrain APELA 4 0.371 −0.243 PSM Hindbrain             
+
+> Terminal PSM
+> Rank 1
+> PSM Hindbrain
+> MSGN1
+> Rank 2
+> PSM Hindbrain
+> TBX6L
+> Rank 3
+> PSM Hindbrain
+> RBM38
+> Rank 4
+> PSM Hindbrain
+> TBX16
+> PSM Hindbrain
+> Terminal Hindbrain
+> Rank 1
+> PSM Hindbrain
+> SOX19A
+> Rank 2
+> PSM Hindbrain
+> SOX3
+> Rank 3
+> PSM Hindbrain
+> SI:CH211-152C2.3
+> Rank 4
+> PSM Hindbrain
+> APELA
+> 0246
+> (a) PSM (b) Hindbrain
+> Observed log expression
+
+Figure 17: Observed expression of lineage-associated genes on a UMAP projection of the latent representations learned by KoopCell-M for ZB cells. Rows show the four highest-ranked genes for (a) PSM and (b) Hindbrain. The left panels highlight the corresponding annotated populations at 12 hpf; the remaining panels show observed log-expression across all cells using a common color scale. All panels share the same UMAP coordinates. Arrows indicate the terminal populations. 
+
+Dynamic gene-expression programs. We next identify groups of genes with similar predicted expression-rate profiles along developmental trajectories. Starting from cells observed at 8 hpf, we 55 infer their path and memory distributions and propagate the augmented dynamics to 12 hpf. The decoder maps each trajectory to log-normalized gene-expression space. Because noise enters only the memory variables, the predicted expression rate for gene g follows the chain rule: 
+
+ug (t) = ∇z Dec ϕ,g (Zt)⊤(AZ t + BH t + bz ). (91) We compute this rate using Jacobian–vector products and average it separately for each lineage. We first give each source cell equal total weight, distributed across paths according to their inferred probabilities and equally among trajectory samples along each path. Let αa denote the resulting weight of trajectory a, whose path is ra. To determine its contribution to lineage L, we compare its endpoint zaT at T = 12 hpf with annotated terminal cells. We define bL(zaT , r a) as the distance-weighted fraction of neighboring cells labeled L, with distances scaled by the terminal covariance for path ra. Normalizing the products αabL(zaT , r a) gives the lineage-specific weights and mean expression rates: 
+
+waL = αabL(zaT , r a)
+
+P 
+
+> a′
+
+αa′ bL(za′ 
+
+> T
+
+, r a′ ) , ¯ugL (t) = X
+
+> a
+
+waL uag (t). (92) For each lineage, we select the 100 genes with the largest mean expression rates over 8–12 hpf, emphasizing net upregulation over this interval. We standardize each rate profile across time and apply Ward clustering to obtain three modules, ordered by the temporal center of their above-average rates. To identify the biological functions associated with these programs, we test enrichment of Gene Ontology (GO) biological-process terms (Gene Ontology Consortium, 2026) in each lineage’s top-100 genes and in each of its three modules. We map input gene symbols to Zebrafish Information Network (ZFIN) identifiers using official symbols and aliases (Ruzicka et al., 2019). The background comprises the 1,549 uniquely mapped input genes with GO biological-process annotations; each tested gene set is restricted to this same background. A one-sided hypergeometric test measures whether a term annotates more genes in a tested set than expected from its frequency in the background (Boyle et al., 2004). Benjamini–Hochberg correction (Benjamini & Hochberg, 1995) is applied jointly across the tested terms and gene sets in both lineages, with q < 0.05 as the significance threshold. 
+
+Developmental functions of the expression programs. The PSM modules are enriched for genes involved in muscle differentiation and development (Figure 18). The first module contains MYF5 ,
+
+MYOD1 , PRDM1A , and RBM24A , and is enriched for positive regulation of muscle cell differentiation (q = 6 .91 × 10 −4). This is consistent with the role of MYF5 and MYOD1 in initiating zebrafish myogenesis (Osborn et al., 2020). The second includes ACTA1A , DESMA , and DMRT2A , with enrichment for skeletal muscle organ development ( q = 1 .43 × 10 −2). In Hindbrain, the first module includes FGF3 , HER6 , and NEUROG1 , with enrichment for regulation of neuron differentiation (q = 8 .57 × 10 −3). The second contains SOX3 , SOX21A , PAX6A , and GBX2 , and is enriched for nervous system development ( q = 2 .47 × 10 −5) and brain development ( q = 7 .68 × 10 −4). These enrichments are consistent with the neural progenitor and differentiation programs described in the developing zebrafish hindbrain (Tambalo et al., 2020). The third module in each lineage is enriched for intermediate filament organization and includes the keratin genes KRT4 and KRT5 (Cokus et al., 2019). Together, the recovered markers and lineage-associated functional enrichments support the biological interpretability of the learned population dynamics. 56 Module 1 (41 genes) positive regulation of muscle cell differentiation 
+
+q = 6.9 × 10 −4 
+
+regulation of muscle tissue development 
+
+q = 0.0024 
+
+Module 2 (41 genes) skeletal muscle organ development 
+
+q = 0.014 
+
+muscle cell development 
+
+q = 0.034 
+
+Module 3 (18 genes) intermediate filament organization 
+
+q = 0.032 
+
+(a) PSM 
+
+8 9 10 11 12 
+
+Time (hpf) 
+
+LSP1 FN1B SI:CH211-101L18.8 FSTL1A TTNB TTNA HOXB7A H1F0 HOXC8A ALPI.1 HES6 RIPPLY1 RBM24A RHOUB PDCD4B LHFP PRDX5 FOSAB CDKN1CA BTG2 PRDM1A MYOD1 HOXB9A MEF2D PLP2 MYL10 UNC45B ACTC1A HOXC3A HOXC6B HN1B TCF15 TBX6 SI:DKEY-261H17.1 CDX4 MYF5 WIF1 ARL4AA LRATB TOB1A TUBA8L2 ZBTB16A CD63 KAZALD2 PINX1 DMRT2A HOXD9A HOXD10A HER2 APOBEC2A ITGB1BP2 GRIN2DA SERPINH1B EMP2 HER4.1 MAP7D1A LRRFIP1A EFEMP2A NEXN HAPLN1A DESMA TNNI2B.1 TXLNBA NTD5 MEOX1 TRIM109 RBFOX1L AHNAK SI:DKEY-11C5.14 ITM2CB OLFML2A HOXA9B CRABP2A PTGES3L CD151 PBXIP1B HOXB10A TPMA ACTC1B FBXL22 HSP90AA1.1 ACTA1A ZNF395 MDKA KRT18 ATP5G1 FAM49A LMO4B COL4A1 HOXA10B KRT4 KRT5 SSR2 KRT92 HOXB6A ID1 PTGDSB CYT1 HER12 ANGPTL7 
+
+Module 1 (28 genes) regulation of neuron differentiation 
+
+q = 0.0086 
+
+Module 2 (53 genes) nervous system development 
+
+q = 2.5 × 10 −5 
+
+animal organ morphogenesis 
+
+q = 3.4 × 10 −4 
+
+brain development 
+
+q = 7.7 × 10 −4 
+
+Module 3 (19 genes) intermediate filament organization 
+
+q = 0.044 
+
+(b) Hindbrain 
+
+8 9 10 11 12 
+
+Time (hpf) 
+
+NEUROG1 PAX6B IRX1B FGF3 PRDX5 MYCN PAX2A BTG2 UCK2A HER6 FOSAB JUNBA PERP PTGDSB TAGLN2 YWHAQA HOXB7A SKA2 MDKB NOVA2 SI:CH211-222L21.1 PAX3A KRT8 MSX1B PTMAA HISTH1L MAP7D1A SI:CH211-137A8.4 CYP26C1 H1F0 GBX2 KIRREL3L CDH11 CDH6 MEIS1B ENG2A EFNB2A HOXB3A IRX5A ALCAMA CRABP2A SOX21A HOXD4A SI:CH211-193L2.5 PAX6A CDKN1CA SI:CH211-193L2.3 SOX3 NR2F5 ELAVL3 TUBA1A POU3F1 HOXA3A EGR2B MAFBA SOX10 SOX9B MAB21L2 FABP3 GFAP ZBTB16A HER15.2 TPM4A WNT11R LSP1 YWHAH LARP7 PINX1 HN1B CD63 FLRT3 CYP26B1 CXCL12A IRX3A HER2 ENG2B CLDNB HER15.1 PHLDA1 TMSB4X RHOUB ZNF395 NR2F2 SI:DKEY-152P16.6 MDKA KRT18 CLDN5A MSX3 KRT4 KRT5 CLDNI ATPIF1B SSR4 ZGC:174153 CYT1 CYT1L HER9 SSR2 ID1 KRT92 
+
+−2 −1 0 1 2
+
+Expression rate: within-gene temporal z-score Figure 18: Dynamic gene-expression programs along KoopCell-M trajectories over 8–12 hpf. Each lineage contains the 100 genes with the largest mean predicted rates of change in log-expression, grouped into three Ward modules. Colors show within-gene temporal z-scores of expression rates, with red indicating rates above the gene’s temporal mean and blue indicating rates below it. Boxes report representative GO biological-process terms and adjusted q-values. PSM programs are enriched for muscle development and Hindbrain programs for neural development; both include a module containing keratin genes. 57
