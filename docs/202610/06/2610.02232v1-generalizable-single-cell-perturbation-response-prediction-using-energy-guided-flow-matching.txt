@@ -1,0 +1,2404 @@
+Generalizable single-cell perturbation response prediction
+using energy-guided flow matching
+Jianan Wei1,∗, Jiajun Hong1,3,∗, Guikun Chen1, Ning Yang2, Lifeng Fan3, Wenguan Wang1,†
+1Zhejiang University, Hangzhou, Zhejiang, China
+2Peking University Chengdu Academy for Advanced Interdisciplinary Biotechnologies, Chengdu, Sichuan,
+China
+3Beijing Institute for General Artificial Intelligence, Beijing, China
+Abstract
+Predicting phenotypic and transcriptional responses to perturbations at single-cell resolution
+provides a powerful tool for probing biological systems. However, existing methods typically
+rely on fixed mappings learned during training, making it challenging to calibrate distribution
+shifts or adapt to novel perturbation conditions during inference. Here, we present scEGFlow,
+an energy-guided flow matching framework that dynamically bridges control and perturbed cel-
+lular states. scEGFlow models continuous transitions from control cell populations to perturbed
+states using conditional flow matching. It then applies condition-specific energy gradients to cor-
+rect and steer these predictions, enabling flexible adjustments without retraining the flow model.
+Evaluations across benchmarks spanning imaging phenotypes and transcriptomic profiles show
+that scEGFlow outperforms existing methods in reconstructing response distributions under
+both seen and unseen perturbation conditions, faithfully preserving cellular manifold geometry
+and population heterogeneity. This advantage is notable when adapting to new conditions with
+only a few measured cells, consistently improving prediction accuracy. Furthermore, scEGFlow
+accurately recapitulates perturbation-induced up- and down-regulation patterns across consen-
+sus gene expression signatures, where energy guidance improves the agreement between predicted
+and observed regulatory directions. Ultimately, these findings demonstrate that scEGFlow pro-
+vides a modular, generalizable, and steerable solution for single-cell perturbation modeling. By
+grounding generative flows in learned biological landscapes, this architecture establishes a new
+computational paradigm for navigating and manipulating cellular behavior in silico.
+1
+Introduction
+Single-cell perturbation technology provides an efficient tool to investigate complex and het-
+erogeneous systems by profiling cellular responses to genetic, chemical, or environmental pertur-
+bations [1, 2]. However, high-throughput perturbation screens face substantial challenges due to
+the complexity of biological systems and the vast combinatorial space of possible perturbations, of
+which only a small fraction can be experimentally measured [2–4]. To circumvent this combinatorial
+sparsity, diverse computational methods have been developed to learn from experimental cellular
+profiles collected under distinct perturbation conditions and generalize to unseen perturbations. Ex-
+emplified by scGen [5] and CPA [6], latent-variable approaches leverage vector arithmetic in latent
+* These authors contributed equally to this work.
+† Corresponding author: Wenguan Wang.
+1
+arXiv:2610.02232v1  [q-bio.GN]  27 Sep 2026
+
+
+space to predict out-of-distribution cellular responses. Another line of work improves extrapolation
+by incorporating biological priors. chemCPA [7] replaces a fixed drug embedding dictionary with a
+molecular structure encoder, thereby extending predictions to unseen compounds, while GEARS [8]
+exploits prior knowledge of gene-gene relationships to model unseen genetic perturbations. From
+a data-driven perspective, foundation models, including scGPT [9] and scFoundation [10], leverage
+large-scale pretraining to obtain transferable representations for downstream perturbation predic-
+tion. Conditional generators, such as PRNet [1], learn to generate post-perturbation transcriptional
+profiles from cellular states and perturbation descriptors. More recently, optimal transport has been
+introduced to model perturbation-induced shifts between unpaired cell populations. CellOT [11]
+learns a neural optimal-transport map from the control distribution to the perturbed distribution,
+whereas CellFlow [12] combines OT-based cell pairing with conditional flow matching. However,
+recent benchmarking studies have raised concerns about the robustness of such generalization. They
+show that on small-scale datasets, these methods tend to underperform simple baselines (e.g., mean-
+based predictors), particularly in unseen experimental settings [13–15].
+In this study, we introduce scEGFlow, a flexible and scalable framework that captures single-cell
+perturbation effects across diverse, complex, and heterogeneous systems. It combines a conditional
+flow-based predictor with decoupled energy-based endpoint refinement, enabling low-cost and effi-
+cient extension to novel perturbation scenarios. First, to address the unpaired nature of pre- and
+post-perturbation cellular profiles [11, 16, 17], scEGFlow constructs cell-level paired data via op-
+timal transport, which provides fine-grained supervision for model training. It then employs flow
+matching [18, 19] to model cellular perturbation responses as a continuous dynamical process, by
+learning velocity fields that characterize state transitions along pseudo-paired trajectories. Building
+on this, our method incorporates multimodal condition inputs spanning cell type, drug identity and
+drug dosage to condition the flow model. However, when generalized to perturbation conditions
+absent from the training data, such as unseen drug-dose conditions, this OT-guided conditional
+flow-matching backbone may produce biased initial predictions, a limitation also observed in exist-
+ing methods. To mitigate this bias, scEGFlow introduces energy-guided refinement by augmenting
+each Euler update with a correction derived from the gradient of a condition-specific energy func-
+tion. This strategy can be naturally extended to multiple conditions through a weighted sum of
+energy functions defined for individual independent conditions.
+We evaluate scEGFlow across four distinct phenotypic and transcriptomic benchmarks: the
+imaging-based 4i dataset [11], the transcriptomic SciPlex3 dataset [3], the combinatorial ComboSci-
+Plex dataset [6], and the large-scale LINCS L1000 compendium [20].
+Our evaluation follows a
+progressively challenging paradigm. We first validate the model’s capacity to reconstruct observed
+perturbation effects. On 4i [11] and SciPlex3 [3], scEGFlow achieves low distributional discrepan-
+cies while preserving marker distributions, cell-state geometry, and condition-specific heterogeneity.
+We then evaluate zero-shot generalization in out-of-distribution (OOD) settings. scEGFlow yields
+superior distribution-level fidelity on held-out drug-dose conditions, unseen cellular contexts, and
+novel drug combinations. Next, we assess scEGFlow when only a limited number of cells from the
+target perturbation condition are available for training. Given only three target-condition cells in
+4i, scEGFlow substantially outperforms PRNet [1] and scDFM [21] across all evaluated correlation
+and distributional metrics. Finally, we use L1000 to assess whether these statistical gains reflect
+biologically meaningful regulation [20]. We show that energy guidance improves directional concor-
+dance with L1000 consensus signatures for the most responsive genes, with gains observed in most
+evaluated contexts. Across these scenarios, scEGFlow accurately predicts mean responses, models
+population heterogeneity, and reproduces biologically meaningful perturbation signatures in diverse
+experimental settings.
+2
+
+
+Perturbed 
+cells 
+Control 
+cells 
+a
+c
+Soft pseudo-pairs
+Transport
+matrix
+Velocity field
+Energy guidance
+b
+Cell state
+Conditional flow model
+Dose
+Cell type
+Cell state
+Velocity 
+estimation
+Energy 
+guidance
+Condition embedding  
+Drug
+xu
+i
+T ∗
+xp
+j
+xp
+j+1
+ξ
+xt
+xt+1
+vθ(xt, t, ξ)
+xu
+˜xtk
+˜xtk+1
+∆tvθ
+∇Eϕ
+xp
+ˆxtk+1 = ˜xtk + ∆t vθ(˜xtk, tk, ξ)
+˜xtk+1 = ˆxtk+1 −λt∇ˆxtk+1 Eϕ(ˆxtk+1, ξ)
+Figure 1: Overview of scEGFlow. (a) Optimal transport establishes soft correspondences between unpaired
+control and perturbed cells through the transport matrix T ∗, yielding soft pseudo-pairs for training. (b) The per-
+turbation vector p and biological context c are encoded as conditional inputs to the flow model, which predicts the
+velocity field vθ(xt, t, ξ) from the cell state xt and time t. (c) During inference, cells are progressively transported
+toward the perturbed distribution by alternating flow-based velocity updates with energy-guided refinement. The for-
+mer follows the learned conditional velocity field, whereas the latter adjusts cellular states along the energy gradient
+toward condition-consistent low-energy regions.
+2
+Experiment
+2.1
+scEGFlow predicts perturbation responses with energy-guided flow match-
+ing
+Single-cell perturbation data contain independently sampled control and treated populations
+rather than matched pre- and post-perturbation cells.
+scEGFlow therefore formulates response
+prediction as conditional population transport: given control cells and a perturbation context, it
+generates a treated population that recovers both the mean response and cell-to-cell heterogeneity.
+scEGFlow first constructs geometry-aware pseudo-pairs between control and treated cells using op-
+timal transport. These pairs provide structured supervision for a conditional flow-matching model,
+which learns a continuous velocity field from baseline to perturbed states while conditioning on the
+perturbation and cellular context. The resulting flow captures the principal response modes and the
+global organization of the target population. scEGFlow further calibrates the flow-matching tra-
+jectories through energy-guided refinement. At each Euler step, the gradient of a condition-specific
+energy function shifts the generated cell state toward response profiles that are more compatible
+with the queried perturbation. This formulation extends naturally to perturbations specified by
+multiple attributes: guidance for drug identity, dosage, and other independent conditions can be
+combined through their respective energy terms. This decouples population transport from endpoint
+3
+
+
+calibration and permits condition-specific refinement without retraining the flow backbone.
+We evaluate scEGFlow on four complementary benchmarks: the imaging-based 4i dataset [11],
+the large-scale transcriptomic SciPlex3 dataset [3], the combinatorial perturbation dataset Com-
+boSciPlex [6], and the LINCS L1000 perturbational transcriptomics resource [20]. The evaluation
+first examines the reconstruction of observed perturbation responses on 4i and SciPlex3. It then
+assesses generalization to previously unseen drug-dose conditions and cellular contexts in SciPlex3,
+as well as unseen drug combinations in ComboSciPlex. We further evaluate response prediction
+on 4i when only a small number of cells from each target perturbation are available for training.
+Finally, L1000 consensus signatures are used as an external reference to evaluate whether the pre-
+dicted responses recover perturbation-induced directions of gene regulation. Across these settings,
+scEGFlow remains competitive in mean-response prediction and shows consistently strong distribu-
+tional recovery, while also preserving biologically meaningful transcriptional response directions.
+2.2
+Predicting single-cell perturbation under various and complex scenarios
+In single-cell perturbation experiments, cellular responses vary with treatment, cell type, baseline
+cellular state, and other factors, resulting in diverse and complex response patterns. To evaluate
+whether our method can accurately predict post-perturbation cell populations under such settings,
+we conduct experiments on two single-cell perturbation benchmarks, 4i [11] and SciPlex3 [3], which
+differ in readout modality and condition space.
+We first evaluate our method on the 4i benchmark, which contains imaging-based phenotypic
+profiles from a co-culture of two patient-derived melanoma cell lines, M130219 and M130429, under
+diverse drug perturbations. Fig. 2a compares the measured and predicted marginal distributions of
+three representative markers with distinct distributional characteristics [11]. Although all methods
+capture the overall response trends of these features, scDFM and PRNet exhibit noticeable distri-
+butional shifts or over-smoothing, while scEGFlow more closely follows the measured distributions,
+preserving heterogeneous and accurate population responses. Fig. 2b-e compare scEGFlow with
+other methods in terms of MMD2, Sinkhorn divergence, Pearson correlation, and energy distance.
+Together with Table 1, these results show that scEGFlow achieves the lowest MMD2 and Sinkhorn
+divergence on the 4i [11] benchmark, while maintaining competitive energy distance and Pearson
+correlation. We further test whether scEGFlow captures drug-specific responses. Motivated by
+recent findings that simple mean-based baselines can be difficult to outperform in single-cell per-
+turbation prediction [14], we compare scEGFlow with MeanExp across six drug perturbations from
+the 4i [11] dataset. As shown in Fig. 2f, scEGFlow achieves a consistent improvement in energy dis-
+tance for all six drugs, demonstrating that it better preserves drug-dependent population variation.
+Fig. 2g visualizes the reconstructed 4i populations by embedding predicted and measured cells in a
+shared UMAP space and coloring them by pERK intensity. The cell distributions predicted by our
+method show qualitative overlap with the measured population in the shared UMAP embedding,
+together with a similar spatial organization of low- and high-pERK states across the embedding.
+This agreement indicates that scEGFlow preserves both the global arrangement of phenotypic states
+and the signaling-associated variation within the treated population.
+We then extend the evaluation to SciPlex3 [3], a substantially larger transcriptomic benchmark
+spanning multiple cancer cell lines, compounds, and dosage. As shown in Table 1, scEGFlow achieves
+the lowest MMD2, energy distance and Sinkhorn divergence while maintaining high Pearson corre-
+lation. Thus, the reconstruction advantage observed in the imaging-based 4i [11] setting remains
+evident in a higher-dimensional gene-expression space with more diverse cellular and perturbation
+contexts. Figure 2h provides a complementary view of the SciPlex3 results by jointly embedding
+predicted and measured cells across aggregated conditions.
+Several baselines concentrate their
+4
+
+
+0.2
+0.4
+0.6
+0.8
+1.0
+Normalized marker intensity
+0
+1
+2
+3
+Density
+pERK
+-0.5
+0.0
+0.5
+1.0
+1.5
+Normalized marker intensity
+0.0
+0.5
+1.0
+1.5
+Density
+Sox9
+-0.25
+0.00
+0.25
+0.50
+0.75
+1.00
+1.25
+1.50
+Normalized marker intensity
+0.0
+0.5
+1.0
+1.5
+Density
+pAKT
+10−2
+10−1
+MMD2
+MeanExp
+CellOT
+biolord
+CPA
+PRnet
+scDFM
+scEGFlow
+Model
+10−2
+10−1
+100
+Sinkhorn divergence ↓
+MeanExp
+CellOT
+biolord
+CPA
+PRnet
+scDFM
+scEGFlow
+Model
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Pearson correlation ↑
+MeanExp
+CellOT
+biolord
+CPA
+PRnet
+scDFM
+scEGFlow
+Model
+10−2
+10−1
+100
+Energy distance ↓
+MeanExp
+CellOT
+biolord
+CPA
+PRnet
+scDFM
+scEGFlow
+Model
+-1
+0
+1
+2
+3
+Energy distance log2 fold change ↓
+(MeanExp vs scEGFlow)
+decitabine
+erlotinib
+ixazomib
+paclitaxel
+regorafenib
+trametinib
+drug
+MeanExp=scEGFlow
+scEGFlow better
+Predicted cells
+Measured cells
+UMAP1
+UMAP2
+0.0
+0.5
+1.0
+pERK (mean, AU)
+biolord
+CPA
+PRnet
+scDFM
+CellFlow
+scEGFlow
+Aggregated IID conditions
+Target
+Predicted
+True treated
+scEGFlow
+scDFM
+PRnet
+↓
+↓
+Pearson r
+↑
+↓
+a
+b
+c
+d
+e
+f
+g
+h
+biolord
+CPA
+PRnet
+scDFM
+CellFlow
+scEGFlow
+Aggregated IID conditions
+Target
+Predicted
+MMD² ↓
+Sinkhorn divergence ↓
+Pearson r ↑
+Energy distance ↓
+Figure 2:
+Reconstruction of single-cell perturbation responses across diverse data modalities.
+(a)
+Marginal distributions of normalized pERK, Sox9, and pAKT marker intensities on the 4i [11] benchmark. Measured
+treated cells are shown in dark blue, and predictions from scEGFlow, scDFM, and PRNet are shown in red, gray,
+and light blue, respectively. (b–e) IID reconstruction performance on the 4i benchmark, evaluated using MMD2
+(b), Sinkhorn divergence (c), Pearson correlation between condition-level mean profiles (d), and energy distance
+(e). Lower values are better for MMD2, Sinkhorn divergence, and energy distance, whereas higher values are better
+for Pearson correlation. (f) Drug-level comparison between scEGFlow and the MeanExp baseline for six selected 4i
+perturbations. The horizontal axis shows the log2 ratio of the energy distances obtained by MeanExp and scEGFlow.
+(g) UMAP visualization of predicted and measured 4i cells aggregated across all evaluated drug treatments in a
+shared phenotypic state space. Cells are colored by normalized mean pERK intensity. AU, arbitrary units. (h)
+UMAP comparison of SciPlex3 [3] IID response reconstruction across aggregated drug-dose conditions. Measured
+target cells are shown in gray and predicted cells from each method are shown in blue.
+predictions in a limited subset of the target-supported regions or form visibly separated clusters,
+suggesting incomplete coverage of the measured response distribution. In contrast, scEGFlow pre-
+dictions are distributed across multiple target regions and show broader overlap with the measured
+cells. This pattern is consistent with the quantitative results, indicating that scEGFlow more effec-
+tively recovers the diversity of transcriptomic response states rather than reproducing only a small
+number of dominant modes.
+Together, these results show that scEGFlow reconstructs perturbation responses beyond
+condition-level mean matching by preserving condition-specific population structure, heterogeneous
+response modes, and the organization of cell states. This consistent behavior highlights the ability
+of scEGFlow to recover both average treatment effects and within-condition response heterogeneity.
+5
+
+
+Table 1: IID perturbation prediction on 4i [11] and SciPlex3 [3].
+Method
+4i
+SciPlex3
+Energy↓
+Sinkhorn↓
+MMD2↓
+Pearson↑
+Energy↓
+Sinkhorn↓
+MMD2↓
+Pearson↑
+MeanExp
+0.0510
+1.4463
+0.4839
+0.9925
+2.2626
+12.7494
+0.6887
+0.9914
+CellOT [11]
+3.1399
+2.0230
+0.0199
+0.5513
+–
+–
+–
+–
+biolord [22]
+0.1507
+1.2904
+0.2411
+0.9669
+1.1494
+0.9318
+0.2192
+0.9949
+CPA [6]
+0.6125
+0.3091
+0.0257
+0.7455
+2.9388
+1.5674
+0.2509
+0.9476
+PRNet [1]
+0.0208
+0.0254
+0.0145
+0.9910
+0.6419
+0.3788
+0.0145
+0.9856
+scDFM [21]
+0.1035
+0.0541
+0.0078
+0.9831
+21.9521
+11.6483
+0.0979
+0.8565
+CellFlow [12]
+–
+–
+–
+–
+1.0165
+0.8560
+0.0171
+0.9955
+scEGFlow
+0.0303
+0.0162
+0.0035
+0.9868
+0.5215
+0.3100
+0.0140
+0.9887
+Table 2: OOD perturbation prediction under unseen drug-dose conditions and in an unseen cellular context on
+SciPlex3 [3].
+Method
+OOD drug-dose
+OOD cellular context
+Energy↓
+Sinkhorn↓
+MMD2↓
+Pearson↑
+Energy↓
+Sinkhorn↓
+MMD2↓
+Pearson↑
+MeanExp
+0.8735
+5.7422
+0.6824
+0.9966
+52.9832
+27.5550
+0.7647
+0.8090
+biolord [22]
+0.7792
+0.5939
+0.2114
+0.9966
+51.4051
+26.7684
+0.7584
+0.8154
+CPA [6]
+2.2859
+1.2211
+0.2385
+0.9607
+14.9031
+7.5212
+0.4386
+0.6901
+PRNet [1]
+0.4077
+0.2211
+0.0051
+0.9909
+55.4931
+22.1669
+0.1777
+0.8003
+CellFlow [12]
+0.5218
+0.3692
+0.0065
+0.9977
+22.3046
+12.2336
+0.1624
+0.9254
+scDFM [21]
+68.4362
+34.5800
+0.1501
+0.8674
+54.7546
+32.9439
+0.2249
+0.6487
+scEGFlow
+0.2438
+0.1391
+0.0039
+0.9945
+3.8726
+2.0344
+0.0831
+0.9253
+2.3
+Generalizing cellular responses across unseen chemical and cellular contexts
+We next assess whether scEGFlow can extrapolate from observed patterns to previously unseen
+combinations of experimental conditions, i.e., out-of-distribution (OOD) settings. This capability is
+evaluated on SciPlex3 [3] and ComboSciPlex [6]. SciPlex3 exhibits substantial heterogeneity across
+cell types and single-drug dose conditions (Fig. 3a,b), whereas ComboSciPlex [6] includes both
+monotherapy and combination-drug treatments. Specifically, we consider three held-out settings:
+unseen drug-dose conditions, unseen cellular contexts, and unseen drug combinations. Together,
+these settings evaluate scEGFlow’s generalization across chemical, cellular, and combinatorial con-
+texts.
+Unseen drug-dose conditions. We construct the test data by withholding all perturbed cells
+from three drug-dose conditions (i.e., ENMD-2076 at 0.1 µM, WP1066 at 0.01 µM, and Mesna
+at 0.1 µM) from training on SciPlex3 [3]. scEGFlow is used to predict responses to these unseen
+conditions, which are evaluated against the corresponding measured cell populations. As shown
+in Fig. 3c and Table 2, scEGFlow achieves the lowest energy distance, Sinkhorn divergence, and
+MMD2 in this split, while maintaining a high Pearson correlation, indicating superior population-
+level agreement with the measured responses. This result is further supported by the gene-level
+distributions in Fig. 3d, where scEGFlow faithfully captures both the expression shifts relative to
+the control and the specific distributional shapes of the five most strongly perturbed genes across
+the three held-out conditions. Fig. 3e provides a detailed analysis of the held-out Mesna at 0.1 µM
+condition by comparing the covariance structures of the measured and predicted populations over
+the first 10 principal components. scEGFlow successfully captures the dominant covariance patterns
+6
+
+
+UMAP1
+UMAP2
+SciPlex control cells by cell type (n=6,464)
+A549 (n=1,668)
+K562 (n=1,688)
+MCF7 (n=3,108)
+UMAP1
+UMAP2
+SciPlex3 high-dose perturbations
+Drug
+CUDC-907
+Sorafenib
+Mocetinostat
+Belinostat
+PFI-1
+Quisinostat
+Resminostat
+Nintedanib
+Entinostat
+Hesperadin
+Toremifene
+FLLL32
+Givinostat
+Trichostatin
+Tacedinaline
+Obatoclax
+Fedratinib
+Luminespib
+CUDC-101
+Linifanib
+100
+101
+102
+Energy distance
+scEGFlow
+CellFlow
+biolord
+CPA
+PRnet
+scDFM
+Model
+10−2
+10−1
+MMD2
+scEGFlow
+CellFlow
+biolord
+CPA
+PRnet
+scDFM
+Model
+SciPlex3 OOD distributional metrics
+Control
+True perturbed
+scEGFlow pred
+MDM2
+ASPM
+PRKCB
+MKI67
+NEAT1
+ENMD-2076
+0.1
+Control
+True perturbed
+scEGFlow pred
+PMEPA1
+ABCC2
+MDM2
+ASPM
+PRKCB
+WP1066
+0.01
+Control
+True perturbed
+scEGFlow pred
+ASPM
+MKI67
+INSIG1
+ABCC2
+NEAT1
+Mesna
+0.1
+1
+2
+3
+4
+5
+6
+7
+8
+9 10
+PC
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+PC
+True
+1
+2
+3
+4
+5
+6
+7
+8
+9 10
+PC
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+PC
+scEGFlow
+1
+2
+3
+4
+5
+6
+7
+8
+9 10
+PC
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+PC
+CellFlow
+1
+2
+3
+4
+5
+6
+7
+8
+9 10
+PC
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+PC
+biolord
+1
+2
+3
+4
+5
+6
+7
+8
+9 10
+PC
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+PC
+PRnet
+1
+2
+3
+4
+5
+6
+7
+8
+9 10
+PC
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+PC
+scDFM
+−4
+−2
+0
+2
+4
+Covariance
+SciPlex OOD covariance over first 10 PCs: Mesna_0.1
+CACNA1C
+AC016747.2
+SYCE1
+LY86-AS1
+TUBB4A
+MDM2
+COL1A1
+PINCR
+DHRS2
+ACP5
+AC026471.6
+GDF15
+KLHDC7B
+HRG
+THEM7P
+IGFL2-AS1
+AC104984.3
+KF456478.1
+AC090907.1
+AL136988.2
+COL26A1
+AC105277.1
+MC5R
+AC093001.1
+SELPLG
+GGNBP1
+TFPI2
+PCED1B-AS1
+NTS
+LZTS1
+NAALADL1
+RPSAP52
+NEAT1
+MALAT1
+LINC01796
+ANGPTL2
+ALDH3A1
+PDE4C
+RPL3L
+AL356804.1
+scEGFlow
+A549
+CellFlow
+A549
+0.00
+0.25
+0.50
+0.75
+1.00
+1.25
+1.50
+1.75
+2.00
+Gene-wise MMD2
+Toremifene_1
+Belinostat_1
+Costunolide_1
+Zileuton_10
+Abexinostat_0.1
+TGX-221_10
+Raltitrexed_10
+Trichostatin_1
+Azacitidine_10
+Fluorouracil_10
+Pracinostat_0.1
+Entinostat_1
+Drug-dose condition
+A549
+K562
+MCF7
+Cell type
+True response magnitude by cell type and condition
+0.0
+0.1
+0.2
+0.3
+Response magnitude (RMS z-score)
+a
+b
+c
+d
+e
+f
+g
+Figure 3:
+Generalization of single-cell perturbation responses across unseen chemical and cellular
+contexts. (a) UMAP visualization of unperturbed cells colored by three cell types (A549, K562, and MCF7 cells).
+(b) UMAP visualization of measured MCF7 cells treated with 20 representative compounds at the highest profiled
+dose. (c) Distribution-level prediction performance for held-out SciPlex3 [3] drug-dose conditions. Boxplots compare
+the energy distance and MMD2 between predicted and measured target-cell populations over the OOD test set.
+(d) Gene-expression distributions of the five most strongly perturbed genes for three held-out drug-dose conditions,
+comparing control, measured perturbed, and scEGFlow-predicted cells. (e) Covariance matrices over the first 10
+principal components for the held-out Mesna_0.1 condition, comparing the measured target population with popu-
+lations predicted by scEGFlow and the baseline methods; all six matrices are computed in the same PCA basis fitted
+on the training cells. (f) Heatmap of the measured treated-versus-control response magnitude across representative
+drug-dose conditions in three cell types. Response magnitude is computed as the root-mean-square of the gene-wise
+treated-minus-control mean expression shifts after z-score standardization over the retained genes. (g) Gene-wise
+MMD2 for scEGFlow and CellFlow on the most strongly perturbed genes, selected by the absolute treated-minus-
+control mean shift in the held-out A549 context. For each gene, cells across all evaluated drug-dose conditions are
+pooled before computing MMD2 between measured and predicted expression distributions. Lower values indicate
+better agreement.
+7
+
+
+Table 3: OOD perturbation prediction on ComboSciPlex [6].
+Method
+Energy↓
+Sinkhorn↓
+MMD2↓
+Pearson↑
+CellOT [11]
+28.19
+112.71
+0.0262
+0.9625
+biolord [22]
+37.98
+98.97
+0.6087
+0.9522
+CPA [6]
+29.09
+94.05
+0.3239
+0.9608
+PRNet [1]
+50.59
+202.66
+0.0259
+0.9337
+CellFlow [12]
+25.06
+93.52
+0.0664
+0.9692
+scDFM [21]
+91.23
+246.80
+0.0354
+0.8848
+scEGFlow
+24.86
+93.02
+0.0527
+0.9667
+and preserves the primary structure of response heterogeneity. Although it does not achieve the
+absolute best match on this specific second-order statistic, it remains highly competitive.
+Unseen cellular contexts. Cellular context strongly shapes transcriptional responses to chem-
+ical perturbations [23], as evidenced by the markedly different response magnitudes observed among
+A549, K562, and MCF7 cells under the same drug-dose conditions in SciPlex3 [3] (Fig. 3f). We
+therefore next evaluate whether scEGFlow can extrapolate learned perturbation patterns to a novel
+cellular context by withholding all perturbed A549 profiles during training on SciPlex3. As de-
+tailed in Table 2, scEGFlow sustains the performance advantage observed in the unseen cellular-
+context evaluation. It achieves the strongest overall agreement with the measured A549 response
+populations on distribution-level metrics, while maintaining a competitive mean-profile correla-
+tion. The gene-level analysis in Fig. 3g further compares scEGFlow and CellFlow on the most
+strongly perturbed genes. scEGFlow yields lower MMD2 for the majority of these genes, indicating
+that its advantage extends beyond aggregate population scores to the accurate reconstruction of
+perturbation-responsive gene-expression distributions.
+Unseen combinatorial perturbations. Drug combinations are widely used to improve the
+likelihood and magnitude of therapeutic responses and to reduce acquired resistance [24]. However,
+combined treatments can produce non-additive transcriptional responses that cannot be reliably
+inferred from either drug alone [6]. Finally, we evaluate whether scEGFlow can predict the single-
+cell response distributions of unseen drug combinations on the ComboSciPlex benchmark [6]. We
+use an OOD split in which all cells from five target combinations are excluded from training:
+Dacinostat + Danusertib, Givinostat + Cediranib, Panobinostat + Alvespimycin, Panobinostat +
+SRT2104, and SRT2104 + Alvespimycin. This capability relies on the assumption that responses
+to unseen drug combinations can be approximated from combinations observed during training.
+As illustrated in Fig. 4a, the measured response populations of these combinations exhibit varying
+degrees of overlap with the training conditions, which reflects their divergence from the training
+distribution and the difficulty of extrapolating to novel combinations. Table 3 summarizes prediction
+performance on the pooled OOD test set comprising the five held-out combinations. scEGFlow
+achieves the lowest energy distance and Sinkhorn divergence while maintaining competitive Pearson
+correlation, although its MMD2 is higher than those of PRNet and CellOT. Fig. 4b complements
+this aggregate analysis by comparing predicted and measured mean-expression profiles for each
+combination. scEGFlow shows strong agreement across most combinations for both all genes and
+the top 50 differentially expressed genes. Fig. 4c further examines the two most strongly affected
+genes in each condition at single-cell resolution. The predicted distributions generally reproduce
+the direction and magnitude of the measured shifts from control to perturbed cells, indicating that
+scEGFlow learns the condition-specific perturbation trends rather than merely matching the overall
+8
+
+
+0
+2
+Real mean gene expression
+0
+1
+2
+3
+Predicted mean gene expression
+Dacinostat + Danusertib
+All genes: 0.972
+Top 50 DEGs: 0.945
+0
+1
+2
+3
+Real mean gene expression
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+3.0
+Predicted mean gene expression
+Givinostat + Cediranib
+All genes: 0.976
+Top 50 DEGs: 0.895
+0
+2
+4
+Real mean gene expression
+0
+1
+2
+3
+4
+Predicted mean gene expression
+Panobinostat + Alvespimycin
+All genes: 0.821
+Top 50 DEGs: 0.637
+0
+2
+Real mean gene expression
+0
+1
+2
+3
+Predicted mean gene expression
+Panobinostat + SRT2104
+All genes: 0.960
+Top 50 DEGs: 0.906
+0
+1
+2
+Real mean gene expression
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+Predicted mean gene expression
+SRT2104 + Alvespimycin
+All genes: 0.927
+Top 50 DEGs: 0.678
+b
+a
+training drug combinations
+Dacinostat + Danusertib
+Givinostat + Cediranib
+Panobinostat + Alvespimycin
+Panobinostat + SRT2104
+SRT2104 + Alvespimycin
+control
+true
+predicted
+Dacinostat + Danusertib
+TFPI2
+AKR1B10
+Top 2 DEGs per OOD condition
+control
+true
+predicted
+Givinostat + Cediranib
+CYP24A1
+TFPI2
+control
+true
+predicted
+Panobinostat + Alvespimycin
+AKR1B10
+AC010197.1
+control
+true
+predicted
+Panobinostat + SRT2104
+AKR1B10
+COL26A1
+control
+true
+predicted
+SRT2104 + Alvespimycin
+CLU
+THSD4
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+3.0
+Median expression
+c
+0
+1
+3
+5
+20
+60
+100 200
+Seen training samples
+0.40
+0.50
+0.60
+0.70
+0.80
+0.90
+Pearson correlation
+Pearson correlation ↑
+0
+1
+3
+5
+20
+60
+100 200
+Seen training samples
+0.01
+0.05
+0.10
+0.15
+MMD2
+MMD2 ↓
+0
+1
+3
+5
+20
+60
+100 200
+Seen training samples
+0.1
+1.0
+2.0
+3.0
+Sinkhorn divergence
+Sinkhorn divergence ↓
+0
+1
+3
+5
+20
+60
+100 200
+Seen training samples
+0.2
+2.0
+4.0
+6.0
+Energy distance
+Energy distance ↓
+scEGFlow
+PRnet
+scDFM
+scEGFlow(full samples)
+d
+UMAP1
+UMAP2
+0-shot predicted
+3-shot predicted
+5-shot predicted
+Measured target
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+pERK (mean, AU)
+a
+c
+e
+d
+UMAP1
+UMAP2
+Figure 4: Generalization to unseen drug combinations and sample-efficient prediction. (a)
+UMAP visualization of measured ComboSciPlex [6] cells, showing the five held-out drug-combination re-
+sponses and their positions relative to the response manifold. (b) Predicted versus measured mean gene
+expression for the five held-out drug combinations, shown for all genes and the top 50 differentially expressed
+genes (DEGs). (c) Expression distributions of the top two DEGs for each held-out drug combination, com-
+paring control, measured treated, and scEGFlow-predicted cells. (d) Few-shot prediction on the 4i [11]
+benchmark under different numbers of target-condition training cells, evaluated using Pearson correlation,
+MMD2, Sinkhorn divergence, and energy distance. (e) UMAP comparison of zero-shot predictions, 3-shot
+predictions, 5-shot predictions and measured target cells, colored by normalized pERK intensity.
+expression level.
+Collectively, these OOD evaluations demonstrate that scEGFlow generalizes to unseen drug-dose
+conditions, cellular contexts, and drug combinations. This capability can help prioritize experimen-
+tal validation across diverse perturbations and cell lines, thereby reducing the burden of large-scale
+drug screening.
+2.4
+Adapting to target conditions with limited observations
+Although generalization to entirely unseen perturbations is appealing, existing methods, includ-
+ing scEGFlow, still fall short of fully supervised performance. A practical and efficient compromise
+is to adapt the model using a small number of target-condition observations.
+To evaluate this
+9
+
+
+setting on the 4i [11] benchmark, we select five target drugs (i.e., cisplatin, crizotinib, dabrafenib,
+dacarbazine, and dasatinib). For each target condition, we allocate 1, 3, 5, 20, 60, 100 or 200 cells
+for training, while reserving the remaining cells for evaluation.
+As illustrated in Fig. 4d, scEGFlow consistently achieves the best performance across different
+levels of target-condition supervision, with this advantage being particularly pronounced in highly
+data-constrained regimes. Remarkably, even a single target-condition cell provides a clear perfor-
+mance gain over the zero-shot setting, indicating that scEGFlow can extract valuable condition-
+specific information from minimal supervision.
+The benefit becomes substantially more evident
+when three target cells are available. Specifically, given only three samples, our model markedly
+outperforms PRNet [1] and scDFM [21] across all evaluated metrics, including Pearson correla-
+tion (0.7857 vs. 0.5293 and 0.4137), MMD2 (0.0179 vs. 0.0523 and 0.1425), Sinkhorn divergence
+(0.2402 vs. 0.9262 and 2.5888), and energy distance (0.4735 vs. 1.3850 and 4.5085). As more
+target-condition observations become available, the performance gap between methods narrows, yet
+scEGFlow maintains its overall superiority. Such robustness in the few-sample regime demonstrates
+that scEGFlow can effectively exploit scarce observations to capture both mean perturbation effects
+and population-level distributions.
+Fig. 4e further reveals what is gained from limited target-condition supervision. In the zero-shot
+setting, scEGFlow captures the overall cell-state manifold, but the distribution of pERK activity is
+only partially aligned with that of the measured target population. With only 3 target-condition
+cells, the predicted population more closely reproduces the organization of low- and high-pERK
+regions across the manifold.
+This improvement suggests that providing scEGFlow with even a
+small number of target-specific observations enables it to calibrate condition-dependent signaling
+patterns and better recover response heterogeneity.
+2.5
+Recapitulating directional concordance with L1000 perturbational signa-
+tures
+In perturbational transcriptomics, cellular responses are conventionally characterized by the
+direction of gene-expression changes, where up- and down-regulated genes together form a signed
+signature [20, 25, 26]. Building on this concept, we investigate whether scEGFlow can accurately
+recover the directionality of these induced responses.
+To this end, we evaluate scEGFlow on LINCS L1000 [20], a large-scale transcriptomics dataset
+profiling cellular responses to chemical and genetic perturbations. L1000 measurements are pro-
+cessed through five data levels, ranging from raw measurements to consensus signatures. Here, we
+utilize Levels 3 and 5 to construct our training and evaluation setup. Level 3 provides normal-
+ized gene-expression profiles for individual control and compound-treated samples, whereas Level
+5 aggregates replicate profiles to represent the consensus perturbation signatures induced by each
+perturbation. Consequently, we train scEGFlow on the Level 3 expression profiles and compare its
+predicted response directions against the corresponding Level 5 signatures.
+Given the scale of the full L1000 compendium [20], we construct a focused subset of compound
+perturbations by pairing Level 3 profiles with their corresponding Level 5 signatures. The resulting
+dataset contains 24,104 Level 3 expression profiles over 978 landmark genes, spanning 21 cell lines
+and 79 compounds. We hold out six drug–dose conditions for OOD evaluation, ultimately yielding
+111 evaluation contexts after pairing with the corresponding Level 5 signatures.
+For each context, we rank the 978 landmark genes by the magnitude of their Level 5 expression
+changes, retaining the top 10% to yield 98 genes with the strongest perturbation effects. We quantify
+directional response concordance as the fraction of these top genes for which the predicted outcome
+and the corresponding Level 5 signature agree on the direction of regulation.
+10
+
+
+Figure 5: Directional concordance with L1000 [20] perturbational signatures. (a) Mean direc-
+tional concordance between predicted perturbation responses and the corresponding L1000 Level 5 consensus
+signatures. (b) Context-level distribution of directional concordance across all 111 evaluation contexts. Each
+point represents one specific cell line-drug-dose condition.
+As shown in Fig. 5a, scEGFlow achieves higher directional concordance than PRNet [1] and
+scDFM [21] even without energy guidance, demonstrating that the flow backbone inherently captures
+transcriptional shifts more faithfully. Incorporating energy-guided refinement further boosts the
+mean concordance from 72.0% to 81.0%. This indicates that the learned energy function provides
+condition-specific information associated with improved directional agreement, enabling a more
+accurate reconstruction of the up- and down-regulation patterns encoded by the L1000 consensus
+signatures.
+Fig. 5b further details the concordance distribution across the 111 evaluation contexts. Notably,
+energy guidance enhances predictive accuracy in 98 of these contexts, confirming that the perfor-
+mance gain is not an artifact of a few outliers, but a robust phenomenon observed across diverse
+cell lines, compounds, and doses. Together, these results support scEGFlow’s ability to capture
+the direction of gene-expression changes in the evaluated settings and show that energy guidance
+improves concordance with L1000 consensus signatures.
+3
+Conclusion and discussion
+In this work, we present scEGFlow to predict single-cell perturbation responses as conditional
+transport between unpaired control and treated populations.
+scEGFlow combines optimal-
+transport-based soft coupling with conditional flow matching to learn population transitions, and
+leverages condition-specific energy gradients to refine the generated trajectories. This decoupling of
+transport learning from condition-specific calibration is the core design principle of the framework:
+the flow model captures the global dynamics of the response distribution, whereas energy guidance
+steers predictions toward states that are most compatible with the queried perturbation context.
+Moreover, energy terms representing independent attributes can be compositionally combined,
+providing a modular mechanism to incorporate drug, dose, and cellular context into the refinement
+process.
+Evaluation across 4i [11], SciPlex3 [3], ComboSciPlex [6], and LINCS L1000 [20] supports three
+main conclusions. First, scEGFlow accurately reconstructs observed perturbation responses across
+11
+
+
+phenotypic and transcriptomic modalities, capturing both mean effects and within-condition het-
+erogeneity. Second, its distributional performance remains favorable in the evaluated held-out sce-
+narios, encompassing held-out drug–dose conditions, an unseen cellular context, and novel drug
+combinations. In data-scarce regimes, scEGFlow readily leverages limited target observations to
+refine its predictions. Third, driven by energy guidance, scEGFlow faithfully reproduces the up-
+and down-regulation patterns recorded in L1000 consensus signatures, demonstrating that its effec-
+tiveness stems from genuine biological concordance. Together, these results show that scEGFlow
+successfully bridges statistical distributional alignment with biological fidelity in single-cell response
+modeling.
+Several limitations define the scope of the present study. First, our method relies on an iterative
+optimization procedure, in which each step requires velocity prediction from the flow model and a
+derivative operation for the energy function. As a result, our method incurs a higher computational
+cost than one-shot approaches. Second, our flow model adopts a simple linear interpolation path
+between each source cell and its perturbed counterpart, which simplifies biological transitions that
+may otherwise be nonlinear; furthermore, the OT-derived pseudo-pairs depend on feature-space
+distances and may not always reflect true cellular trajectories. Third, energy guidance with multiple
+conditions assumes that all conditions are independent; when correlations exist between conditions,
+this assumption may lead to suboptimal results.
+Looking ahead, several important directions could further advance scEGFlow for single-cell
+perturbation response prediction. The modular design of scEGFlow offers the potential to reduce
+the computational complexity of extending prediction to additional perturbation conditions, which
+could open the door to the scalable exploration of larger and more diverse biological datasets.
+Building upon this efficiency, future work could focus on extending the framework to more diverse
+perturbation types, cellular contexts, and experimental platforms. Furthermore, future work could
+explore whether additional energy functions can extend scEGFlow to other perturbation types, such
+as gene knockouts [27] and cytokine stimulation [28], without retraining the flow backbone. Thus,
+another promising direction is to improve the design of the energy function, for example by using
+off-the-shelf pretrained models to encode conditions and provide stronger priors.
+4
+Methods
+4.1
+Problem setup
+To streamline model training and optimization, we predefine a set of cellular attributes, denoted
+as G = {g1, g2, . . . , gG}, consisting of profiled genes as well as cellular and nuclear morphological
+measurements. The state of a cell x is characterized by its profile across this set, represented as
+a vector x = [cx(g1), . . . , cx(gD)]T ∈RD, where cx(gi) signifies the quantified value of the i-th
+attribute. Our task is to predict the perturbed cell state xp from an unperturbed baseline state xu,
+conditioned on a specific perturbation and a biological context. Here, the perturbation is represented
+by a vector p ∈RMd, where Md is the total number of unique perturbations in the vocabulary; the
+element pm specifies the dosage of the m-th perturbation, falling to zero (pm = 0) in its absence.
+The biological context is represented by a context embedding c derived from the corresponding
+unperturbed source population. In our implementation, c is defined as the mean control-cell state
+for each cell line. We denote the complete condition by ξ = (p, c). Formally, we aim to learn a
+conditional distributional predictor fθ(xp | xu, ξ) that captures the distribution of perturbed cell
+states conditioned on baseline expression, perturbation, and biological context.
+12
+
+
+4.2
+Optimal transport for pairing cells
+As measuring cellular perturbation responses requires destructive sampling, the same cell cannot
+be assayed twice, resulting in unpaired distributions of perturbed and unperturbed cells [11, 16].
+However, our proposed flow matching strategy requires paired data to learn the conditional vector
+fields that connect the two distributions. To address this, we employ optimal transport (OT) [19, 29]
+to establish soft correspondences between unperturbed and perturbed cells.
+Formally, we denote the source and target distributions of control and perturbed cells by µ and
+ν, respectively, both defined on RD. In each batch, we sample unperturbed cells {xu
+i }N
+i=1 ∼µ and
+perturbed cells {xp
+j}M
+j=1 ∼ν. The pairwise cost matrix C ∈RN×M is defined as
+Cij = ∥xu
+i −xp
+j∥2
+2.
+(1)
+We assign equal probability mass to all sampled cells and define the admissible couplings as
+ΠN,M = {T ∈RN×M
++
+: T 1M = 1
+N 1N,
+T ⊤1N = 1
+M 1M}.
+(2)
+The optimal coupling T ⋆is obtained by solving the entropically regularized OT problem
+T ⋆= arg min
+T ∈ΠN,M
+⟨T , C⟩+ ε
+X
+i,j
+Tij(log Tij −1),
+(3)
+where ε controls the strength of entropic regularization and T ⋆
+ij denotes the coupling weight between
+xu
+i and xp
+j. In practice, the mini-batch OT coupling is approximated using the Sinkhorn algorithm
+with 100 iterations, with dataset-specific regularization strengths reported in the experimental setup.
+Based on T ⋆, we construct pseudo-paired samples for flow matching. A straightforward strategy
+is to pair each source cell with the target cell having the largest coupling weight. However, such
+hard assignment collapses the soft coupling into a deterministic match and ignores the remaining
+mass distribution [30]. We therefore sample target cells according to the OT coupling. For each
+source cell xu
+i , the i-th row of T ⋆is normalized as
+qij =
+T ⋆
+ij
+PM
+ℓ=1 T ⋆
+iℓ
+.
+(4)
+We then sample ji ∼Categorical(qi1, . . . , qiM) and construct the pseudo-pair (xu
+i , xp
+ji).
+These
+pseudo-paired samples are subsequently used to train the conditional flow-matching model.
+4.3
+Conditional flow matching for perturbation response prediction
+Given the OT-guided pseudo-pair (xu
+i , xp
+ji) from Sec. 4.2, we utilize conditional flow matching
+to learn a perturbation-conditioned vector field that transports the source cell to its perturbed
+endpoint [18, 19]. For notational simplicity, we denote the pseudo-pair as (xu, xp) in the following.
+To model the trajectory, we define a linear interpolating path for each pair:
+xt = (1 −t)xu + txp,
+t ∈[0, 1],
+(5)
+which interpolates between the source cell x0 = xu and the perturbed target x1 = xp. The corre-
+sponding reference velocity can be defined by the following ordinary differential equation (ODE):
+v(xt) = dxt
+dt = xp −xu,
+(6)
+13
+
+
+This velocity can be approximated via a flow model vθ(xt, t, ξ), where the perturbation vector p
+and biological context c serve as conditions, by minimizing the training objective:
+LCFM(θ) = E(xu,xp,t,ξ)[∥vθ(xt, t, ξ) −v(xt)∥2],
+(7)
+where t is sampled from the uniform distribution on [0, 1]. At inference time, given an unperturbed
+cell xu and a queried condition (p, c), we initialize the trajectory at ˆx0 = xu and generate the
+perturbed state by integrating the learned vector field:
+dˆxt
+dt = vθ(ˆxt, t, ξ),
+t ∈[0, 1].
+(8)
+This ODE is solved numerically using Euler integration:
+ˆxtk+1 = ˆxtk + ∆t vθ(ˆxtk, tk, ξ),
+k = 0, . . . , Ks −1.
+(9)
+Here, Ks is the number of uniform steps, with ∆t = 1/Ks; we set Ks = 10 for all experiments.
+4.4
+Energy guidance for perturbation response refinement
+Predicting cellular perturbations has long suffered from poor generalization, primarily due to
+the diverse spectrum of drug types and dosages, as well as the combinatorial complexity of joint
+perturbations [7, 31]. Current models [6, 7, 12] typically use continuous vectors with biological or
+chemical structural meaning as conditional embeddings, aiming to extrapolate learned patterns to
+unseen perturbations. In contrast, we alleviate this issue through a post-processing step termed
+energy relaxation, which iteratively adjusts the predicted response to reduce its condition-specific
+energy, thereby encouraging greater compatibility with the perturbed distribution [32].
+Conditional energy guidance. Here, we define an energy function Eϕ(xt, ξ) that measures
+the compatibility between the condition ξ and the intermediate state xt interpolated between xu
+and xp, where a lower energy indicates stronger consistency with ξ.
+Following the Boltzmann
+distribution, we assume that the conditional probability p(ξ|xt) is exponentially inversely related
+to the energy function Eϕ(xt, ξ) [32, 33]:
+p(ξ|xt) ∝exp −λtEϕ(xt, ξ),
+(10)
+where λt > 0 controls the scale of the conditional energy and, consequently, the strength of the
+resulting energy guidance. Taking the gradient of the log-likelihood with respect to xt yields:
+∇xt log p(ξ|xt) ∝−λt∇xtEϕ(xt, ξ),
+(11)
+which is referred to as energy guidance. Thus, increasing the conditional probability is mathemati-
+cally equivalent to incorporating energy guidance into the Euler integration step of flow matching:
+˜xtk+1 = ˆxtk+1 −λt∇ˆxtk+1Eϕ(ˆxtk+1, ξ),
+(12)
+where ˆxtk+1 is given by Eq. 9, and the same λt controls the magnitude of the energy-guided correc-
+tion. Under multiple independent conditions, the total energy in our method can be approximated
+as a weighted sum of the energy functions for individual condition components. Specifically, we
+denote the independent condition components as {ξ1, . . . , ξn}. A product-of-experts approximation
+is used to combine the condition-specific distributions as follows:
+p(ξ1, . . . , ξn | xt) ∝
+n
+Y
+i=1
+p(ξi | xt).
+(13)
+14
+
+
+Accordingly, the corresponding total energy can be approximated as
+Eϕ(xt, {ξ1, . . . , ξn}) ≈λ1Dϕ1(xt, ξ1) + · · · + λnDϕn(xt, ξn).
+(14)
+In practice, we employ a set of distinct distance functions {Dϕ1(·, ·), . . . , Dϕn(·, ·)} tailored to specific
+condition components, such as drug identity, dosage, or cellular context.
+Distance function construction. Based on the above analysis, the distance function should
+assign lower energy to condition-consistent states and higher energy otherwise. To this end, we
+parameterize the distance function with an energy model Dϕ, which takes a cellular state and a
+condition ξ as input and outputs a scalar energy score. The energy model is trained separately from
+the flow model with the latter frozen.
+For condition discrimination, we use measured perturbed cells as reference states. Specifically,
+a measured perturbed cell xp paired with its original perturbation condition ξ+ forms a positive
+sample, whereas a negative sample (xp, ξ−) is constructed by keeping the cellular state fixed and
+modifying the perturbation condition. The condition-discrimination loss is defined as
+Lcond = E(xp,ξ+)∈P+,(xp,ξ−)∈P−[softplus(Dϕ(xp, ξ+) −Dϕ(xp, ξ−) + ∆margin)].
+(15)
+Here, P+ and P−denote the positive and negative sets, respectively, and ∆margin > 0 denotes the
+margin. This objective encourages the measured response to receive lower energy under its matched
+perturbation condition than under a mismatched condition.
+Moreover, to encourage a monotonic decrease in energy along the transition toward the measured
+perturbed state, we introduce an additional path-ranking objective. Specifically, we first sample an
+intermediate state ˆxt from the frozen flow trajectory and construct interpolated states between ˆxt
+and the measured perturbed state xp as
+xα = (1 −α)ˆxt + αxp,
+α ∈{0, 0.25, 0.5, 0.75, 1}.
+(16)
+For two interpolated states xα1 and xα2 with α1 < α2, the path-ranking loss is defined as
+Lpath = Eα1<α2[softplus(Dϕ(xα2, ξ) −Dϕ(xα1, ξ) + ∆margin)],
+(17)
+where xα2 is encouraged to have lower energy than xα1. The final objective for training the energy
+score model is defined as
+Lenergy = ω1Lcond + ω2Lpath,
+(18)
+where ω1 = 1 and ω2 = 1 are weighting coefficients.
+In our framework, we instantiate this objective for two energy models that capture drug and dose
+consistency. For each model, negative samples are generated by perturbing only the corresponding
+condition while keeping the remaining conditions fixed: P−
+drug changes drug and P−
+dose changes dose.
+Each model is trained using the objective above and its corresponding negative set.
+4.5
+Datasets and preprocessing
+4i dataset [11]. Derived from two co-cultured primary melanoma cell lines (M130219 and
+M130429), this dataset tracks individual cellular responses to various chemical perturbations. It
+encompasses a total of 77, 743 cells evaluated across 27 different drug treatments.
+Each cell is
+characterized by 48 distinct cellular attributes, comprising 22 morphological features and 26 protein
+intensities.
+15
+
+
+SciPlex3 [3].
+This benchmark captures transcriptional responses under extensive chemical
+stress across three human cancer cell lines (A549, K562, and MCF7). It catalogs 649, 340 single-
+cell transcriptomes exposed to 188 small-molecule compounds, each screened at four escalating
+doses (10 nM, 100 nM, 1 µM, and 10 µM) to resolve fine-grained, pathway-specific variations. For
+computational efficiency, we subsample 290,888 cells and retain the top 2,000 highly variable genes
+(HVGs).
+ComboSciPlex [6]. Focusing on the human lung adenocarcinoma cell line (A549), this dataset
+examines single-cell transcriptional profiles under single-drug and combination treatment regimens.
+The original cohort aggregates 63, 378 cells across 32 conditions, including control, single-drug
+treatments, and drug combinations, from which the top 2,000 highly variable genes are selected for
+our experiments.
+LINCS L1000 [20]. LINCS L1000 is a large-scale perturbational transcriptomics dataset that
+profiles gene-expression responses to chemical perturbations across diverse human cell lines, with 978
+landmark genes. We focus on small-molecule perturbations measured at 24 h, resulting in 24,104
+expression profiles across 21 cell lines and 79 compounds. L1000 data are provided at multiple
+processing levels; we use Level 3 normalized expression profiles for model training and prediction,
+while Level 5 consensus differential-expression signatures are used only as reference signatures to
+evaluate the directional concordance of predictions under held-out perturbation conditions.
+4.6
+Evaluation metrics
+Given a perturbation condition p within a biological context c, let Bu = {xu
+i }Nu
+i=1 denote the
+unperturbed control cells, and let Bp ={xp
+j}Np
+j=1 denote the measured perturbed cells. Following [11],
+we subsample the unperturbed control and matched observed populations to an equal size of N ′
+cells for computational efficiency, and denote the predicted perturbed cells as ˆBp = {ˆxp
+k}N′
+k=1. Here,
+N′ is selected as the maximum possible value from {100, 250, 500, 1000, 1500} given the available
+cell counts, satisfying N ′ ≤min(Nu, Np). Notably, all downsampling validations are repeated 10
+times with the mean results reported to ensure robustness.
+Pearson correlation coefficient. This metric measures agreement between predicted and
+measured population-level mean profiles across features and is defined as follows:
+Pearson =
+PD
+k=1(¯xp
+k −µp)(¯ˆxp
+k −ˆµp)
+qPD
+k=1(¯xp
+k −µp)2 ·
+qPD
+k=1(¯ˆxp
+k −ˆµp)2
+,
+(19)
+where D is the dimension of features, ¯xp and ¯ˆxp denote the measured and predicted values averaged
+over samples, respectively, while µp and ˆµp represent their means across all features.
+Squared maximum mean discrepancy (MMD2).
+MMD2 is a kernel-based metric for
+comparing two probability distributions [34].
+Unlike the Pearson correlation coefficient, which
+evaluates the agreement between mean response profiles, it compares entire distributions via pairwise
+sample similarities, thereby capturing discrepancies in higher-order population structures. Formally,
+MMD2 is defined as:
+MMD2(Bp, ˆBp) = E[kms(xp, xp′)] + E[kms(ˆxp, ˆxp′)] −2E[kms(xp, ˆxp)].
+(20)
+Here, kms is a multi-scale Gaussian radial basis function (RBF) kernel designed to capture discrep-
+ancies at different resolutions (from local cell-level variations to global population-level shifts):
+kms(xp, ˆxp) = 1
+L
+L
+X
+ℓ=1
+exp(−γℓ∥xp −ˆxp∥2),
+(21)
+16
+
+
+where L = 50 and γℓis logarithmically spaced from 101 to 10−3.
+Energy distance [35]. This criterion measures the statistical distance between predicted and
+observed cell population attributes, which characterizes the equality of their distributions. It reflects
+the extent to which the predicted cells capture the overall geometry, dispersion, and variability of
+the observed perturbed population. Formally, the distance is defined as:
+ED(Bp, ˆBp) = 2E∥xp −ˆxp∥−E∥xp −xp′∥−E∥ˆxp −ˆxp′∥,
+(22)
+where ∥·∥is the pairwise Euclidean distance. Here, xp, xp′ are sampled uniformly and independently
+from the observed cell population Bp, and ˆxp, ˆxp′ are drawn from the predicted cell population ˆBp.
+Sinkhorn divergence [36].
+To assess the geometric alignment between the observed cell
+population Bp and the predicted population ˆBp, we utilize the Sinkhorn divergence Sε, defined as:
+Sε(Bp, ˆBp) = OTε(Bp, ˆBp) −1
+2OTε(Bp, Bp) −1
+2OTε( ˆBp, ˆBp),
+(23)
+where OTε is the entropy-regularized optimal transport cost with a regularization strength ε. Specif-
+ically, given the evaluation cost matrix Ceval ∈RN′×N′ with Ceval
+ij
+= ∥xp
+i −ˆxp
+j∥2
+2, the entropic OT
+cost used for evaluation is formulated as
+OTε(Bp, ˆBp) =
+min
+T ∈Π(ueval,peval)
+X
+i,j
+TijCeval
+ij
++ ε
+X
+i,j
+Tij(log Tij −1),
+(24)
+where Π(ueval, peval) is defined analogously to Eq. 2, with uniform empirical weights over the ob-
+served and predicted cells. Here, T denotes the transport plan between the two cell populations,
+and ε is the entropic regularization strength. In practice, each OTε term is computed using the
+Sinkhorn algorithm. For evaluation, we set ε = 100 and use 100 Sinkhorn iterations.
+4.7
+Experimental setup
+Evaluation settings. We evaluate models under three settings: 1) In the independent and
+identically distributed (IID) setting, each perturbation condition appears in training, with cells
+split into 80% training and 20% test cells within each condition. This setting measures interpo-
+lation within the observed perturbation space. 2) In the out-of-distribution (OOD) setting, the
+perturbation conditions used for testing are absent from the training set. For SciPlex3 [3], we hold
+out three drug-dose conditions, and for ComboSciPlex [6], we hold out five drug-combination condi-
+tions. This setting tests whether models can generalize to unseen dosage or combination conditions
+rather than interpolate among observed conditions. 3) In the few-shot setting, we evaluate a related
+but less stringent scenario in which the target perturbations are no longer completely unseen: only
+a small number of cells from each target condition is included during training, and prediction is
+evaluated on the remaining held-out cells from the same conditions. We use this setting on the
+4i [11] dataset for five target perturbations under a leave-one-condition protocol. This setting tests
+adaptation when only limited condition-specific supervision is available. See Appendix for more
+details.
+Baselines.
+Our method is benchmarked against leading single-cell perturbation prediction
+models, including CellOT [11], biolord [22], CPA [6], PRNet [1], CellFlow [12], and scDFM [21]. We
+also include MeanExp as a statistical baseline [31]. In the IID setting, MeanExp predicts the mean
+expression profile of training samples from the queried condition. In the OOD setting, it predicts the
+mean expression of all perturbed training cells with the same dosage as the target condition. The
+official implementations of all baseline methods are used with their recommended hyperparameters
+17
+
+
+and dataset-specific adjustments. For a fair comparison, all models are evaluated using the same
+data protocol.
+Implementation details.
+Our model is implemented in PyTorch [37] and optimized with
+AdamW using a batch size of 256 for 4i, SciPlex3, and ComboSciPlex. For 4i, we train the model
+for 100,000 iterations with a learning rate of 1 × 10−6, Sinkhorn regularization εOT = 0.2, and
+100 Sinkhorn iterations. For SciPlex3 [3], we use 50,000 training iterations, a learning rate of
+1 × 10−7, εOT = 0.1, and 100 Sinkhorn iterations. ComboSciPlex [6] uses the same optimization
+and mini-batch OT settings as SciPlex3. For LINCS L1000 [20], we use a batch size of 128, train the
+conditional flow-matching model for 30,000 iterations with a learning rate of 1×10−7, and train the
+energy model for 300 iterations with a learning rate of 1 × 10−4. During inference, energy-guided
+refinement is performed for 10 steps with guidance coefficient λ = 0.05.
+References
+[1] Xiaoning Qi, Lianhe Zhao, Chenyu Tian, Yueyue Li, Zhen-Lin Chen, Peipei Huo, Runsheng
+Chen, Xiaodong Liu, Baoping Wan, Shengyong Yang, and Yi Zhao. Predicting transcriptional
+responses to novel chemical perturbations using deep generative model for drug discovery.
+Nature Communications, 2024.
+[2] Thomas M. Norman, Max A. Horlbeck, Joseph M. Replogle, Alex Y. Ge, Albert Xu, Marco
+Jost, Luke A. Gilbert, and Jonathan S. Weissman. Exploring genetic interaction manifolds
+constructed from rich single-cell phenotypes. Science, 2019.
+[3] Sanjay R. Srivatsan, José L. McFaline-Figueroa, Vijay Ramani, Lauren Saunders, Junyue Cao,
+Jonathan Packer, Hannah A. Pliner, Dana L. Jackson, Riza M. Daza, Lena Christiansen,
+Fan Zhang, Frank Steemers, Jay Shendure, and Cole Trapnell. Massively multiplex chemical
+transcriptomics at single-cell resolution. Science, 2020.
+[4] Joseph M. Replogle, Reuben A. Saunders, Angela N. Pogson, Jeffrey A. Hussmann, Alexander
+Lenail, Alina Guna, Lauren Mascibroda, Eric J. Wagner, Karen Adelman, Gila Lithwick-Yanai,
+Nika Iremadze, Florian Oberstrass, Doron Lipson, Jessica L. Bonnar, Marco Jost, Thomas M.
+Norman, and Jonathan S. Weissman.
+Mapping information-rich genotype-phenotype land-
+scapes with genome-scale perturb-seq. Cell, 2022.
+[5] Mohammad Lotfollahi, F Alexander Wolf, and Fabian J Theis. scgen predicts single-cell per-
+turbation responses. Nature Methods, 2019.
+[6] Mohammad Lotfollahi, Anna Klimovskaia Susmelj, Carlo De Donno, Leon Hetzel, Yuge Ji,
+Ignacio L. Ibarra, Sanjay R. Srivatsan, Mohsen Naghipourfar, Riza M. Daza, Beth Martin, Jay
+Shendure, Jose L. McFaline-Figueroa, Pierre Boyeau, F. Alexander Wolf, Nafissa Yakubova,
+Stephan Günnemann, Cole Trapnell, David Lopez-Paz, and Fabian J. Theis. Predicting cellular
+responses to complex perturbations in high-throughput screens. Molecular Systems Biology,
+2023.
+[7] Leon Hetzel, Simon Boehm, Niki Kilbertus, Stephan Günnemann, Mohammad Lotfollahi, and
+Fabian J. Theis.
+Predicting cellular responses to novel drug perturbations at a single-cell
+resolution. In NeurIPS, 2022.
+[8] Yusuf Roohani, Kexin Huang, and Jure Leskovec. Predicting transcriptional outcomes of novel
+multigene perturbations with GEARS. Nature Biotechnology, 2024.
+18
+
+
+[9] Haotian Cui, Chloe Wang, Hassaan Maan, Kuan Pang, Fengning Luo, Nan Duan, and Bo Wang.
+scgpt: toward building a foundation model for single-cell multi-omics using generative ai. Nature
+Methods, 2024.
+[10] Minsheng Hao, Jing Gong, Xin Zeng, Chiming Liu, Yucheng Guo, Xingyi Cheng, Taifeng
+Wang, Jianzhu Ma, Xuegong Zhang, and Le Song. Large-scale foundation model on single-cell
+transcriptomics. Nature Methods, 2024.
+[11] Charlotte Bunne, Stefan G Stark, Gabriele Gut, Jacobo Sarabia Del Castillo, Mitch Levesque,
+Kjong-Van Lehmann, Lucas Pelkmans, Andreas Krause, and Gunnar Rätsch. Learning single-
+cell perturbation responses using neural optimal transport. Nature Methods, 2023.
+[12] Dominik Klein, Jonas Simon Fleck, Daniil Bobrovskiy, Lea Zimmermann, Sören Becker,
+Alessandro Palma, Leander Dony, Alejandro Tejada-Lapuerta, Guillaume Huguet, Hsiu-Chuan
+Lin, Nadezhda Azbukina, Fátima Sanchís-Calleja, Theo Uscidda, Artur Szalata, Manuel Gan-
+der, Aviv Regev, Barbara Treutlein, J. Gray Camp, and Fabian J. Theis. CellFlow enables
+generative single-cell phenotype modeling with flow matching. bioRxiv, 2025.
+[13] Ramon Viñas Torné, Maciej Wiatrak, Zoe Piran, Shuyang Fan, Liangze Jiang, Sarah A. Teich-
+mann, Mor Nitzan, and Maria Brbić. Systema: a framework for evaluating genetic perturbation
+response prediction beyond systematic variation. Nature Biotechnology, 2025.
+[14] Constantin Ahlmann-Eltze, Wolfgang Huber, and Simon Anders. Deep-learning-based gene
+perturbation effect prediction does not yet outperform simple linear baselines. Nature Methods,
+2025.
+[15] Gerold Csendes, Gema Sanz, Kristóf Z. Szalay, and Bence Szalai. Benchmarking foundation
+cell models for post-perturbation RNA-seq prediction. BMC Genomics, 2025.
+[16] Geoffrey Schiebinger, Jian Shu, Marcin Tabaka, Brian Cleary, Vidya Subramanian, Aryeh
+Solomon, Joshua Gould, Siyan Liu, Stacie Lin, Peter Berube, Lia Lee, Jenny Chen, Justin
+Brumbaugh, Philippe Rigollet, Konrad Hochedlinger, Rudolf Jaenisch, Aviv Regev, and Eric S.
+Lander. Optimal-transport analysis of single-cell gene expression identifies developmental tra-
+jectories in reprogramming. Cell, 2019.
+[17] Alexander Tong, Jessie Huang, Guy Wolf, David Van Dijk, and Smita Krishnaswamy. Tra-
+jectorynet: A dynamic optimal transport network for modeling cellular dynamics. In ICML,
+2020.
+[18] Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow
+matching for generative modeling. In ICLR, 2023.
+[19] Alexander Tong, Kilian Fatras, Nikolay Malkin, Guillaume Huguet, Yanlei Zhang, Jarrid
+Rector-Brooks, Guy Wolf, and Yoshua Bengio. Improving and generalizing flow-based gener-
+ative models with minibatch optimal transport. Transactions on Machine Learning Research,
+2024.
+[20] Aravind Subramanian, Rajiv Narayan, Steven M Corsello, David D Peck, Ted E Natoli, Xi-
+aodong Lu, Joshua Gould, John F Davis, Andrew A Tubelli, Jacob K Asiedu, et al. A next
+generation connectivity map: L1000 platform and the first 1,000,000 profiles. Cell, 2017.
+[21] Chenglei Yu, Chuanrui Wang, Bangyan Liao, and Tailin Wu.
+scDFM: Distributional flow
+matching model for robust single-cell perturbation prediction. In ICLR, 2026.
+19
+
+
+[22] Zoe Piran, Niv Cohen, Yedid Hoshen, and Mor Nitzan. Disentanglement of single-cell data
+with biolord. Nature Biotechnology, 2024.
+[23] James M McFarland, Brenton R Paolella, Allison Warren, Kathryn Geiger-Schuller, Tsukasa
+Shibue, Michael Rothberg, Olena Kuksenko, William N Colgan, Andrew Jones, Emily Cham-
+bers, et al. Multiplexed single-cell transcriptional response profiling to define cancer vulnera-
+bilities and therapeutic mechanism of action. Nature communications, 2020.
+[24] Adam C Palmer and Peter K Sorger.
+Combination cancer therapy can confer benefit via
+patient-to-patient variability without drug additivity or synergy. Cell, 2017.
+[25] Justin Lamb, Emily D Crawford, David Peck, Joshua W Modell, Irene C Blat, Matthew J
+Wrobel, Jim Lerner, Jean-Philippe Brunet, Aravind Subramanian, Kenneth N Ross, et al. The
+connectivity map: using gene-expression signatures to connect small molecules, genes, and
+disease. science, 2006.
+[26] Rui Peng, Ziru Liu, Yuanxu Gao, and Jinzhuo Wang. A generative framework for predicting
+cellular morphological and transcriptomic perturbation responses. Cell Reports Methods, 2026.
+[27] Atray Dixit, Oren Parnas, Biyu Li, Jenny Chen, Charles P. Fulco, Livnat Jerby-Arnon, Ne-
+manja D. Marjanovic, Danielle Dionne, Tyler Burks, Raktima Raychowdhury, Britt Adamson,
+Thomas M. Norman, Eric S. Lander, Jonathan S. Weissman, Nir Friedman, and Aviv Regev.
+Perturb-seq: Dissecting molecular circuits with scalable single-cell rna profiling of pooled ge-
+netic screens. Cell, 2016.
+[28] Hyun Min Kang, Meena Subramaniam, Sasha Targ, Michelle Nguyen, Lenka Maliskova, Eliz-
+abeth McCarthy, Eunice Wan, Simon Wong, Lauren Byrnes, Cristina M. Lanata, Rachel E.
+Gate, Sara Mostafavi, Alexander Marson, Noah Zaitlen, Lindsey A. Criswell, and Chun Jimmie
+Ye. Multiplexed droplet single-cell RNA-sequencing using natural genetic variation. Nature
+Biotechnology, 2018.
+[29] Marco Cuturi. Sinkhorn distances: Lightspeed computation of optimal transport. In NeurIPS,
+2013.
+[30] Minyoung Kim. Swamp: Swapped assignment of multi-modal pairs for cross-modal retrieval.
+In Proceedings of the 26th International Conference on Artificial Intelligence and Statistics,
+2023.
+[31] Zhiting Wei, Yiheng Wang, Yicheng Gao, Shuguang Wang, Ping Li, Duanmiao Si, Yuli Gao,
+Siqi Wu, Danlu Li, Kejing Dong, et al. Benchmarking algorithms for generalizable single-cell
+perturbation response prediction. Nature Methods, 2026.
+[32] Yilun Du and Igor Mordatch.
+Implicit generation and modeling in energy-based models.
+NeurIPS, 2019.
+[33] Will Grathwohl, Kuan-Chieh Wang, Jörn-Henrik Jacobsen, David Duvenaud, Mohammad
+Norouzi, and Kevin Swersky. Your classifier is secretly an energy based model and you should
+treat it like one. ICLR, 2020.
+[34] Arthur Gretton, Karsten M. Borgwardt, Malte J. Rasch, Bernhard Schölkopf, and Alexander
+Smola. A kernel two-sample test. Journal of Machine Learning Research, 2012.
+20
+
+
+[35] Gábor J. Székely and Maria L. Rizzo. Energy statistics: A class of statistics based on distances.
+Journal of Statistical Planning and Inference, 2013.
+[36] Jean Feydy, Thibault Séjourné, François-Xavier Vialard, Shun-ichi Amari, Alain Trouvé, and
+Gabriel Peyré. Interpolating between optimal transport and MMD using sinkhorn divergences.
+In Proceedings of the Twenty-Second International Conference on Artificial Intelligence and
+Statistics, 2019.
+[37] Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan,
+Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas
+Kopf, Edward Yang, Zachary DeVito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy,
+Benoit Steiner, Lu Fang, Junjie Bai, and Soumith Chintala. PyTorch: An imperative style,
+high-performance deep learning library. In NeurIPS, 2019.
+21
+
+
+Supplementary Information
+S1
+Datasets and Preprocessing
+S1.1
+Dataset overview
+In this study, three single-cell perturbation datasets are used: 4i [11] provides imaging-based phe-
+notypic measurements, SciPlex3 [3] profiles transcriptional responses to single-drug treatments, and
+ComboSciPlex [6] profiles transcriptional responses to both single-drug and combination treatments.
+For LINCS L1000 [20], Level 3 expression profiles are used for model training and prediction, and
+Level 5 consensus signatures are used to evaluate the direction of predicted gene-expression changes.
+Table S1 summarizes the processed datasets used for experiments.
+Table S1: Overview of the datasets used in this study.
+Dataset Cells/profiles Features Contexts Conditions
+Readout
+4i [11]
+77,743
+48
+1
+27
+imaging phenotype
+SciPlex3 [3]
+290,888
+2,000
+3
+749
+scRNA-seq
+ComboSciPlex [6]
+63,378
+2,000
+1
+32
+scRNA-seq
+L1000 Level 3 [20]
+24,104
+978
+21
+110
+gene-expression profiles
+S1.2
+4i preprocessing
+The 4i dataset [11] contains single-cell imaging profiles under chemical perturbations. Following
+CellOT [11], the preprocessed representation is retained without additional feature filtering, with
+each cell characterized by 48 morphological and protein-marker intensity measurements. The dataset
+contains 77,743 cells, including 10,995 untreated cells and 66,748 treated cells across 27 chemical
+perturbations. Untreated cells serve as the source population, and cells treated with each compound
+form the corresponding target population.
+For the held-out and few-shot experiments, five drugs are designated as target perturbations:
+cisplatin, crizotinib, dabrafenib, dacarbazine, and dasatinib. Treated cells from these con-
+ditions are either excluded from training or included in limited numbers, following the evaluation
+protocols in Supplementary Section S2.
+S1.3
+SciPlex3 preprocessing
+SciPlex3 [3] profiles transcriptional responses to chemical perturbations across three cancer cell
+lines: A549, K562, and MCF7.
+Each cell line defines a distinct cellular context, with vehicle-
+treated cells serving as its source population. Perturbation conditions are specified by compound
+identity and dose. Data splits are defined before feature selection. The three drug-dose conditions,
+i.e., ENMD-2076 at 0.1 µM, WP1066 at 0.01 µM, and Mesna at 0.1 µM, are entirely withheld
+from training for OOD evaluation. Gene-expression counts are normalized and log-transformed.
+The top 2,000 highly variable genes are selected from the training cells using the Seurat procedure
+implemented in Scanpy. The same gene set is retained for the IID and OOD test sets. The processed
+dataset contains 290,888 cells represented by 2,000 genes across the three cellular contexts. For
+scEGFlow training, these expression profiles are projected onto 200 principal components. The PCA
+transformation is fitted exclusively on the training cells and then applied unchanged to the IID and
+OOD test sets. The model predicts perturbed states in this PCA space, and these predictions are
+subsequently transformed back to the 2,000-gene expression space for gene-level evaluation.
+22
+
+
+S1.4
+ComboSciPlex preprocessing
+ComboSciPlex [6] profiles single-cell transcriptional responses to individual compounds and pair-
+wise drug combinations in A549 cells. This cell line defines a single cellular context, with cells re-
+ceiving no active compound serving as the source population. Perturbation conditions are specified
+by the individual compound or compound pair. Data splits are defined before feature selection.
+The five drug-combination conditions, i.e., Dacinostat + Danusertib, Givinostat + Cediranib,
+Panobinostat + Alvespimycin, Panobinostat + SRT2104, and SRT2104 + Alvespimycin, are en-
+tirely withheld from training for OOD evaluation. Within each remaining observed perturbation
+condition, cells are partitioned into training and IID test sets.
+Gene-expression counts are normalized and log-transformed following the same procedure as for
+SciPlex3 [3] (Supplementary Section S1.3). The top 2,000 highly variable genes are selected from the
+training cells using the Seurat procedure implemented in Scanpy. The same gene set is retained for
+the IID and OOD test sets. The processed dataset contains 63,378 cells represented by 2,000 genes
+across 32 conditions, including control, within a single cellular context. For scEGFlow training,
+these expression profiles are projected onto 200 principal components. The PCA transformation is
+fitted exclusively on the training cells and then applied unchanged to the IID and OOD test sets.
+The model predicts perturbed states in this PCA space, and these predictions are subsequently
+transformed back to the 2,000-gene expression space for gene-level evaluation.
+S1.5
+LINCS L1000 preprocessing and external validation
+The LINCS L1000 compendium [20] profiles transcriptional responses to perturbations across
+multiple cell lines. We restrict the analysis to compound treatments measured 24 h after exposure
+and their corresponding controls. Each cell line defines a distinct cellular context, with untreated
+or vehicle-treated profiles serving as its source population. Perturbation conditions are specified by
+compound identity and dose. Data splits are defined before dimensionality reduction. The six drug-
+dose conditions, i.e., olaparib, GSK-1059615, dasatinib, PD-0325901, CGP-60474, and veliparib,
+all at 10 µM, are entirely withheld from training for OOD evaluation.
+Level 3 profiles provide normalized gene-expression measurements for individual experimental
+instances. We retain the 978 directly measured landmark genes as the expression space. The pro-
+cessed dataset contains 24,104 profiles represented by 978 genes across 21 cellular contexts and 79
+compounds, including 13,672 control profiles and 10,432 compound-treated profiles. For scEGFlow
+training, these expression profiles are projected onto 768 principal components. The PCA transfor-
+mation is fitted exclusively on the training profiles and then applied unchanged to held-out profiles.
+The model predicts perturbed states in this PCA space, and these predictions are subsequently
+transformed back to the 978-gene expression space for gene-level evaluation.
+Level 5 consensus differential-expression signatures, represented as moderated z-scores, provide
+the reference directions of gene regulation for external validation. These signatures are used only for
+evaluation and responsive-gene selection; they are not provided to either the scEGFlow backbone
+or the energy model during training or prediction.
+For each held-out perturbation, scEGFlow
+generates predicted treated profiles from the corresponding Level 3 control population. Predictions
+are matched to Level 5 signatures by cell line, compound identity, dose, and treatment duration.
+The six held-out perturbations across 21 cell lines define 126 possible cell line-drug-dose settings.
+Settings lacking the Level 3 profiles required for prediction or a corresponding Level 5 signature are
+excluded, leaving 111 matched settings for external validation.
+We evaluate whether the model recovers the directions of gene regulation recorded in the Level 5
+reference signatures. For each matched cell line-drug-dose setting c, we first compute the predicted
+23
+
+
+expression change relative to the matched Level 3 controls. We then select genes with the largest
+absolute Level 5 response scores and calculate the fraction for which the predicted and reference
+changes have the same direction.
+For each landmark gene g, the predicted expression change is the mean expression in the pre-
+dicted treated population minus the mean expression in the matched control population:
+∆pred
+c,g
+=
+1
+Npred
+c
+Npred
+cX
+i=1
+ˆx p
+c,i,g −
+1
+Nctrl
+c
+Nctrl
+cX
+j=1
+x u
+c,j,g,
+(S1)
+where ˆx p
+c,i,g is the expression of gene g in predicted treated profile i, and x u
+c,j,g is its expression in
+matched Level 3 control profile j. Here, N pred
+c
+and N ctrl
+c
+denote the numbers of predicted treated and
+control profiles, respectively. A positive value of ∆pred
+c,g
+indicates predicted upregulation, whereas a
+negative value indicates predicted downregulation.
+The Level 5 moderated z-score, denoted by ∆L5
+c,g, provides the reference response for gene g in
+setting c, with its sign indicating the direction of regulation. Because predicted expression differences
+and Level 5 scores are on different scales, we compare their signs rather than their numerical
+magnitudes. To evaluate direction agreement among genes with stronger reference responses, we
+rank the 978 landmark genes within each setting by |∆L5
+c,g|. The top 10%, approximately 98 genes
+per setting, form the responsive-gene set Gc. This selection uses only the Level 5 reference scores
+and is performed separately for each setting.
+For the selected genes, directional concordance is the fraction whose predicted expression changes
+have the same sign as their Level 5 reference scores:
+Concordance(c) =
+1
+|Gc|
+X
+g∈Gc
+1[sign(∆pred
+c,g ) = sign(∆L5
+c,g)],
+(S2)
+where 1[·] equals 1 when the signs agree and 0 otherwise. Concordance is calculated separately for
+each of the 111 matched settings, with higher values indicating greater agreement in the directions
+of gene regulation.
+S2
+Data Splits and Evaluation Protocols
+S2.1
+IID experimental setup
+For both 4i [11] and SciPlex3 [3], we randomly split the cells within each perturbation condition
+into a training set (80%) and a held-out test set (20%). Every evaluated perturbation condition is
+therefore represented during training, but the individual test cells are excluded from training.
+S2.2
+OOD experimental setup
+For OOD evaluation, treated samples from the target conditions are excluded from training. We
+consider three settings: unseen drug-dose conditions, transfer to an unseen cellular context, and
+unseen drug combinations.
+S2.2.1
+Drug-dose conditions
+For SciPlex3 [3], we exclude all treated cells from three drug-dose conditions from training:
+ENMD-2076 at 0.1 µM, WP1066 at 0.01 µM, and Mesna at 0.1 µM. Vehicle-control cells serve as
+the source population, and predictions are evaluated against the held-out treated cells.
+24
+
+
+For LINCS L1000 [20], we hold out six drug-dose conditions and train models on Level 3 ex-
+pression profiles excluding these conditions. Predicted response directions are evaluated against the
+matched Level 5 consensus signatures.
+S2.2.2
+Cellular-context transfer
+For SciPlex3 [3], we exclude all treated A549 cells from training while retaining treated cells
+from K562 and MCF7. Unperturbed A549 cells serve as the source population, and predictions are
+evaluated against the held-out treated A549 cells.
+S2.2.3
+Combinatorial perturbations
+For ComboSciPlex [6], we exclude all cells from five drug combinations from training: Dacino-
+stat with Danusertib, Givinostat with Cediranib, Panobinostat with Alvespimycin, Panobinostat
+with SRT2104, and SRT2104 with Alvespimycin. The remaining single-drug treatments and drug
+combinations are retained for training. Predictions are generated from unperturbed source cells and
+evaluated against the held-out combination-treated cells.
+S2.3
+Few-shot adaptation
+Few-shot adaptation is evaluated on five target perturbations in the 4i benchmark [11]: cisplatin,
+crizotinib, dabrafenib, dacarbazine, and dasatinib.
+For each target, we start from a zero-shot
+training set that excludes its treated cells and add k ∈{1, 3, 5, 20, 60, 100, 200} measured target
+cells.
+A separate model is trained for each target and each k, with all remaining target cells
+reserved exclusively for evaluation. As k increases, previously selected target cells are retained, and
+additional cells are added to the supervision set. For each k, all methods are trained with the same
+k target-condition cells and evaluated on all remaining cells from that condition.
+S2.4
+Subsampling evaluation protocol
+Following the subsampling strategy of [11], we evaluate single-cell distributions using equally
+sized subsets of control and treated cells to limit computational cost.
+For each condition, we
+select the largest N ∈{100, 250, 500, 1000, 1500} that does not exceed either the available control-
+cell count or the held-out treated-cell count. We randomly sample N control cells to generate N
+predicted treated cells and compare them with N randomly sampled held-out treated cells.
+To reduce variability due to random subsampling, we repeat this procedure 10 times per condi-
+tion and average each metric across repetitions. Overall performance is then computed as the mean
+of the condition-level scores.
+S3
+More Implementation Details
+S3.1
+Perturbation representation p.
+Small-molecule identity is represented by a 1024-bit Morgan fingerprint. For SciPlex3 [3], raw
+doses are recorded in nanomolar (nM). The dose feature is computed as log10(d+1), where d denotes
+the numeric dose value in nM and d ∈{10, 100, 1000, 10000} for treated cells. It is incorporated
+into the drug representation to encode the drug-dose condition. For combination perturbations,
+each constituent drug-dose component is encoded separately, and the resulting representations are
+combined into a joint perturbation representation.
+25
+
+
+S3.2
+Cellular-context representation c.
+When cellular-context conditioning is used, each context is represented by the mean unperturbed
+cellular state computed from the corresponding training source cells. This mean state is encoded
+and combined with the perturbation representation to condition the velocity network.
+S3.3
+Energy model construction
+An energy model assigns a scalar compatibility score to a cellular state under a queried per-
+turbation condition, with lower energy indicating stronger agreement between the cellular state
+and the condition. Here, we describe the architecture of the energy models used in the reported
+experiments.
+Given the cellular state x, biological context c, and perturbation vector p (from which the
+molecular fingerprint m is derived via drug identity), each input is encoded into a latent space.
+These representations are then fused to yield a term-specific energy:
+Dϕ(x, ξ) = hE(hx(x), hm(m), hp(p), hc(c)),
+where hx, hm, hp, and hc map the cellular state, molecular fingerprint, perturbation vector, and
+biological context into their respective hidden representations, and hE denotes the network that
+maps these representations to a scalar energy value. In the reported experiments, we instantiate
+this architecture as drug and dose energy models, Ddrug
+ϕ
+and Ddose
+ϕ
+, trained with drug- and dose-
+negative samples, respectively.
+S3.4
+Training and inference hyperparameters
+Tables S2 and S3 summarize the training and inference hyperparameters used for each dataset.
+The conditional flow-matching model and the energy models are both trained with the AdamW
+optimizer.
+Table S2: Training hyperparameters for the conditional flow-matching model.
+Dataset
+Feature dim.
+Training steps
+Batch size
+Learning rate
+4i [11]
+48
+100,000
+256
+10−6
+SciPlex3 [3]
+200
+50,000
+256
+10−7
+ComboSciPlex [6]
+200
+50,000
+256
+10−7
+LINCS L1000 [20]
+768
+30,000
+128
+10−7
+Table S3: Training hyperparameters for the energy model.
+Dataset
+Feature dim.
+Training steps
+Batch size
+Learning rate
+Weight decay
+4i [11]
+48
+5,000
+256
+10−4
+10−4
+SciPlex3 [3]
+200
+300
+256
+10−4
+10−4
+ComboSciPlex [6]
+200
+5,000
+256
+10−4
+10−4
+LINCS L1000 [20]
+768
+300
+128
+10−4
+10−4
+26
+
+
+S4
+Additional Quantitative Results
+We provide additional quantitative analyses to further characterize the performance and behavior
+of scEGFlow across different perturbation settings. These analyses complement the main results
+with condition-wise comparisons, guidance-strength sensitivity, and detailed evaluations of energy-
+guided refinement.
+S4.1
+Condition-wise OOD effects of energy guidance
+We first examine the effect of energy guidance at the level of individual held-out conditions rather
+than only through aggregate performance. For SciPlex3 [3], we consider the three OOD drug-dose
+conditions ENMD-2076 at 0.1 µM, WP1066 at 0.01 µM, and Mesna at 0.1 µM. The unguided
+model uses the same trained flow backbone while disabling the energy-guided correction during
+inference. The guided model additionally applies the final energy model with the paper-default
+guidance strength.
+As shown in Table S4, energy guidance consistently improves population-level agreement across
+all three held-out drug-dose conditions. Averaged across conditions, energy distance decreases from
+0.2810 to 0.2438, Sinkhorn divergence from 0.1615 to 0.1391, and MMD2 from 0.0045 to 0.0039,
+while Pearson correlation increases from 0.9932 to 0.9945. These results indicate that the energy-
+based correction provides condition-specific refinement beyond the predictions generated by the flow
+backbone alone.
+We further examine the effect of energy guidance on the five held-out ComboSciPlex [6] drug
+combinations defined in Supplementary Section S2.2.
+As shown in Table S5, energy guidance
+consistently reduces energy distance and Sinkhorn divergence across all five combinations, while
+improving MMD2 and Pearson correlation in four of the five conditions. The only exception is
+Givinostat + Cediranib, for which a slight degradation in MMD2 and Pearson correlation is observed.
+Overall, energy guidance reduces the average energy distance from 29.9767 to 24.8578 and
+Sinkhorn divergence from 111.6462 to 93.0152, while improving MMD2 from 0.0618 to 0.0527 and
+Pearson correlation from 0.9597 to 0.9667. These results demonstrate that energy-guided refinement
+provides consistent improvements in the recovery of responses to unseen combinatorial perturba-
+tions.
+Table S4: Prediction performance with and without energy guidance on three held-out OOD drug-dose conditions
+in SciPlex3 [3]. Both settings share the same trained flow model.
+Condition
+Model
+Energy ↓
+Sinkhorn ↓
+MMD2 ↓
+Pearson ↑
+ENMD-2076_0.1 w/o energy guidance
+0.2380
+0.1360
+0.0040
+0.9947
+ENMD-2076_0.1
+w/ energy guidance
+0.2050
+0.1180
+0.0035
+0.9955
+WP1066_0.01 w/o energy guidance
+0.2520
+0.1450
+0.0041
+0.9942
+WP1066_0.01
+w/ energy guidance
+0.2180
+0.1260
+0.0036
+0.9951
+Mesna_0.1 w/o energy guidance
+0.3530
+0.2035
+0.0054
+0.9907
+Mesna_0.1
+w/ energy guidance
+0.3084
+0.1733
+0.0046
+0.9929
+Average w/o energy guidance
+0.2810
+0.1615
+0.0045
+0.9932
+Average
+w/ energy guidance
+0.2438
+0.1391
+0.0039
+0.9945
+27
+
+
+Table S5: Prediction performance with and without energy guidance on five held-out ComboSciPlex [6] OOD drug
+combinations. Both settings share the same trained flow model. Average rows are obtained by pooling all test cells
+from the five held-out combinations and recomputing each metric on the pooled measured and predicted populations.
+Condition
+Model
+Energy ↓Sinkhorn ↓MMD2 ↓Pearson ↑
+Dacinostat + Danusertib w/o energy guidance
+25.8631
+100.5147
+0.0656
+0.9588
+Dacinostat + Danusertib
+w/ energy guidance
+21.7346
+83.7241
+0.0476
+0.9720
+Givinostat + Cediranib w/o energy guidance
+29.4728
+112.7362
+0.0498
+0.9792
+Givinostat + Cediranib
+w/ energy guidance
+24.1183
+91.5836
+0.0524
+0.9760
+Panobinostat + Alvespimycin w/o energy guidance
+64.7315
+195.6841
+0.1215
+0.7904
+Panobinostat + Alvespimycin
+w/ energy guidance
+55.8427
+168.9142
+0.0987
+0.8210
+Panobinostat + SRT2104 w/o energy guidance
+32.4176
+121.4523
+0.0705
+0.9436
+Panobinostat + SRT2104
+w/ energy guidance
+27.3165
+102.3475
+0.0548
+0.9600
+SRT2104 + Alvespimycin w/o energy guidance
+53.9154
+142.4815
+0.0895
+0.9172
+SRT2104 + Alvespimycin
+w/ energy guidance
+41.6157
+142.3341
+0.0777
+0.9270
+Average w/o energy guidance
+29.9767
+111.6462
+0.0618
+0.9597
+Average
+w/ energy guidance
+24.8578
+93.0152
+0.0527
+0.9667
+Table S6: Sensitivity of SciPlex3 [3] OOD drug-dose prediction to the guidance coefficient λ.
+λ
+Energy ↓
+Sinkhorn ↓
+MMD2 ↓
+Pearson ↑
+0.0000
+0.2810
+0.1615
+0.0045
+0.9932
+0.0125
+0.2705
+0.1554
+0.0043
+0.9936
+0.0250
+0.2588
+0.1480
+0.0041
+0.9940
+0.0500
+0.2438
+0.1391
+0.0039
+0.9945
+0.1000
+0.2479
+0.1415
+0.0040
+0.9944
+0.2000
+0.2676
+0.1532
+0.0043
+0.9937
+Table S7: Sensitivity of ComboSciPlex [6] OOD drug combination prediction to the guidance coefficient λ.
+λ
+Energy ↓
+Sinkhorn ↓
+MMD2 ↓
+Pearson ↑
+0.0000
+29.9767
+111.6462
+0.0618
+0.9597
+0.0125
+28.4163
+105.7328
+0.0589
+0.9621
+0.0250
+26.6835
+99.2846
+0.0554
+0.9646
+0.0500
+24.8578
+93.0152
+0.0527
+0.9667
+0.1000
+25.1936
+94.2671
+0.0532
+0.9662
+0.2000
+27.1849
+101.4385
+0.0569
+0.9637
+S4.2
+Sensitivity to energy-guidance strength
+We investigate the sensitivity of scEGFlow to the inference-time guidance coefficient λ by sweep-
+ing across λ∈{0, 0.0125, 0.025, 0.05, 0.10, 0.20} while keeping all other settings fixed. Here, setting
+λ = 0 disables the energy correction and reduces the framework to the conditional flow-matching
+model.
+As shown in Table S6 for SciPlex3 [3], scaling the guidance coefficient from zero up to the
+default λ = 0.05 steadily optimizes all four evaluation metrics, achieving the lowest values for
+energy distance (0.2438), Sinkhorn divergence (0.1391), and MMD2 (0.0039), together with the
+highest Pearson correlation (0.9945). Although performance moderately degrades when λ is further
+increased to 0.10 and 0.20, all four metrics remain better than those of the conditional flow-matching
+model.
+28
+
+
+A similar trend is observed on ComboSciPlex [6], with λ = 0.05 yielding the best performance
+across all four metrics among the tested coefficients (Table S7). Together, the results on SciPlex3 [3]
+and ComboSciPlex [6] show that the gains from energy guidance are robust across a reasonable
+parametric neighborhood rather than contingent on brittle hyperparameter tuning.
+29
