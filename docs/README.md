@@ -7,25 +7,29 @@
 
 ## 每次日报
 - 最新运行日期：2026-10-06
-- 运行时间：2026-10-06 01:03:35 UTC
+- 运行时间：2026-10-06 23:16:15 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：1
-- 速读区：0
+- 本次总论文数：3
+- 精读区：2
+- 速读区：1
 
 ### 今日简报（AI）
-1) 今天精读 1 篇、速读 0 篇，唯一入选论文拿下满分 10.0，主题是单细胞扰动响应预测。
-2) 最值得看的方向是「能量引导的流匹配」如何提升扰动响应预测的泛化能力，即让模型在未见过的扰动条件下也能预测细胞反应。
-3) 普通读者可先了解流匹配与单细胞扰动实验的基本概念，再顺着这篇论文的泛化评测思路，关注该方向后续的验证与应用。
+2026-10-06日报精选3篇：两篇精读聚焦虚拟细胞扰动建模与单细胞群体转变，一篇速读探索单神经元电生理响应。  
+最值得看的是10分VCLMU的机制中心虚拟细胞世界模型，以及9分TempoBridge用源条件流匹配与最优
 - 详情：[/202610/06/README](/202610/06/README)
 
 ### 精读区论文标签
-1. [Generalizable single-cell perturbation response prediction using energy-guided flow matching](/202610/06/2610.02232v1-generalizable-single-cell-perturbation-response-prediction-using-energy-guided-flow-matching)  
+1. [VCLMU: Mechanism-Centric Virtual Cell World Modeling for Perturbation Response](/202610/06/2610.04475v1-vclmu-mechanism-centric-virtual-cell-world-modeling-for-perturbation-response)  
    标签：评分：10.0/10、query:virtual-cell
-   evidence：能量引导流匹配预测单细胞扰动响应
+   evidence：面向基因扰动响应预测的机制中心虚拟细胞世界模型
+2. [TempoBridge: Source-Conditioned Flow Matching with Optimal Transport Couplings for Single-Cell Population Transitions](/202610/06/2610.04945v1-tempobridge-source-conditioned-flow-matching-with-optimal-transport-couplings-for-single-cell-population-transitions)  
+   标签：评分：9.0/10、query:virtual-cell
+   evidence：面向遗传与化学单细胞群体转变的源条件流匹配
 
 ### 速读区论文标签
-- 本次无速读推荐。
+1. [Conditional Flow Matching for Single-Neuron Electrophysiology: Capturing Multimodal Responses Across Stimuli](/202610/06/2610.06520v1-conditional-flow-matching-for-single-neuron-electrophysiology-capturing-multimodal-responses-across-stimuli)  
+   标签：评分：6.0/10、query:virtual-cell
+   evidence：条件生成模型预测单细胞对刺激的多模态响应
 
 
 <div class="dpr-home-promo-card">

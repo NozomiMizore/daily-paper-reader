@@ -1,0 +1,696 @@
+Title: VCLMU: Mechanism-Centric Virtual Cell World Modeling for Perturbation Response
+
+URL Source: https://arxiv.org/pdf/2610.04475v1
+
+Published Time: Tue, 06 Oct 2026 00:50:40 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# VCLMU: Mechanism-Centric Virtual Cell World Modeling for Perturbation Response 
+
+Yuwei Miao 1∗ Azim Dehghani Amirabad 1∗ Scott Oloff 1
+
+Junzhou Huang 2† Tianyu Cui 1† Rui Liao 1†
+
+> 1
+
+Johnson & Johnson Innovative Medicine 2University of Texas at Arlington 
+
+## Abstract 
+
+Predicting cellular responses to genetic perturbations is a central capability for vir-tual cells and a key step toward computational modeling of biological interventions. Most existing models directly map an unperturbed molecular profile and perturba-tion to the resulting observation without explicitly representing the latent cellular transition induced by the intervention. We introduce a mechanism-centric virtual cell world model that represents cellular state as a set of Latent Mechanism Units (LMUs) and treats genetic perturbations as actions on these latent states. Each LMU combines a reusable identity grounded in multimodal biological evidence with an observation-specific state, allowing a perturbation to induce mechanism-specific stochastic transitions before decoding the resulting transcriptional response. We train VCLMU through two-stage pretraining, first on around 200K pseudo-bulk perturbation profiles and then on gene-aligned single-cell perturbation data. Across six perturbation-disjoint benchmarks, VCLMU consistently improves perturbation-specific response recovery over strong baselines while maintaining competitive global response accuracy. We further analyze learned LMUs through enrichment between perturbation responses and LMU gene sets and show that they capture structured biological response programs. These results support mechanism-level latent state transition as a useful formulation for virtual cell models that aim to predict and interpret cellular responses to biological interventions. 
+
+## 1 Introduction 
+
+Predicting how cells respond to genetic perturbations is a foundational capability for virtual cell 
+
+models and an important step toward computational evaluation of biological interventions [6]. High-throughput single-cell perturbation screens [1, 10, 22, 25], now consolidated into harmonized re-sources [24], provide increasingly large datasets for learning intervention-response relationships. A rapid progression of models has followed, including scGen [20], CPA [21], and GEARS [26]; pretrained transcriptome models [7, 15, 30]; and large-scale virtual cell models trained across diverse perturbations and cellular contexts [2, 34], alongside standardized benchmarks [27]. Most existing perturbation predictors remain primarily observation-centric : they map an unperturbed profile and intervention to the resulting transcriptional response while leaving the latent cellular transition induced by that intervention implicit. Scaling this map has so far yielded limited returns. A recent systematic evaluation finds that deep perturbation predictors still do not outperform simple linear or condition-agnostic baselines [3], suggesting that improved modeling of intervention-induced state changes may be as important as additional model capacity. Latent-variable models such as        
+
+> ∗Equal contribution
+> †Corresponding authors: Junzhou Huang (jzhuang@exchange.uta.edu), Tianyu Cui (TCui8@its.jnj.com), and Rui Liao (RLiao2@its.jnj.com) 40th Conference on Neural Information Processing Systems (NeurIPS 2026). Workshop: AI for Drug Discovery: Bridging the Translation Gap. arXiv:2610.04475v1 [cs.AI] 3 Oct 2026 Encoder
+> Action
+> Encoder
+> Decoder 𝒙 𝑖 𝑐
+> 𝒙 𝑖
+> 𝑝 𝐸 𝜔
+> 𝒐 𝑖
+> 𝒐 𝑖
+> ′
+> 𝒉 𝑖𝑘
+> 𝑝
+> 𝒉 𝑖𝑘 𝑐 ෢𝒉 𝑖𝑘 𝑝
+> 𝐷 𝜃
+> ෞ𝝁 𝑖
+> ෝ𝒗 𝑖
+> 𝒆 𝑔
+> ෝ𝒂 𝑖 𝒂 𝑖
+> State
+> Encoder
+> 0.56
+> 0.12
+> 0.08
+> …
+> …
+> Set
+> Encoder
+> 𝒉 𝑖𝑘
+> 𝑐
+> Control Cell Exp
+> Perturbed Cell
+> Respons e
+> Control Exp Emb
+> Perturbed Exp Emb
+> Perturbed LMU states
+> Inverse
+> Inference Predicted Action Action
+> 𝒛 i~𝑞(𝒛 𝑖𝑘 | 𝒉 𝑖𝑘 𝑐 , 𝝍 𝑖 )
+> Transition Module
+> LMU States for
+> Control Cell
+> Predicted Perturbed
+> LMU States
+> Routing
+> by
+> Predicted
+> Cell Response
+> Evidence Matrix
+> Modality
+> Gene
+> LMUs identity
+> 𝒐 𝑖
+> ℒ𝑖𝑛𝑣
+> Activated LMUs with weights
+> LMU
+> Module
+> ℒ𝑓𝑤𝑑
+> ∆𝒙 𝑖
+> 𝑝
+> ෢∆𝒙 𝑖 𝑝
+> Perturbed Cell Exp
+
+Figure 1: Overview of the mechanism-centric virtual cell world model. Multimodal biological evidence is composed into reusable Latent Mechanism Unit (LMU) identities. A control profile 
+
+xci is encoded and routed to a sparse active LMU set with control mechanism states Hci , while the perturbation action ai is encoded as ψi. Each active LMU undergoes an action-conditioned stochastic transition to produce predicted perturbed mechanism states, which are decoded into the response distribution p(∆ xi | xci , a i) and the predicted profile bxpi = xci + bμi. During training, the observed perturbed profile is encoded through the same active LMUs to provide transition targets and support inverse prediction of the perturbation, without entering the forward prediction path. CPA [21] and SAMS-VAE [5] introduce structured latent effects, but a perturbation still enters primarily as an additive or conditioning term rather than as an action that transforms cellular state. We instead adopt a single-step world-model formulation that encodes an observation into latent state, transitions that state under a perturbation, and decodes the resulting response [11–14]. Because concurrent cellular programs can respond differently to the same intervention, we factorize state into mechanism-specific units, following the general principle of object-centric world models [8, 9, 19, 33]. We therefore introduce VCLMU, which represents a cell as a sparse set of Latent Mechanism Units (LMUs) selected from a bank of K units by a control-conditioned top-Ka router (Fig. 1). Each LMU separates a reusable identity from an observation-specific state: the identity represents which mechanism the unit captures and combines a learnable query with a set-encoder summary of a periodically refreshed candidate gene set grounded in multimodal gene evidence, while the state reflects the current activity of that mechanism from the expression of the same genes. Perturbations are encoded from the target gene and its regulatory neighborhood and applied independently to each active LMU, allowing heterogeneous responses across mechanisms. State transitions are residual and stochastic, with each unit drawing an action-conditioned Gaussian latent variable to represent variability not determined by the control state and perturbation. The transitioned states are then decoded into the perturbed expression profile. We explicitly supervise these latent transitions rather than only the final reconstruction: the observed perturbed profile is encoded through the same control-selected LMUs, and predicted state changes are aligned with the observed changes using stop-gradient targets, while the target branch is constrained to reconstruct the observed profile. The forward dynamics depend only on the control state and perturbation, preventing information leakage from the observed outcome. Our contributions are (i) a formulation of perturbation response as action-conditioned latent-state transition in addition to direct observation regression; (ii) LMUs, a factorized cellular state whose units carry separate stochastic dynamics under a shared action; and (iii) supervision of the latent transition itself, with stop-gradient targets and observation grounding that keep the learned target from collapsing, together with a two-stage curriculum that pretrains on pseudo-bulk perturbation profiles and continues on gene-aligned single-cell data. Across six perturbation benchmarks, VCLMU 2Figure 2: Perturbation prediction and LMU interpretability. (a) Jaccard@20 across six evaluation datasets for VCLMU-FT and baselines. (b) Stage 1 versus Stage 2 pretraining under the same down-stream fine-tuning protocol; annotations indicate the Jaccard@20 gain. (c) ∆PCC versus ∆PCC@20, showing global and DE-focused Pearson correlation jointly. (d) Enrichment of perturbation-specific response genes in learned LMU candidate gene sets across held-out perturbations after excluding ubiquitous response genes and subtracting the shared response; color indicates − log 10 (BH -FDR) .
+
+(e) Six representative significant associations between perturbations and LMUs whose overlapping response genes form biologically coherent programs spanning interferon response, mitotic regulation, T-cell signaling, T-cell activation, oxidative phosphorylation, and RNA processing; numbers indicate overlapping response genes. improves recovery of top response genes over strong baselines without sacrificing global response accuracy, and its learned units align with coherent, largely disjoint transcriptional programs. 
+
+## 2 Method 
+
+Problem formulation. Let xci , xpi ∈ RG denote a control reference and an associated perturbed expression profile, and let ai index the perturbed gene. We predict the response ∆xi = xpi − xci
+
+from (xci , a i). Each gene g carries a multimodal evidence embedding eg ∈ Rd built from functional annotation, pathway, interaction network, protein sequence, and tissue-expression resources, together with a gene-regulatory-network (GRN) neighborhood [16]. These features provide biological evidence for gene representation, while the response model itself is learned end-to-end. Details of the evidence representations are provided in Appendix C. Rather than fitting (xc, a ) 7 → ∆x directly, we factor the map through a latent state in the manner of a world model [11, 13]: encode the control cell into a 3structured latent state, transition that state under the perturbation, and decode the transitioned state into the transcriptional response. 
+
+Cellular state as a set of Latent Mechanism Units. A cell is represented by a set of K Latent Mechanism Units (LMUs), of which only a sparse subset Ai of size Ka is active per cell, in the spirit of slot-based object-centric encoders [19] and sparsely-gated expert routing [29]. Each LMU factorizes into an identity and a state, which differ in scope. The identity ℓk is shared across all cells and grounded in biological evidence: LMU k owns a small, periodically refreshed set of candidate genes Ck, and its identity blends a free learnable query qk with a permutation-invariant summary 
+
+SetEnc [18] of that set’s evidence embeddings, 
+
+ℓk = LayerNorm( αqk + (1 − α) SetEnc {eg : g ∈ C k}) , (1) where α ∈ (0 , 1) is learned. The free query allows each LMU to adapt to programs supported by the data, while the evidence term anchors its identity to biologically informed gene representations, yield-ing mechanism-level representations that are both biologically coherent and interpretable (Fig. 2d,e). The state hik is instead specific to a single observation: given a control profile xci , the observation encoder produces oci = fobs (xci ), which routes to the active set and provides global context for LMU state construction, 
+
+Ai = Route( oci ), hcik = fstate 
+
+ ℓk, {(eg , x cig )}g∈C k , oci
+
+ , k ∈ A i. (2) Identity therefore answers which mechanism a unit is, and state answers how active it currently is. Routing depends only on the control profile, so the active set is a property of the starting cell rather than of the outcome. We write hcik = hik (xci ) and stack the active states of a sample into Hci ∈ RKa×d.During training we additionally encode the observed perturbed profile as hpik = hik (xpi ), stacked into Hpi , using the same indices Ai: reusing the control-selected set puts the two representations in LMU-wise correspondence, so “how much did mechanism k move” is well defined. Routing, evidence construction, and candidate refresh are detailed in Appendix A. 
+
+Perturbation as an action on mechanism states. A perturbation is encoded once, into an action embedding ψi = fact (ai, {eg }, GRN) that summarizes the target gene together with its GRN neighborhood, and is then applied separately to each active LMU. Because every unit receives the same action but occupies a different state, one perturbation can strongly move some mechanisms and leave others untouched, a behavior that is difficult to represent with a single global latent state. Transitions are residual and stochastic, with a per-unit latent zik drawn from a learned conditional distribution q(zik | hcik , ψi) and regularized toward the prior p(zik ) = N (0, I) through a KL penalty [17], allowing the transition to represent variability not determined by the control state and the action: bhpik = hcik + fdyn (hcik , ψi, zik ) , zik ∼ q(zik | hcik , ψi) . (3) The residual form means the model predicts a change to each mechanism rather than re-deriving the cell from scratch. Critically, the dynamics see only the control state and the action, so the observed outcome cannot leak into the forward path. Stacking bhpik into bHpi as before, we supervise the dynamics by matching the predicted mechanism change to the observed one, 
+
+Ldyn = SmoothL1 
+
+ bHpi − Hci , sg[ Hpi − Hci ]
+
+
+
+, (4) where sg is a stop-gradient [23]: the encoder supplies the target but is not trained to make that target easy to hit. 
+
+Decoding the predicted state. The transitioned units are first mixed by a lightweight interaction layer, since mechanisms are not independent, and then read out by a cross-attention decoder [32] in which each gene attends to the predicted mechanism states using its own evidence embedding as the query. This produces a per-gene mean and variance, 
+
+(bμi, bvi) = fdec 
+
+
+
+{bhpik }k∈A i , {eg }Gg=1 
+
+
+
+, (5) defining a factorized Gaussian p(∆ xi | xci , a i) over the response. We identify the predicted response with its mean, c∆xi = bμi, giving the point prediction bxpi = xci + c∆xi. Using gene evidence both to define LMU identities and to query the predicted mechanism states keeps the latent and observation spaces grounded in the same biological vocabulary. 4Learning objective. Supervising only the decoded profile would leave the latent transition un-derdetermined, since many latent trajectories explain the same output. The full objective therefore combines the response likelihood with mechanism-level supervision and a small set of regularizers, 
+
+L = Lfwd + λdyn Ldyn + λKL LKL + λobs Lobs + λinv Linv + RLMU , (6) where Lfwd is the Gaussian negative log-likelihood of Eq. (5), Ldyn is the dynamics-alignment loss of Eq. (4), and LKL regularizes the transition distribution of Eq. (3). The remaining terms guard against degenerate solutions: Lobs requires the observed mechanism states to reconstruct the observed profile, preventing the transition target from collapsing to an arbitrary code; Linv asks an inverse model to recover the perturbation from the control and perturbed mechanism states, their difference, and their elementwise interaction, encouraging the encoded state changes to retain perturbation-specific information; and RLMU collects weak identity-anchor, diversity, and activity-entropy terms that keep LMUs distinct and used. We pretrain on perturbation-disjoint pseudo-bulk profiles and then continue on gene-aligned single-cell data, with dynamics alignment and target-state grounding disabled during Stage 2 (Appendix A). 
+
+## 3 Results 
+
+Setup. We evaluate on held-out single-gene perturbations under perturbation-disjoint downstream splits on widely used genetic perturbation datasets, so no perturbation in the downstream fine-tuning set appears at test time (see more details in Appendix D). VCLMU-FT denotes the Stage-2 pretrained model further fine-tuned on the downstream training split of each evaluation dataset. We report Jaccard@20 together with Pearson correlation on the full perturbation response ( ∆PCC) and the top responsive genes ( ∆PCC@20). 
+
+Held-out perturbation prediction. VCLMU-FT attains the best Jaccard@20 on all six datasets (Fig. 2a). The margin is small on Adamson [1] and Norman [22], where the condition-agnostic Perturbed Mean is already competitive, consistent with reports that simple baselines remain hard to beat [3]. The gains are largest on Replogle K562 and RPE1 [25] and Tian CRISPRi [31], where baselines recover few true response genes. Using the Stage 2 pretrained checkpoint for downstream fine-tuning improves Jaccard@20 on five of six datasets, with the largest gains on Adamson, Norman, and Tian CRISPRa, while preserving performance on Replogle RPE1 (Fig. 2b). This indicates that pseudo-bulk pretraining captures transferable perturbation structure that subsequent single-cell pretraining further sharpens. VCLMU also occupies the upper-right region of the ∆PCC/ ∆PCC@20 plane (Fig. 2c): accuracy on responsive genes does not come at the cost of the global response. 
+
+LMU candidate gene sets are associated with distinct perturbation-response programs. To assess the biological coherence of learned LMUs, we analyzed enrichment between perturbation-specific response genes and LMU candidate gene sets. Among 1,101 held-out perturbations with at least ten observations, after excluding ubiquitous response genes and subtracting the shared response, 86.6% are significantly associated with at least one LMU (BH-FDR < 0.05 ) [4]. In total, 56 distinct LMUs appear as the best match, with the most frequent accounting for only 20.9% of perturbations. The median best-LMU overlap is seven genes, corresponding to a 19.9-fold enrichment over the random-overlap expectation. Fig. 2(d,e) shows representative LMU associations whose overlapping response genes form biologically coherent programs spanning interferon response, mitotic regulation, T-cell signaling and activation, oxidative phosphorylation, and RNA processing. LMUs are also largely non-redundant: across 50,000 randomly sampled pairs, the median candidate-gene Jaccard is 
+
+0.0079 , with 47.9% sharing no genes and 80.1% having Jaccard < 0.05 .
+
+## 4 Conclusion 
+
+We introduced a mechanism-centric virtual cell world model that represents perturbation response as action-conditioned transitions over Latent Mechanism Units. Across held-out perturbations, VCLMU achieves strong response-gene recovery while maintaining global prediction accuracy, and the learned LMUs capture distinct and biologically coherent response programs. These results support mechanism-level latent state transition as a useful and interpretable formulation for virtual cell modeling. The current study focuses primarily on single-gene transcriptomic perturbations, and future work will extend LMU validation to multimodal and combinatorial perturbation settings. 5References 
+
+[1] Adamson, B., Norman, T. M., Jost, M., Cho, M. Y., Nuñez, J. K., Chen, Y., Villalta, J. E., Gilbert, L. A., et al. A multiplexed single-cell CRISPR screening platform enables systematic dissection of the unfolded protein response. Cell , 167(7):1867–1882, 2016. [2] Adduri, A. K., Gautam, D., Bevilacqua, B., Imran, A., Shah, R., Naghipourfar, M., Teyssier, N., Ilango, R., Nagaraj, S., Dong, M., et al. Predicting cellular responses to perturbation across diverse contexts with State. bioRxiv 2025.06.26.661135, 2025. [3] Ahlmann-Eltze, C., Huber, W., and Anders, S. Deep-learning-based gene perturbation effect prediction does not yet outperform simple linear baselines. Nature Methods , 22(8):1657–1661, 2025. [4] Benjamini, Y. and Hochberg, Y. Controlling the false discovery rate: a practical and powerful approach to multiple testing. Journal of the Royal Statistical Society: Series B , 57(1):289–300, 1995. [5] Bereket, M. and Karaletsos, T. Modelling cellular perturbations with the sparse additive mechanism shift variational autoencoder. In Advances in Neural Information Processing Systems (NeurIPS) , 2023. [6] Bunne, C., Roohani, Y., Rosen, Y., Gupta, A., Zhang, X., Roed, M., Alexandrov, T., AlQuraishi, M., et al. How to build the virtual cell with artificial intelligence: priorities and opportunities. Cell , 187(25):7045– 7063, 2024. [7] Cui, H., Wang, C., Maan, H., Pang, K., Luo, F., Duan, N., and Wang, B. scGPT: toward building a foundation model for single-cell multi-omics using generative AI. Nature Methods , 21:1470–1480, 2024. [8] Daniel, T. and Tamar, A. DDLP: unsupervised object-centric video prediction with deep dynamic latent particles. Transactions on Machine Learning Research , 2024. [9] Daniel, T., Qi, C., Haramati, D., Zadeh, A., Li, C., Tamar, A., Pathak, D., and Held, D. Latent particle world models: self-supervised object-centric stochastic dynamics modeling. In International Conference on Learning Representations (ICLR) , 2026. [10] Dixit, A., Parnas, O., Li, B., Chen, J., Fulco, C. P., Jerby-Arnon, L., Marjanovic, N. D., Dionne, D., Burks, T., Raychowdhury, R., et al. Perturb-Seq: dissecting molecular circuits with scalable single-cell RNA profiling of pooled genetic screens. Cell , 167(7):1853–1866, 2016. [11] Ha, D. and Schmidhuber, J. World models. arXiv preprint arXiv:1803.10122 , 2018. [12] Hafner, D., Lillicrap, T., Fischer, I., Villegas, R., Ha, D., Lee, H., and Davidson, J. Learning latent dynamics for planning from pixels. In International Conference on Machine Learning (ICML) , 2019. [13] Hafner, D., Lillicrap, T., Ba, J., and Norouzi, M. Dream to control: learning behaviors by latent imagination. In International Conference on Learning Representations (ICLR) , 2020. [14] Hafner, D., Pasukonis, J., Ba, J., and Lillicrap, T. Mastering diverse control tasks through world models. 
+
+Nature , 640(8059):647–653, 2025. [15] Hao, M., Gong, J., Zeng, X., Liu, C., Guo, Y., Cheng, X., Wang, T., Ma, J., Zhang, X., and Song, L. Large-scale foundation model on single-cell transcriptomics. Nature Methods , 21(8):1481–1491, 2024. [16] Kamimoto, K., Stringa, B., Hoffmann, C. M., Jindal, K., Solnica-Krezel, L., and Morris, S. A. Dissecting cell identity via network inference and in silico gene perturbation. Nature , 614(7949):742–751, 2023. [17] Kingma, D. P. and Welling, M. Auto-encoding variational Bayes. In International Conference on Learning Representations (ICLR) , 2014. [18] Lee, J., Lee, Y., Kim, J., Kosiorek, A. R., Choi, S., and Teh, Y. W. Set Transformer: a framework for attention-based permutation-invariant neural networks. In International Conference on Machine Learning (ICML) , 2019. [19] Locatello, F., Weissenborn, D., Unterthiner, T., Mahendran, A., Heigold, G., Uszkoreit, J., Dosovitskiy, A., and Kipf, T. Object-centric learning with slot attention. In Advances in Neural Information Processing Systems (NeurIPS) , 2020. [20] Lotfollahi, M., Wolf, F. A., and Theis, F. J. scGen predicts single-cell perturbation responses. Nature Methods , 16:715–721, 2019. 
+
+6[21] Lotfollahi, M., Klimovskaia Susmelj, A., De Donno, C., Hetzel, L., Ji, Y., Ibarra, I. L., Srivatsan, S. R., Naghipourfar, M., et al. Predicting cellular responses to complex perturbations in high-throughput screens. 
+
+Molecular Systems Biology , 19(6):e11517, 2023. [22] Norman, T. M., Horlbeck, M. A., Replogle, J. M., Ge, A. Y., Xu, A., Jost, M., Gilbert, L. A., and Weissman, J. S. Exploring genetic interaction manifolds constructed from rich single-cell phenotypes. Science ,365(6455):786–793, 2019. [23] van den Oord, A., Vinyals, O., and Kavukcuoglu, K. Neural discrete representation learning. In Advances in Neural Information Processing Systems (NeurIPS) , 2017. [24] Peidli, S., Green, T. D., Shen, C., Gross, T., Min, J., Garda, S., Yuan, B., Schumacher, L. J., et al. scPerturb: harmonized single-cell perturbation data. Nature Methods , 21(3):531–540, 2024. [25] Replogle, J. M., Saunders, R. A., Pogson, A. N., Hussmann, J. A., Lenail, A., Guna, A., Mascibroda, L., Wagner, E. J., et al. Mapping information-rich genotype-phenotype landscapes with genome-scale Perturb-seq. Cell , 185(14):2559–2575, 2022. [26] Roohani, Y., Huang, K., and Leskovec, J. Predicting transcriptional outcomes of novel multigene perturba-tions with GEARS. Nature Biotechnology , 42:927–935, 2024. [27] Roohani, Y. H., Hua, T. J., Tung, P.-Y., Bounds, L. R., et al. Virtual Cell Challenge: toward a Turing test for the virtual cell. Cell , 188(13):3370–3374, 2025. [28] Schubert, M., Klinger, B., Klünemann, M., Sieber, A., Uhlitz, F., Sauer, S., Garnett, M. J., Blüthgen, N., and Saez-Rodriguez, J. Perturbation-response genes reveal signaling footprints in cancer gene expression. 
+
+Nature Communications , 9(1):20, 2018. [29] Shazeer, N., Mirhoseini, A., Maziarz, K., Davis, A., Le, Q., Hinton, G., and Dean, J. Outrageously large neural networks: the sparsely-gated mixture-of-experts layer. In International Conference on Learning Representations (ICLR) , 2017. [30] Theodoris, C. V., Xiao, L., Chopra, A., Chaffin, M. D., Al Sayed, Z. R., Hill, M. C., Mantineo, H., Brydon, E. M., Zeng, Z., Liu, X. S., and Ellinor, P. T. Transfer learning enables predictions in network biology. 
+
+Nature , 618:616–624, 2023. [31] Tian, R., Abarientos, A., Hong, J., Hashemi, S. H., Yan, R., Dräger, N., Leng, K., Nalls, M. A., Singleton, A. B., Xu, K., et al. Genome-wide CRISPRi/a screens in human neurons link lysosomal failure to ferroptosis. Nature Neuroscience , 24(7):1020–1034, 2021. [32] Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L., and Polosukhin, I. Attention is all you need. In Advances in Neural Information Processing Systems (NeurIPS) , 2017. [33] Villar-Corrales, A. and Behnke, S. PlaySlot: learning inverse latent dynamics for controllable object-centric video prediction and planning. In International Conference on Machine Learning (ICML) , 2025. [34] Wang, C., Karimzadeh, M., Ravindra, N. G., Bounds, L. R., Alerasool, N., Huang, A. C., Ma, S., Cui, H., et al. X-Cell: scaling causal perturbation prediction across diverse cellular contexts via diffusion language models. bioRxiv 2026.03.18.712807, 2026. [35] The Gene Ontology Consortium. The Gene Ontology resource: enriching a GOld mine. Nucleic Acids Research , 49(D1):D325–D334, 2021. [36] Liberzon, A., Birger, C., Thorvaldsdóttir, H., Ghandi, M., Mesirov, J. P., and Tamayo, P. The Molecular Signatures Database (MSigDB) Hallmark Gene Set Collection. Cell Systems , 1(6):417–425, 2015. [37] Du, J., Jia, P., Dai, Y., Tao, C., Zhao, Z., and Zhi, D. Gene2vec: distributed representation of genes based on co-expression. BMC Genomics , 20(Suppl 1):82, 2019. [38] Szklarczyk, D., Kirsch, R., Koutrouli, M., et al. STRING v12: protein–protein association networks sup-porting functional discovery in genome-wide experimental datasets. Nucleic Acids Research , 52(D1):D619– D631, 2024. [39] Cho, H., Berger, B., and Peng, J. Compact integration of multi-network topology for functional analysis of genes. Cell Systems , 3(6):540–548, 2016. [40] Gillespie, M., Jassal, B., Stephan, R., et al. The Reactome pathway knowledgebase 2024. Nucleic Acids Research , 52(D1):D672–D678, 2024. 
+
+7[41] Lin, Z., Akin, H., Rao, R., et al. Evolutionary-scale prediction of atomic-level protein structure with a language model. Science , 379(6637):1123–1130, 2023. [42] GTEx Consortium. The GTEx Consortium atlas of genetic regulatory effects across human tissues. Science ,369(6509):1318–1330, 2020. [43] Huang, A. C., Hsieh, T.-H. S., Zhu, J., Michuda, J., Teng, A., Kim, S., Rumsey, E. M., Lam, S. K., Anigbogu, I., Wright, P., Ameen, M., You, K., Graves, C. J., Kim, H. J., Litterman, A. J., Sit, R. V., Blocker, A., and Chu, C. X-Atlas/Orion: Genome-wide Perturb-seq Datasets via a Scalable Fix-Cryopreserve Platform for Training Dose-Dependent Biological Foundation Models. bioRxiv , 2025. doi:10.1101/2025.06.11.659105. [44] Zhu, R., Dann, E., Yan, J., Retana, J. R., Goto, R., Guitche, R. C., Petersen, L. K., Ota, M., Pritchard, J. K., and Marson, A. Genome-scale Perturb-seq in primary human CD4+ T cells maps context-specific regulators of T cell programs and human immune traits. bioRxiv , 2025. 
+
+8A Additional Method Details 
+
+A.1 Notation and gene evidence 
+
+We describe all quantities for a single sample i consisting of a control reference and its associated perturbed profile. A superscript c denotes the control state, a superscript p denotes the perturbed state, and a hat denotes a model prediction. All losses below are per-sample; the training objective averages them over the mini-batch. The operator Top n returns the indices of the n largest scores, 
+
+norm denotes ℓ2 normalization, sg denotes stop-gradient, and ⊙ denotes elementwise product. All functions written f• and all matrices written W• are learned. 
+
+xci , xpi ∈ RG are the control reference and perturbed profile, ai is the index of the perturbed gene, and ∆xi = xpi − xci . The model contains K LMUs, of which a sparse subset Ai of size Ka is active for sample i. Each LMU maintains C candidate genes. Bold lower-case letters denote vectors; 
+
+Hci , Hpi , bHpi ∈ RKa×d stack the corresponding LMU states. Table 1 summarizes the symbols used throughout. Table 1: Notation used in the main text and appendix. 
+
+Symbol Meaning 
+
+G, g number of genes; gene index 
+
+K, k number of LMUs in the bank; LMU index 
+
+Ka, Ai number of active LMUs for sample i; their index set 
+
+C, Ck candidate genes per LMU; candidate set of LMU kd, dz model width; latent transition width 
+
+xci , xpi , bxpi control profile; observed perturbed profile; predicted perturbed profile 
+
+∆xi, c∆xi observed response xpi − xci ; predicted response 
+
+ai, ψi perturbed gene (action); action embedding 
+
+GL(ai) the L highest-weight GRN neighbors of gene ai
+
+e(m) 
+
+> g
+
+, ee(m) 
+
+> g
+
+, eg raw, projected, and fused multimodal evidence for gene g
+
+Mg , m available modalities for gene g; modality index 
+
+qk, q0 
+
+> k
+
+learnable LMU query; its initialization anchor 
+
+ℓk, ¯ℓk live LMU identity; EMA prototype 
+
+oci , opi observation summaries fobs (xci ) and fobs (xpi )
+
+wcik , wpik LMU activity weights from xci and xpi
+
+uk, bk pooled candidate-gene features; identity–expression fusion 
+
+hcik , hpik , bhpik control, observed perturbed, and predicted perturbed LMU state 
+
+zik , μik , σ2 
+
+> ik
+
+transition latent; its conditional mean and variance 
+
+δik , ∆hik raw and FiLM-modulated LMU state update 
+
+bμig , bvig predicted per-gene response mean and variance 
+
+Nk cumulative usage count of LMU k
+
+Let e(m) 
+
+> g
+
+∈ Rdm be the raw modality-m feature for gene g, and let Mg be its set of available modalities. The evidence memory computes 
+
+ee(m) 
+
+> g
+
+= LN m
+
+
+
+Wme(m)
+
+> g
+
+
+
+, eg = We
+
+ 1
+
+|M g |
+
+X
+
+> m∈M g
+
+ee(m)
+
+> g
+
+ . (7) All modality projections and We are shared across genes. The implementation supports control-expression statistics, control co-expression PCs, Gene Ontology, Hallmark and PROGENy member-ships, Gene2vec, STRING-PPI, Reactome, protein-language-model embeddings, and GTEx tissue expression. The evidence module supports per-gene modality masks; unavailable modalities are omitted from the average in Eq. (7). Any evidence or GRN feature estimated from perturbational expression is fitted using the training split only. 9The shared set encoder used below is a Transformer encoder followed by masked mean pooling and LayerNorm: 
+
+SetEnc( {tj }nj=1 ) = LN 
+
+ 1
+
+n
+
+> n
+
+X
+
+> j=1
+
+Transformer( {Wstj }nj=1 )j
+
+ . (8) 
+
+A.2 LMU identities and candidate-gene refresh 
+
+Each LMU has a learnable query qk and an initialization anchor q0 
+
+> k
+
+obtained from gene-evidence centroids. The implementation permits deterministic tile means or K-means initialization; the reported training entry point uses deterministic tile means. Given candidate set Ck, its live identity is 
+
+ℓk = LN ( αqk + (1 − α) SetEnc {eg : g ∈ C k}) , α = sigmoid( α0). (9) For selected LMUs, an exponential moving average (EMA) prototype is updated by 
+
+¯ℓk ← cema ¯ℓk + (1 − cema ) sg[ ℓk]. (10) Candidate membership is refreshed periodically along the direction 
+
+nk = norm   12 norm( qk) + 12 norm( ¯ℓk) , (11) giving 
+
+Ck = Top C
+
+cos( eg , nk) + cloy 1{g ∈ C old  
+
+> k
+
+}Gg=1 . (12) The loyalty bonus cloy provides hysteresis against abrupt membership replacement. Candidate sets may overlap; the model therefore does not impose a hard partition of genes. In distributed training, EMA statistics and usage counts are synchronized before every refresh. 
+
+A.3 Control-based routing and state construction 
+
+The action-independent observation encoder produces oci = fobs (xci ) for the control reference and 
+
+opi = fobs (xpi ) for the observed perturbed profile. Routing uses the control reference only: 
+
+Ai = Top Ka
+
+
+
+cos  norm( Wooci ), norm( ¯ℓk) + cucb 
+
+√Nk + 1 
+
+Kk=1 
+
+, (13) 
+
+wcik = exp  cos( Wooci , ¯ℓk)/τ P 
+
+> j∈A i
+
+exp  cos( Wooci , ¯ℓj )/τ  , k ∈ A i, (14) where Nk is the cumulative usage count of LMU k and τ = 0 .01+0 .99 sigmoid( τ0). The exploration bonus affects only the discrete top-Ka selection; gradients flow through the soft activity weights. For the observed perturbed profile, wpik is recomputed from opi over the fixed set Ai.Writing y for either profile, candidate-gene tokens, and expression-specific LMU features are 
+
+tg (y) = eg + ϕ(yg ), uk(y) = SetEnc {tg (y) : g ∈ C k}. (15) Identity and expression are fused before adding weak global context: 
+
+bk(y) = ffuse ([ ℓk; uk(y)]) , (16) 
+
+hk(y) = ρk(y) fmix ([ bk(y); η f obs (y)]) , (17) 
+
+ρk(y) = clip ( Ka wk(y), 0.25 , 4) . (18) Together, ffuse , fmix , and the activity scaling ρk constitute the state encoder fstate of Eq. (2). The global-context gate is η = sigmoid( η0) with η0 initialized to −3, so the state initially depends primarily on LMU-specific candidate-gene expression. The same encoder and active indices define 
+
+hcik = hik (xci ) and hpik = hik (xpi ).10 A.4 Perturbation encoder and stochastic transition 
+
+For the configured GRN-aware action encoder, let GL(ai) be the L highest-weight GRN neighbors of perturbed gene ai. The action representation is 
+
+ci = MHA  eai , {eg }g∈G L(ai), {eg }g∈G L(ai)
+
+ , ψi = fact ([ eai ; ci]) . (19) A simpler ablation uses ψi = eai .For each active LMU, 
+
+μik ; log σ2
+
+> ik
+
+ = fprior ([ hcik ; ψi]) , (20) 
+
+zik = μik + σik ⊙ ϵik , ϵik ∼ N (0, I), (21) 
+
+δik = ftrans ([ hcik ; ψi; zik ]) , (22) 
+
+[γik ; βik ] = ffilm ([ hcik ; ψi]) , (23) 
+
+∆hik = (1 + tanh γik ) ⊙ δik + cres tanh βik , bhpik = hcik + ∆ hik . (24) These blocks jointly implement fdyn of Eq. (3). The implementation uses cres = 0 .1 to limit a deterministic additive bypass around zik . During training, zik is sampled; at validation and inference, 
+
+zik = μik . The KL term is 
+
+LKL = 1
+
+Ka
+
+X
+
+> k∈A i
+
+12
+
+> dz
+
+X
+
+> j=1
+
+μ2 
+
+> ikj
+
++ σ2 
+
+> ikj
+
+− log σ2 
+
+> ikj
+
+− 1 . (25) This is a KL-regularized conditional transition; there is no target-conditioned variational posterior. 
+
+A.5 Observation decoder and inverse model 
+
+A one-layer Transformer first permits interactions among predicted LMUs. Gene evidence is reused as decoder queries through Wq :
+
+eHpi = Transformer LMU ( bHpi ), (26) 
+
+dig = LN 
+
+
+
+MHA( Wq eg , eHpi , eHpi ) + Wq eg
+
+
+
+, (27) 
+
+[bμig ; log bvig ] = fgene ([ dig ; Wq eg ]) . (28) Together these blocks form the decoder fdec of Eq. (5). The forward prediction loss is 
+
+Lfwd = 12G
+
+> G
+
+X
+
+> g=1
+
+
+
+log bvig + (∆ xig − bμig )2
+
+bvig 
+
++ log(2 π)
+
+
+
+. (29) The inverse model predicts the perturbed gene using only the encoded state change. It forms per-LMU tokens 
+
+rik = finv ([ hcik ; hpik ; hpik − hcik ; hpik ⊙ hcik ]) , (30) attention-pools them into ¯ri, and computes 
+
+sig = exp( ξ) cos(¯ ri, W inv eg ) , Linv = CE( si, a i), (31) where ξ is a learnable logit scale and si = ( si1, . . . , s iG ). The true perturbation identity ai is used only as the classification target, not as an input to the inverse head. 
+
+A.6 Auxiliary supervision and LMU regularization 
+
+Because the active indices are shared, dynamics supervision is position-wise: 
+
+Ldyn = SmoothL1 
+
+ bHpi − Hci , sg[ Hpi − Hci ]
+
+
+
+. (32) The stop-gradient prevents the target branch from moving merely to match the prediction. To ground that branch independently, 
+
+¯hpi = X
+
+> k∈A i
+
+wpik hpik , Lobs = SmoothL1  Wout (¯hpi ), xpi
+
+ . (33) 11 The structural regularizer is 
+
+RLMU = λdiv Rdiv + λanc Ranc + λact Ract , (34) with 
+
+Rdiv = Ek̸ =l
+
+max {0, cos( ℓk, ℓl) − cdiv }2 , (35) 
+
+Ranc = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+1 − cos( qk, q0
+
+> k
+
+) , (36) 
+
+Hi = − X
+
+> k∈A i
+
+wcik log( wcik + 10 −8), Ract = ( Ei[Hi] − H⋆)2 , (37) where Ei[Hi] is the mini-batch mean of the per-cell activity entropy. The diversity expectation is estimated from sampled pairs of live, active LMUs. Unlike plain entropy minimization, Ract targets a moderate entropy H⋆ and therefore discourages both one-LMU collapse and uniform activity. Combining the terms gives 
+
+L = Lfwd + λdyn Ldyn + λobs Lobs + λKL LKL + λinv Linv + RLMU , (38) where λKL and, when used, λinv follow linear warm-up schedules that scale them from 0 to their final values, and all per-sample terms are averaged over the mini-batch. 
+
+A.7 Two-stage training and inference 
+
+We first form perturbation-disjoint data splits before any response-derived preprocessing or model fitting. All response-derived preprocessing, control statistics, GRN construction, and evidence fitting are performed using training data only. 
+
+Stage 1: pseudo-bulk pretraining. For each perturbed pseudo-bulk profile, xci is the training control mean for its context. The model is optimized end-to-end, including evidence projections, set encoder, LMU queries, dynamics, and decoder. Candidate memberships are refreshed periodically from synchronized EMA prototypes. The current configuration jointly uses forward prediction, dynamics alignment, target-state grounding, inverse prediction, KL regularization, and LMU regular-ization. 
+
+Stage 2: single-cell pretraining. The stage-1 checkpoint is restored before recomputing evidence-derived quantities. Single-cell profiles are log-transformed and aligned one-to-one to the stage-1 gene order; only shared genes contribute to observation losses. The control reference is estimated from training control cells. Evidence projections are then frozen, and the remaining model continues pretraining at a lower learning rate. In the current configuration, the dynamics and target-state-grounding terms are disabled, while the forward and inverse objectives remain active. At inference, the observed perturbed profile is absent: the model selects LMUs from xci , encodes 
+
+ai, sets zik = μik , predicts bHpi , and returns bxpi = xci + bμi. The target-state, state-grounding, and inverse branches are not required. 
+
+## B Data 
+
+Pseudo-bulk corpus. Stage-1 training uses approximately 200K pseudo-bulk genetic perturbation profiles constructed from publicly available datasets comprising more than 10 million single-cell perturbation profiles, including X-Atlas-Orion [43], Marson [44], and the Virtual Cell Challenge 2025 collection [27]. We use only gene perturbation experiments (e.g., CRISPR knockout, CRISPR interference, and CRISPR activation) and exclude chemical perturbation data. Pseudo-bulk profiles are generated by randomly aggregating 200 cells from the same perturbation condition within each cellular context, improving the signal-to-noise ratio while preserving perturbation-specific and context-specific biological responses. Expression profiles are normalized and log-transformed over a shared gene vocabulary. For each perturbed pseudo-bulk profile, the control reference xci is defined as the mean expression profile of the corresponding training control cells from the same cellular context. 12 Single-cell data. Stage 2 continues pretraining on gene-aligned single-cell genetic perturbation data derived from the same resources, including X-Atlas-Orion [43], Marson [44], and the Virtual Cell Challenge 2025 collection [27]. Profiles are library-size normalized and log-transformed. Only genes shared between Stage 1 and Stage 2 contribute to the observation losses. For each dataset, the control reference is estimated as the mean expression profile of the corresponding training control cells. 
+
+Evaluation Datasets Evaluation datasets are Adamson [1], Norman [22], Replogle K562 and RPE1 [25], and Tian CRISPRa and CRISPRi [31], spanning multiple genetic perturbation screens and cellular contexts. 
+
+Gene evidence. Each gene carries a multimodal evidence embedding built from co-expression, Gene Ontology, MSigDB Hallmark, PROGENy, Gene2Vec, STRING Mashup, Reactome, ESM2, and GTEx representations (Appendix C). Features estimated from perturbational expression are fitted using the training split only. 
+
+## C Biological Evidence Representations 
+
+To incorporate complementary biological evidence, we augment each gene with a collection of representations capturing transcriptional co-regulation, functional annotation, signaling pathways, interaction networks, protein sequence, and tissue-specific expression. These biological evidence representations combine information from curated biological resources with training-derived expres-sion statistics. All representations are constructed at the human gene level, aligned to the shared gene vocabulary used throughout training, and standardized prior to model training. Each evidence modality m provides the raw feature e(m) 
+
+> g
+
+used in Eq. (7). Table 2: Biological evidence representations used to construct the multimodal gene evidence embed-ding.                      
+
+> Evidence Source Description Dim.
+> m1Training co-expression Principal components of the training-set gene–gene co-expression matrix, capturing major transcriptional covariance patterns.
+> ≤
+> 256
+> m2Gene Ontology [35] Gene–term association matrix compressed using truncated SVD to summarize biological process, molecular function, and cellular component annotations. 512
+> m3MSigDB Hallmark [36] Binary membership in the Hallmark gene sets, representing approximately 50 curated biological programs.
+> ∼50
+> m4PROGENy [28] Association with the 14 PROGENy signaling pathways, providing pathway-level functional information. 14
+> m5Gene2Vec [37] Pretrained gene embeddings capturing functional similarity learned from large-scale biological co-occurrence. 200
+> m6STRING + Mashup [38, 39] Protein interaction network embedding capturing both local and global network topology. 800
+> m7Reactome [40] Gene–pathway association matrix compressed using truncated SVD to summarize Reactome pathway memberships. 200
+> m8ESM2-3B [41] Protein language model embedding encoding evolutionary and structural information from protein sequences. 2560
+> m9GTEx v8 [42] RNA-seq expression profiles across 54 human tissues, providing tissue-specific biological context. 54
+
+Among these evidence representations, only the co-expression representation ( m1) is estimated from the training data. All remaining representations are obtained from external biological resources. PCA is used to construct the co-expression representation, while truncated SVD is applied to the Gene Ontology and Reactome annotation matrices to obtain compact embeddings. 13 D Experimental Details 
+
+D.1 Perturbation-disjoint Data Splits 
+
+The perturbation-disjoint constraint is applied to downstream fine-tuning and evaluation splits. Because Stage 1 and Stage 2 pretraining use separate large-scale perturbation corpora, a downstream test perturbation may still appear during pretraining in a different dataset or cellular context. Following the perturbation-disjoint evaluation setting used in prior perturbation-response benchmarks, we split each evaluation dataset by perturbation identity rather than by individual cells. For each random seed, 25% of the genetic perturbations are held out for testing, and all cells associated with a held-out perturbation are assigned to the test set. The remaining perturbations are used for downstream model development, ensuring that no test perturbation appears as an intervention during downstream model fitting. This setting evaluates generalization to held-out perturbation identities rather than to new cells from perturbations already observed during training. We repeat the perturbation-level split across three random seeds and report performance aggregated over the resulting test sets. For downstream evaluation, VCLMU-FT initializes from the Stage-2 pretrained checkpoint and is further fine-tuned using only the downstream training split of each evaluation dataset. Held-out perturbations are never used during downstream fine-tuning. 
+
+D.2 Baseline Implementation Details 
+
+All baselines are evaluated under the same perturbation-disjoint splits described in Appendix D.1. For each dataset and random seed, models are trained using only the downstream training split and evaluated on held-out perturbation identities. For each held-out perturbation, we compare the observed condition-level mean expression profile with the corresponding mean predicted profile. 
+
+GEARS. We use the official cell-gears implementation [26]. GEARS propagates perturbation effects over a gene graph constructed from biological relationships. The model is trained indepen-dently for each dataset and random split with hidden size 64 , batch size 32 , and 50 training epochs using Adam with learning rate 10 −3. Predictions for each held-out perturbation are obtained using the model’s standard perturbation-conditioned prediction procedure. 
+
+CPA. We use the cpa-tools implementation [21]. The model uses a 64 -dimensional latent representation with a Gaussian reconstruction objective. The encoder contains four layers of width 
+
+256 with batch normalization and dropout 0.2, while the decoder contains two layers of width 256 .Perturbation identity, dosage, and cell type are represented as covariates, together with the adversarial training objective of CPA. Models are trained with Adam at learning rate 10 −3 for up to 50 epochs with early stopping. At inference, control cells are provided together with the target perturbation, and predicted profiles are averaged to obtain the condition-level prediction. 
+
+scGPT and scGPT-FT. We use the TransformerGenerator architecture from scGPT [7], with embedding dimension 512 , feed-forward dimension 512 , 12 Transformer layers, 8 attention heads, and dropout 0.2. Perturbation identity is represented as a binary per-gene perturbation indicator together with gene expression values. scGPT is trained from random initialization, whereas scGPT-FT initializes the encoder, value encoder, and Transformer encoder from the pretrained scGPT_human 
+
+checkpoint before downstream fine-tuning. Both variants are trained with batch size 8 using Adam with learning rate 10 −4 for up to 15 epochs and early stopping on validation masked MSE. At inference, predictions are generated from sampled control cells paired with the target perturbation and averaged to obtain the condition-level prediction. 
+
+Perturbed Mean. We include a condition-agnostic reference that predicts the same perturbation response for every held-out perturbation. Specifically, the prediction is the mean expression profile pooled over all non-control cells in the downstream training split, without using the identity of the test perturbation. 
+
+D.3 LMU Interpretability Analysis 
+
+We evaluate the interpretability of the learned LMUs from two complementary perspectives: whether different LMUs form non-redundant gene modules, and whether these modules align with 14 perturbation-specific transcriptional responses. Each background LMU k is associated with a learned candidate gene set Ck, defined by the candidate gene indices retained by the trained model. 
+
+LMU non-redundancy. We first assess whether the learned LMU library collapses to highly overlapping gene modules. For two LMUs k and l, we compute the Jaccard similarity between their candidate gene sets, 
+
+J(k, l ) = |C k ∩ C l||C k ∪ C l| .
+
+We evaluate the distribution of Jaccard similarities over 50,000 randomly sampled pairs of distinct LMUs. We report the median Jaccard similarity, the fraction of sampled pairs with zero candidate-gene overlap, and the fraction with Jaccard similarity below 0.05 . These statistics quantify whether the learned LMU library contains distinct rather than highly redundant gene modules. 
+
+Perturbation-specific response construction. We next test whether held-out perturbations pref-erentially align with different learned LMUs. For each perturbation ai, we compute an observed transcriptional response relative to its matched control context. For every observation associated with 
+
+ai, the corresponding context-specific control reference is subtracted from the perturbed expression profile, and the resulting response vectors are averaged over observations carrying the same perturba-tion. We denote the resulting mean response by ∆xi. Only held-out perturbations represented by at least 10 observations are retained for this analysis. Because raw perturbation responses can contain transcriptional changes shared across many per-turbations, we explicitly remove ubiquitous and shared response signals before measuring LMU alignment. We first identify genes that recurrently appear among strong raw responses. For each retained perturbation, we select the 200 genes with the largest absolute values in ∆xi, excluding the directly perturbed gene itself. Let T raw  
+
+> i
+
+denote this set. For each gene g, we compute its prevalence across perturbations, 
+
+πg = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+1 [g ∈ T raw  
+
+> i
+
+] ,
+
+where N is the number of retained perturbations. Genes with πg > 0.20 are treated as ubiquitous response genes and excluded from subsequent enrichment analysis. We additionally subtract the signed response shared across perturbations. Specifically, we compute the gene-wise median response 
+
+m = median i (∆ xi) ,
+
+and define the residual perturbation-specific response as 
+
+ri = ∆ xi − m.
+
+Among genes not classified as ubiquitous, we select the 100 genes with the largest absolute residual response |ri| for each perturbation, again excluding the directly perturbed gene. We denote this perturbation-specific response set by Si.
+
+Perturbation–LMU enrichment. For each perturbation–LMU pair (i, k ), we quantify whether the perturbation-specific response set Si significantly overlaps the candidate gene set of LMU k.Ubiquitous response genes are removed from Ck before testing. Let eCk denote the resulting LMU candidate set and let Geff denote the number of genes remaining in the effective background universe. We compute the observed overlap 
+
+Oik = |S i ∩ eCk|,
+
+and evaluate its significance using a one-sided hypergeometric test with population size Geff , | eCk|
+
+candidate genes, and |S i| sampled response genes. The expected overlap under the corresponding random-overlap null is 
+
+Eik = |S i|| eCk|
+
+Geff 
+
+.
+
+We define fold enrichment as 
+
+Fik = Oik 
+
+Eik 
+
+.
+
+15 For each perturbation independently, the hypergeometric p-values obtained across all LMUs are corrected using the Benjamini–Hochberg procedure [4]. We consider a perturbation–LMU association significant when the resulting FDR is below 0.05 . For visualization, association strength is represented as 
+
+− log 10 (FDR ik ).
+
+The best-matching LMU for perturbation i is defined as the LMU with the largest − log 10 (FDR ik ).Summary statistics are computed over all retained held-out perturbations. We report the fraction of perturbations whose best-matching LMU has FDR < 0.05 , the number of distinct LMUs appearing as a best match, and the fraction of perturbations assigned to the most frequently selected best-matching LMU. We additionally report the median observed overlap Oik and the median fold enrichment Fik 
+
+evaluated at the best-matching LMU of each perturbation. These quantities respectively summarize the prevalence, diversity, concentration, overlap size, and enrichment strength of perturbation-specific LMU associations. 
+
+Representative biological programs. To provide qualitative examples of the biological structure captured by the learned units, we further examine representative significant perturbation–LMU associations. For each selected pair, we inspect the genes in the intersection 
+
+Si ∩ eCk,
+
+which are simultaneously among the strongest perturbation-specific response genes and members of the corresponding learned LMU candidate set. The six representative associations shown in Fig. 2 are EDRF1–LMU 905, SLC10A7–LMU 332, ANKRD16–LMU 325, TMEM33–LMU 925, CARMIL1–LMU 439, and SCML2–LMU 1836. Bio-logical program labels are assigned based on the functional coherence of the overlapping genes rather than through an automated pathway-enrichment procedure. For example, the EDRF1–LMU 905 over-lap contains interferon-associated genes including IFI44 , IFI44L , IFI6 , IFIH1 , IFIT3 , ISG15 , MX1 ,
+
+OAS1 , OAS2 , and RSAD2 , motivating its annotation as an interferon-response program. Similarly, the other representative overlaps contain coherent gene groups related to mitotic regulation, T-cell signaling, T-cell activation, oxidative phosphorylation, and RNA processing. 
+
+D.4 Evaluation Metrics 
+
+We evaluate perturbation-response predictions independently for each held-out perturbation condition. For a test perturbation p, let xp ∈ RG denote the observed condition-level expression profile and 
+
+bxp ∈ RG denote the corresponding model prediction over the same G genes. All control reference profiles are constructed exclusively from the training split, while ground-truth differential-expression sets are used only for evaluation. We report three complementary metrics: ∆PCC for global response prediction, ∆PCC@20 for prediction of strongly responsive genes, and Jaccard@20 for recovery of response-gene identities. 
+
+Control-referenced perturbation response. We first construct a common control reference using all control cells in the training split. Let Xctrl denote the set of training control profiles. The training control mean is 
+
+¯xctrl = 1
+
+|X ctrl |
+
+X
+
+> x∈X ctrl
+
+x. (39) For each held-out perturbation p, the observed and predicted perturbation-induced expression changes are defined relative to the same control reference: 
+
+∆xp = xp − ¯xctrl , c∆xp = bxp − ¯xctrl . (40) Using the same training-derived control reference for both observed and predicted profiles ensures that the evaluation measures agreement in the perturbation-induced response under a common baseline. 
+
+Global perturbation-response correlation. We use Pearson correlation across all evaluated genes to measure agreement between the observed and predicted perturbation-response profiles: 
+
+∆PCC p = PCC 
+
+
+
+∆xp, c∆xp
+
+
+
+. (41) This metric evaluates whether the model reproduces the direction and relative magnitude of gene-expression changes induced by a held-out perturbation across the full transcriptional response. 16 DE-focused perturbation-response correlation. Because the global correlation includes many genes that change only weakly under a perturbation, we additionally evaluate prediction accuracy on the most strongly responsive genes. For each perturbation p, we use the benchmark-provided set of the top 20 non-dropout differentially expressed genes identified from the observed perturbation response, denoted by 
+
+Dp = {g1, . . . , g 20 }, |D p| = 20 . (42) The set Dp is defined exclusively from the ground-truth observations and is independent of model predictions. We then compute Pearson correlation after restricting both response vectors to these genes: 
+
+∆PCC@20 p = PCC 
+
+
+
+∆xp[Dp], c∆xp[Dp]
+
+
+
+. (43) While ∆PCC measures agreement over the complete transcriptional response, ∆PCC@20 focuses specifically on whether the model correctly captures the direction and relative magnitude of expression changes among the genes most strongly affected by the perturbation. 
+
+Top-20 response-gene recovery. ∆PCC@20 evaluates prediction accuracy on genes that are already known from the ground-truth experiment to be highly responsive, but it does not measure whether the model itself can identify which genes should respond most strongly. We therefore additionally report Jaccard@20. Genes are ranked by the absolute magnitude of their predicted perturbation-induced change relative to the training control mean, giving the predicted top-20 response set 
+
+bDp = Top 20 
+
+n c∆xpg 
+
+oGg=1 
+
+. (44) We then compare the predicted response genes with the ground-truth top-20 non-dropout DE genes using the Jaccard index: 
+
+Jaccard@20 p =
+
+Dp ∩ bDp
+
+Dp ∪ bDp
+
+. (45) Jaccard@20 is therefore complementary to ∆PCC@20: the latter measures expression agreement on the experimentally identified responsive genes, whereas Jaccard@20 evaluates whether the model can recover the identities of those genes from its own predicted response. 
+
+Aggregation. All three metrics are computed independently for each held-out perturbation condi-tion. Condition-level scores are then averaged across the held-out perturbations within each split, and the evaluation is repeated over the three perturbation-disjoint random splits described above. We report the resulting mean performance across the three splits, with variability summarized by the corresponding standard deviation. 17
