@@ -1,0 +1,405 @@
+Title: CloneOT: predicting clone-specific perturbation responses with lineage-supervised neural inverse optimal transport
+
+URL Source: https://arxiv.org/pdf/2610.16093v1
+
+Published Time: Wed, 14 Oct 2026 02:20:48 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# CloneOT: predicting clone-specific perturbation responses with lineage-supervised neural inverse optimal transport 
+
+Yanshuo Chen 1,2, Wei Chen 3,4, and Heng Huang 1,2,5 
+
+> 1
+
+Department of Computer Science, University of Maryland, College Park, MD, 20742, USA.  
+
+> 2
+
+Center of Bioinformatics and Computational Biology, College Park, MD, 20740, USA.  
+
+> 3
+
+Department of Biostatistics, University of Pittsburgh, Pittsburgh, PA, 15261, USA.  
+
+> 4
+
+Department of Pediatrics, UPMC Children’s Hospital of Pittsburgh, Pittsburgh, PA, 15224, USA.  
+
+> 5
+
+Institute of Health Computing, University of Maryland, North Bethesda, MD, 20852, USA. 
+
+Abstract. Predicting single-cell perturbation responses requires mapping between two unpaired pop-ulations of cells measured before and after the perturbation. Optimal transport (OT) provides a prin-cipled framework for constructing such mappings by minimizing the transport cost, and neural OT methods ( e.g. , CellOT) have been employed for this prediction task. However, these methods rely on a fixed transport cost, typically the squared Euclidean distance. This cost may connect cells with the wrong responses. Lineage tracing provides the information needed to learn the cost, as heritable bar-codes link the cells of the same clone before and after the perturbation. Here, we propose CloneOT, a neural inverse OT method that learns both the transport cost and the transport map from partially lineage-traced single-cell datasets. CloneOT represents the cost as a neural network. It learns the cost by minimizing the extra cost that the lineage adds to the optimal transport, so that the cheapest transport keeps the cells of each clone together. Our experiments demonstrate that CloneOT recovers the correct transport on 2D datasets, while the squared Euclidean cost fails. Moreover, CloneOT out-performs five baselines on 14 lineage-tracing perturbation scenarios of cancer cells, for both seen and unseen clones. Furthermore, we show that CloneOT reveals the clone-specific transcriptional programs of drug-tolerant persister cells and forecasts the fate of each clone from its cells before treatment. Our implementation is available at https://github.com/poseidonchan/CloneOT .
+
+Keywords: Optimal transport · Inverse optimal transport · Lineage tracing · Neural cost · Single-cell perturbation arXiv:2610.16093v1 [q-bio.GN] 12 Oct 2026 1 Introduction 
+
+Single-cell perturbation experiments measure how drugs, genetic interventions and other stimuli change the molecular states of individual cells. They have important implications for cancer research [1] and drug development [2]. Predicting these responses computationally is also a key task of recent efforts toward virtual cell models [3,4,5]. In particular, predicting the response of a cell from its state before the perturbation can explain why cells of the same population respond differently. For example, a small fraction of cancer cells persists under targeted therapy [6,7]. However, single-cell RNA sequencing (scRNA-seq) destroys the cells it measures. It is therefore impossible to observe the same cell before and after the perturbation, and a model must learn a mapping between two unpaired populations. Since no cell is observed twice, a model has to decide which cell before the perturbation becomes which cell after it. Previous models make this decision implicitly, by making different assumptions during modeling. scGen assumes that the perturbation shifts every cell by the same vector in a learned latent space [8], and SquidDiff, a conditional diffusion model, applies the same shift to its conditioning vector [9]. chemCPA and bioLORD assume that the basal state of a cell and the effect of the perturbation can be disentangled, so the perturbation changes the effect while the cell keeps its basal state [10,11]. Optimal transport (OT) methods such as CellOT assume that all features of a cell are equally important under the perturbation and they move cells onto the target population at the minimal total cost measured by the squared Euclidean distance [12,13,14]. This assumption does not match the observation that a perturbation changes some features much more than others. However, unpaired data produced by conventional scRNA-seq cannot identify the correct cost. For example, if two equally abundant groups of cells exchanged their responses, the treated population would look exactly the same. Hence, an optimal transport model with the Euclidean cost would then assign both groups the wrong response. Lineage tracing provides the missing link. Heritable barcodes mark the descendants of a common ancestor. The cells of a clone can therefore be identified before and after treatment, even though their states and numbers change [6,15,16,7]. A clone links a set of source cells to a set of target cells without pairing individual cells. Previous methods used lineage information to constrain the couplings of OT-based trajectory inference [17,18] and to supervise transition maps [19,20,21,22]. Nevertheless, these methods relate the cells under a fixed cost or transition model. They do not learn the cost itself. Learning a cost from observed transport is the subject of inverse OT [23,24,25]. When matched pairs are observed, the cost can be estimated by maximizing their likelihood under the entropic coupling [26]. OT-SI is the closest method to lineage tracing, as it learns a cost from correspondences between subsets of two point clouds [27]. However, these methods are discrete OT solvers, so they do not learn a map that predicts the responses of new cells. To address these limitations, we present CloneOT, a neural inverse OT method that learns both the trans-port cost and the transport map from partially lineage-traced single-cell datasets (Fig. 1). Unlike previous methods, CloneOT uses the available lineage information to learn the transport cost and the corresponding neural optimal transport map to predict the response of a new cell from its expression alone. CloneOT therefore uses lineage tracing to learn how the response differs between clones. We demonstrate that CloneOT is capable of 1) recovering the correct transport on two 2D datasets, while the squared Euclidean cost fails; 2) predicting the responses of lineage-traced cancer cells in 14 scenarios more accurately than five baselines, for both seen and unseen clones; and 3) revealing the clone-specific programs of drug-tolerant persister cells, such as the interferon and antioxidant programs of non-cycling and cycling persisters, and forecasting the fate of each clone from its cells before treatment. 
+
+## 2 Methods 
+
+2.1 Overview 
+
+Single-cell perturbation experiments measure one population of cells before a perturbation, the source cells, and another population after it, the target cells. Sequencing destroys the cells it measures, so we never observe how an individual source cell responds. The task is to learn a map that predicts the response of any source cell from its expression (Fig. 1a). Optimal transport (OT) addresses this task by moving the source population onto the target population at the smallest total cost. The transport cost c(x, y ) specifies 1a Partial lineage observations b Learn the transport cost from lineage c Predict new cells    
+
+> Control Perturbed labeled clones unlabeled cells
+> Learned OT cost Lineage constraint
+> Unconstrained plan Lineage-constrained plan
+> update
+
+Fig. 1. Overview of CloneOT. a. Lineage barcodes identify, for a fraction of the clones (colored), which source and target cells belong to the same clone. b. The transport cost cθ (x, y ) = hθ (φθ (x) − ψθ (y)) is a neural network with neural ODE flows φθ , ψ θ and a symmetric input convex network hθ . Training alternates between solving the entropic OT problems without and with the lineage constraint by neural dual potentials and descending L(θ) = OT Aθ − OT θ ,the extra cost of respecting the lineage. c. A neural map Tη amortizes the learned coupling and predicts the response of a new cell. 
+
+how expensive it is for a cell in state x to become a cell in state y. The cost therefore decides which source cells are connected with which responses. Most OT methods fix the cost to the squared Euclidean distance. This choice assumes that cells change as little as possible in every direction of the expression space. The assumption fails when a perturbation changes some directions much more than others, and unpaired data alone cannot reveal the correct cost. Lineage tracing provides the information needed to learn the cost. Heritable barcodes mark the descen-dants of each ancestor cell. For a fraction of the clones, we therefore know which source cells and which target cells belong together, although we do not know which source cell gave rise to which target cell (Fig. 1a). CloneOT uses this information with a simple idea. Under a good cost, the cheapest transport of the source population onto the target population should already keep the cells of each clone together. CloneOT there-fore solves two transport problems with the same cost, one without and one with the lineage as a constraint, and measures the extra cost that the lineage adds (Fig. 1b). If the lineage-consistent transport is much more expensive than the best transport, the cost disagrees with the lineage, and CloneOT changes the cost to reduce this gap. The cost is a neural network, so the cost of a change can depend on the state of a cell. Both transport problems are also solved with neural networks, so the cost is learned without differentiating through an iterative solver. After training, a neural map learns the expected response of each cell under the learned transport. The map predicts the response of a new source cell from its expression alone, without its barcode (Fig. 1c). 22.2 CloneOT Problem formulation The training data consist of source cells {xi}Ni=1 and target cells {yj }Mj=1 , with empirical distributions μ and ν. Each cell is represented by the posterior mean of a variational autoencoder (VAE) [28]. For each labeled clone k = 1 , . . . , K , we know its source cells Sk and its target cells Yk. All other cells, including the clones observed on only one side, form the unlabeled sets S0 and Y0. The goal is a map that predicts the response of a new source cell from its expression alone. 
+
+Neural transport cost CloneOT parameterizes the cost as a neural network of the form proposed by Howard et al. [29], 
+
+cθ (x, y ) = hθ
+
+ φθ (x) − ψθ (y), hθ (d) = gθ (d) + gθ (−d) + α
+
+2 ∥d∥2, (1) in coordinates centered at the source and target means. The maps φθ and ψθ are neural ODE flows [30,31]. Specifically, φθ (x) is the state at time 1 of ˙ z = vθ (z, t ) started at z(0) = x, where vθ is a neural velocity field, and ψθ has its own velocity field. The function gθ is an input convex neural network (ICNN) [32] with softplus activations and nonnegative weights between its hidden layers. Hence hθ is convex, symmetric and minimal at d = 0, and the quadratic term with α > 0 makes it strictly convex. The flows are invertible, so the cost compares the two populations in learned coordinates. A target state y is cheap for a source cell x when ψθ (y) is close to φθ (x) in the geometry of hθ . Moreover, the cost satisfies the twist condition, because the flows are diffeomorphisms and hθ is strictly convex. For a source distribution with a density, the unregularized optimal transport is therefore a unique map of the form ψ−1 
+
+> θ
+
+◦ T ◦ φθ , and T is the optimal map for the cost hθ between the transformed populations [33,29]. With φθ = ψθ = id and hθ (d) = 12 ∥d∥2, cθ
+
+is the squared Euclidean cost of W2 OT. CloneOT starts near this cost, with zero velocity fields and small output weights of the ICNN, and moves away from it as the lineage requires. 
+
+Learning the cost from lineage Clones expand and shrink during an experiment. CloneOT therefore gives the source cells of labeled clone k the total mass ν(Yk), the share of the clone among the target cells. The unlabeled source cells share the remaining mass equally, so the source distribution is 
+
+ω =
+
+> K
+
+X
+
+> k=1
+
+ν(Yk) μ(· | Sk) + ν(Y0) μ(· | S0). (2) The coupling of the two populations under cθ is the solution πθ of the entropic OT problem OT θ = min 
+
+> π∈Π(ω,ν )
+
+Z
+
+cθ dπ + ε KL( π ∥ ω ⊗ ν). (3) Here Π(ω, ν ) is the set of couplings with marginals ω and ν, KL is the Kullback–Leibler divergence and ε > 0is a temperature [34,35]. Under a good cost, this coupling should already connect the source cells of each labeled clone with the target cells of the same clone. CloneOT therefore compares it with the same problem under the lineage constraint. Under this constraint, a target cell of labeled clone k may only descend from source cells of clone k, and an unlabeled target cell may only descend from unlabeled source cells. We write OT Aθ and πAθ for the optimal value and coupling of the constrained problem. They exist because Eq. (2) gives every clone exactly its share of the target cells. A constraint can only increase the optimal cost, so the difference 
+
+L(θ) = OT Aθ − OT θ ≥ 0 (4) is never negative. It is close to zero when the unconstrained coupling nearly respects the lineage, and it grows with the extra cost that the lineage adds to the transport. CloneOT learns the cost by minimizing 
+
+L/ε . Equivalently, L/ε is the smallest Kullback–Leibler divergence between a lineage-consistent coupling and πθ . Minimizing it therefore moves the coupling that the cost predicts toward the observed lineage. When every clone consists of one source cell and one target cell, L/ε is the negative log-likelihood of the 3observed pairs, the classical inverse OT estimator [26]. Supplementary Section ?? proves these properties. The derivative of an optimal transport cost with respect to a parameter of the cost is the expected derivative of the cost under the optimal coupling [36]. Hence 
+
+∇θ L(θ) = EπAθ
+
+∇θ cθ
+
+ − Eπθ
+
+∇θ cθ
+
+, (5) and the gradient only requires expectations under the two couplings. 
+
+Neural entropic optimal transport solver Neural OT solvers represent the dual potentials of a transport problem by neural networks [37,38], and CellOT uses them to predict perturbation responses with a fixed cost [12,13]. CloneOT solves its two entropic problems in the same way. Supplementary Section ?? reviews inverse OT methods. For a potential f on the source cells, the best potential on the target cells is the entropic 
+
+c-transform 
+
+gf (y) = −ε log 
+
+Z
+
+exp 
+
+ f (x) − cθ (x, y )
+
+ε
+
+
+
+dω (x). (6) The c-transform has a closed form, so only f has to be learned, and OT θ = max  
+
+> f
+
+Dθ (f ), Dθ (f ) = 
+
+Z
+
+f dω +
+
+Z
+
+gf dν. (7) The constrained problem has the same form, OT Aθ = max f DAθ (f ), but the integral in its c-transform runs only over the source cells allowed for y. At the optimum, a target cell y descends from the source cell x
+
+with probability proportional to e(f (x)−cθ (x,y )) /ε ω(x) among the allowed source cells. ICNN-based neural OT solvers play a min-max game between two networks [37]. In contrast, each problem of CloneOT needs a single network, and its c-transform needs no inner optimization. CloneOT parameterizes the two potentials as f (x) = sθ fξ (φθ (x)) and f A(x) = sθ f Aξ′ (φθ (x), e k(x)). Here sθ is the median of cθ over random pairs of training cells, so the networks work in units of the cost, and ek(x) is a learned embedding of the labeled clone of x. Training alternates stochastic gradient steps (Supplementary Algorithm ?? ). First, the potentials ascend Dθ and DAθ on minibatches of 4,096 target cells, and the c-transform of each target cell is computed exactly over all training source cells. Then the cost descends L/ε with the potentials held fixed. CloneOT estimates the two expectations of Eq. (5) with source cells sampled from the conditional distributions of the two couplings. In each cost update, it draws 1,024 target cells and samples eight source cells for each of them from each coupling. 
+
+Neural map and prediction Once the cost is learned, the predicted response of a source cell is the average of its possible descendants under πθ ,
+
+Eπθ [y | x] = 
+
+> M
+
+X
+
+> j=1
+
+exp {(gf (yj ) − cθ (x, y j )) /ε }
+
+P 
+
+> l
+
+exp {(gf (yl) − cθ (x, y l)) /ε } yj . (8) This prediction is defined for any x, but it requires all training target cells. CloneOT therefore amortizes the prediction with a neural map Tη (x) = x + Fη (x), fitted by least squares on minibatches of training source cells [39]. On single-cell data, Fη is fitted so that the decoded map D(Tη (x)) matches the expected decoded descendant Eπθ [D(y) | x], where D is the VAE decoder. CloneOT then predicts the expression profile D(Tη (x)) of a new source cell without its clone or any target measurement. 
+
+2.3 Implementation and baselines 
+
+The potentials and the map are multilayer perceptrons with three hidden layers of width 128. The velocity fields of the flows and the ICNN have two hidden layers of width 64. All networks are trained with Adam. The temperature is ε = 0 .1 m, where m is the median of 12 ∥y − x∥2 over random pairs of training cells. The same settings are used for the 2D datasets and all single-cell tasks (Supplementary Table ?? ). On single-cell data, the map checkpoint is selected on the validation clones. The selection criterion is the mean of ℓ2, 1 − r2
+
+4and the energy score over the validation clones, each relative to the prediction of every clone by the mean of the training target cells. All models were trained on one NVIDIA RTX 5090 GPU, and CloneOT trains in a median of 1.6 minutes per model (Supplementary Table ?? ). We compare CloneOT with five published methods. They are the neural OT method CellOT [12], the diffusion model SquidDiff [9] and three generative perturbation models, scGen [8], chemCPA [10] and bi-oLORD [11]. Each method is trained per task with its recommended settings on the same cells and returns one predicted expression profile per source cell. Deterministic methods return their output, chemCPA and bioLORD return the mean of their predicted distribution, and SquidDiff returns one generated profile. Each method keeps the checkpoint with the best energy score on the validation clones, and none of them uses lineage information in training. As in CellOT [12,13], we also report two naive baselines. Identity predicts every source cell by its own expression, and Observed predicts every clone by the training target cells. Ob-served is not an upper bound in the clone-level evaluation, since its clone means are those of the whole target population. On the 2D datasets, we also compare with OT-SI [27], the inverse OT method closest to CloneOT, and with neural W2OT, the solver underlying CellOT [12,38]. OT-SI is a discrete OT solver without a map for new points, so we extend its plan to new points through its dual potential and predict them by the barycentric projection. Supplementary Section ?? lists the settings of all baselines. 
+
+2.4 Datasets and evaluation 
+
+The 2D datasets are the T-shape dataset and the rotated-moons dataset. Methods are evaluated on 400 new source points by the fraction of predictions on the correct class and by the mean distance to the true target position (Supplementary Section ?? ). The single-cell data comprise 14 scenarios from three studies. Twelve time and sorting scenarios come from Watermelon lineage tracing of PC9 lung cancer cells treated with osimertinib [6]. One scenario comes from doxorubicin treatment of MDA-MB-231 breast cancer cells with ClonMapper barcodes [15], and one from olaparib treatment of Kuramochi ovarian cancer cells in ReSisTrace [16]. Expression is normalized and log-transformed, and 2,000 highly variable genes are selected on the training cells [40,41]. A VAE with the architecture of W1OT [13], hidden layers of widths 256 and 128 and a 50-dimensional latent space is then trained on the source and target cells of the training set. In the setting of seen clones (IID), about 20% of the cells of every training clone with at least two cells on each side are held out. These evaluation clones are split at random into a validation half for model selection and a test half for evaluation. In the setting of unseen clones (OOD), entire clones are held out, so the test clones never appear in training. In each setting, 10%, 20%, 40% or 80% of the training clones are labeled, in nested sets. Following CellOT [12,13], we evaluate predictions on the top 50 differentially expressed genes of the training cells, separately for every evaluation clone. The metrics are (i) the ℓ2 distance between the predicted and observed clone-mean expression, (ii) the squared Pearson correlation r2 between the two clone means, and (iii) the energy score [42]. For a clone with predicted profiles {pi}ni=1 and observed target cells {yj }mj=1 ,the energy score is ES = 1
+
+nm 
+
+X
+
+> i,j
+
+∥pi − yj ∥ − 12n2
+
+X
+
+> i,i ′
+
+∥pi − pi′ ∥. (9) It is a strictly proper scoring rule, so its expectation is lowest when the predicted profiles follow the true distribution of the cells of the clone. Scores are averaged over clones. Two methods are compared with the two-sided Wilcoxon signed-rank test on per-clone differences within each scenario, with Benjamini–Hochberg adjustment (Supplementary Section ?? ). 
+
+## 3 Results 
+
+3.1 CloneOT learns the transport cost on 2D datasets 
+
+We first validate our model on 2D datasets (Section 2.4 and Fig. 2). We use these datasets to examine whether the transport cost needs to be learned, and whether CloneOT learns it more accurately than a discrete inverse OT solver. In both datasets, the supervision is a set of correspondences between subsets of 5T-shape Ground truth Neural W2OT OT-SI CloneOT 
+
+> Rotated moons
+
+## ab         
+
+> Source Target Prediction Transport Transport to the other class Fig. 2. CloneOT on 2D datasets. Source points (dark blue), target points (pink) and predictions for new source points (light blue) are shown with transport rays for a quarter of the points. Red rays end on the wrong class. a. The T-shape dataset [29]. For 20% of the source points, the corresponding target points are given. b. The rotated-moons dataset [27]. The only correspondence is between each source moon and its rotated moon. Neural W2OT uses the squared Euclidean cost, and all methods are shown for training seed 0.
+
+source and target points, and these subsets play the role of clones. We compare CloneOT with two methods. Neural W2OT uses the squared Euclidean cost and is the solver underlying CellOT [12,38], and OT-SI is a discrete inverse OT solver [27]. First, we test the T-shape dataset [29]. In this dataset, a vertical bar on the left moves to the right, and a horizontal bar on top moves down (Fig. 2a). Under the squared Euclidean cost, moving the left bar down and the top bar to the right is cheaper. Neural W2OT therefore sends almost all new points to the wrong bar. In contrast, CloneOT learns the cost from the correspondences of 20% of the source points, and it places every new point on the correct bar. This indicates that the cost must be learned when the squared Euclidean cost prefers a wrong transport. Next, we compare CloneOT with OT-SI on the rotated-moons dataset of OT-SI [27]. The target is the two moons rotated by 90 ◦. The only supervision is which source moon corresponds to which rotated moon (Fig. 2b). Neural W2OT sends about half of the new points to the wrong moon. OT-SI places most points on the correct moon, but its accuracy changes with the training seed, and on the T-shape it fails for some seeds. The results show that CloneOT places every new point on the correct moon for all seeds and recovers the rotation itself (Supplementary Table ?? ). This indicates that CloneOT learns the transport more accurately and more stably than the discrete inverse OT solver. 
+
+3.2 CloneOT accurately predicts clone-level responses 
+
+We apply CloneOT to the 14 lineage-tracing scenarios of Watermelon [6], ClonMapper [15] and ReSisTrace [16]. We compare it with the five baselines and the two naive baselines, Identity and Observed, using the per-clone r2, ℓ2 and energy score (Sections 2.3 and 2.4). We consider two settings. For seen clones (IID setting), about 20% of the cells of every training clone are held out, and each model predicts these cells from their expression before the perturbation. For unseen clones (OOD setting), entire clones are held out, so every evaluation clone is absent from training. In both settings, 10%, 20%, 40% or 80% of the training clones carry lineage labels. 60.5 0.6 0.7 0.8 
+
+> Watermelon (12 scenarios)
+> **** **** **** **** ****
+
+r² ↑ 
+
+> 46810
+> **** **** **** **** ****
+
+ℓ2 ↓
+
+> 2.5 5.0 7.5 10.0
+> **** **** **** **** ****
+
+Energy score ↓         
+
+> 0.45 0.60 0.75 0.90
+> ClonMapper (doxorubicin)
+> **** **** **** **** ****
+> 234
+> **** **** **** **** ****
+> 1.6 2.4 3.2 4.0
+> ns **** ****
+> 0.6 0.7 0.8
+> ReSisTrace (olaparib)  ** ns ns ns
+> 3456
+> ** **ns ns
+> 3.0 4.5 6.0 ** **ns ns
+> 0.5 0.6 0.7 0.8
+> **** **** **** **** ns
+
+r² ↑ 
+
+> 2.5 5.0 7.5 10.0
+> **** **** **** **** ****
+
+ℓ2 ↓
+
+> 2.5 5.0 7.5 10.0
+> *** **** *** **** ****
+
+Energy score ↓   
+
+> 0.7 0.8 0.9 ***** *** **** ****
+> 1234
+> *** **** **** **** ****
+> 2.0 2.5 3.0 3.5
+> ****↓ *↓ ns *** ****
+> 0.72 0.78 0.84
+> **** **** *** ** ns
+> 2.4 3.2 4.0 4.8
+> **** **** *** **** **
+> 3.0 4.5
+> **** **** ** **** **
+
+## a Seen clones (held-out cells, IID) b Unseen clones (OOD) 
+
+CloneOT CellOT SquidDiff scGen chemCPA bioLORD Identity Observed   
+
+> 0.0 0.3 0.6
+
+CellOT    
+
+> 0.0 0.3 0.6
+> CloneOT
+> 14/14 above
+> p= 1 × 10 −4
+> 0.0 0.3 0.6
+
+SquidDiff    
+
+> 0.0 0.3 0.6
+> 14/14 above
+> p= 1 × 10 −4
+> 0.0 0.3 0.6
+
+scGen    
+
+> 0.0 0.3 0.6
+> 14/14 above
+> p= 1 × 10 −4
+> 0.0 0.3 0.6
+
+chemCPA    
+
+> 0.0 0.3 0.6
+> 14/14 above
+> p= 1 × 10 −4
+> 0.0 0.3 0.6
+
+bioLORD  
+
+> 0.0 0.3 0.6
+> 13/14 above
+> p= 2 × 10 −3
+
+## c Clone-specific predictions for seen clones in all scenarios 
+
+Watermelon ClonMapper ReSisTrace Fig. 3. Performance benchmark with 80% labeled clones. a. Seen clones (IID setting). b. Unseen clones (OOD setting). Bars show means over the test clones of each study with 95% bootstrap confidence intervals. Stars denote two-sided Wilcoxon signed-rank tests against CloneOT over clones (* p < 0.05, ** p < 0.01, *** p < 0.001, **** p < 10 −4, ns not significant), and red arrows mark methods significantly better than CloneOT. c. Clone-specific correlation for seen clones, CloneOT against each baseline with one point per scenario and p from a paired Wilcoxon signed-rank test over scenarios. 
+
+The results show that CloneOT is the most accurate of the six methods on all three metrics for seen clones, except in ReSisTrace, where it performs on par with chemCPA (Fig. 3a). In paired tests over the clones of each scenario, CloneOT is significantly more accurate than the baselines in most comparisons, and it is never significantly less accurate (Supplementary Table ?? ). The naive baselines bracket these results. Identity assumes no response and is the least accurate prediction. Observed predicts every clone by the measured target population, so its clone means are those of the average response. Observed also has the lowest energy score, because it consists of measured cells and therefore carries their cell-to-cell variability. Notably, in Watermelon, CloneOT is the only method that predicts clone means more accurately than Observed. This can be attributed to the fact that the other methods mainly predict the response that all cells share, whereas CloneOT also predicts how each clone deviates from it. To examine the predictions themselves, we ask how well each method predicts the differences between clones (Fig. 3c). For each test clone, we compute its clone-specific deviation. The deviation is the mean expression of the clone over the 50 evaluation genes minus the average of these clone means over all test clones of the scenario. We compute it once for the prediction and once for the observed target cells. The 70 10 20 40 80 0.69 0.70 0.71 0.72 0.73 0.74                                
+
+> Seen clones
+> r² ↑
+> 010 20 40 80 3.7 3.8 3.9 4.0 4.1
+> ℓ2↓
+> 010 20 40 80 4.2 4.3 4.4
+> Energy score ↓
+> 010 20 40 80 0.05 0.10 0.15 0.20
+> Clone-specific r↑
+> 010 20 40 80
+> Labeled clones (%)
+> 0.72 0.73 0.74 0.75
+> Unseen clones
+> 010 20 40 80
+> Labeled clones (%)
+> 3.6 3.7 3.8 3.9
+> 010 20 40 80
+> Labeled clones (%)
+> 4.25 4.30 4.35 4.40
+> 010 20 40 80
+> Labeled clones (%)
+> 0.05 0.10 0.15 0.20
+
+## ab 
+
+> CloneOT without lineage (0%)
+
+Fig. 4. Lineage supervision improves CloneOT. a. r2, ℓ2, energy score and clone-specific correlation (Fig. 3c) for seen clones against the fraction of labeled training clones. The value at 0% is CloneOT without lineage (open circles). b. The same for unseen clones. Points are means over the 14 scenarios with 95% confidence intervals over clones (over scenarios for the clone-specific correlation). 
+
+deviation removes the response that all treated cells share. Hence a method that predicts the same profile for every clone, such as Observed, has no deviations. We then define the clone-specific correlation r as the Pearson correlation between the predicted and observed deviations over all clones and genes of a scenario. CloneOT achieves a higher clone-specific correlation than every baseline in nearly all scenarios. This shows that the gains of CloneOT extend beyond the shared response to the differences between clones. We further evaluate CloneOT on unseen clones (Fig. 3b). CloneOT again predicts the clone means with the lowest ℓ2 of the six methods, and it has the lowest energy score in Watermelon and ReSisTrace. In paired tests, it is rarely significantly less accurate than a baseline (Supplementary Table ?? ). These results indicate that the cost learned from the labeled clones generalizes to clones absent from training. 
+
+3.3 CloneOT improves with lineage supervision and transfers it to unlabeled clones 
+
+Next, we examine how the amount of lineage information affects CloneOT. The results show that lineage improves every metric for both seen and unseen clones, and that the accuracy generally increases with the fraction of labeled clones (Fig. 4). Without lineage, CloneOT is entropic W2 OT. Like the other OT methods, it then predicts clone means less accurately than Observed. Learning the cost from only 10% of the clones already improves every metric. This indicates that a few labeled clones are enough to improve the cost, so CloneOT suits experiments in which only some clones are identified on both sides. With 80% labeled clones, CloneOT reduces ℓ2 in every scenario for both seen and unseen clones, and it has a significantly lower ℓ2 than the same solver with the fixed squared Euclidean cost in almost every scenario (Supplementary Table ?? ). Removing the flows or replacing the ICNN by a quadratic function also reduces the accuracy (Supplementary Section ?? ). This indicates that a flexible neural transport cost is necessary. Interestingly, the gains extend to the clones without labels. At every fraction of labeled clones, ℓ2 decreases at least as much on unlabeled as on labeled test clones. This can be attributed to the fact that all cells share the learned cost, so the information of the labeled clones transfers to the other clones. 80.00 0.15 0.30 0.45 
+
+> Correlation with observed clone scores
+> E2F targets, G2/M checkpoint (PC1) G2/M checkpoint, E2F targets (PC2) EMT, apical junction (PC3) EMT, xenobiotic metabolism (PC4) p53 pathway, TNF-α/NF-κB (PC5) MYC targets, glycolysis / interferon response (PC6) Estrogen response (PC7) Coagulation (PC8) TNF-α/NF-κB, MYC targets (PC9) Interferon response (PC10)
+
+********      
+
+> All scenarios
+> 0.0 0.5 1.0 0.0 0.5 1.0
+> True positive rate
+> AUC
+> 0.72
+> 0.59 0.48
+> Day 0 → 3 model
+> 0.0 0.5 1.0
+> False positive rate
+> 0.0 0.5 1.0
+> True positive rate
+> AUC
+> 0.68
+> 0.58 0.51
+> Day 0 → 7 model
+> −0.25 0.00 0.25
+> Observed (z)
+> Interferon (PC10)
+> Low Mid High
+> Predicted score (thirds)
+> −0.25 0.00 0.25
+> Observed (z)
+> Interferon vs antioxidant (PC6)
+
+## a b c  
+
+> CloneOT Without lineage Pre-perturbation state
+
+Fig. 5. CloneOT predicts the clone-specific programs and fates of drug-tolerant persister cells (Water-melon, 80% labeled clones). a. Correlation across seen test clones between the predicted and the observed program score, pooled over the 12 scenarios (1356 clones summed over scenarios) with 95% bootstrap confidence intervals. Programs are the leading principal components of the post-treatment cells and are labeled by the Hallmark sets enriched at their two ends. Asterisks mark a gain from lineage (paired bootstrap, Benjamini–Hochberg q < 0.05), and gray marks no gain. b. Forecast of the day-14 fate (cycling or non-cycling persisters) of day-0 clones from nine gene set scores by cross-validated logistic regression, with AUC averaged over 20 repetitions. c. Observed program score of the seen test clones in each third of the predicted score, with 95% confidence intervals. 
+
+3.4 CloneOT reveals the clone-specific programs and fates of drug-tolerant persister cells 
+
+CloneOT predicts the differences between clones. We therefore ask what these differences mean biologically. In the Watermelon study, most clones gave rise to only cycling or only non-cycling persister cells [6]. Cy-cling persisters had higher NRF2 and glutathione antioxidant signatures. Non-cycling persisters had higher interferon-α, cholesterol homeostasis and Notch signatures. None of these programs was upregulated before treatment. We therefore ask which programs CloneOT predicts better with lineage, and whether CloneOT forecasts the fate of a clone and its programs from the cells before treatment. To answer these questions, we decompose the post-treatment cells of the 12 Watermelon scenarios into ten transcriptional programs. The programs are the leading principal components of the training target cells, pooled over the scenarios. We annotate each program by the MSigDB Hallmark gene sets [43,44] enriched among its most positive and most negative genes (Supplementary Table ?? ). For every test clone of the seen-clone setting, we score each program on its observed target cells, on the predictions for its source cells and on its source cells before the perturbation. We then measure how well each model predicts the program scores by the Pearson correlation across test clones, after standardizing the scores within each scenario (Fig. 5a). The confidence intervals and the comparison with CloneOT without lineage come from a paired bootstrap over clones (Supplementary Section ?? ). Lineage does not improve the prediction of the two leading programs, the E2F and G2/M cell-cycle programs. This is consistent with the cell-cycle phase being a transient state rather than a clonal one. In contrast, lineage significantly improves the prediction of the other eight programs, in most scenarios (Fig. 5a and Supplementary Fig. ?? ). Consistent with the original study, these programs include the ones that separate the persister fates. They include an interferon-response program (PC10) and a program that opposes interferon-response genes to MYC targets, glycolysis and antioxidant genes (PC6). They also include 9an EMT program with the NRF2 targets AKR1C2 , AKR1C3 and GSTM4 (PC4) and a p53 stress program (PC5). Scoring every MSigDB gene set separately gives the same pattern (Supplementary Table ?? ). We next forecast the fate of each clone, the central question of the original study. A day-0 clone is cycling if its day-14 descendants appear only in the mCherry-low persister fraction, and non-cycling if they appear only in the mCherry-high fraction [6]. The mCherry-low fraction contains the cells that kept dividing. We describe each seen and unseen evaluation clone by nine fate-related MSigDB gene sets scored on its predicted response, including the NRF2, glutathione, interferon-α and cholesterol signatures. We then classify the two fates by logistic regression with five-fold cross-validation, repeated 20 times (Supplementary Section ?? ). The results show that CloneOT forecasts the fate clearly better than without lineage, from both its day-3 and its day-7 predictions (Fig. 5b). In contrast, the same gene sets scored on the cells before treatment perform at the level of chance. This agrees with the original finding that the two fates arise from distinct lineages, and that their programs are not upregulated before treatment [6]. This indicates that the fate of a clone is hidden in its pre-perturbation state, and CloneOT reveals it by predicting the response of the clone. To test whether CloneOT also forecasts these programs before treatment, we split the test clones of each scenario into thirds by their predicted program score (Fig. 5c). The interferon program (PC10) is led by 
+
+OASL , CCL5 , BST2 and ISG15 . PC6 separates interferon-response genes from antioxidant genes such as 
+
+TXN , NQO1 and PRDX1 . For both programs, the observed score rises clearly from the bottom to the top third of the CloneOT prediction. The predictions without lineage and the scores before treatment separate the clones much less. CloneOT therefore forecasts which clones will induce the interferon program and which the antioxidant program, the two programs that separate non-cycling from cycling persisters. 
+
+## 4 Discussion 
+
+In this work, we develop CloneOT as a neural inverse optimal transport method. CloneOT learns the trans-port cost of single-cell perturbation responses from partial lineage information. Key features distinguishing it from previous methods include (1) a neural transport cost learned from clone sets, with an objective that generalizes the classical inverse OT likelihood from pairs to sets of cells, and (2) a neural entropic OT solver with closed-form conjugates and an envelope gradient, so the cost is learned without unrolling Sinkhorn iterations or map updates. Unlike previous uses of lineage tracing, CloneOT uses lineage to supervise the transport cost itself. More interestingly, all cells share the learned cost, so the information of the labeled clones transfers to clones without labels. Another advantage of CloneOT is its speed, since one model trains in a median of 1.6 minutes on a single GPU. Through extensive experiments, we demonstrate that CloneOT recovers the true transport on two 2D datasets, while the squared Euclidean cost fails. On 14 lineage-tracing scenarios, CloneOT predicts clone-level responses more accurately than five baselines, and it captures the differences between clones. In Watermelon, it is the only method that predicts clone means more accurately than the strong Observed baseline [45,46]. In the scenario of drug-tolerant persister cells, CloneOT forecasts from the pre-perturbation state which clones will become cycling persisters, clearly better than without lineage. It also forecasts which clones will induce the interferon and antioxidant programs of the two fates [6], although these programs are not upregulated before treatment. As is previously highlighted, CloneOT learns the transport cost from clone sets, a weak form of super-vision that does not pair individual cells. A potential future development is therefore to add lineage-tracing experiments to the training data of virtual cell models [3,4,5]. These models currently learn perturbation responses from unpaired populations, and our results show that lineage improves the accuracy even when only 10% of the clones are labeled. Benefited from its neural formulation, CloneOT can also be extended to condition the cost on drugs, doses and time points, similar to conditional OT maps [14]. In summary, CloneOT represents a widely applicable framework for learning transport costs from lineage tracing. It also provides a practical training scheme for neural inverse optimal transport. Considering the fact that lineage tracing is increasingly combined with perturbation screens, spatial profiling and multi-modal measurements, we believe that CloneOT will be helpful wherever groups of observations are known to correspond while individual pairings remain hidden. 10 5 Acknowledgements 
+
+We thank the authors of the Watermelon, ClonMapper and ReSisTrace studies for making their lineage-tracing data publicly available. 
+
+## 6 Author contributions 
+
+Y.C. conceived the method, implemented the software and performed the experiments. W.C. and H.H. supervised the project. All authors wrote and reviewed the manuscript. 
+
+## 7 Data availability 
+
+All datasets analyzed in this study are publicly available from the Gene Expression Omnibus under accession numbers GSE150949 (Watermelon [6]), GSE291678 (ClonMapper [15]) and GSE223003 (ReSisTrace [16]). The MSigDB gene sets are available at https://www.gsea-msigdb.org .
+
+## 8 Code availability 
+
+The implementation of CloneOT, with its documentation, tutorials and the scripts of the simulated examples, is available at https://github.com/poseidonchan/CloneOT .
+
+## References 
+
+1. Frangieh, C.J., Melms, J.C., Thakore, P.I., Geiger-Schuller, K.R., Ho, P., Luoma, A.M., Cleary, B., Jerby-Arnon, L., Malu, S., Cuoco, M.S., Zhao, M., Ager, C.R., Rogava, M., Hovey, L., Rotem, A., Bernatchez, C., Wucherpfen-nig, K.W., Johnson, B.E., Rozenblatt-Rosen, O., Schadendorf, D., Regev, A., Izar, B.: Multimodal pooled Perturb-CITE-seq screens in patient models define mechanisms of cancer immune evasion. Nature Genetics 53 (3), 332–341 (Mar 2021) 2. Van De Sande, B., Lee, J.S., Mutasa-Gottgens, E., Naughton, B., Bacon, W., Manning, J., Wang, Y., Pollard, J., Mendez, M., Hill, J., Kumar, N., Cao, X., Chen, X., Khaladkar, M., Wen, J., Leach, A., Ferran, E.: Applications of single-cell RNA sequencing in drug discovery and development. Nature Reviews Drug Discovery 22 (6), 496–520 (Jun 2023) 3. Bunne, C., Roohani, Y., Rosen, Y., Gupta, A., Zhang, X., et al.: How to build the virtual cell with artificial intel-ligence: Priorities and opportunities. Cell 187 (25), 7045–7063 (2024). https://doi.org/10.1016/j.cell.2024.11.015 4. Roohani, Y.H., Hua, T.J., Tung, P.Y., Bounds, L.R., Yu, F.B., et al.: Virtual Cell Challenge: Toward a Turing test for the virtual cell. Cell (2025). https://doi.org/10.1016/j.cell.2025.06.008 5. Adduri, A.K., et al.: Predicting cellular responses to perturbation across diverse contexts with State. bioRxiv (2025). https://doi.org/10.1101/2025.06.26.661135 6. Oren, Y., Tsabar, M., Cuoco, M.S., et al.: Cycling cancer persister cells arise from lineages with distinct programs. Nature 596 , 576–582 (2021). https://doi.org/10.1038/s41586-021-03796-6 7. Goyal, Y., Busch, G.T., Pillai, M., et al.: Diverse clonal fates emerge upon drug treatment of homogeneous cancer cells. Nature 620 , 651–659 (2023). https://doi.org/10.1038/s41586-023-06342-8 8. Lotfollahi, M., Wolf, F.A., Theis, F.J.: scGen predicts single-cell perturbation responses. Nature Methods 16 ,715–721 (2019). https://doi.org/10.1038/s41592-019-0494-8 9. He, S., Zhu, Y., Tavakol, D.N., et al.: Squidiff: predicting cellular development and responses to perturbations using a diffusion model. Nature Methods 23 , 65–77 (2026). https://doi.org/10.1038/s41592-025-02877-y 10. Hetzel, L., B¨ ohm, S., Kilbertus, N., G¨ unnemann, S., Lotfollahi, M., Theis, F.: Predicting Cellular Responses to Novel Drug Perturbations at a Single-Cell Resolution. In: Advances in Neural Information Processing Systems. vol. 35, pp. 26711–26722 (2022) 11. Piran, Z., Cohen, N., Hoshen, Y., Nitzan, M.: Disentanglement of single-cell data with biolord. Nature Biotech-nology 42 , 1678–1683 (2024). https://doi.org/10.1038/s41587-023-02079-x 12. Bunne, C., Stark, S.G., Gut, G., et al.: Learning single-cell perturbation responses using neural optimal transport. Nature Methods 20 , 1759–1768 (2023). https://doi.org/10.1038/s41592-023-01969-x 
+
+11 13. Chen, Y., Hu, Z., Chen, W., Huang, H.: Fast and scalable Wasserstein-1 neural optimal trans-port solver for single-cell perturbation prediction. Bioinformatics 41 (Suppl. 1), i513–i522 (2025). https://doi.org/10.1093/bioinformatics/btaf253 14. Driessen, A., Rajwade, D.A., Harsanyi, B., Rapsomaniki, M., Born, J.: Conditional Monge Gap en-ables generalizable single-cell perturbation modelling. Nature Machine Intelligence 8, 984–996 (2026). https://doi.org/10.1038/s42256-026-01242-8 15. Morgan, D., Gardner, A.L., Brock, A.: Lineage Tracing Reveals Clone-Specific Responses to Doxorubicin in Triple-Negative Breast Cancer. bioRxiv (2025). https://doi.org/10.1101/2025.03.18.643980 16. Dai, J., Zheng, S., Falco, M.M., et al.: Tracing back primed resistance in cancer via sister cells. Nature Commu-nications 15 , 1158 (2024). https://doi.org/10.1038/s41467-024-45478-7 17. Schiebinger, G., Shu, J., Tabaka, M., Cleary, B., Subramanian, V., Solomon, A., Gould, J., Liu, S., Lin, S., Berube, P., Lee, L., Chen, J., Brumbaugh, J., Rigollet, P., Hochedlinger, K., Jaenisch, R., Regev, A., Lander, E.S.: Optimal-transport analysis of single-cell gene expression identifies developmental trajectories in reprogramming. Cell 176 , 928–943 (2019) 18. Klein, D., Palla, G., Lange, M., et al.: Mapping cells through time and space with moscot. Nature (2025) 19. Forrow, A., Schiebinger, G.: LineageOT is a unified framework for lineage tracing and trajectory inference. Nature Communications 12 , 4940 (2021). https://doi.org/10.1038/s41467-021-25133-1 20. Lange, M., Piran, Z., Klein, M., et al.: Mapping lineage-traced cells across time points with moslin. Genome Biology 25 (2024) 21. Wang, S.W., Herriges, M.J., Hurley, K., Kotton, D.N., Klein, A.M.: CoSpar identifies early cell fate bi-ases from single-cell transcriptomic and lineage information. Nature Biotechnology 40 , 1066–1074 (2022). https://doi.org/10.1038/s41587-022-01209-1 22. Prasad, N., Yang, K.D., Uhler, C.: Optimal Transport using GANs for Lineage Tracing. ICML Workshop on Computational Biology; arXiv:2007.12098 (2020), https://arxiv.org/abs/2007.12098 
+
+23. Stuart, A.M., Wolfram, M.T.: Inverse optimal transport. SIAM Journal on Applied Mathematics 80 (1), 599–619 (2020) 24. Galichon, A., Salani´ e, B.: Cupid’s invisible hand: social surplus and identification in matching models. The Review of Economic Studies 89 (5), 2600–2629 (2022) 25. Li, R., Ye, X., Zhou, H., Zha, H.: Learning to match via inverse optimal transport. Journal of Machine Learning Research 20 (80), 1–37 (2019) 26. Dupuy, A., Galichon, A.: Personality traits and the marriage market. Journal of Political Economy 122 (6), 1271–1319 (2014) 27. Liu, R., Balsubramani, A., Zou, J.: Learning transport cost from subset correspondence. In: International Con-ference on Learning Representations (2020), https://openreview.net/forum?id=SJlRUkrFPS 
+
+28. Kingma, D.P., Welling, M.: Auto-Encoding Variational Bayes. arXiv:1312.6114 (2013), https://arxiv.org/abs/ 1312.6114 
+
+29. Howard, S., Deligiannidis, G., Rebeschini, P., Thornton, J.: Differentiable Cost-Parameterized Monge Map Esti-mators. arXiv:2406.08399 (2024), https://arxiv.org/abs/2406.08399 
+
+30. Chen, R.T.Q., Rubanova, Y., Bettencourt, J., Duvenaud, D.: Neural ordinary differential equations. In: Advances in Neural Information Processing Systems. vol. 31 (2018) 31. Grathwohl, W., Chen, R.T.Q., Bettencourt, J., Sutskever, I., Duvenaud, D.: FFJORD: Free-form continuous dynamics for scalable reversible generative models. In: International Conference on Learning Representations (2019) 32. Amos, B., Xu, L., Kolter, J.Z.: Input convex neural networks. In: Proceedings of the 34th International Conference on Machine Learning. pp. 146–155 (2017) 33. Gangbo, W., McCann, R.J.: The geometry of optimal transportation. Acta Mathematica 177 (2), 113–161 (1996). https://doi.org/10.1007/BF02392620 34. Cuturi, M.: Sinkhorn distances: lightspeed computation of optimal transport. In: Advances in Neural Information Processing Systems. vol. 26 (2013) 35. Peyr´ e, G., Cuturi, M., et al.: Computational optimal transport: With applications to data science. Foundations and Trends ® in Machine Learning 11 (5-6), 355–607 (2019) 36. Danskin, J.M.: The theory of max-min, with applications. SIAM Journal on Applied Mathematics 14 (4), 641–664 (1966) 37. Makkuva, A., Taghvaei, A., Oh, S., Lee, J.: Optimal transport mapping via input convex neural networks. In: Proceedings of the 37th International Conference on Machine Learning. Proceedings of Machine Learning Research, vol. 119, pp. 6672–6681 (2020) 38. Amos, B.: On amortizing convex conjugates for optimal transport. In: International Conference on Learning Representations (2023) 39. Seguy, V., Damodaran, B.B., Flamary, R., Courty, N., Rolet, A., Blondel, M.: Large-scale optimal transport and mapping estimation. In: International Conference on Learning Representations (2018) 
+
+12 40. Wolf, F.A., Angerer, P., Theis, F.J.: SCANPY: large-scale single-cell gene expression data analysis. Genome Biology 19 , 15 (2018). https://doi.org/10.1186/s13059-017-1382-0 41. Stuart, T., Butler, A., Hoffman, P., et al.: Comprehensive Integration of Single-Cell Data. Cell 177 (7), 1888– 1902.e21 (2019). https://doi.org/10.1016/j.cell.2019.05.031 42. Gneiting, T., Raftery, A.E.: Strictly proper scoring rules, prediction, and estimation. Journal of the American Statistical Association 102 (477), 359–378 (2007) 43. Liberzon, A., Birger, C., Thorvaldsd´ ottir, H., Ghandi, M., Mesirov, J.P., Tamayo, P.: The Molecular Signatures Database hallmark gene set collection. Cell Systems 1(6), 417–425 (2015). https://doi.org/10.1016/j.cels.2015.12.004 44. Subramanian, A., Tamayo, P., Mootha, V.K., Mukherjee, S., Ebert, B.L., Gillette, M.A., Paulovich, A., Pomeroy, S.L., Golub, T.R., Lander, E.S., Mesirov, J.P.: Gene set enrichment analysis: a knowledge-based approach for interpreting genome-wide expression profiles. Proceedings of the National Academy of Sciences 102 (43), 15545– 15550 (2005). https://doi.org/10.1073/pnas.0506580102 45. Ahlmann-Eltze, C., Huber, W., Anders, S.: Deep-learning-based gene perturbation effect prediction does not yet outperform simple linear baselines. Nature Methods (2025) 46. Vi˜ nas Torn´ e, R., et al.: Systema: a framework for evaluating genetic perturbation response prediction beyond systematic variation. Nature Biotechnology (2025) 
+
+13
