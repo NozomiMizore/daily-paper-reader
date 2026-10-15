@@ -48,17 +48,17 @@
 <section class="dpr-home-dashboard-card dpr-home-report-card">
   <div class="dpr-home-dashboard-header">
     <div>
-      <span class="dpr-home-dashboard-kicker">2026-10-14</span>
+      <span class="dpr-home-dashboard-kicker">2026-10-15</span>
       <h3 class="dpr-home-dashboard-title">今日汇总</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">共 5 篇</strong>
+    <strong class="dpr-home-dashboard-count">共 2 篇</strong>
   </div>
   <dl class="dpr-home-dashboard-stats">
     <div class="dpr-home-dashboard-stat"><dt>累计更新</dt><dd>1 次</dd></div>
-    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>4</dd></div>
+    <div class="dpr-home-dashboard-stat"><dt>精读</dt><dd>1</dd></div>
     <div class="dpr-home-dashboard-stat"><dt>速读</dt><dd>1</dd></div>
   </dl>
-  <p class="dpr-home-dashboard-body">最近更新：2026-10-14 22:50:39 UTC<br>状态：成功</p>
+  <p class="dpr-home-dashboard-body">最近更新：2026-10-15 22:39:56 UTC<br>状态：成功</p>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-brief-card">
   <div class="dpr-home-dashboard-header">
@@ -69,9 +69,9 @@
     <strong class="dpr-home-dashboard-count">AI</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<p>今日5篇：4篇精读、1篇速读，细胞扰动响应预测与生成成为高分焦点。</p>
-<p>最值得看两篇满分精读：CloneOT用谱系监督神经逆最优传输预测克隆特异性扰动响应，PerturbBridge用直接表型监督生成细胞扰动表型。</p>
-<p>普通读者可先读这两篇理解预测/生成思路，再借6分速读篇思考“无实验读数能否预测表型活性”。</p>
+<p>今日精读1篇（9.0）+速读1篇（6.0）：从衰老基因调控异质性，到科学交互预测中的模型幻觉。</p>
+<p>最值得看的是9分精读：深度学习虚拟扰动提示，衰老伴随基因调控响应异质性增加；6分速读则提醒条件流模型预测未见科学交互时可能幻觉出非加性效应。</p>
+<p>普通读者可优先关注衰老相关基因调控变化，同时对AI预测的新交互结果保持“先验证再采信”。</p>
   </div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-deep-card">
@@ -80,12 +80,12 @@
       <span class="dpr-home-dashboard-kicker">今日累计</span>
       <h3 class="dpr-home-dashboard-title">精读推荐</h3>
     </div>
-    <strong class="dpr-home-dashboard-count">4 篇</strong>
+    <strong class="dpr-home-dashboard-count">1 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="CloneOT: predicting clone-specific perturbation responses with lineage-supervised neural inverse optimal transport">CloneOT: predicting clone-specific perturbation responses with lineage-supervised neural inverse optimal transport</span></li><li><span class="dpr-home-dashboard-paper-title" title="PerturbBridge: Direct Phenotypic Supervision for Cellular Perturbation Generation">PerturbBridge: Direct Phenotypic Supervision for Cellular Perturbation Generation</span></li><li><span class="dpr-home-dashboard-paper-title" title="Learning Perturbation-Specific Representations through Conditional Energy Prior for Cellular Response Prediction">Learning Perturbation-Specific Representations through Conditional Energy Prior for Cellular Response Prediction</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Deep learning-based virtual perturbation reveals increasing heterogeneity of gene regulatory responses with aging">Deep learning-based virtual perturbation reveals increasing heterogeneity of gene regulatory responses with aging</span></li></ul>
   </div>
-  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">virtual-cell <strong>4</strong></span></div>
+  <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">virtual-cell <strong>1</strong></span></div>
 </section>
 <section class="dpr-home-dashboard-card dpr-home-skim-card">
   <div class="dpr-home-dashboard-header">
@@ -96,7 +96,7 @@
     <strong class="dpr-home-dashboard-count">1 篇</strong>
   </div>
   <div class="dpr-home-dashboard-body">
-<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Can phenotypic activity be predicted without experimental readouts?">Can phenotypic activity be predicted without experimental readouts?</span></li></ul>
+<ul class="dpr-home-dashboard-paper-list"><li><span class="dpr-home-dashboard-paper-title" title="Predicting Unseen Scientific Interactions: Conditional Flow Models Hallucinate Non-Additive Effects">Predicting Unseen Scientific Interactions: Conditional Flow Models Hallucinate Non-Additive Effects</span></li></ul>
   </div>
   <div class="dpr-home-dashboard-tags"><span class="dpr-home-dashboard-tag">virtual-cell <strong>1</strong></span></div>
 </section>
