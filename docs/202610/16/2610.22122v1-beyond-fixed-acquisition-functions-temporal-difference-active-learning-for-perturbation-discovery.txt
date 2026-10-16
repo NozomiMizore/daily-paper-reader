@@ -1,0 +1,2286 @@
+Title: Beyond Fixed Acquisition Functions: Temporal Difference Active Learning for Perturbation Discovery
+
+URL Source: https://arxiv.org/pdf/2610.22122v1
+
+Published Time: Fri, 16 Oct 2026 02:00:54 GMT
+
+Number of Pages: 41
+
+Markdown Content:
+# Beyond Fixed Acquisition Functions: Temporal Difference Active Learning for Perturbation Discovery 
+
+Xudong Zhang 1,2,∗ Jianzhe Li 1,2,∗ Yitong Tang 1 Peijie Zhou 1,2,†
+
+> 1
+
+Center for Machine Learning Research, Peking University, Beijing, China 
+
+> 2
+
+AI for Science Institute (AISI), Beijing, China 
+
+xudongzhang25@stu.pku.edu.cn 
+
+> ∗
+
+Equal contribution. †Corresponding author. 
+
+Abstract 
+
+Genetic and drug perturbation screens are important tools for elucidating disease mechanisms and validating therapeutic targets, but experimental costs limit the number of candidates that can be tested. Existing perturbation screening methods typically update the surrogate model with feedback while keeping the acquisition function fixed, limiting their ability to adapt selection to different response landscapes. Experimental feedback reveals current hits and informs subsequent selection by updating candidate predictions, providing a training signal for learning how to select experiments. We formulate budgeted perturbation discovery as a sequential decision problem and propose Temporal Difference Active Learning (TDAL), which learns an acquisition function online through temporal difference learning from a single screening trajectory, accounting for current hits and future discoveries. TDAL uses the Hellinger distance between hit probabilities for unmeasured candidates before and after an experiment to weight successor value, and reuses measured outcomes through leave-batch-out (LBO) to construct virtual transitions and alleviate training data scarcity. Across eight public screens spanning single, double, and triple perturbations under varied experimental configurations, TDAL achieves an average rank of 1.63 among eleven methods and ranks first on four tasks, demonstrating its adaptability across response landscapes. 
+
+1 Introduction 
+
+Large-scale perturbational screens deepen the understanding of disease mechanisms and help validate therapeutic targets (Schmidt et al., 2022; Zhuang et al., 2019; Sanchez et al., 2021). The human genome comprises nearly 20,000 single-gene candidates, roughly 200 million pairs, and one trillion triples in terms of perturbation combinations. The costs of testing each perturbation and measuring its phenotype make exhaustive screening infeasible (Mehrjou et al., 2022; Pacchiano et al., 2023). Closed-loop systems have shown that model-guided experiment selection can improve biological discovery under limited resources (Xu et al., 2026; DeMeo et al., 2025). It is thus important to develop strategies that maximize cumulative discoveries within a fixed experimental budget. Active learning addresses this challenge by iteratively fitting a surrogate model to measured outcomes and using an acquisition function to select subsequent experiments (Figure 1a). GeneDisco evaluates active learning methods for perturbation screening and reports substantial variation in their performance across experimental settings (Mehrjou et al., 2022). Existing methods employ different selection criteria to guide perturbation discovery. OAE (Pacchiano et al., 2023) seeks near-optimal perturbations, DiscoBAX (Lyle et al., 2023) considers response strength and mechanistic diversity, and Probability-of-Hit (PoH) (Rubbi et al., 2026) prioritizes perturbations that exceed a predefined phenotypic threshold. Recent approaches also incorporate language model agents or biological priors into experiment selection (Roohani et al., 2025; Hao et al., 2025; Li et al., 2026a). 1arXiv:2610.22122v1 [cs.LG] 15 Oct 2026 Single peak Multiple peaks Unobserved peak      
+
+> abObserved Greedy Uncertainty Diversity
+
+Figure 1: a, Active learning fits a surrogate model, selects experiments with an acquisition function, and updates the model with new observations (gray arrows). TDAL learns a dynamic acquisition function from accumulated transitions (purple path). b, A surrogate model is fitted to observations. Fixed acquisition functions (Greedy, Uncertainty, and Diversity) use its predictions to select the next batch, yielding different selections across illustrative landscapes. Hexagon fills show responses. Gray and colored outlines mark observed candidates and next batch selections, respectively. 
+
+Indeed, different response landscapes favor different selection strategies (Figure 1b). In conventional active learning, experimental feedback updates the surrogate model and changes subsequent selections, while the acquisition rule itself typically remains predefined. The same feedback can also inform how experiments should be selected: each experiment yields immediate discoveries and updates predictions for the remaining candidates, influencing future discovery opportunities. This motivates learning an acquisition function that accounts for both current and future discoveries from experimental feedback. We therefore formulate screening as a sequential decision problem and use experimental transitions to learn a dynamic acquisition function online (Figure 1a). However, unlike reinforcement learning with repeated episodes, a screening campaign follows a single trajectory that cannot be reset, with each candidate queried at most once and only one real transition generated per round. Learning an acquisition function from such limited feedback presents a particular challenge. Here we introduce Temporal Difference Active Learning (TDAL), which learns a dynamic acquisition function online from experimental feedback to maximize cumulative discoveries. Building on surrogate hit probabilities, TDAL uses temporal difference learning to incorporate observed discoveries and feedback-weighted successor value into experiment selection. It weights successor value according to changes in predicted hit probabilities for the remaining candidates, reflecting how experimental feedback updates their predicted outcomes. To alleviate the scarcity of real transitions, TDAL constructs additional training transitions from previously measured outcomes through leave-batch-out (LBO). Our main contributions are threefold. 
+
+• We formulate perturbation discovery as a sequential decision problem and learn a dynamic acquisition function from experimental feedback to adapt to different response landscapes. 
+
+• We introduce TDAL, which learns online from a single screening trajectory through temporal difference learning. It uses the Hellinger distance to weight successor value and LBO to construct additional training transitions, alleviating training data scarcity. 
+
+• We evaluate TDAL across eight screens spanning single, double, and triple perturbations. TDAL ranks first on four tasks and achieves an average rank of 1.63 among eleven methods. 22 Related Work 
+
+2.1 Active Learning and Acquisition Function Learning 
+
+Active learning alternates between sample selection and model updates to improve predictions with fewer labels. Methods include BALD, which uses information gain (Houlsby et al., 2011), CoreSet, which emphasizes geometric coverage (Sener and Savarese, 2018), and BADGE, which combines uncertainty and diversity (Ash et al., 2020). For discovery, active search (Garnett et al., 2012), ENS (Jiang et al., 2017), and its batch extension (Jiang et al., 2018) evaluate future hits within the budget. IDS (Xu et al., 2022) balances instantaneous regret and information gain to increase cumulative response. These methods adapt sampling to observations but retain predefined acquisition functions. Other approaches learn acquisition functions from data. Learning Active Learning predicts expected error reduction (Konyushkova et al., 2017). MetaBO trains acquisition functions through reinforcement learning across tasks (Volpp et al., 2020). Amortized active search trains a neural network to imitate ENS selections (Nguyen et al., 2024). In molecular discovery, GLARE updates its selection policy online using measured activity labels (Chen et al., 2025), while Zhang et al. (2026) learn a policy to identify the optimal molecule. SOFisher uses Double DQN to select spatial-omics fields of view (Li et al., 2026b). Our work focuses on perturbation screens, where TDAL learns a dynamic acquisition function online from experimental feedback. 
+
+2.2 Active Learning for Perturbation Discovery 
+
+Active learning guides the discovery of perturbations with target phenotypes under a limited experimental budget. GeneDisco provides a unified benchmark for gene perturbations (Mehrjou et al., 2022). OAE seeks near-optimal perturbations with high responses (Pacchiano et al., 2023), DiscoBAX balances response strength and mechanistic diversity (Lyle et al., 2023), and PoH selects candidates by their posterior probability of exceeding a predefined phenotypic threshold (Rubbi et al., 2026). RECOVER and NAIAD target drug and genetic combination discovery, respectively (Bertin et al., 2023; Qin et al., 2025), while BATCHIE uses information-driven batch design to improve predictions of drug combination responses (Tosh et al., 2025). These methods update surrogate models from observations while typically keeping acquisition functions fixed. Biological priors and agents guide selection. IterPert improves predictions with multimodal priors (Huang et al., 2024), while BioBO combines gene representations and pathway information (Li et al., 2026a). Soper et al. (2025) and DeepAL (Zhu et al., 2026) combine knowledge graphs with Bayesian matrix factorization and representation learning, respectively, for double gene perturbation discovery. BioDiscoveryAgent and PerTurboAgent design perturbations using language models, experimental history, and tools (Roohani et al., 2025; Hao et al., 2025). AIDO.Builder updates models from feedback and reuses experience through memory (Guo et al., 2026). Gupta et al. (2025) found the tested agents insensitive to permuted feedback, whereas Wainrib et al. (2026) reported discovery gains from feedback beyond prior knowledge. We construct transitions from feedback to learn a dynamic acquisition function that adapts to different response landscapes (Appendix A.1). 
+
+3 Problem Formulation 
+
+We consider a fixed candidate pool and aim to maximize expected cumulative discoveries of perturbations that induce desired phenotypic responses within a fixed experimental budget. We formulate this task as a sequential decision problem and define an objective combining immediate discoveries with successor value weighted according to experimental feedback (notation in Appendix A.2). 3Figure 2: TDAL framework. The surrogate is fitted to measurements, and the acquisition function sums hit probabilities and network outputs to select the next batch. TDAL incorporates new observations, refits the surrogate, and constructs real transitions. These enter replay alongside virtual LBO transitions reconstructed from measurements, training the acquisition function through TD learning with Hellinger distance weighting successor value according to prediction changes. 
+
+3.1 Sequential Perturbation Discovery 
+
+Let X be a finite pool of gene or gene combination perturbations. Testing a candidate 𝑥 ∈ X yields a scalar phenotype 𝑒 (𝑥 ). We align effect directions across assays so that larger 𝑒 (𝑥 ) indicates closer agreement with the target phenotype. For a threshold 𝜏 fixed before screening, the hit indicator is 𝑧 (𝑥 ) = 1{𝑒 (𝑥 ) ≥ 𝜏 } (Rubbi et al., 2026). Let 𝐷 0 contain the 𝑛 0 candidate–phenotype pairs (𝑥, 𝑒 (𝑥 )) observed before sequential selection begins. The phenotypes of initially unmeasured candidates 𝑥 ∈ 𝑈 0 are revealed only when queried. The subsequent screening process consists of 𝑇 rounds with batch size 𝐵 , subject to the experimental budget. In the experimental loop shown in Figure 2, let 𝐴 𝑡 denote the selected batch at round 𝑡 ∈ { 0, . . . , 𝑇 − 1}
+
+and 𝑂 𝑡 = {( 𝑥, 𝑒 (𝑥 )) : 𝑥 ∈ 𝐴 𝑡 } its observed outcomes. Before selecting 𝐴 𝑡 , the available history is 
+
+𝐻 𝑡 = (𝐷 0, ( 𝐴 𝑗 , 𝑂 𝑗 )0≤ 𝑗<𝑡 ). The measured dataset and unmeasured candidate pool are 
+
+𝐷 𝑡 = 𝐷 0 ∪
+
+Ø  
+
+> 0≤𝑗<𝑡
+
+𝑂 𝑗 , 𝑈 𝑡 = X \ { 𝑥 : (𝑥, 𝑒 (𝑥 )) ∈ 𝐷 𝑡 }. (1) A surrogate model trained on 𝐷 𝑡 estimates hit probabilities ˆ 𝑝 𝑡 (𝑥 ) for 𝑥 ∈ 𝑈 𝑡 . The acquisition function selects 
+
+𝐴 𝑡 ⊆ 𝑈 𝑡 using the available history and surrogate predictions. Experimentally testing the selected batch yields 𝑂 𝑡 and a reward equal to the number of discoveries in round 𝑡 : 𝑅 𝑡 = Í𝑥 ∈ 𝐴 𝑡 𝑧 (𝑥 ). Appending ( 𝐴 𝑡 , 𝑂 𝑡 )
+
+to the history gives 𝐻 𝑡 +1, with 𝐷 𝑡 +1 = 𝐷 𝑡 ∪ 𝑂 𝑡 and 𝑈 𝑡 +1 = 𝑈 𝑡 \ 𝐴 𝑡 . Each round thus produces a transition 
+
+(𝐻 𝑡 , 𝐴 𝑡 , 𝑅 𝑡 , 𝐻 𝑡 +1). After 𝑇 rounds, the final output consists of all verified hit candidates recorded in 𝐷 𝑇 ,whose cumulative discovery count is 𝐶 𝑇 = Í( 𝑥,𝑒 ( 𝑥 ) ) ∈ 𝐷 𝑇 𝑧 (𝑥 ).
+
+3.2 Sequential Decision Objective 
+
+The screening goal is to maximize expected final discoveries E𝜋 [𝐶 𝑇 | 𝐻 0]. Each experiment yields the current discovery count and updates the surrogate model’s predictions for unmeasured candidates, informing 4estimates of future discovery value and selection in the next round. We use the current discovery count as the immediate reward and adjust the successor value weight according to prediction changes before and after the experiment, defining a surrogate learning objective weighted by experimental feedback. Let 
+
+𝑤 𝑡 = 𝑤 (𝐻 𝑡 , 𝐴 𝑡 , 𝐻 𝑡 +1) ∈ [ 0, 1] denote the successor value weight determined by the observed transition. For a selection policy 𝜋 , define 
+
+𝐽 𝑤 (𝜋 ) = E𝜋 
+
+h∑︁ 𝑇 −1
+
+> 𝑡 =0
+
+Ö 𝑡 −1 
+
+> 𝑗 =0
+
+𝑤 𝑗 
+
+
+
+𝑅 𝑡 𝐻 0
+
+i
+
+. (2) We seek a selection policy 𝜋 that maximizes 𝐽 𝑤 (𝜋 ). When 𝑤 𝑡 = 1 for all 𝑡 , this is equivalent to maximizing expected final discoveries E𝜋 [𝐶 𝑇 | 𝐻 0].To maximize 𝐽 𝑤 , let 𝑄 ∗,𝑤 𝑡 (𝐻 𝑡 , 𝐴 ) denote the expected weighted cumulative discoveries from round 𝑡 to 𝑇 − 1, when batch 𝐴 is selected given history 𝐻 𝑡 and subsequent selections follow the optimal policy. This value combines current discoveries with weighted successor value through the Bellman equation for a finite horizon: 
+
+𝑄 ∗,𝑤 𝑡 (𝐻 𝑡 , 𝐴 ) = E𝑅 𝑡 + 𝑤 𝑡 max 𝐴 ′ ⊆𝑈 𝑡 +1 𝑄 ∗,𝑤 𝑡 +1 (𝐻 𝑡 +1, 𝐴 ′) 𝐻 𝑡 , 𝐴 𝑡 = 𝐴  . (3) At each round, the optimal selection policy 𝜋 ∗ 
+
+> 𝑤
+
+selects the batch maximizing 𝑄 ∗,𝑤 𝑡 given the current history, thereby maximizing the weighted cumulative discovery objective 𝐽 𝑤 :
+
+𝜋 ∗ 
+
+> 𝑤
+
+(𝐻 𝑡 ) ∈ arg max 𝐴 ⊆𝑈 𝑡 𝑄 ∗,𝑤 𝑡 (𝐻 𝑡 , 𝐴 ), 𝐽 𝑤 (𝜋 ∗ 
+
+> 𝑤
+
+) = max 𝜋 𝐽 𝑤 (𝜋 ) = max 𝐴 ⊆𝑈 0 𝑄 ∗,𝑤  
+
+> 0
+
+(𝐻 0, 𝐴 ). (4) 
+
+4 Temporal Difference Active Learning 
+
+Within this sequential decision framework, TDAL uses experimental feedback to update a dynamic acquisition function online through TD learning, accounting for current and future discoveries while adapting selection to different response landscapes (Figure 2). See Algorithm 1 (Appendix A.3). 
+
+4.1 Dynamic Acquisition Function 
+
+The optimal value 𝑄 ∗,𝑤 𝑡 (𝐻 𝑡 , 𝐴 ) involves expectations over future experimental feedback and is difficult to compute directly. TDAL approximates this value using a dynamic acquisition function learned online from experimental feedback and built on surrogate predictions. 
+
+Surrogate model. In the active learning loop, the surrogate model approximates the posterior predictive distribution of unmeasured outcomes, providing a reference for estimating immediate discoveries. We use an MLP 𝑔 𝛽 with MC dropout and fit parameters 𝛽 𝑡 to data 𝐷 𝑡 . For each unmeasured candidate, we estimate ˆ𝑝 𝑡 (𝑥 ) as the proportion of sampled predictions at or above threshold 𝜏 .
+
+Value decomposition. Given the measured data 𝐷 𝑡 , b𝑅 𝑡 ( 𝐴 ) = Í𝑥 ∈ 𝐴 ˆ𝑝 𝑡 (𝑥 ) estimates the number of discoveries in the unmeasured batch 𝐴 . Thus, the optimal batch value can be written as 
+
+𝑄 ∗,𝑤 𝑡 (𝐻 𝑡 , 𝐴 ) = b𝑅 𝑡 ( 𝐴 ) + E
+
+h
+
+𝑅 𝑡 − b𝑅 𝑡 ( 𝐴 ) + 𝑤 𝑡 max 𝐴 ′ 𝑄 ∗,𝑤 𝑡 +1 (𝐻 𝑡 +1, 𝐴 ′) 𝐻 𝑡 , 𝐴 𝑡 = 𝐴 
+
+i| {z }  
+
+> 𝐹 ∗
+> 𝑡 (𝐻 𝑡 , 𝐴 )
+
+. (5) The term 𝐹 ∗ 
+
+> 𝑡
+
+(𝐻 𝑡 , 𝐴 ) accounts for the expected error in this estimate and the weighted value of subsequent discoveries. This decomposition allows value learning to build on the surrogate’s estimate of immediate discoveries, which provides a reference grounded in measured data. 
+
+Acquisition function parameterization. We approximate 𝐹 ∗ 
+
+> 𝑡
+
+(𝐻 𝑡 , 𝐴 ) using the summed outputs 𝐹 𝜃 (𝑠 𝑡 , 𝐴 ) of a fully connected acquisition network 𝑓 𝜃 . The state 𝑠 𝑡 summarizes screening progress, measured outcomes, 5and surrogate prediction statistics for unmeasured candidates. The candidate features 𝑐 𝑡 (𝑥 ) combine a fixed biological representation with the surrogate model’s predictions. Adding each candidate’s network output to its estimated hit probability yields a dynamic acquisition function that scores candidates based on 𝑠 𝑡 and 
+
+𝑐 𝑡 (𝑥 ) (Appendices A.4–A.6) 
+
+𝑞 𝜃 (𝑠 𝑡 , 𝑥 ) = ˆ𝑝 𝑡 (𝑥 ) + 𝑓 𝜃 (𝑠 𝑡 , 𝑐 𝑡 (𝑥 )) . (6) We use an additive approximation 𝑄 𝜃 to make batch maximization tractable. Selecting the 𝐵 unmeasured candidates with the highest scores maximizes 
+
+𝑄 𝜃 (𝑠 𝑡 , 𝐴 ) =∑︁ 𝑥 ∈ 𝐴 𝑞 𝜃 (𝑠 𝑡 , 𝑥 ) ≈ 𝑄 ∗,𝑤 𝑡 (𝐻 𝑡 , 𝐴 ). (7) 
+
+4.2 Temporal Difference Learning 
+
+We train the acquisition network 𝑓 𝜃 using real and LBO transitions (Appendix A.7). Each transition provides an observed discovery count and a successor state, supplying a learning signal for the acquisition function to adapt its selection strategy to different response landscapes. 
+
+Real transitions. After querying batch 𝐴 𝑡 , we obtain observations 𝑂 𝑡 and discovery count 𝑅 𝑡 . We refit the surrogate on 𝐷 𝑡 +1 and construct the successor selection state 𝑠 𝑡 +1. With successor value weight 𝑤 𝑡 , the round is stored as the training record 𝜉 𝑡 = (𝑠 𝑡 , 𝐴 𝑡 , 𝑅 𝑡 , 𝑤 𝑡 , 𝑠 𝑡 +1).
+
+Virtual transitions through LBO. Screening follows a single trajectory, which cannot be reset to test alternative selection sequences within the same budget. Each round therefore provides only one real batch transition. LBO supplements these transitions by temporarily hiding measured outcomes and then restoring them to reconstruct experimental feedback. Let 𝐷 + and 𝑈 + denote the current measured dataset and unmeasured pool. For a batch 𝐴 of measured candidates, hiding its outcomes gives 𝐷 − = 𝐷 + \ {( 𝑥, 𝑒 (𝑥 )) : 𝑥 ∈ 𝐴 }. We refit the surrogate model on 𝐷 − to construct the predecessor state 𝑠 −, and construct the successor state 𝑠 + from 𝐷 +
+
+with the outcomes restored. The discovery count 𝑅 is computed from the batch’s observed outcomes. We compute 𝑤 by comparing hit probability estimates before and after restoration over 𝑈 +. The resulting virtual transition is e𝜉 = (𝑠 − , 𝐴, 𝑅, 𝑤, 𝑠 +). Real and virtual transitions enter the same replay buffer R, providing more training data without additional experiments. 
+
+Feedback weights. For each candidate, hit and nonhit probabilities define a Bernoulli distribution. For both real and virtual transitions, we use Hellinger distance (Hellinger, 1909) to compare these distributions before and after feedback over the remaining pool. Unchanged predictions across 𝑈 𝑡 +1 give 𝑤 𝑡 = 0, while larger Hellinger distances assign more weight to successor value: 
+
+𝑤 2 
+
+> 𝑡
+
+=
+
+Í𝑥 ∈𝑈 𝑡 +1 𝐻 2Ber ( ˆ𝑝 𝑡 (𝑥 ), ˆ𝑝 𝑡 +1 (𝑥 )) |𝑈 𝑡 +1 | , 𝐻 2Ber ( 𝑝, 𝑞 ) = 1 − √𝑝𝑞 −√︁ (1 − 𝑝 )( 1 − 𝑞 ). (8) 
+
+Updating the acquisition function through TD learning. For a replay transition 𝜉 = (𝑠, 𝐴, 𝑅, 𝑤, 𝑠 ′), we follow Double DQN. The current acquisition function selects the successor batch 𝐴 ′ 
+
+> 𝜃
+
+, and the target network evaluates its batch value 𝑄 ¯𝜃 (𝑠 ′, 𝐴 ′ 
+
+> 𝜃
+
+) (van Hasselt et al., 2016). Here, ¯ 𝜃 denotes the target network parameters. The current discovery count and successor value weighted by 𝑤 form the TD target 𝑌 . Both real and LBO transitions use this target. During each update, the stored surrogate predictions remain fixed, and we optimize only 𝜃 .
+
+𝑌 = 𝑅 + 𝑤𝑄 ¯𝜃 (𝑠 ′, 𝐴 ′ 
+
+> 𝜃
+
+), LTD (𝜃 ) = E𝜉 ∼R [Huber (𝑄 𝜃 (𝑠, 𝐴 ) − 𝑌 )] . (9) 64.3 Theoretical Analysis 
+
+We analyze weighted Bellman optimality, predictive improvement, and the final discovery gap. 
+
+Proposition 1 (Weighted Bellman optimality). For a finite horizon, let 𝑄 ∗,𝑤 𝑡 satisfy the Bellman recursion in equation 3, and let 𝜋 ∗ 
+
+> 𝑤
+
+select a feasible batch maximizing 𝑄 ∗,𝑤 𝑡 (𝐻 𝑡 , 𝐴 ) at every reachable history. Then 𝐽 𝑤 (𝜋 ∗ 
+
+> 𝑤
+
+) = max 𝜋 𝐽 𝑤 (𝜋 ). Thus, optimal batch selection maximizes the weighted discovery objective (Appendix B.1). 
+
+Proposition 2 (Feedback and predictive improvement). Fix 𝐻 𝑡 , 𝐴 𝑡 and 𝑈 = 𝑈 𝑡 +1, with |𝑈 | > 0. Let 
+
+𝑝 𝑥 = Pr (𝑧 (𝑥 ) = 1 | 𝐻 𝑡 , 𝐴 𝑡 ) and 𝑞 𝑥 = Pr (𝑧 (𝑥 ) = 1 | 𝐻 𝑡 , 𝐴 𝑡 , 𝑂 𝑡 ) denote hit probabilities before and after feedback. Let Δpred denote the expected decrease in squared loss from ( 𝑝 𝑥 − 𝑧 (𝑥 )) 2 to (𝑞 𝑥 − 𝑧 (𝑥 )) 2, averaged over 𝑥 ∈ 𝑈 (Gneiting and Raftery, 2007). With 𝑤 𝑡 computed from these probabilities, the expected predictive improvement conditional on 𝐻 𝑡 , 𝐴 𝑡 satisfies 
+
+E[𝑤 4 
+
+> 𝑡
+
+] ≤ Δpred = 1
+
+|𝑈 |∑︁ 𝑥 ∈𝑈 E[( 𝑞 𝑥 − 𝑝 𝑥 )2] ≤ 2E[𝑤 2 
+
+> 𝑡
+
+]. (10) This bounds predictive improvement using the Hellinger weight. For a query 𝑎 revealing only 𝑧 (𝑎 ), let 
+
+𝑟 = Pr (𝑧 (𝑎 ) = 1) ∈ ( 0, 1), 𝑝 + 
+
+> 𝑥
+
+= Pr (𝑧 (𝑥 ) = 1 | 𝑧 (𝑎 ) = 1), and 𝑝 − 
+
+> 𝑥
+
+= Pr (𝑧 (𝑥 ) = 1 | 𝑧 (𝑎 ) = 0), suppressing the same conditioning. The predictive improvement decomposes as 
+
+Δpred (𝑎 ) = 𝑟 (1 − 𝑟 )|𝑈 |∑︁ 𝑥 ∈𝑈 ( 𝑝 + 
+
+> 𝑥
+
+− 𝑝 − 
+
+> 𝑥
+
+)2. (11) Outcome uncertainty 𝑟 (1 − 𝑟 ) multiplies the mean squared difference between remaining predictions under the two outcomes. Queries without hits can therefore inform selection (Appendix B.2). 
+
+Proposition 3 (Final discovery gap). Under the same initial information and budget, let 𝜋 ∗ 
+
+> 𝐶
+
+maximize expected final discoveries and let 𝜋 𝜃 select a feasible batch maximizing 𝑄 𝜃 (𝑠 𝑡 , 𝐴 ) at each round. For feedback weights 
+
+𝑤 𝑡 ∈ [ 0, 1], write 𝑊 𝑡 = Î𝑡 −1 
+
+> 𝑗 =0
+
+𝑤 𝑗 , with 𝑊 0 = 1. Define the value error over feasible batches as 𝜀 𝑤 𝑡 (𝐻 𝑡 ) =
+
+max 𝐴 |𝑄 𝜃 (𝑠 𝑡 , 𝐴 ) − 𝑄 ∗,𝑤 𝑡 (𝐻 𝑡 , 𝐴 )| and the objective weighting bias as Δ𝐶 (𝑤 ) = E𝜋 ∗ 
+
+> 𝐶
+
+[Í𝑇 −1 
+
+> 𝑡 =0
+
+(1 − 𝑊 𝑡 )𝑅 𝑡 | 𝐻 0].The final discovery gap satisfies 
+
+E𝜋 ∗ 
+
+> 𝐶
+
+[𝐶 𝑇 | 𝐻 0] − E𝜋 𝜃 [𝐶 𝑇 | 𝐻 0] ≤ Δ𝐶 (𝑤 ) + 2E𝜋 𝜃 
+
+h∑︁ 𝑇 −1 
+
+> 𝑡 =0
+
+𝑊 𝑡 𝜀 𝑤 𝑡 (𝐻 𝑡 ) | 𝐻 0
+
+i
+
+. (12) The first term measures discovery return attenuated by weighting. The second bounds selection losses from value estimation error. Small terms imply near-optimal expected final discoveries. For constant weights under a common value error bound, smaller weights lower the error bound but raise the bias bound. Larger weights lower the bias bound but raise the error bound (Appendix B.3). 
+
+5 Experiments and Results 
+
+We evaluate hit discovery performance across eight public genetic perturbation datasets under fixed experi-mental budgets. Then we examine how local landscape structure affects active discovery, assess individual components through ablations, and analyze candidate rankings over selection rounds. 
+
+5.1 Experimental Setup Data and budgets. We evaluate TDAL on eight public datasets recording phenotypic responses to genetic perturbations, aiming to identify perturbations producing desired phenotypic changes (Appendix C.1). These comprise four single perturbation tasks (Schmidt et al., 2022; Zhuang et al., 2019; Carnevale et al., 2022), 7three double perturbation tasks (Fong et al., 2025; Simpson et al., 2023; Horlbeck et al., 2018), and one triple perturbation task (Kuzmin et al., 2020), with candidate pools ranging from 11,067 to 214,642. Initial sample sizes, batch sizes, and budgets vary across tasks (Table C2). 
+
+Experimental protocol. We conduct retrospective sequential evaluation using measured phenotypes from these genetic perturbation datasets. Candidate identities and fixed representations are available at the start. Each method initially receives the phenotypes of 𝑛 0 candidates, and the remaining outcomes are revealed as candidates are selected in subsequent rounds. We fix the hit threshold 𝜏 before screening to target the top 5% of candidates in the predefined effect direction (Mehrjou et al., 2022). Selection aims to maximize final cumulative hits 𝐶 𝑇 within the budget, and recall Recall 𝑇 = 𝐶 𝑇 /Í𝑥 ∈ X 𝑧 (𝑥 ) measures discovery coverage. Within each of five seeds (0–4), methods share the candidate pool, initial data, budget, and hit threshold (Appendix C.2). 
+
+Baselines. We compare diverse baselines with publicly available implementations (Appendix C.3). Pertur-bation discovery baselines include PoH (Rubbi et al., 2026), OAE (Pacchiano et al., 2023), and DiscoBAX (Lyle et al., 2023). General acquisition functions include UCB (Srinivas et al., 2010), Expected Improvement (Jones et al., 1998), and Thompson Sampling (Thompson, 1933). Active learning baselines include BADGE (Ash et al., 2020), CoreSet (Sener and Savarese, 2018), and TopUncertain and KMeans-Embedding from GeneDisco (Mehrjou et al., 2022). Random serves as a control. For computational scalability, we evaluate DiscoBAX on four single perturbation tasks. 010 20 30 Recall (%) 128 1088 2048 Queried perturbations 0100 200 Cumulative hits 
+
+a IFN-γ    
+
+> 020 40 Recall (%) 128 1088 2048 Queried perturbations 0100 200 300 Cumulative hits
+
+b IL-2   
+
+> 0510 Recall (%) 128 1088 2048 Queried perturbations 050 100 Cumulative hits
+
+c NK    
+
+> 010 20 Recall (%) 128 1088 2048 Queried perturbations 050 100 150 Cumulative hits
+
+d Carnevale   
+
+> 050 Recall (%) 1024 14k 27k Queried perturbations 02000 4000 6000 Cumulative hits
+
+e Simpson K562   
+
+> 010 20 30 Recall (%) 128 1088 2048 Queried perturbations 050 100 150 200 Cumulative hits
+
+f SCHEMATIC    
+
+> 020 40 Recall (%) 1024 27k 52k Queried perturbations 01000 2000 3000 4000 Cumulative hits
+
+g Kuzmin    
+
+> 050 100 Recall (%) 1024 14k 27k Queried perturbations 01000 2000 3000 4000 Cumulative hits
+
+h Horlbeck Jurkat                                                                                                               
+
+> TDAL PoH CoreSet OAE UCB TopUnc DiscoBAX EI BADGE TS KMeans Random
+> 13276549810 11 12
+> 1283479510 611 12 241710 912 85611 3
+> 14278639511 10 12 218437—610 511 9312987—6410 511
+> 126543—89710 11 218346—59711 10
+> 1.63 2.25 4.63 5.63 5.88 6.25 7.00 7.00 7.50 7.75 10.00 10.00
+> 14812 Rank IFN-γ IL-2 NK Carnevale Simpson K562 SCHEMATIC Kuzmin Horlbeck Jurkat
+> Mean rank
+
+i           
+
+> TDAL PoH OAE DiscoBAX UCB EI TS TopUncertain BADGE CoreSet KMeans Random
+
+Figure 3: Discovery performance across tasks. a–h, Mean cumulative hits and recall with pointwise 95% confidence intervals across five seeds. i, Ranks by mean final hits (darker is higher). 
+
+5.2 Budgeted Perturbation Discovery Single perturbations. Across five seeds, TDAL achieves the highest mean final discovery counts on IFN-𝛾 ,IL-2, and Carnevale (Figure 3a–d). Final cumulative hit counts are 270 .6 ± 6.1, 367 .4 ± 3.0, and 161 .2 ± 8.6, 8corresponding to recalls of 31.00%, 42.08%, and 18.40%, respectively. On NK, CoreSet, TDAL, and Random reach recalls of 13.01%, 12.49%, and 11.71%, respectively, with small gaps between active methods and Random. TDAL shows strong performance and adaptability across single gene perturbation landscapes. 
+
+Combinatorial perturbations. TDAL ranks first on Kuzmin and third on SCHEMATIC, with final recalls of 38.59% and 29.01%, respectively (Figure 3e–h). Although ranked second on Simpson K562 and Horlbeck Jurkat, TDAL approaches complete hit recovery with recalls of 94.40% and 99.45%, respectively, within 0.2 percentage points of the best method. These results show consistently strong performance across double and triple gene perturbation tasks. 
+
+Stability across tasks. Fixed acquisition functions favor different response landscapes (Mehrjou et al., 2022). Among eleven methods evaluated on all eight main tasks, TDAL achieves an average rank of 1.63, placing first on four tasks, second on three, and third on one (Figure 3i). TDAL’s top three performance on every task supports its adaptability across response landscapes (Appendix D). 0.83× 1.25× 1.51× 1.76× 2.53× 3.58× 5.84× 6.27×        
+
+> 10-NN hit enrichment
+> NK Carnevale SCHEMATIC Kuzmin IFN-γ IL-2 Jurkat Simpson 135
+> Gain over Random (×)  Baseline mean fit
+> 0.95× 3.82× 9.67× 17.71× 1.05 2.53 3.83 10.00 17.71
+> 10-NN hit enrichment (×)
+> 0123
+> Gain over Random (×)
+
+a b           
+
+> TDAL PoH OAE DiscoBAX UCB EI TS TopUnc BADGE CoreSet KMeans Random
+
+Figure 4: Local hit structure and discovery gains. a, Real tasks. b, Noisy multicluster landscapes, with example hit locations. Axes show mean enrichment and discovery gains over Random. Points show mean gains with 95% confidence intervals across five repetitions. 
+
+5.3 Landscape Structure and Active Discovery Real landscapes. Active learning gains over Random vary across datasets, with several methods underper-forming Random on NK (Figure 3). We examine local hit structure in the fixed candidate representations. Within an analysis sample, enrichment is the mean hit rate among each hit candidate’s 10 nearest neighbors divided by the sample’s overall hit rate. Across eight tasks, enrichment ranges from 0 .83 × to 6 .27 ×. The gray dashed fit to mean gains across nine shared baselines (Figure 4a) indicates that stronger local hit clustering is associated with greater active learning gains. 
+
+Controlled landscapes. To further examine this relationship, we construct simulated landscapes with controlled spatial structure. We keep the positions of 17,660 candidates and the set of phenotype values fixed, changing their assignment so that hits become progressively more clustered. With nearly random hit locations, methods perform close to Random. Across five enrichment levels, stronger clustering yields larger gains for TDAL and several baselines, although the benefit varies across acquisition functions (Figure 4b). These results indicate that local hit structure can provide useful information for active selection. Construction details and results are in Appendix E. 95.4 Component Ablations Dynamic acquisition function. Surrogate only removes 𝑓 𝜃 and selects solely by ˆ 𝑝 𝑡 (𝑥 ), updating the surrogate model while keeping the acquisition function fixed (Appendix C.3). Its mean final discovery counts are lower than full TDAL on all four tasks, supporting learning the acquisition function alongside surrogate updates. w/o successor retains 𝑓 𝜃 but sets 𝑤 𝑡 = 0, fitting the residual 𝑅 𝑡 − b𝑅 𝑡 ( 𝐴 𝑡 ) between observed and surrogate estimated discoveries. Its mean final discovery count exceeds Surrogate only on all four tasks, showing that current feedback alone can train a dynamic acquisition function. Full TDAL adds further gains on every task, indicating that incorporating estimated future discovery value improves selection beyond learning from current feedback alone. 
+
+Training and scoring design. Fixing 𝑤 𝑡 = 1 lowers mean final discovery counts below both full TDAL and w/o successor on all four tasks. Undiscounted successor value can therefore impair selection, supporting adjustment of its weight to experimental feedback. Removing LBO also lowers mean final discoveries on every task, supporting the use of additional reconstructed transitions to train 𝑄 𝜃 when real experimental feedback is sparse. w/o anchor removes the explicit ˆ 𝑝 𝑡 (𝑥 ) from the score while retaining surrogate predictions in the inputs. Its final mean decreases on the two 60-round single perturbation tasks but increases slightly on the two 200-round tasks. With more rounds of online training, the acquisition function maintains performance without the explicit probability baseline. Detailed ablation settings are provided in Appendix F. 
+
+Dataset Surrogate only w/o adaptive 𝑤 𝑡 w/o LBO w/o successor w/o anchor Full TDAL IFN-𝛾 186 .4 ± 27 .7 191 .8 ± 41 .1 222 .2 ± 79 .8 260 .0 ± 11 .7 262 .2 ± 15 .3 270 .6 ± 6.1
+
+IL-2 253 .8 ± 15 .2 319 .6 ± 16 .8 352 .2 ± 11 .5 361 .4 ± 3.4 342 .8 ± 43 .2 367 .4 ± 3.0
+
+Kuzmin 3277 .8 ± 35 .5 3724 .6 ± 142 .4 4096 .4 ± 208 .1 4086 .8 ± 89 .3 4174 .4 ± 121 .4 4141 .0 ± 194 .0Jurkat 4518 .2 ± 13 .3 4301 .2 ± 248 .3 4510 .4 ± 39 .3 4536 .0 ± 15 .3 4550 .2 ± 3.8 4542 .8 ± 4.8
+
+Table 1: Core ablations on four tasks. Final cumulative hits across five seeds (mean ± SD). Bold and underlined values mark the highest and second-highest means. 20 40 60 80 100               
+
+> Screening progress (%)
+> 1.6 2.0 2.4 2.8 3.2
+> TD loss
+> TD loss (5 runs) Additional hits (5 runs)
+> 040 85
+> Cumulative hits
+> r ≤ 10 6/85 r ≤ 35 32/85 r ≤ 45 65/85 r ≤ 54 85/85
+> 010 20 30 40 50
+> Active round
+> 1B=32 1k 10k
+> Candidate rank  TDAL trajectory TDAL at selection Surrogate at selection
+
+a b
+
+Figure 5: Online learning and candidate reranking. a, Training loss and cumulative discoveries over screening rounds. b, Hit discovery in a t-SNE projection of representations (top) and ranking trajectories (bottom), with a comparison between TDAL and surrogate prediction ranks. 
+
+5.5 Online Feedback and Selection Paths 
+
+To examine how online learning changes candidate selection, we analyze 85 IL-2 hits discovered in all five TDAL runs but in none of the Surrogate only runs. Discoveries concentrate in the second half of screening, with the median cumulative count rising from 16 after 30 rounds to 85 at completion (Figure 5a). Candidate ranks under TDAL progressively improve before selection (Figure 5b). Across the 85 candidates, their mean ranks at selection are 16.6 under TDAL and 9,780 under concurrent surrogate predictions, showing how accumulated feedback helps prioritize hits ranked poorly by the surrogate alone (Appendix Figure F1). 10 6 Conclusion 
+
+We introduce TDAL to learn a dynamic acquisition function online from a single perturbation screening trajectory. Building on surrogate-estimated hit probabilities, TDAL uses temporal difference learning to incorporate observed discoveries and feedback-weighted successor value, while LBO reconstructs additional training transitions from measured outcomes. By learning how to select experiments from feedback accumulated within the ongoing screen, TDAL adapts candidate selection to both immediate discoveries and subsequent discovery opportunities under limited experimental feedback. Across eight public screens spanning single, double, and triple perturbations, TDAL achieves an average rank of 1.63 among eleven methods, demonstrating consistent discovery performance across diverse response landscapes. 
+
+Limitations. Our evaluation is retrospective, and the additive acquisition function does not explicitly model interactions among candidates within a batch. Feedback weighting also relies on surrogate-estimated hit probabilities, motivating further investigation of its robustness to prediction errors. Future work will explore batch-aware selection and alternative feedback weighting strategies, alongside prospective validation in closed-loop biological experiments. 
+
+Reproducibility statement 
+
+The TDAL implementation, task configurations, and data preparation scripts are available at https://anonymous. 4open.science/r/TDAL/, with data sources and running instructions. Appendices A–C provide implementation details, theoretical assumptions and proofs, and experimental settings, respectively. 
+
+AI use statement 
+
+The research ideas and methodological design originated from the authors. Generative AI tools were used to assist with code development, checking mathematical derivations and proofs, and improving manuscript clarity and grammar. The authors reviewed and verified all AI-assisted content and take full responsibility for the final work. 
+
+References 
+
+Jordan T. Ash, Chicheng Zhang, Akshay Krishnamurthy, John Langford, and Alekh Agarwal. Deep batch active learning by diverse, uncertain gradient lower bounds. In International Conference on Learning Representations , 2020. URL https://openreview.net/forum?id=ryghZJBKPS. Paul Bertin, Jarrid Rector-Brooks, Deepak Sharma, Thomas Gaudelet, Andrew Anighoro, Torsten Gross, Francisco Martínez-Peña, Eileen L Tang, M. S. Suraj, Cristian Regep, et al. RECOVER identifies synergistic drug combinations in vitro through sequential model optimization. Cell Reports Methods , 3(10):100599, 2023. doi: 10.1016/j.crmeth.2023.100599. URL https://doi.org/10.1016/j.crmeth.2023.100599. Julia Carnevale, Eric Shifrut, Nupura Kale, William A Nyberg, Franziska Blaeschke, Yan Yi Chen, Zhongmei Li, Sagar P Bapat, Morgan E Diolaiti, Patrick O’Leary, et al. RASA2 ablation in T cells boosts antigen sensitivity and long-term function. Nature , 609(7925):174–182, 2022. doi: 10.1038/s41586-022-05126-w. URL https://doi.org/10.1038/s41586-022-05126-w. Yicong Chen, Jiahua Rao, Jiancong Xie, Dahao Xu, Zhen Wang, and Yuedong Yang. Reinforced active learning for large-scale virtual screening with learnable policy model. In Advances in Neural Information Processing Systems , volume 38, pages 60831–60856, 2025. doi: 10.52202/085713-2034. URL https://proceedings. neurips.cc/paper_files/paper/2025/file/57ac7ccded0eaaec4ad6f05612289b79-Paper-Conference.pdf. 11 Hyunghoon Cho, Bonnie Berger, and Jian Peng. Compact integration of multi-network topology for functional analysis of genes. Cell Systems , 3(6):540–548.e5, 2016. doi: 10.1016/j.cels.2016.10.017. URL https://doi.org/10.1016/j.cels.2016.10.017. Benjamin DeMeo, Charlotte Nesbitt, Samuel A Miller, Daniel B Burkhardt, Inna Lipchina, Doris Fu, Peter Holderrieth, David Kim, Sergey Kolchenko, Artur Szalata, et al. Active learning framework leveraging transcriptomics identifies modulators of disease phenotypes. Science , 390(6776):eadi8577, 2025. doi: 10.1126/science.adi8577. URL https://doi.org/10.1126/science.adi8577. Samson H Fong, Brent M Kuenzi, Nicole M Mattson, John Lee, Kyle Sanchez, Ana Bojorquez-Gomez, Kyle Ford, Brenton P Munson, Katherine Licon, Sarah Bergendahl, et al. A multilineage screen identifies actionable synthetic lethal interactions in human cancers. Nature Genetics , 57(1):154–164, 2025. doi: 10.1038/s41588-024-01971-9. URL https://doi.org/10.1038/s41588-024-01971-9. Yarin Gal and Zoubin Ghahramani. Dropout as a Bayesian approximation: Representing model uncertainty in deep learning. In International Conference on Machine Learning , pages 1050–1059. PMLR, 2016. URL https://proceedings.mlr.press/v48/gal16.html. Roman Garnett, Yamuna Krishnamurthy, Xuehan Xiong, Jeff G. Schneider, and Richard P. Mann. Bayesian optimal active search and surveying. In ICML , 2012. URL http://icml.cc/2012/papers/618.pdf. Tilmann Gneiting and Adrian E. Raftery. Strictly proper scoring rules, prediction, and estimation. Journal of the American Statistical Association , 102(477):359–378, 2007. doi: 10.1198/016214506000001437. Han Guo, Youwei Liang, Xingyi Cheng, Caleb Ellington, Pengtao Xie, Le Song, and Eric Xing. Using AI to build AI: AIDO.Builder enables autonomous machine learning model building for biomedicine. bioRxiv ,2026. doi: 10.64898/2026.04.20.719735. URL https://www.biorxiv.org/content/10.64898/2026.04.20. 719735v2. Rushil Gupta, Jason Hartford, and Bang Liu. LLMs for Bayesian optimization in scientific domains: Are we there yet? In Christos Christodoulopoulos, Tanmoy Chakraborty, Carolyn Rose, and Violet Peng, editors, 
+
+Findings of the Association for Computational Linguistics: EMNLP 2025 , pages 15482–15510, Suzhou, China, November 2025. Association for Computational Linguistics. doi: 10.18653/v1/2025.findings-emnlp. 838. URL https://aclanthology.org/2025.findings-emnlp.838/. Minsheng Hao, Yongju Lee, Hanchen Wang, Gabriele Scalia, and Aviv Regev. PerTurboAgent: An LLM-based agent for designing iterative Perturb-Seq experiments. In MLCB , pages 44–64, 2025. URL https://proceedings.mlr.press/v311/hao25b.html. E. Hellinger. Neue Begründung der Theorie quadratischer Formen von unendlichvielen Veränderlichen. Journal für die reine und angewandte Mathematik , 1909(136):210–271, 1909. doi: 10.1515/crll.1909.136.210. URL https://doi.org/10.1515/crll.1909.136.210. Max A Horlbeck, Albert Xu, Min Wang, Neal K Bennett, Chong Y Park, Derek Bogdanoff, Britt Adamson, Eric D Chow, Martin Kampmann, Tim R Peterson, et al. Mapping the genetic landscape of human cells. 
+
+Cell , 174(4):953–967.e22, 2018. doi: 10.1016/j.cell.2018.06.010. URL https://doi.org/10.1016/j.cell.2018. 06.010. Neil Houlsby, Ferenc Huszár, Zoubin Ghahramani, and Máté Lengyel. Bayesian active learning for classification and preference learning. arXiv preprint arXiv:1112.5745 , 2011. URL https://arxiv.org/abs/1112.5745. 12 Kexin Huang, Romain Lopez, Jan-Christian Hütter, Takamasa Kudo, Antonio Rios, and Aviv Regev. Sequential optimal experimental design of perturbation screens guided by multi-modal priors. In 
+
+International Conference on Research in Computational Molecular Biology , pages 17–37. Springer, 2024. doi: 10.1007/978-1-0716-3989-4_2. URL https://doi.org/10.1007/978-1-0716-3989-4_2. Shali Jiang, Gustavo Malkomes, Geoff Converse, Alyssa Shofner, Benjamin Moseley, and Roman Garnett. Efficient nonmyopic active search. In ICML , pages 1714–1723, 2017. URL http://proceedings.mlr.press/ v70/jiang17d.html. Shali Jiang, Gustavo Malkomes, Matthew Abbott, Benjamin Moseley, and Roman Garnett. Efficient nonmyopic batch active search. In NeurIPS , pages 1107–1117, 2018. URL http://papers.nips.cc/paper/ 7387-efficient-nonmyopic-batch-active-search. Donald R Jones, Matthias Schonlau, and William J Welch. Efficient global optimization of expensive black-box functions. Journal of Global Optimization , 13(4):455–492, 1998. doi: 10.1023/A:1008306431147. URL https://doi.org/10.1023/A:1008306431147. Ksenia Konyushkova, Raphael Sznitman, and Pascal Fua. Learning active learning from data. In Advances in Neural Information Processing Systems , volume 30, 2017. URL https://proceedings.neurips.cc/paper/2017/ hash/8ca8da41fe1ebc8d3ca31dc14f5fc56c-Abstract.html. Elena Kuzmin, Benjamin VanderSluis, Alex N Nguyen Ba, Wen Wang, Elizabeth N Koch, Matej Usaj, Anton Khmelinskii, Mojca Mattiazzi Usaj, Jolanda Van Leeuwen, Oren Kraus, et al. Exploring whole-genome duplicate gene retention with complex genetic interaction analysis. Science , 368(6498):eaaz5667, 2020. doi: 10.1126/science.aaz5667. URL https://doi.org/10.1126/science.aaz5667. Yanke Li, Tianyu Cui, Tommaso Mansi, Mangal Prakash, and Rui Liao. BioBO: Biology-informed Bayesian optimization for perturbation design. In The Fourteenth International Conference on Learning Representations , 2026a. URL https://openreview.net/forum?id=CF3kJrAwmV. Zhuo Li, Weiran Wu, Chuangyi Han, Yan Cui, Tian Lu, Rongqin Ke, Jian Sun, and Zhiyuan Yuan. SOFisher: reinforcement learning-guided experiment designs for spatial omics. Nature Communications , 17:6830, 2026b. doi: 10.1038/s41467-026-73404-6. URL https://doi.org/10.1038/s41467-026-73404-6. Clare Lyle, Arash Mehrjou, Pascal Notin, Andrew Jesson, Stefan Bauer, Yarin Gal, and Patrick Schwab. DiscoBAX: Discovery of optimal intervention sets in genomic experiment design. In ICML , pages 23170–23189, 2023. URL https://proceedings.mlr.press/v202/lyle23a.html. Arash Mehrjou, Ashkan Soleymani, Andrew Jesson, Pascal Notin, Yarin Gal, Stefan Bauer, and Patrick Schwab. GeneDisco: A benchmark for experimental design in drug discovery. In International Conference on Learning Representations , 2022. URL https://openreview.net/forum?id=-w2oomO6qgc. Robin M Meyers, Jordan G Bryan, James M McFarland, Barbara A Weir, Ann E Sizemore, Han Xu, Neekesh V Dharia, Phillip G Montgomery, Glenn S Cowley, Sasha Pantel, et al. Computational correction of copy number effect improves specificity of CRISPR–Cas9 essentiality screens in cancer cells. Nature Genetics ,49(12):1779–1784, 2017. doi: 10.1038/ng.3984. URL https://doi.org/10.1038/ng.3984. Quan Nguyen, Anindya Sarkar, and Roman Garnett. Amortized nonmyopic active search via deep imitation learning. arXiv preprint arXiv:2405.15031 , 2024. URL https://arxiv.org/abs/2405.15031. Aldo Pacchiano, Drausin Wulsin, Robert A Barton, and Luis Voloch. Neural design for genetic perturbation experiments. In The Eleventh International Conference on Learning Representations , 2023. URL https://openreview.net/forum?id=TUBpc5rqGA. 13 Jason Qin, Hans-Hermann Wessels, Carlos Fernandez-Granda, and Yuhan Hao. Active learning for efficient discovery of optimal combinatorial perturbations. In Forty-second International Conference on Machine Learning , 2025. URL https://openreview.net/forum?id=fGbGF0kl5L. Yusuf H Roohani, Andrew H. Lee, Qian Huang, Jian Vora, Zachary Steinhart, Kexin Huang, Alexander Marson, Percy Liang, and Jure Leskovec. BioDiscoveryAgent: An AI agent for designing genetic perturbation experiments. In The Thirteenth International Conference on Learning Representations , 2025. URL https://openreview.net/forum?id=HAwZGLcye3. Andrea Rubbi, Arpit Merchant, Samuel Ogden, Amir Akbarnejad, Pietro Lio, Sattar Vakili, and Mohammad Lotfollahi. Many needles in a haystack: Active hit discovery for perturbation experiments. In Forty-third International Conference on Machine Learning , 2026. URL https://openreview.net/forum?id=iZN85pjpsS. Carlos G Sanchez, Christopher M Acker, Audrey Gray, Malini Varadarajan, Cheng Song, Nadire R Cochran, Steven Paula, Alicia Lindeman, Shaojian An, Gregory McAllister, et al. Genome-wide CRISPR screen identifies protein pathways modulating tau protein levels in neurons. Communications Biology , 4(1):736, 2021. doi: 10.1038/s42003-021-02272-1. URL https://doi.org/10.1038/s42003-021-02272-1. Igal Sason and Sergio Verdú. 𝑓 -divergence inequalities. IEEE Transactions on Information Theory , 62(11): 5973–6006, 2016. doi: 10.1109/TIT.2016.2603151. Ralf Schmidt, Zachary Steinhart, Madeline Layeghi, Jacob W Freimer, Raymund Bueno, Vinh Q Nguyen, Franziska Blaeschke, Chun Jimmie Ye, and Alexander Marson. CRISPR activation and interference screens decode stimulation responses in primary human T cells. Science , 375(6580):eabj4008, 2022. doi: 10.1126/science.abj4008. URL https://doi.org/10.1126/science.abj4008. Ozan Sener and Silvio Savarese. Active learning for convolutional neural networks: A core-set approach. In International Conference on Learning Representations , 2018. URL https://openreview.net/forum?id= H1aIuk-RW. Danny Simpson, Jia Ling, Yangwode Jing, and Britt Adamson. Mapping the genetic interaction network of PARP inhibitor response. bioRxiv , 2023. doi: 10.1101/2023.08.19.553986. URL https://doi.org/10.1101/ 2023.08.19.553986. Braden Soper, Michal Lisicki, Mary Silva, Jose Cadena, Haonan Zhu, Shivshankar Sundaram, Priyadip Ray, and Jeff Drocco. Knowledge graph-aided Bayesian active learning for top-K genetic interaction discovery. Scientific Reports , 15(1):31196, 2025. doi: 10.1038/s41598-025-13972-7. URL https: //doi.org/10.1038/s41598-025-13972-7. Niranjan Srinivas, Andreas Krause, Sham M. Kakade, and Matthias W. Seeger. Gaussian process optimization in the bandit setting: No regret and experimental design. In Johannes Fürnkranz and Thorsten Joachims, editors, Proceedings of the 27th International Conference on Machine Learning (ICML-10), June 21-24, 2010, Haifa, Israel , pages 1015–1022. Omnipress, 2010. URL https://icml.cc/Conferences/2010/papers/ 422.pdf. William R. Thompson. On the likelihood that one unknown probability exceeds another in view of the evidence of two samples. Biometrika , 25(3/4):285–294, 1933. doi: 10.1093/biomet/25.3-4.285. URL https://doi.org/10.1093/biomet/25.3-4.285. Christopher Tosh, Mauricio Tec, Jessica B White, Jeffrey F Quinn, Glorymar Ibanez Sanchez, Paul Calder, Andrew L Kung, Filemon S Dela Cruz, and Wesley Tansey. A Bayesian active learning platform for scalable combination drug screens. Nature Communications , 16(1):156, 2025. doi: 10.1038/s41467-024-55287-7. URL https://doi.org/10.1038/s41467-024-55287-7. 14 Hado van Hasselt, Arthur Guez, and David Silver. Deep reinforcement learning with double Q-learning. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , volume 30, 2016. doi: 10.1609/aaai.v30i1. 10295. URL https://doi.org/10.1609/aaai.v30i1.10295. Michael Volpp, Lukas P. Fröhlich, Kirsten Fischer, Andreas Doerr, Stefan Falkner, Frank Hutter, and Christian Daniel. Meta-learning acquisition functions for transfer learning in Bayesian optimization. In International Conference on Learning Representations , 2020. URL https://openreview.net/forum?id=ryeYpJSKwr. Gilles Wainrib, Barbara Bodinier, Haithem Dakhli, Josep Monserrat, Almudena Espin-Perez, Roberta Codato, and John Klein. Can AI scientist agents learn from lab-in-the-loop feedback? evidence from iterative perturbation discovery. In The 2026 Workshop on Generative and Agentic AI for Biology , 2026. URL https://openreview.net/forum?id=sZijNyjuCF. Yue Xu, Haotian Cui, Kuan Pang, Gen Li, Fanglin Gong, Songtao Dong, Bo Wang, and Bowen Li. LUMI-lab: a foundation model-driven autonomous platform enabling discovery of ionizable lipid designs for mRNA delivery. Cell , 189(6):1620–1635.e25, 2026. doi: 10.1016/j.cell.2026.01.012. URL https://doi.org/10.1016/j.cell.2026.01.012. Ziping Xu, Eunjae Shim, Ambuj Tewari, and Paul Zimmerman. Adaptive sampling for discov-ery. In Advances in Neural Information Processing Systems , volume 35, pages 1114–1126, 2022. doi: 10.52202/068431-0082. URL https://proceedings.neurips.cc/paper_files/paper/2022/hash/ 07bc8125400bf4b140c332010756bd9b-Abstract-Conference.html. Hanwen Zhang, Wencheng Liu, Wenhao Zheng, Ting Kang, Shilong Hu, Zhuang Miao, Jin Liu, Bowen Ke, Xianggen Liu, and Jiancheng Lv. Policy-based active learning for efficient molecular identification. 
+
+Journal of Chemical Information and Modeling , 66(10):5851–5868, 2026. doi: 10.1021/acs.jcim.6c00474. URL https://doi.org/10.1021/acs.jcim.6c00474. Haonan Zhu, Mary Silva, Jose Cadena, Braden Soper, Michał Lisicki, Braian Peetoom, Sergio E Baranzini, Shivshankar Sundaram, Priyadip Ray, and Jeff Drocco. Deep active learning-based experimental design to uncover synergistic genetic interactions for host-targeted therapeutics. Bioinformatics Advances , 6(1): vbaf228, 2026. doi: 10.1093/bioadv/vbaf228. URL https://academic.oup.com/bioinformaticsadvances/ article/6/1/vbaf228/8262951. Xiaoxuan Zhuang, Daniel P Veltri, and Eric O Long. Genome-wide CRISPR screen reveals cancer cell resistance to NK cells induced by NK-derived IFN-𝛾 . Frontiers in Immunology , 10:2879, 2019. doi: 10.3389/fimmu.2019.02879. URL https://doi.org/10.3389/fimmu.2019.02879. 15 Appendix A Algorithm and Implementation Details 
+
+A.1 Comparison with Related Methods 
+
+Table A1 compares representative methods for perturbation screening, molecular virtual screening, and spatial omics sampling across five mechanisms including surrogate updates, biological knowledge, online acquisition updates, value bootstrapping, and experience augmentation. 
+
+Table A1: Comparison of active screening and experimental design methods. ✓/× indicate whether a method uses each mechanism.                                                           
+
+> Method Research task Surrogate updates Biological knowledge Online acquisition updates Value bootstrapping Experience augmentation GeneDisco surrogate baselines Perturbation screening ✓××××
+> OAE Perturbation screening ✓××××
+> DiscoBAX Perturbation screening ✓××××
+> PoH Perturbation screening ✓××××
+> BioBO Perturbation screening ✓✓×××
+> BioDiscoveryAgent Perturbation screening ×✓×××
+> PerTurboAgent Perturbation screening ✓✓×××
+> GLARE Molecular virtual screening
+> ✓×✓××
+> SOFisher Spatial omics sampling ×××✓×
+> TDAL Perturbation screening ✓×✓✓✓
+
+Surrogate updates use newly measured outcomes to fit a model that predicts unmeasured phenotypes or activities. Biological knowledge guides selection through pathway information, literature, or knowledge encoded in language models. BioBO and PerTurboAgent combine such knowledge with response modeling, whereas BioDiscoveryAgent incorporates experimental observations into its language model context without fitting a response surrogate. SOFisher uses observed spatial features as inputs to its sampling policy rather than fitting a phenotype prediction model. Online acquisition updates use feedback from the current task to update the acquisition function’s parameters. Value bootstrapping constructs training targets from current rewards and estimated successor values. GLARE updates its selection policy during screening but does not explicitly bootstrap a successor value. SOFisher trains its sampling policy through value bootstrapping before application and uses fixed policy parameters on 16 new tissue sections, while incorporating newly sampled observations into the state. TDAL performs both acquisition updates and successor value bootstrapping within the current screening task. Experience augmentation reconstructs additional transitions from measured outcomes to train the acquisition function. In budgeted experimental design without replacement, the measured dataset grows while the unmeasured pool and remaining budget shrink. A screen therefore provides a single executed trajectory and cannot return to an earlier state to test alternative experimental sequences within the same budget. LBO reconstructs predecessor states in which a measured batch has not yet been observed, then restores that batch’s real outcomes to form additional transitions to a known successor state. The same experimental outcomes can thus support batch value learning under different information states, expanding online training experience without additional experiments. 
+
+A.2 Notation 
+
+Table A2 summarizes the main notation used in the problem formulation and TDAL. 
+
+Table A2: Key notation for the screening objective and TDAL. Symbol Meaning 
+
+X Fixed pool of candidate perturbations. 
+
+𝑒 (𝑥 ) Phenotype of candidate 𝑥 after aligning the effect direction. 
+
+𝜏 Threshold defining the desired phenotypic response. 
+
+𝑧 (𝑥 ) Indicator that candidate 𝑥 meets the hit threshold. 
+
+𝐷 𝑡 Measured data available before selection in round 𝑡 .
+
+𝑈 𝑡 Unmeasured candidates available in round 𝑡 .
+
+𝐻 𝑡 History of observations and selections before round 𝑡 .
+
+𝐴 𝑡 Batch selected for experimentation in round 𝑡 .
+
+𝐵 Number of candidates queried per round. 
+
+𝑇 Number of active screening rounds. 
+
+𝑅 𝑡 Observed number of discoveries in batch 𝐴 𝑡 .
+
+𝐶 𝑇 Final verified discovery count, including initial discoveries. 
+
+𝜋 Policy that selects each batch from the available history. 
+
+𝐽 𝑤 (𝜋 ) Expected cumulative discoveries weighted by experimental feedback. 
+
+𝑄 ∗,𝑤 𝑡 (𝐻 𝑡 , 𝐴 ) Optimal weighted value of selecting batch 𝐴 given history 𝐻 𝑡 .
+
+𝑤 𝑡 Successor value weight determined by prediction changes. 
+
+𝑔 𝛽 Surrogate model predicting perturbation phenotypes. ˆ𝑝 𝑡 (𝑥 ) Estimated hit probability of an unmeasured candidate. 
+
+b𝑅 𝑡 ( 𝐴 ) Estimated immediate discovery count from surrogate hit probabilities. 
+
+𝜙 (𝑥 ) Fixed biological representation of candidate 𝑥 .
+
+𝑠 𝑡 Global summary of screening progress, observations, and predictions. 
+
+𝑐 𝑡 (𝑥 ) Candidate features combining biological representation and predictions. 
+
+𝑓 𝜃 Acquisition network mapping the state and candidate features to an output. 
+
+𝑞 𝜃 (𝑠 𝑡 , 𝑥 ) Dynamic acquisition function scoring candidate 𝑥 .
+
+𝑄 𝜃 (𝑠 𝑡 , 𝐴 ) Batch value estimate obtained by summing candidate scores. 
+
+𝜉 𝑡 Transition generated by an experimental round. 
+
+e𝜉 Virtual transition reconstructed by LBO from measured outcomes. 
+
+𝑌 𝑖 TD target for transition 𝑖 .
+
+17 A.3 Complete TDAL Algorithm 
+
+Algorithm 1 summarizes TDAL from initialization through the end of screening. Starting from the initial observations 𝐷 0, TDAL fits a surrogate model, estimates hit probabilities for candidates in the initial unmeasured pool 𝑈 0, and forms the initial selection state. It then constructs initial LBO transitions from 𝐷 0
+
+to initialize the acquisition network through TD training before the first query. At each round, the acquisition function scores candidates in 𝑈 𝑡 , and TDAL queries the 𝐵 candidates with the highest scores. The observed outcomes are added to 𝐷 𝑡 , and the queried candidates are removed from 𝑈 𝑡 .TDAL refits the surrogate model on the updated data. Before the next round, it updates predictions over 𝑈 𝑡 +1
+
+to construct the successor state. Comparing hit probabilities before and after the experiment over this pool gives the Hellinger weight. The selected batch, observed discovery count, feedback weight, and current and successor states form a real transition. Real and online LBO transitions enter the replay buffer, from which TD updates train the acquisition network for subsequent selection. After 𝑇 rounds, TDAL returns all verified hit candidates. 
+
+A.4 Candidate Representations 
+
+The mapping 𝜙 (𝑥 ) encodes candidate perturbation 𝑥 as a vector of fixed dimension, providing gene functional information to the surrogate and acquisition network. Human tasks use genome-wide CRISPR–Cas9 knockout screening data from the Broad Institute’s Project Achilles. The CERES gene dependency profiles in DepMap 20Q4 provide 808-dimensional gene representa-tions. Each dimension corresponds to a cancer cell line and describes the effect of knocking out the gene on cell growth. CERES corrects for copy number effects (Meyers et al., 2017). The Kuzmin yeast task uses the 500-dimensional STRING network embeddings released with Mashup (Cho et al., 2016). These base gene representations remain fixed during screening. For a single gene perturbation, 𝜙 (𝑥 ) is the corresponding gene embedding. For a candidate 𝑥 containing 𝑚 ∈ { 2, 3} genes with embeddings v1, . . . , v𝑚 , we define 
+
+𝜙 (𝑥 ) =
+
+ 1
+
+𝑚 ∑︁  
+
+> 𝑚 𝑖 =1
+
+v𝑖 , 2
+
+𝑚 (𝑚 − 1)∑︁ 𝑖< 𝑗 |v𝑖 − v 𝑗 |, 2
+
+𝑚 (𝑚 − 1)∑︁ 𝑖< 𝑗 v𝑖 ⊙ v 𝑗 
+
+
+
+. (13) The brackets concatenate the mean embedding, mean elementwise absolute difference, and mean elementwise product, with ⊙ denoting elementwise multiplication. Averaging over all members and unordered pairs makes this construction invariant to gene order. 
+
+A.5 Surrogate Model and Hit Probability Estimation Model and training. The surrogate takes a fixed vector representation (embedding) 𝜙 (𝑥 ) of candidate perturbation 𝑥 as input and predicts the phenotype 𝑒 (𝑥 ) after aligning the effect direction. Its two hidden layers have widths 128 and 64. Each applies a linear transformation followed by ReLU and dropout. A final linear layer produces a scalar output. The model is 
+
+h(1) 
+
+> sur
+
+(𝑥 ) = Dropout 0.2
+
+ ReLU (𝑊 sur 1 𝜙 (𝑥 ) + 𝑏 sur 1 ) ∈ R128 ,
+
+h(2) 
+
+> sur
+
+(𝑥 ) = Dropout 0.2
+
+
+
+ReLU (𝑊 sur 2 h(1) 
+
+> sur
+
+(𝑥 ) + 𝑏 sur 2 )
+
+
+
+∈ R64 ,𝑔 𝛽 (𝜙 (𝑥 )) = 𝑊 sur out h(2) 
+
+> sur
+
+(𝑥 ) + 𝑏 sur out ∈ R.
+
+(14) Here, Dropout 0.2 denotes dropout with probability 0.2, and 𝛽 contains all weights and biases of the hidden and output layers. Predictive uncertainty is estimated through MC dropout (Gal and Ghahramani, 2016). 18 Algorithm 1 TDAL 
+
+Input Candidate pool X with representations 𝜙 (𝑥 ), initial data 𝐷 0, rounds 𝑇 , batch size 𝐵 , threshold 𝜏 , and LBO transition limits.  
+
+> 1:
+
+Initialize 𝑈 0 ← X \ { 𝑥 : (𝑥, 𝑒 (𝑥 )) ∈ 𝐷 0}. 
+
+> 2:
+
+Initialize acquisition network 𝑓 𝜃 with a zero output layer.  
+
+> 3:
+
+Initialize target network 𝑓 ¯𝜃 with ¯ 𝜃 ← 𝜃 . 
+
+> 4:
+
+Initialize replay buffer R ← ∅ . 
+
+> 5:
+
+Fit surrogate 𝑔 𝛽 0 to 𝐷 0 with validation early stopping.  
+
+> 6:
+
+Estimate b𝜇 0 (𝑥 ), b𝜎 0 (𝑥 ), and ˆ 𝑝 0 (𝑥 ) using 50 MC dropout samples for 𝑥 ∈ 𝑈 0. 
+
+> 7:
+
+Construct 𝑠 0 and candidate features {𝑐 0 (𝑥 ) : 𝑥 ∈ 𝑈 0}. 
+
+> 8:
+
+if |𝐷 0 | > 𝐵 then  
+
+> 9:
+
+Add initial LBO transitions to R using Algorithm 2.  
+
+> 10:
+
+for 20 initial TD updates do  
+
+> 11:
+
+Update 𝑓 𝜃 using the TD loss on a replay minibatch.  
+
+> 12:
+
+Soft update the target parameters ¯ 𝜃 . 
+
+> 13:
+
+Refresh the sampled transitions ' replay priorities.  
+
+> 14:
+
+end for  
+
+> 15:
+
+end if  
+
+> 16:
+
+for 𝑡 = 0, . . . , 𝑇 − 1 do  
+
+> 17:
+
+Compute 𝑞 𝜃 (𝑠 𝑡 , 𝑥 ) = ˆ𝑝 𝑡 (𝑥 ) + 𝑓 𝜃 (𝑠 𝑡 , 𝑐 𝑡 (𝑥 )) for 𝑥 ∈ 𝑈 𝑡 . 
+
+> 18:
+
+Select the 𝐵 highest scoring candidates as 𝐴 𝑡 . 
+
+> 19:
+
+Experimentally query 𝐴 𝑡 to obtain 𝑂 𝑡 = {( 𝑥, 𝑒 (𝑥 )) : 𝑥 ∈ 𝐴 𝑡 }. 
+
+> 20:
+
+Compute the discovery count 𝑅 𝑡 = Í𝑥 ∈ 𝐴 𝑡 𝑧 (𝑥 ). 
+
+> 21:
+
+Update measured data 𝐷 𝑡 +1 ← 𝐷 𝑡 ∪ 𝑂 𝑡 . 
+
+> 22:
+
+Update the unmeasured pool 𝑈 𝑡 +1 ← 𝑈 𝑡 \ 𝐴 𝑡 . 
+
+> 23:
+
+Refit 𝑔 𝛽 𝑡 +1 to 𝐷 𝑡 +1 with validation early stopping.  
+
+> 24:
+
+if 𝑡 < 𝑇 − 1 then  
+
+> 25:
+
+Estimate b𝜇 𝑡 +1 (𝑥 ), b𝜎 𝑡 +1 (𝑥 ), and ˆ 𝑝 𝑡 +1 (𝑥 ) by MC dropout for 𝑥 ∈ 𝑈 𝑡 +1. 
+
+> 26:
+
+Construct 𝑠 𝑡 +1 and candidate features {𝑐 𝑡 +1 (𝑥 ) : 𝑥 ∈ 𝑈 𝑡 +1}. 
+
+> 27:
+
+Compute Hellinger weight 𝑤 𝑡 from ˆ 𝑝 𝑡 (𝑥 ) and ˆ 𝑝 𝑡 +1 (𝑥 ) over 𝑈 𝑡 +1. 
+
+> 28:
+
+else  
+
+> 29:
+
+Set the terminal successor state 𝑠 𝑇 . 
+
+> 30:
+
+Set 𝑤 𝑡 ← 0.  
+
+> 31:
+
+end if  
+
+> 32:
+
+Add 𝜉 𝑡 = (𝑠 𝑡 , 𝐴 𝑡 , 𝑅 𝑡 , 𝑤 𝑡 , 𝑠 𝑡 +1) and its prediction inputs to R. 
+
+> 33:
+
+Add online LBO transitions using Algorithm 2.  
+
+> 34:
+
+for 20 online TD updates do  
+
+> 35:
+
+Update 𝑓 𝜃 using the TD loss on a replay minibatch.  
+
+> 36:
+
+Soft update the target parameters ¯ 𝜃 . 
+
+> 37:
+
+Refresh the sampled transitions ' replay priorities.  
+
+> 38:
+
+end for  
+
+> 39:
+
+end for  
+
+> 40:
+
+return verified hit set {𝑥 : (𝑥, 𝑒 (𝑥 )) ∈ 𝐷 𝑇 , 𝑧 (𝑥 ) = 1}.19 At each round, the measured data 𝐷 𝑡 are split into a training set 𝐷 tr  
+
+> 𝑡
+
+and a validation set 𝐷 val  
+
+> 𝑡
+
+for early stopping, and the model parameters are reinitialized. The surrogate fits measured phenotypes by minimizing the mean squared error 
+
+Lsur (𝛽 ) = 1
+
+|𝐷 tr  
+
+> 𝑡
+
+|∑︁ ( 𝑥,𝑒 ( 𝑥 ) ) ∈ 𝐷 tr 
+
+> 𝑡
+
+ 𝑔 𝛽 (𝜙 (𝑥 )) − 𝑒 (𝑥 )2. (15) Dropout is active during training and disabled when evaluating validation mean squared error after each epoch. Let 𝛽 ( 𝑗 ) 
+
+> 𝑡
+
+denote the parameters after epoch 𝑗 , and let 𝐽 𝑡 be the number of epochs completed in the current round. We select the final model by minimizing validation error, 
+
+𝑗 ∗ 
+
+> 𝑡
+
+= arg min    
+
+> 1≤𝑗 ≤𝐽 𝑡
+
+1
+
+|𝐷 val  
+
+> 𝑡
+
+|∑︁ ( 𝑥,𝑒 ( 𝑥 ) ) ∈ 𝐷 val 
+
+> 𝑡
+
+ 𝑔 𝛽 ( 𝑗 )
+
+> 𝑡
+
+(𝜙 (𝑥 )) − 𝑒 (𝑥 )2,𝛽 𝑡 = 𝛽 ( 𝑗 ∗  
+
+> 𝑡 )
+> 𝑡
+
+.
+
+(16) 
+
+Predictive statistics. Dropout remains active at inference. For each unmeasured candidate 𝑥 ∈ 𝑈 𝑡 , we independently sample 𝐾 forward passes. Denote the 𝑘 th stochastic forward pass by 𝑔 (𝑘 ) 
+
+> 𝛽 𝑡
+
+, giving the phenotype prediction b𝑒 (𝑘 ) 
+
+> 𝑡
+
+(𝑥 ) = 𝑔 (𝑘 ) 
+
+> 𝛽 𝑡
+
+(𝜙 (𝑥 )) . The predictive mean, uncertainty, and hit probability are estimated by the sample mean, standard deviation, and fraction reaching the hit threshold, respectively, 
+
+b𝜇 𝑡 (𝑥 ) = 1
+
+𝐾 ∑︁  
+
+> 𝐾 𝑘 =1
+
+b𝑒 (𝑘 ) 
+
+> 𝑡
+
+(𝑥 ),
+
+b𝜎 𝑡 (𝑥 ) =
+
+ 1
+
+𝐾 ∑︁ 
+
+> 𝐾 𝑘 =1
+
+ b𝑒 (𝑘 ) 
+
+> 𝑡
+
+(𝑥 ) − b𝜇 𝑡 (𝑥 )2
+
+1/2
+
+,
+
+ˆ𝑝 𝑡 (𝑥 ) = 1
+
+𝐾 ∑︁  
+
+> 𝐾 𝑘 =1
+
+1{b𝑒 (𝑘 ) 
+
+> 𝑡
+
+(𝑥 ) ≥ 𝜏 }.
+
+(17) These statistics define candidate features and the selection state. The hit probability also provides the acquisition function’s base score and is used to compute the Hellinger weight. 
+
+A.6 State Representation and Acquisition Function Parameterization Dynamic candidate features. For each unmeasured candidate 𝑥 ∈ 𝑈 𝑡 , the acquisition network receives the shared selection state 𝑠 𝑡 and candidate features 𝑐 𝑡 (𝑥 ). These features combine the fixed biological representation 𝜙 (𝑥 ) with the surrogate model’s predicted mean, uncertainty, and hit probability. We center the mean at the hit threshold and scale both the mean and uncertainty, giving 
+
+𝑐 𝑡 (𝑥 ) =
+
+
+
+𝜙 (𝑥 ), b𝜇 𝑡 (𝑥 ) − 𝜏 𝑎 𝑡 
+
+, log 
+
+
+
+1 + b𝜎 𝑡 (𝑥 )
+
+𝑎 𝑡 
+
+
+
+, ˆ𝑝 𝑡 (𝑥 )
+
+
+
+. (18) Here, b𝜇 𝑡 (𝑥 ) and b𝜎 𝑡 (𝑥 ) are the predictive mean and standard deviation defined in Appendix A.5. The hit probability ˆ 𝑝 𝑡 (𝑥 ) is included without rescaling. The normalization denominator 𝑎 𝑡 is computed from the phenotypes already measured in 𝐷 𝑡 . It is the larger of their interquartile range (75th minus 25th percentile) and population standard deviation, with a minimum of 10 −6 to prevent division by zero. The same denominator is used for all candidates scored at that round. Their predicted means and uncertainties remain specific to each candidate. We recompute 𝑎 𝑡 when the measured data change. 20 Selection state. The selection state 𝑠 𝑡 is a vector summary of the current screening history 𝐻 𝑡 that provides global information for the dynamic acquisition function. Shared by all candidates, it combines screening progress, measured outcomes, and surrogate prediction statistics over the unmeasured pool 𝑈 𝑡 . Its 15 components follow the network input order 
+
+𝑠 𝑡 =
+
+h |𝐷 𝑡 |
+
+𝑀 , 𝑀 − | 𝐷 𝑡 |
+
+𝑀 , ⌈min {𝑀 − | 𝐷 𝑡 |, |𝑈 𝑡 |}/ 𝐵 ⌉⌈𝑀 /𝐵 ⌉ , |𝑈 𝑡 ||X| , min {𝐵, 𝑀 − | 𝐷 𝑡 |, |𝑈 𝑡 |} 
+
+𝐵 ,𝜏, max ( 𝑥,𝑒 ( 𝑥 ) ) ∈ 𝐷 𝑡 𝑒 (𝑥 ), 𝑎 𝑡 , Mean 𝑈 𝑡 ( ˆ𝑝 𝑡 ), SD 𝑈 𝑡 ( ˆ𝑝 𝑡 ), P90 ,𝑈 𝑡 ( ˆ𝑝 𝑡 ),
+
+Mean 𝑈 𝑡 
+
+ b𝜇 𝑡 − 𝜏 𝑎 𝑡 
+
+
+
+, SD 𝑈 𝑡 
+
+ b𝜇 𝑡 − 𝜏 𝑎 𝑡 
+
+
+
+,
+
+Mean 𝑈 𝑡 
+
+b𝜎 𝑡 
+
+𝑎 𝑡 
+
+
+
+, P90 ,𝑈 𝑡 
+
+b𝜎 𝑡 
+
+𝑎 𝑡 
+
+ i
+
+∈ R15 .
+
+(19) Here, Mean 𝑈 𝑡 , SD 𝑈 𝑡 , and P 90 ,𝑈 𝑡 denote the mean, population standard deviation, and 90th percentile over candidates 𝑥 ∈ 𝑈 𝑡 . The first five components describe the measured budget fraction, remaining budget fraction, normalized remaining rounds, remaining pool fraction, and query batch size relative to 𝐵 . These ratios are clipped to [0, 1]. The batch size ratio is one for the full batches used here. The hit threshold 𝜏 , largest measured phenotype max ( 𝑥,𝑒 ( 𝑥 ) ) ∈ 𝐷 𝑡 𝑒 (𝑥 ), and normalization denominator 𝑎 𝑡 
+
+retain the phenotype scale after aligning the effect direction. Statistics of the hit probability ˆ 𝑝 𝑡 (𝑥 ), normalized predicted effect (b𝜇 𝑡 (𝑥 ) − 𝜏 )/ 𝑎 𝑡 , and scaled uncertainty b𝜎 𝑡 (𝑥 )/ 𝑎 𝑡 summarize predictions over 𝑥 ∈ 𝑈 𝑡 . The uncertainty statistics use the scaled standard deviation. 
+
+Acquisition network. The acquisition network 𝑓 𝜃 is the trainable component of 𝑞 𝜃 = ˆ𝑝 𝑡 + 𝑓 𝜃 . For each unmeasured candidate 𝑥 ∈ 𝑈 𝑡 , its encoding and network layers are 
+
+𝑢 𝜃 (𝑥 ) = ReLU 
+
+
+
+𝑊 enc 
+
+𝜙 (𝑥 )
+
+max {∥ 𝜙 (𝑥 )∥ 2, 10 −8} + 𝑏 enc 
+
+
+
+∈ R64 ,
+
+h(0) 
+
+> 𝑡
+
+(𝑥 ) =
+
+
+
+𝑠 𝑡 , 𝑢 𝜃 (𝑥 ), b𝜇 𝑡 (𝑥 ) − 𝜏 𝑎 𝑡 
+
+, log 
+
+
+
+1 + b𝜎 𝑡 (𝑥 )
+
+𝑎 𝑡 
+
+
+
+, ˆ𝑝 𝑡 (𝑥 )
+
+
+
+∈ R82 ,
+
+h(𝑘 ) 
+
+> 𝑡
+
+(𝑥 ) = ReLU 
+
+
+
+𝑊 acq  
+
+> 𝑘
+
+h(𝑘 −1) 
+
+> 𝑡
+
+(𝑥 ) + 𝑏 acq 
+
+> 𝑘
+
+
+
+∈ R128 , 𝑘 = 1, 2,𝑓 𝜃 (𝑠 𝑡 , 𝑐 𝑡 (𝑥 )) = 𝑊 acq out h(2) 
+
+> 𝑡
+
+(𝑥 ) + 𝑏 acq out ∈ R.
+
+(20) Here, 𝑢 𝜃 (𝑥 ) encodes the normalized fixed representation. The input h(0) 
+
+> 𝑡
+
+(𝑥 ) concatenates the 15 state features, 64 encoding features, and three surrogate prediction features from 𝑐 𝑡 (𝑥 ).The parameters 𝜃 include the weights and biases of the projection, two hidden layers, and output layer. The static embeddings remain fixed, while the projection is learned with the acquisition network. The output layer’s weights and bias are initialized to zero, so that 𝑓 𝜃 = 0 and 𝑞 𝜃 = ˆ𝑝 𝑡 before initial TD training. 
+
+A.7 TD Learning and Experience Replay LBO transition construction. Initial LBO hides batches from 𝐷 0 to train the acquisition network before the first query. Online LBO draws hidden batches from candidates measured after initialization, so a batch can combine observations from different rounds. Algorithm 2 gives the construction for both stages. The current measured dataset 𝐷 + and unmeasured pool 𝑈 + define the successor state 𝑠 +. Each hidden batch produces a different predecessor state, but restoring its outcomes returns to this same successor state. For a nonterminal successor, let ˆ 𝑝 + (𝑥 ) denote the MC dropout hit probability estimated by the surrogate trained on 21 𝐷 +, for 𝑥 ∈ 𝑈 +. For initial LBO, the successor dataset is 𝐷 + = 𝐷 0, giving ˆ 𝑝 + (𝑥 ) = ˆ𝑝 0 (𝑥 ). For online LBO after round 𝑡 , it is 𝐷 + = 𝐷 𝑡 +1, giving ˆ 𝑝 + (𝑥 ) = ˆ𝑝 𝑡 +1 (𝑥 ).For each hidden batch 𝐴 , removing its outcomes from 𝐷 + gives the predecessor dataset 𝐷 − , and returning its candidates to the unmeasured pool gives 𝑈 − . We fit the predecessor surrogate 𝑔 𝛽 − to 𝐷 − with validation early stopping. Its MC dropout predictions give predecessor hit probabilities ˆ 𝑝 − (𝑥 ) for 𝑥 ∈ 𝑈 − . These predictions also define 𝑠 − and the candidate features, with the phenotype scale and screening progress recomputed from 𝐷 −. The Hellinger weight compares ˆ 𝑝 − (𝑥 ) and ˆ 𝑝 + (𝑥 ) over the shared remaining pool 𝑈 + ⊆ 𝑈 −. The observed discoveries in 𝐴 give the transition reward 𝑅 . The predecessor state, hidden batch, reward, weight, and successor state then form the LBO transition. The set S prevents repeated hidden batches for a given successor and excludes the current real batch during online LBO. The list C contains the accepted hidden batches. Initial and online transition limits 𝐿 and the generation schedule are specified in Table C3. 
+
+Successor selection and TD target. For a replay transition 𝜉 𝑖 = (𝑠 𝑖 , 𝐴 𝑖 , 𝑅 𝑖 , 𝑤 𝑖 , 𝑠 ′ 
+
+> 𝑖
+
+), the TD target combines its observed reward with an estimate of weighted future discoveries. To estimate this successor value, the current acquisition function scores every candidate in the recorded successor pool 𝑈 ′ 
+
+> 𝑖
+
+using 
+
+𝑞 𝜃 (𝑠 ′ 
+
+> 𝑖
+
+, 𝑥 ) = ˆ𝑝 ′ 
+
+> 𝑖
+
+(𝑥 ) + 𝑓 𝜃 (𝑠 ′ 
+
+> 𝑖
+
+, 𝑐 ′ 
+
+> 𝑖
+
+(𝑥 )) , 𝑥 ∈ 𝑈 ′ 
+
+> 𝑖
+
+. (21) The state 𝑠 ′ 
+
+> 𝑖
+
+, candidate features 𝑐 ′ 
+
+> 𝑖
+
+(𝑥 ), and hit probabilities ˆ 𝑝 ′ 
+
+> 𝑖
+
+(𝑥 ) are saved when the transition is constructed. Replay keeps these inputs fixed and applies the current network to them. As 𝜃 changes, the network can select a different successor batch from the same recorded pool. Following Double DQN, we select the 𝐵 candidates with the highest current scores to form 𝐴 ′ 
+
+> 𝜃 ,𝑖
+
+and evaluate them with the target network (van Hasselt et al., 2016). This gives 
+
+𝑄 ¯𝜃 (𝑠 ′ 
+
+> 𝑖
+
+, 𝐴 ′ 
+
+> 𝜃 ,𝑖
+
+) =∑︁ 𝑥 ∈ 𝐴 ′
+
+> 𝜃 ,𝑖
+
+ ˆ𝑝 ′ 
+
+> 𝑖
+
+(𝑥 ) + 𝑓 ¯𝜃 (𝑠 ′ 
+
+> 𝑖
+
+, 𝑐 ′ 
+
+> 𝑖
+
+(𝑥 ))  ,𝑌 𝑖 = 𝑅 𝑖 + 𝑤 𝑖 𝑄 ¯𝜃 (𝑠 ′ 
+
+> 𝑖
+
+, 𝐴 ′ 
+
+> 𝜃 ,𝑖
+
+).
+
+(22) This successor selection is used to calculate the training target and does not trigger additional experiments. For terminal transitions, 𝑌 𝑖 = 𝑅 𝑖 . Real and LBO transitions use the same target, which is held constant when computing gradients. 
+
+Experience replay and parameter updates. Real and LBO transitions enter a shared prioritized replay buffer. Let 𝑛 be the number of stored transitions and 𝜌 𝑖 the priority of transition 𝑖 . Each update samples a training batch B without replacement using normalized sampling weights 
+
+𝑃 (𝑖 ) = (𝜌 𝑖 + 𝜖 PER ) 𝛼 PER 
+
+Í𝑛 𝑗 =1 (𝜌 𝑗 + 𝜖 PER ) 𝛼 PER . (23) The exponent 𝛼 PER controls the preference for high priority transitions. Frequently sampled transitions receive smaller importance weights in the loss, reducing the imbalance introduced by prioritized sampling. We use 
+
+e𝜅 𝑖 = (𝑛𝑃 (𝑖 )) −𝛽 IS , 𝜅 IS  
+
+> 𝑖
+
+= e𝜅 𝑖 
+
+max 𝑗 ∈ B e𝜅 𝑗 
+
+. (24) Here, 𝛽 IS controls the strength of the weighting, and normalization sets the largest weight within B to one. With TD error 𝛿 𝑖 = 𝑄 𝜃 (𝑠 𝑖 , 𝐴 𝑖 ) − 𝑌 𝑖 , the training loss is 
+
+bLTD (𝜃 ) = 1
+
+|B| ∑︁ 𝑖 ∈ B 𝜅 IS  
+
+> 𝑖
+
+Huber 1 (𝛿 𝑖 ). (25) 22 Algorithm 2 LBO transition construction 
+
+Input Measured data 𝐷 +, unmeasured pool 𝑈 +, initial data 𝐷 0, successor state 𝑠 +, successor estimates 
+
+{ ˆ𝑝 + (𝑥 ) : 𝑥 ∈ 𝑈 +} when nonterminal, stage, batch size 𝐵 , threshold 𝜏 , transition limit 𝐿 , replay buffer R,and current real batch 𝐴 𝑡 for online LBO. 
+
+Output Replay buffer R augmented with up to 𝐿 LBO transitions.  
+
+> 1:
+
+if initial LBO then  
+
+> 2:
+
+Set eligible candidates 𝐸 ← { 𝑥 : (𝑥, 𝑒 (𝑥 )) ∈ 𝐷 0}. 
+
+> 3:
+
+Initialize used batches S ← ∅ . 
+
+> 4:
+
+else  
+
+> 5:
+
+Set 𝐸 ← { 𝑥 : (𝑥, 𝑒 (𝑥 )) ∈ 𝐷 + \ 𝐷 0}. 
+
+> 6:
+
+Initialize S ← { 𝐴 𝑡 }. 
+
+> 7:
+
+end if  
+
+> 8:
+
+Initialize the hidden batch list C ← [ ] . 
+
+> 9:
+
+Generate seeded random permutations of 𝐸 . 
+
+> 10:
+
+for each generated permutation do  
+
+> 11:
+
+Partition it into complete batches of size 𝐵 . 
+
+> 12:
+
+for each batch 𝐴 in this partition do  
+
+> 13:
+
+if 𝐴 ∉ S then  
+
+> 14:
+
+Append 𝐴 to C. 
+
+> 15:
+
+Add 𝐴 to S. 
+
+> 16:
+
+end if  
+
+> 17:
+
+end for  
+
+> 18:
+
+end for  
+
+> 19:
+
+Retain at most the first 𝐿 batches in C. 
+
+> 20:
+
+for each hidden batch 𝐴 ∈ C do  
+
+> 21:
+
+Hide its outcomes 𝐷 − ← 𝐷 + \ {( 𝑥, 𝑒 (𝑥 )) : 𝑥 ∈ 𝐴 }. 
+
+> 22:
+
+Restore its candidates to the pool 𝑈 − ← 𝑈 + ∪ 𝐴 . 
+
+> 23:
+
+Fit predecessor surrogate 𝑔 𝛽 − to 𝐷 − with validation early stopping.  
+
+> 24:
+
+Draw 𝐾 = 50 MC dropout predictions from 𝑔 𝛽 − for 𝑥 ∈ 𝑈 − . 
+
+> 25:
+
+Estimate ˆ 𝑝 − (𝑥 ) ← 𝐾 −1 Í𝐾 𝑘 =1 1{𝑔 (𝑘 ) 
+
+> 𝛽 −
+
+(𝜙 (𝑥 )) ≥ 𝜏 } for 𝑥 ∈ 𝑈 − . 
+
+> 26:
+
+Construct 𝑠 − and {𝑐 − (𝑥 ) : 𝑥 ∈ 𝑈 − } from 𝐷 − and its predictive statistics.  
+
+> 27:
+
+Compute 𝑅 ← Í𝑥 ∈ 𝐴 𝑧 (𝑥 ) from the hidden outcomes.  
+
+> 28:
+
+if 𝑠 + is terminal then  
+
+> 29:
+
+Set 𝑤 ← 0.  
+
+> 30:
+
+else  
+
+> 31:
+
+Compute 𝑤 from Hellinger distances between ˆ 𝑝 − (𝑥 ) and ˆ 𝑝 + (𝑥 ) for 𝑥 ∈ 𝑈 +. 
+
+> 32:
+
+end if  
+
+> 33:
+
+Add e𝜉 = (𝑠 − , 𝐴, 𝑅, 𝑤, 𝑠 +) and its prediction inputs to R. 
+
+> 34:
+
+end for  
+
+> 35:
+
+return R.The Huber loss is quadratic for absolute errors up to 1 and linear above 1. Gradients update only 𝜃 , with surrogate predictions held fixed. After each update, the sampled transitions receive priorities 𝜌 𝑖 ← | 𝛿 𝑖 | + 𝜖 PER ,and the target parameters follow ¯𝜃 ← ( 1 − 𝜏 target ) ¯𝜃 + 𝜏 target 𝜃. (26) The optimizer and training settings are specified in Table C3. 23 B Theoretical Analysis 
+
+We prove Propositions 1–3, establishing weighted Bellman optimality, relating the Hellinger weight to predictive improvement, and bounding the gap in final discoveries. 
+
+B.1 Weighted Bellman Optimality 
+
+We fix the surrogate training and prediction procedures and condition on their randomness. Given the history 𝐻 𝑡 and query batch 𝐴 𝑡 , the observed outcomes determine the discovery count 𝑅 𝑡 and feedback weight 
+
+𝑤 𝑡 = 𝑤 (𝐻 𝑡 , 𝐴 𝑡 , 𝐻 𝑡 +1) ∈ [ 0, 1]. Both quantities are therefore determined by the successor history 𝐻 𝑡 +1. At history 𝐻 , the feasible batch set is 
+
+A𝑡 (𝐻 ) = {𝐴 ⊆ 𝑈 𝑡 (𝐻 ) : | 𝐴 | = 𝐵 }. (27) For any selection policy 𝜋 , define the weighted discovery count from round 𝑡 to the end of screening as 
+
+𝐺 𝑤 𝑡 =∑︁ 𝑇 −1
+
+> 𝑘 =𝑡
+
+Ö 𝑘 −1 
+
+> 𝑗 =𝑡
+
+𝑤 𝑗 
+
+
+
+𝑅 𝑘 , 𝐺 𝑤 𝑇 = 0. (28) The current count 𝑅 𝑡 has weight one, while each subsequent count is weighted by the product of the intervening feedback weights. The corresponding policy value is 
+
+𝑉 𝑤, 𝜋 𝑡 (𝐻 ) = E𝜋 [𝐺 𝑤 𝑡 | 𝐻 𝑡 = 𝐻 ], (29) the expected weighted number of remaining discoveries when selection follows 𝜋 from the current screening history 𝐻 . The terminal value is zero because no experiments remain. Separating the current round from subsequent rounds gives 
+
+𝐺 𝑤 𝑡 = 𝑅 𝑡 + 𝑤 𝑡 𝐺 𝑤 𝑡 +1. (30) Given 𝐻 𝑡 +1, both 𝑅 𝑡 and 𝑤 𝑡 are known, and the conditional expectation of the remaining return is 𝑉 𝑤, 𝜋 𝑡 +1 (𝐻 𝑡 +1).Averaging over the current batch and its observations, we obtain the following by the law of iterated expectations: 
+
+𝑉 𝑤, 𝜋 𝑡 (𝐻 ) =∑︁ 𝐴 ∈ A 𝑡 (𝐻 ) 𝜋 𝑡 ( 𝐴 | 𝐻 )E𝑅 𝑡 + 𝑤 𝑡 𝑉 𝑤, 𝜋 𝑡 +1 (𝐻 𝑡 +1) | 𝐻 𝑡 = 𝐻, 𝐴 𝑡 = 𝐴  . (31) Here, 𝜋 𝑡 ( 𝐴 | 𝐻 ) is the probability of selecting batch 𝐴 given history 𝐻 . This expression averages the expected current discoveries and weighted successor value over the policy’s batch choices. Starting from the terminal condition 𝑉 ∗,𝑤 𝑇 = 0, define recursively 
+
+𝑄 ∗,𝑤 𝑡 (𝐻, 𝐴 ) = E𝑅 𝑡 + 𝑤 𝑡 𝑉 ∗,𝑤 𝑡 +1 (𝐻 𝑡 +1) | 𝐻 𝑡 = 𝐻, 𝐴 𝑡 = 𝐴  ,𝑉 ∗,𝑤 𝑡 (𝐻 ) = max 𝐴 ∈ A 𝑡 (𝐻 ) 𝑄 ∗,𝑤 𝑡 (𝐻, 𝐴 ). (32) This recursion starts at the last round, where only current discoveries contribute. Earlier rounds also include the weighted successor value already determined at the next round. Here, 𝑄 ∗,𝑤 𝑡 (𝐻, 𝐴 ) is the conditional expected value of selecting batch 𝐴 , and 𝑉 ∗,𝑤 𝑡 (𝐻 ) takes the maximum over feasible batches. The finite horizon and finite batch sets uniquely determine these values. Since 0 ≤ 𝑅 𝑡 ≤ 𝐵 and 0 ≤ 𝑤 𝑡 ≤ 1, 0 ≤ 𝑄 ∗,𝑤 𝑡 (𝐻, 𝐴 ) ≤ 𝑉 ∗,𝑤 𝑡 (𝐻 ) ≤ ( 𝑇 − 𝑡 )𝐵. (33) 24 To establish optimality, we first show that every policy has value at most 𝑉 ∗,𝑤 𝑡 . At the terminal round 𝑡 = 𝑇 ,every policy satisfies 
+
+𝑉 𝑤, 𝜋 𝑇 (𝐻 ) = 𝑉 ∗,𝑤 𝑇 (𝐻 ) = 0. (34) Suppose that, at round 𝑡 + 1, every policy and reachable history satisfy 
+
+𝑉 𝑤, 𝜋 𝑡 +1 (𝐻 𝑡 +1) ≤ 𝑉 ∗,𝑤 𝑡 +1 (𝐻 𝑡 +1). (35) At round 𝑡 , retain the policy’s current batch selection probabilities and replace its successor value by this upper bound. Since 𝑤 𝑡 ≥ 0, this replacement cannot decrease the conditional expected value. Equations 31 and 32 therefore give 
+
+𝑉 𝑤, 𝜋 𝑡 (𝐻 ) ≤ ∑︁ 𝐴 ∈ A 𝑡 (𝐻 ) 𝜋 𝑡 ( 𝐴 | 𝐻 )E𝑅 𝑡 + 𝑤 𝑡 𝑉 ∗,𝑤 𝑡 +1 (𝐻 𝑡 +1) | 𝐻 𝑡 = 𝐻, 𝐴 𝑡 = 𝐴 
+
+=∑︁ 𝐴 ∈ A 𝑡 (𝐻 ) 𝜋 𝑡 ( 𝐴 | 𝐻 )𝑄 ∗,𝑤 𝑡 (𝐻, 𝐴 )≤ 𝑉 ∗,𝑤 𝑡 (𝐻 ).
+
+(36) The last inequality holds because any probability-weighted average of batch values cannot exceed their maximum. Thus, the value bound at the next round implies the bound at the current round. Backward induction from the terminal round establishes 𝑉 𝑤, 𝜋 𝑡 (𝐻 ) ≤ 𝑉 ∗,𝑤 𝑡 (𝐻 ) for every round, policy, and reachable history. We next show that this upper bound is attained. Let 𝜋 ∗ 
+
+> 𝑤
+
+select a feasible batch maximizing 𝑄 ∗,𝑤 𝑡 at every round and reachable history. At the terminal round, 
+
+𝑉 𝑤, 𝜋 ∗ 
+
+> 𝑤
+> 𝑇
+
+(𝐻 ) = 𝑉 ∗,𝑤 𝑇 (𝐻 ) = 0. (37) Suppose this policy attains 𝑉 ∗,𝑤 𝑡 +1 at every reachable history at round 𝑡 + 1. After selecting 𝜋 ∗ 
+
+> 𝑤
+
+(𝐻 ) at round 𝑡 ,its continuation therefore attains the optimal successor value in the definition of 𝑄 ∗,𝑤 𝑡 .
+
+𝑉 𝑤, 𝜋 ∗ 
+
+> 𝑤
+> 𝑡
+
+(𝐻 ) = 𝑄 ∗,𝑤 𝑡 
+
+ 𝐻, 𝜋 ∗ 
+
+> 𝑤
+
+(𝐻 )
+
+= max 𝐴 ∈ A 𝑡 (𝐻 ) 𝑄 ∗,𝑤 𝑡 (𝐻, 𝐴 )
+
+= 𝑉 ∗,𝑤 𝑡 (𝐻 ).
+
+(38) The first equality follows from the induction hypothesis, the second from the policy’s maximizing batch choice, and the third from the definition of 𝑉 ∗,𝑤 𝑡 . Backward induction therefore establishes that this policy attains the bound at every round and reachable history. Finally, since 𝐽 𝑤 (𝜋 ) = 𝑉 𝑤, 𝜋  
+
+> 0
+
+(𝐻 0), every policy’s objective is bounded above by 𝑉 ∗,𝑤  
+
+> 0
+
+(𝐻 0), and 𝜋 ∗ 
+
+> 𝑤
+
+attains this value. Therefore, 
+
+𝐽 𝑤 (𝜋 ∗ 
+
+> 𝑤
+
+) = 𝑉 𝑤, 𝜋 ∗ 
+
+> 𝑤
+> 0
+
+(𝐻 0) = 𝑉 ∗,𝑤  
+
+> 0
+
+(𝐻 0)
+
+= max 𝐴 ∈ A 0 (𝐻 0 ) 𝑄 ∗,𝑤  
+
+> 0
+
+(𝐻 0, 𝐴 ) = max 𝜋 𝐽 𝑤 (𝜋 ). (39) Thus, maximizing the optimal batch value at each round maximizes the weighted cumulative discovery objective. This proves Proposition 1. 
+
+B.2 Feedback and Predictive Improvement 
+
+Fix the current history 𝐻 𝑡 and query batch 𝐴 𝑡 , with remaining pool 𝑈 = 𝑈 𝑡 +1 and |𝑈 | > 0. Under a common joint probability model, define the conditional hit probabilities before and after feedback as 
+
+𝑝 𝑥 = Pr (𝑧 (𝑥 ) = 1 | 𝐻 𝑡 , 𝐴 𝑡 ),𝑞 𝑥 = Pr (𝑧 (𝑥 ) = 1 | 𝐻 𝑡 , 𝐴 𝑡 , 𝑂 𝑡 ). (40) 25 We analyze the Hellinger weight computed from these probabilities. Before the batch outcomes are observed, averaging the updated probability 𝑞 𝑥 over their possible values recovers the current probability 𝑝 𝑥 , giving 
+
+E[𝑞 𝑥 | 𝐻 𝑡 , 𝐴 𝑡 ] = 𝑝 𝑥 . (41) This analysis uses conditional hit probabilities before and after experimental feedback. TDAL approximates these probabilities using MC dropout predictions. The expected reduction in mean squared prediction error is 
+
+Δpred = 1
+
+|𝑈 |∑︁ 𝑥 ∈𝑈 E( 𝑝 𝑥 − 𝑧 (𝑥 )) 2 − ( 𝑞 𝑥 − 𝑧 (𝑥 )) 2 . (42) The two terms are the binary Brier losses before and after feedback (Gneiting and Raftery, 2007). Expanding their difference gives 
+
+( 𝑝 𝑥 − 𝑧 (𝑥 )) 2 − ( 𝑞 𝑥 − 𝑧 (𝑥 )) 2 = (𝑞 𝑥 − 𝑝 𝑥 )2 + 2(𝑞 𝑥 − 𝑝 𝑥 )( 𝑧 (𝑥 ) − 𝑞 𝑥 ). (43) By the definition of 𝑞 𝑥 ,
+
+E[𝑧 (𝑥 ) − 𝑞 𝑥 | 𝐻 𝑡 , 𝐴 𝑡 , 𝑂 𝑡 ] = Pr (𝑧 (𝑥 ) = 1 | 𝐻 𝑡 , 𝐴 𝑡 , 𝑂 𝑡 ) − 𝑞 𝑥 = 0. (44) Given the feedback, 𝑞 𝑥 − 𝑝 𝑥 is fixed, so the cross term has zero conditional expectation. The law of iterated expectations therefore yields 
+
+Δpred = 1
+
+|𝑈 |∑︁ 𝑥 ∈𝑈 E[( 𝑞 𝑥 − 𝑝 𝑥 )2]. (45) Thus, feedback does not increase mean prediction error in expectation, and the expected reduction equals the mean squared change in hit probabilities. To relate this reduction to the Hellinger weight, write 
+
+ℎ2 
+
+> 𝑥
+
+= 1 − √𝑝 𝑥 𝑞 𝑥 −√︁ (1 − 𝑝 𝑥 )( 1 − 𝑞 𝑥 ),𝑤 2 
+
+> 𝑡
+
+= 1
+
+|𝑈 |∑︁ 𝑥 ∈𝑈 ℎ2 
+
+> 𝑥
+
+. (46) For any 𝑝, 𝑞 ∈ [ 0, 1], let ℎ = 𝐻 Ber ( 𝑝, 𝑞 ). The Bernoulli Hellinger bounds (Sason and Verdú, 2016) follow directly here. Since √𝑎𝑏 ≥ min (𝑎, 𝑏 ),
+
+ℎ2 ≤ 1 − min ( 𝑝, 𝑞 ) − min (1 − 𝑝, 1 − 𝑞 ) = | 𝑝 − 𝑞 |. (47) Conversely, define 
+
+𝑢 = (√𝑝, √︁ 1 − 𝑝 ), 𝑣 = (√𝑞, √︁ 1 − 𝑞 ). (48) Cauchy–Schwarz gives 
+
+| 𝑝 − 𝑞 | = 12∑︁  
+
+> 2
+> 𝑖 =1
+
+|𝑢 𝑖 − 𝑣 𝑖 | | 𝑢 𝑖 + 𝑣 𝑖 |≤ 12 ∥𝑢 − 𝑣 ∥2 ∥𝑢 + 𝑣 ∥2 = ℎ√︁ 2 − ℎ2 ≤ √2 ℎ. 
+
+(49) Hence 
+
+ℎ4 
+
+> 𝑥
+
+≤ ( 𝑞 𝑥 − 𝑝 𝑥 )2 ≤ 2ℎ2 
+
+> 𝑥
+
+. (50) 26 Jensen’s inequality gives, for each feedback outcome, 
+
+𝑤 4 
+
+> 𝑡
+
+=
+
+ 1
+
+|𝑈 |∑︁ 𝑥 ∈𝑈 ℎ2
+
+> 𝑥
+
+2
+
+≤ 1
+
+|𝑈 |∑︁ 𝑥 ∈𝑈 ℎ4
+
+> 𝑥
+
+≤ 1
+
+|𝑈 |∑︁ 𝑥 ∈𝑈 (𝑞 𝑥 − 𝑝 𝑥 )2 ≤ 2𝑤 2 
+
+> 𝑡
+
+.
+
+(51) Taking conditional expectations gives 
+
+E[𝑤 4 
+
+> 𝑡
+
+] ≤ Δpred ≤ 2E[𝑤 2 
+
+> 𝑡
+
+]. (52) An experiment therefore does more than establish whether queried candidates are hits. It can improve predictions for unmeasured candidates. These bounds connect that expected improvement to the Hellinger weight, supporting the use of feedback’s effect on remaining predictions to weight successor value. Now consider querying one candidate 𝑎 and observing only its hit indicator. Suppress conditioning on the current history and query, and define 
+
+𝑟 = Pr (𝑧 (𝑎 ) = 1) ∈ ( 0, 1),𝑝 + 
+
+> 𝑥
+
+= Pr (𝑧 (𝑥 ) = 1 | 𝑧 (𝑎 ) = 1),𝑝 − 
+
+> 𝑥
+
+= Pr (𝑧 (𝑥 ) = 1 | 𝑧 (𝑎 ) = 0).
+
+(53) The law of total probability gives 
+
+𝑝 𝑥 = 𝑟 𝑝 + 
+
+> 𝑥
+
++ ( 1 − 𝑟 ) 𝑝 − 
+
+> 𝑥
+
+. (54) After feedback, 𝑞 𝑥 = 𝑝 + 
+
+> 𝑥
+
+with probability 𝑟 and 𝑞 𝑥 = 𝑝 − 
+
+> 𝑥
+
+with probability 1 − 𝑟 . Hence 
+
+E[( 𝑞 𝑥 − 𝑝 𝑥 )2] = 𝑟 ( 𝑝 + 
+
+> 𝑥
+
+− 𝑝 𝑥 )2 + ( 1 − 𝑟 )( 𝑝 − 
+
+> 𝑥
+
+− 𝑝 𝑥 )2
+
+= 𝑟 (1 − 𝑟 )2 ( 𝑝 + 
+
+> 𝑥
+
+− 𝑝 − 
+
+> 𝑥
+
+)2 + ( 1 − 𝑟 )𝑟 2 ( 𝑝 + 
+
+> 𝑥
+
+− 𝑝 − 
+
+> 𝑥
+
+)2
+
+= 𝑟 (1 − 𝑟 )( 𝑝 + 
+
+> 𝑥
+
+− 𝑝 − 
+
+> 𝑥
+
+)2.
+
+(55) Averaging over the remaining candidates yields 
+
+Δpred (𝑎 ) = 𝑟 (1 − 𝑟 )|𝑈 |∑︁ 𝑥 ∈𝑈 ( 𝑝 + 
+
+> 𝑥
+
+− 𝑝 − 
+
+> 𝑥
+
+)2. (56) This proves Proposition 2. Outcome uncertainty and its influence on remaining candidates jointly determine predictive improvement. If neither outcome changes remaining predictions, the feedback provides no predictive improvement. Otherwise, even a query without a hit changes remaining predictions and produces a nonzero weight. This explains how TDAL retains the current discovery reward while allowing experiments without hits to contribute to learning through successor value. The decomposition into two outcomes is the special case of one query revealing only a binary label. TDAL observes a batch of continuous phenotypes instead. The general identity for predictive improvement conditions on the complete batch observations 𝑂 𝑡 and also applies to that feedback under the same assumptions about the joint model. It does not require a binary observation space. 27 B.3 Final Discovery Gap 
+
+Fix the initial history 𝐻 0, surrogate update rule, and algorithmic randomness. At each round, 0 ≤ 𝑅 𝑡 ≤ 𝐵 ,and the feedback weight is a measurable function 𝑤 𝑡 = 𝑤 (𝐻 𝑡 , 𝐴 𝑡 , 𝐻 𝑡 +1) ∈ [ 0, 1]. This permits the weight, current discovery count, and successor value to depend on the same feedback. Write 
+
+𝑊 𝑡 =
+
+Ö𝑡 −1 
+
+> 𝑗 =0
+
+𝑤 𝑗 , 𝑊 0 = 1. (57) At each history 𝐻 , let 𝑠 = 𝑠 𝑡 (𝐻 ) be the screening state and let 𝜃 denote the network parameters after all online updates at that history. The learned policy selects a feasible batch maximizing 𝑄 𝜃 (𝑠, 𝐴 ). Its value estimation error is 
+
+𝜀 𝑤 𝑡 (𝐻 ) = max 𝐴 ∈ A 𝑡 (𝐻 ) |𝑄 𝜃 (𝑠, 𝐴 ) − 𝑄 ∗,𝑤 𝑡 (𝐻, 𝐴 )| . (58) First consider how this error affects the current batch choice. Fix a history 𝐻 , let 𝐴 ∗ maximize 𝑄 ∗,𝑤 𝑡 (𝐻, 𝐴 ),and let b𝐴 maximize 𝑄 𝜃 (𝑠, 𝐴 ). By the error definition, 
+
+𝑉 ∗,𝑤 𝑡 (𝐻 ) = 𝑄 ∗,𝑤 𝑡 (𝐻, 𝐴 ∗)≤ 𝑄 𝜃 (𝑠, 𝐴 ∗) + 𝜀 𝑤 𝑡 (𝐻 )≤ 𝑄 𝜃 (𝑠, b𝐴 ) + 𝜀 𝑤 𝑡 (𝐻 )≤ 𝑄 ∗,𝑤 𝑡 (𝐻, b𝐴 ) + 2𝜀 𝑤 𝑡 (𝐻 ).
+
+(59) The second inequality uses the maximizing property of b𝐴 . Thus, 0 ≤ 𝑉 ∗,𝑤 𝑡 (𝐻 ) − 𝑄 ∗,𝑤 𝑡 (𝐻, b𝐴 ) ≤ 2𝜀 𝑤 𝑡 (𝐻 ). (60) The gap between the optimal batch value and the value of the selected batch is therefore at most twice the estimation error. Next, accumulate these losses across the screening trajectory. Let b𝐴 𝑡 be the batch selected by the learned policy at round 𝑡 . The weighted Bellman equation gives 
+
+𝑄 ∗,𝑤 𝑡 (𝐻 𝑡 , b𝐴 𝑡 ) = E
+
+h
+
+𝑅 𝑡 + 𝑤 𝑡 𝑉 ∗,𝑤 𝑡 +1 (𝐻 𝑡 +1) | 𝐻 𝑡 , 𝐴 𝑡 = b𝐴 𝑡 
+
+i
+
+. (61) Since 𝑊 𝑡 is determined by the current history and 𝑊 𝑡 +1 = 𝑊 𝑡 𝑤 𝑡 , taking expectations along the learned policy gives 
+
+E𝜋 𝜃 
+
+h∑︁ 𝑇 −1 
+
+> 𝑡 =0
+
+𝑊 𝑡 
+
+ 𝑉 ∗,𝑤 𝑡 (𝐻 𝑡 ) − 𝑄 ∗,𝑤 𝑡 (𝐻 𝑡 , b𝐴 𝑡 ) | 𝐻 0
+
+i
+
+= E𝜋 𝜃 
+
+h∑︁ 𝑇 −1
+
+> 𝑡 =0
+
+ 𝑊 𝑡 𝑉 ∗,𝑤 𝑡 (𝐻 𝑡 ) − 𝑊 𝑡 𝑅 𝑡 − 𝑊 𝑡 +1𝑉 ∗,𝑤 𝑡 +1 (𝐻 𝑡 +1) | 𝐻 0
+
+i
+
+= 𝑉 ∗,𝑤  
+
+> 0
+
+(𝐻 0) − 𝐽 𝑤 (𝜋 𝜃 ).
+
+(62) Value terms from adjacent rounds cancel, leaving the initial value 𝑉 ∗,𝑤  
+
+> 0
+
+(𝐻 0). The terminal term vanishes because 𝑉 ∗,𝑤 𝑇 = 0. Proposition 1 and the batch value gap then imply max 𝜋 𝐽 𝑤 (𝜋 ) − 𝐽 𝑤 (𝜋 𝜃 ) ≤ 2E𝜋 𝜃 
+
+h∑︁ 𝑇 −1 
+
+> 𝑡 =0
+
+𝑊 𝑡 𝜀 𝑤 𝑡 (𝐻 𝑡 ) | 𝐻 0
+
+i
+
+. (63) Finally, relate the weighted objective to final discoveries. Since 
+
+𝐶 𝑇 = 𝐶 0 +∑︁ 𝑇 −1 
+
+> 𝑡 =0
+
+𝑅 𝑡 , (64) 28 every policy satisfies 
+
+E𝜋 [𝐶 𝑇 | 𝐻 0] = 𝐶 0 + 𝐽 𝑤 (𝜋 ) + E𝜋 
+
+h∑︁ 𝑇 −1 
+
+> 𝑡 =0
+
+(1 − 𝑊 𝑡 )𝑅 𝑡 | 𝐻 0
+
+i
+
+. (65) The last term counts the expected discoveries omitted when each round receives weight 𝑊 𝑡 instead of one. It is nonnegative because 𝑅 𝑡 ≥ 0 and 𝑊 𝑡 ≤ 1. Let 𝜋 ∗ 
+
+> 𝐶
+
+maximize expected final discoveries under the same initial information and budget, and write 
+
+Δ𝐶 (𝑤 ) = E𝜋 ∗
+
+> 𝐶
+
+h∑︁ 𝑇 −1 
+
+> 𝑡 =0
+
+(1 − 𝑊 𝑡 )𝑅 𝑡 | 𝐻 0
+
+i
+
+. (66) Subtracting the final discovery counts and using the nonnegative weighting bias of the learned policy gives 
+
+E𝜋 ∗ 
+
+> 𝐶
+
+[𝐶 𝑇 | 𝐻 0] − E𝜋 𝜃 [𝐶 𝑇 | 𝐻 0]≤ Δ𝐶 (𝑤 ) + 𝐽 𝑤 (𝜋 ∗ 
+
+> 𝐶
+
+) − 𝐽 𝑤 (𝜋 𝜃 )≤ Δ𝐶 (𝑤 ) + max 𝜋 𝐽 𝑤 (𝜋 ) − 𝐽 𝑤 (𝜋 𝜃 )≤ Δ𝐶 (𝑤 ) + 2E𝜋 𝜃 
+
+h∑︁ 𝑇 −1 
+
+> 𝑡 =0
+
+𝑊 𝑡 𝜀 𝑤 𝑡 (𝐻 𝑡 ) | 𝐻 0
+
+i
+
+.
+
+(67) This proves Proposition 3. 
+
+Feedback weights and the two error terms. Consider two weight rules 𝑤, 𝑤 ′ in the same experimental environment. If, at every reachable history, batch, and feedback outcome, 
+
+𝑤 ′ (𝐻, 𝐴, 𝐻 ′) ≥ 𝑤 (𝐻, 𝐴, 𝐻 ′), (68) then 𝑊 ′ 
+
+> 𝑡
+
+≥ 𝑊 𝑡 on every trajectory. Taking expectations under the same optimal discovery policy 𝜋 ∗ 
+
+> 𝐶
+
+yields 
+
+Δ𝐶 (𝑤 ′) ≤ Δ𝐶 (𝑤 ). (69) Thus, increasing feedback weights reduces the objective weighting bias. To examine the error term, consider constant weights 𝑤 𝑡 = 𝑤 and assume all weight settings being compared share a common value error bound 
+
+𝜀 𝑤 𝑡 (𝐻 ) ≤ 𝜀. (70) Then 𝑊 𝑡 = 𝑤 𝑡 , and 𝑅 𝑡 ≤ 𝐵 gives 
+
+Δ𝐶 (𝑤 ) ≤ 𝐵 ∑︁ 𝑇 −1 
+
+> 𝑡 =0
+
+(1 − 𝑤 𝑡 ), (71) while 2E𝜋 𝜃 
+
+h∑︁ 𝑇 −1 
+
+> 𝑡 =0
+
+𝑊 𝑡 𝜀 𝑤 𝑡 (𝐻 𝑡 ) | 𝐻 0
+
+i
+
+≤ 2𝜀 ∑︁ 𝑇 −1 
+
+> 𝑡 =0
+
+𝑤 𝑡 . (72) The bias bound is nonincreasing in 𝑤 , whereas the estimation error term’s bound is nondecreasing under the common error bound 𝜀 . Smaller weights reduce the error bound but attenuate more future discovery return. Larger weights retain more future return but increase the error bound. In the learned model, 𝜀 𝑤 𝑡 (𝐻 ) and the selected trajectory depend on 𝑤 . Comparing weight settings therefore also involves their different value estimation errors. When 𝑤 = 1, the objective weighting bias vanishes and the final discovery gap is at most 2𝑇 𝜀 . If also 𝜀 = 0, the learned policy achieves the optimal expected final discovery count. 29 Table C1: Perturbation types, phenotypes, and hit rules for eight tasks. Dataset Perturbation Phenotype Hit rule IFN-𝛾 (Schmidt et al., 2022) Single gene IFN-𝛾 production by T cells Top 5% by absolute score IL-2 (Schmidt et al., 2022) Single gene IL-2 production by T cells Top 5% by absolute score NK (Zhuang et al., 2019) Single gene Cancer cell sensitivity to NK cell killing Top 5% by absolute score Carnevale (Carnevale et al., 2022) Single gene T cell proliferation under adenosine suppression Top 5% by absolute score Simpson K562 (Simpson et al., 2023) Two genes K562 cell growth after dual gene repression Top 5% by raw score SCHEMATIC (Fong et al., 2025) Two genes Genetic interactions across cancer cell backgrounds Bottom 5% by raw score Kuzmin yeast (Kuzmin et al., 2020) Three genes Genetic interactions in triple gene yeast perturbations Bottom 5% by raw score Horlbeck Jurkat (Horlbeck et al., 2018) Two genes Jurkat cell growth after dual gene repression Bottom 5% by raw score 
+
+C Datasets and Experimental Setup 
+
+C.1 Datasets and Hit Definitions 
+
+The eight public screens comprise four single gene tasks, three double gene tasks, and one triple gene task, covering T cell function, cancer cell growth, immune killing, and genetic interactions. Each candidate is a single gene or combinatorial perturbation. Table C1 summarizes perturbation types, phenotypes, and hit rules. Raw phenotype scores are transformed into effects 𝑒 (𝑥 ) according to the direction in the table. For a pool of 
+
+𝑁 = |X| candidates, the score at rank max {1, ⌊0.05 𝑁 ⌋} in descending effect order defines the fixed threshold 
+
+𝜏 , with hits given by 𝑧 (𝑥 ) = 1{𝑒 (𝑥 ) ≥ 𝜏 }. The target hit proportion is 5%, and 𝜏 is the corresponding phenotype score threshold. The threshold is fixed before screening. The phenotype and hit label of each candidate are revealed when it is queried. 
+
+IFN-𝛾 . This task identifies genes that regulate interferon-𝛾 production in T cells. Enrichment differences between populations with high and low cytokine levels measure perturbation effects. We target strong effects in either direction (Schmidt et al., 2022). 
+
+IL-2. This task identifies regulators of interleukin-2 production following T cell stimulation. Enrichment differences between populations with high and low expression define the phenotype, with strong effects in either direction included as discovery targets (Schmidt et al., 2022). 
+
+NK. This task studies cancer cell genes that affect sensitivity or resistance to natural killer cells. The phenotype is the sum of standardized enrichment scores across two replicates for perturbed K562 cells exposed to NK cells relative to controls. Strong effects in either direction are targeted (Zhuang et al., 2019). 
+
+Carnevale. This task studies genes that affect T cell proliferation under immunosuppressive conditions. We use enrichment scores associated with proliferation from the screen under adenosine suppression and target perturbations that strongly increase or decrease proliferation (Carnevale et al., 2022). 30 Simpson K562. The original study examines how DNA repair genes jointly affect cell growth and PARP inhibitor response. We use its double gene CRISPRi growth phenotype and target combinations with the highest growth scores (Simpson et al., 2023). 
+
+SCHEMATIC. This task seeks gene combinations that cause synthetic lethality across cancer cell backgrounds. We use the multilineage interaction score to identify strong negative interactions whose growth or survival defects exceed expectations from individual perturbations (Fong et al., 2025). 
+
+Kuzmin yeast. This task examines how duplicate genes compensate for one another and how this compensation depends on other genes. We use the corrected trigenic interaction score to target combinations with stronger growth defects than expected (Kuzmin et al., 2020). 
+
+Horlbeck Jurkat. This task examines the effect of jointly repressing two genes on Jurkat cell growth. We use the double gene CRISPRi growth phenotype and target combinations that strongly inhibit growth (Horlbeck et al., 2018). 
+
+C.2 Experimental Protocol and Hyperparameters 
+
+Table C2 summarizes candidate counts, pool hit counts, and screening configurations.  
+
+> Table C2: Candidate pools, hits, and budgets for eight tasks.
+
+Dataset 𝑁 Pool hits 𝑛 0 𝐵 𝑇 𝑀 
+
+IFN-𝛾 17,470 873 128 32 60 2,048 IL-2 17,470 873 128 32 60 2,048 NK 17,533 876 128 32 60 2,048 Carnevale 17,526 876 128 32 60 2,048 Simpson K562 143,345 7,167 1,024 128 200 26,624 SCHEMATIC 11,067 553 128 32 60 2,048 Kuzmin yeast 214,642 10,732 1,024 256 200 52,224 Horlbeck Jurkat 91,378 4,568 1,024 128 200 26,624 
+
+𝑁 is the number of queryable perturbations with valid measured phenotypes and fixed representations in the retrospective evaluation. Combinatorial tasks count gene combinations as candidates. All candidate identities and representations are known at the start. Each method initially receives the phenotypes of the 𝑛 0 candidates in 𝐷 0, while the phenotypes of the remaining 𝑁 − 𝑛 0 candidates are withheld. After batch 𝐴 𝑡 is selected, the evaluation environment returns its recorded experimental outcomes, adds these observations to the measured data, and removes the candidates from the unmeasured pool. Screening returns all verified hit candidates, whose count 𝐶 𝑇 measures final discovery. For seed 𝑖 , let 𝐶 𝑡 ,𝑖 be the number of hits in the measured set after 𝑡 active rounds, with 𝐶 0,𝑖 the number in the initial set. The final cumulative hit count is 
+
+𝐶 𝑇,𝑖 = 𝐶 0,𝑖 + 
+
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =0
+
+𝑅 𝑡 ,𝑖 . (73) This metric counts distinct discovered hits within the total budget, including initialization. Recall is 𝐶 𝑇 ,𝑖 
+
+divided by the fixed pool hit count in Table C2. Batch size 𝐵 gives the number of new queries per round, 𝑇 is the number of active rounds, and the total budget 𝑀 = 𝑛 0 + 𝐵𝑇 includes initialization and all subsequent queries. 31 Each task is repeated with seeds 0–4. Methods share the candidate pool, initial set, hit threshold, experimental budget, and underlying phenotype dataset within each seed. Method differences are paired within each task and seed before aggregation across seeds. 
+
+Hyperparameter settings. Table C3 summarizes TDAL’s model and training settings.                                
+
+> Table C3: Key TDAL hyperparameters. Component Parameter Value Surrogate Hidden widths and dropout Widths 128, 64, dropout probability 0.2 Surrogate Training/validation split 80%/20% Surrogate Optimizer Adam, learning rate 10 −3
+> Surrogate Training batch and epochs Batch size 64, at most 100 epochs, early stopping patience 10 Surrogate MC samples 𝐾 =50 Acquisition network Projection and hidden widths Projection dimension 64, hidden widths 128, 128 TD learning Optimizer AdamW, learning rate 5 ×10 −4
+> TD learning Training batch and updates At most 16 transitions per update, 20 updates initially and after each active round Initial LBO Transition limit min {80 ,2⌊| 𝐷 0|/ 𝐵 ⌋}
+> Online LBO Rounds 1–8/9–32/33–64 At most 8/4/2 transitions per round Online LBO From round 65 At most 1 transition every 4 rounds
+
+C.3 Baseline Methods 
+
+For batch perturbation screening, we compare representative methods for hit discovery, Bayesian optimization, and batch active learning, with random selection as a reference. UCB, EI, TS, TopUncertain, and OAE use the GeneDisco Bayesian MLP and retrain their surrogate after each round of new observations (Mehrjou et al., 2022). 
+
+PoH. Many Needles selects the 𝐵 unmeasured candidates with the highest estimated probability of exceeding the hit threshold (Rubbi et al., 2026). At each round, we refit a Bayesian MLP with two hidden layers of widths 128 and 64 on the measured data. For each candidate 𝑥 ∈ 𝑈 𝑡 , we obtain 50 MC dropout predictions and use their mean and standard deviation to form a Gaussian predictive approximation. The probability of exceeding 𝜏 then serves as the acquisition score. 
+
+OAE. OAE uses optimistic estimates for batch discovery of candidates with high responses. We use its released Bayesian variant, which combines predictive means and uncertainty to select each batch after aligning predictions with the effect direction (Pacchiano et al., 2023). 
+
+DiscoBAX. DiscoBAX targets a diverse subset of candidates with high responses and uses fantasized observations to estimate information gain about that subset. We use the authors’ surrogate training and acquisition implementation, with two hidden layers of 128 and 64 units and dropout 0.2 to match TDAL and PoH in network capacity. We evaluate this implementation on the four single gene perturbation tasks (Lyle et al., 2023). 
+
+UCB. Upper Confidence Bound combines the predictive mean with a weighted uncertainty term. It favors candidates with high predicted effects or high uncertainty to balance exploitation and exploration (Srinivas et al., 2010). 32 Expected Improvement (EI). EI estimates the expected improvement over the best effect observed so far and prioritizes candidates with larger expected gains (Jones et al., 1998). 
+
+Thompson Sampling (TS). TS draws an effect function from the surrogate posterior and selects a batch by ranking unmeasured candidates under that draw, allowing model uncertainty to influence selection (Thompson, 1933). 
+
+TopUncertain. TopUncertain ranks candidates by predictive standard deviation and allocates experiments to regions where the surrogate is most uncertain (Mehrjou et al., 2022). 
+
+BADGE. BADGE selects diverse batches using k-means++ in a gradient representation space. We use the GeneDisco regression implementation and its proxy gradient representations (Ash et al., 2020; Mehrjou et al., 2022). 
+
+CoreSet. CoreSet greedily expands geometric coverage in the candidate representation space extracted by the surrogate. It successively selects the candidate farthest from the existing selection centers (Sener and Savarese, 2018). 
+
+KMeans-Embedding. This method uses k-means to cluster candidate representations extracted by the surrogate and selects candidates near cluster centers to represent different regions of the candidate space (Mehrjou et al., 2022). 
+
+Random. Random samples uniformly without replacement from the current unmeasured pool, providing a reference for random screening. 
+
+D Complete Benchmark Results 
+
+D.1 Single Gene Perturbation Results 
+
+Table D1 reports the complete endpoint results for the four single gene perturbation tasks in Figure 3a–d, supplementing the discovery trajectories in the main text with cumulative hit counts for each method, variation across seeds, and recall.                                                              
+
+> Table D1: Final cumulative hits and recall on the four single gene perturbation tasks. Entries are mean ±sample SD of cumulative hits across five random seeds, with mean recall in parentheses. The second highest mean in each column is underlined. Method IFN-𝛾 IL-2 NK Carnevale TDAL 270 .6±6.1
+> (31 .00% )
+> 367 .4±3.0
+> (42 .08% )
+> 109 .4±9.3
+> (12 .49% )
+> 161 .2±8.6
+> (18 .40% )
+> PoH 256 .6±14 .6
+> (29 .39% )
+> 347 .8±6.0
+> (39 .84% )
+> 101 .0±4.1
+> (11 .53% )
+> 145 .6±2.7
+> (16 .62% )
+> OAE 194 .0±13 .0
+> (22 .22% )
+> 334 .2±6.4
+> (38 .28% )
+> 97 .2±7.2
+> (11 .10% )
+> 124 .6±5.8
+> (14 .22% )
+> DiscoBAX 218 .0±10 .4
+> (24 .97% )
+> 266 .0±17 .7
+> (30 .47% )
+> 81 .0±5.2
+> (9.25% )
+> 151 .8±5.9
+> (17 .33% )
+> UCB 196 .4±12 .4
+> (22 .50% )
+> 331 .0±10 .2
+> (37 .92% )
+> 85 .4±6.2
+> (9.75% )
+> 123 .8±8.3
+> (14 .13% )
+> Expected Improvement 185 .8±16 .9
+> (21 .28% )
+> 315 .4±7.1
+> (36 .13% )
+> 92 .6±4.1
+> (10 .57% )
+> 123 .2±8.3
+> (14 .06% )
+
+33 Table D1 (continued) 
+
+Method IFN-𝛾 IL-2 NK Carnevale Thompson Sampling 178 .2 ± 12 .1
+
+(20 .41% )
+
+299 .8 ± 6.5
+
+(34 .34% )
+
+98 .4 ± 8.4
+
+(11 .23% )
+
+114 .0 ± 10 .8
+
+(13 .01% )
+
+TopUncertain 200 .8 ± 10 .1
+
+(23 .00% )
+
+298 .6 ± 13 .6
+
+(34 .20% )
+
+91 .4 ± 4.4
+
+(10 .43% )
+
+127 .2 ± 5.5
+
+(14 .52% )
+
+BADGE 190 .8 ± 8.6
+
+(21 .86% )
+
+237 .0 ± 12 .0
+
+(27 .15% )
+
+99 .0 ± 5.2
+
+(11 .30% )
+
+140 .2 ± 7.8
+
+(16 .00% )
+
+CoreSet 259 .8 ± 2.2
+
+(29 .76% )
+
+298 .4 ± 4.8
+
+(34 .18% )
+
+114 .0 ± 6.1
+
+(13 .01% )
+
+159 .4 ± 7.3
+
+(18 .20% )
+
+KMeans-Embedding 153 .2 ± 11 .2
+
+(17 .55% )
+
+202 .4 ± 6.5
+
+(23 .18% )
+
+82 .0 ± 3.4
+
+(9.36% )
+
+117 .2 ± 8.9
+
+(13 .38% )
+
+Random 94 .0 ± 6.0
+
+(10 .77% )
+
+102 .2 ± 7.0
+
+(11 .71% )
+
+102 .6 ± 10 .5
+
+(11 .71% )
+
+103 .4 ± 10 .8
+
+(11 .80% )
+
+D.2 Combinatorial Perturbation Results 
+
+Table D2 reports the complete endpoint results for the four combinatorial perturbation tasks in Figure 3e– h, providing cumulative hit counts for each method, variation across seeds, and recall for the discovery performance comparison in the main text. 
+
+Table D2: Final cumulative hits and recall on the four main combinatorial perturbation tasks. Entries are mean ±
+
+sample SD of cumulative hits across five random seeds, with mean recall in parentheses. The second highest mean in each column is underlined. Method Simpson K562 SCHEMATIC Kuzmin yeast Horlbeck Jurkat TDAL 6765 .4 ± 102 .5
+
+(94 .40% )
+
+160 .4 ± 14 .2
+
+(29 .01% )
+
+4141 .0 ± 194 .0
+
+(38 .59% )
+
+4542 .8 ± 4.8
+
+(99 .45% )
+
+PoH 6771 .0 ± 75 .7
+
+(94 .47% )
+
+187 .2 ± 5.1
+
+(33 .85% )
+
+4111 .4 ± 42 .2
+
+(38 .31% )
+
+4551 .4 ± 1.5
+
+(99 .64% )
+
+OAE 5951 .2 ± 36 .4
+
+(83 .04% )
+
+104 .8 ± 10 .0
+
+(18 .95% )
+
+3420 .4 ± 83 .1
+
+(31 .87% )
+
+4489 .2 ± 23 .3
+
+(98 .27% )
+
+UCB 5955 .4 ± 46 .0
+
+(83 .09% )
+
+105 .0 ± 6.6
+
+(18 .99% )
+
+3636 .6 ± 157 .1
+
+(33 .89% )
+
+4394 .0 ± 103 .0
+
+(96 .19% )
+
+Expected Improvement 5005 .2 ± 176 .9
+
+(69 .84% )
+
+117 .0 ± 2.9
+
+(21 .16% )
+
+3013 .4 ± 278 .6
+
+(28 .08% )
+
+4134 .2 ± 92 .5
+
+(90 .50% )
+
+Thompson Sampling 5903 .8 ± 17 .1
+
+(82 .37% )
+
+99 .6 ± 6.9
+
+(18 .01% )
+
+3196 .2 ± 164 .5
+
+(29 .78% )
+
+4044 .8 ± 48 .9
+
+(88 .55% )
+
+TopUncertain 3758 .0 ± 181 .5
+
+(52 .43% )
+
+107 .8 ± 7.6
+
+(19 .49% )
+
+3759 .6 ± 145 .6
+
+(35 .03% )
+
+4059 .8 ± 136 .6
+
+(88 .87% )
+
+34 Table D2 (continued) 
+
+Method Simpson K562 SCHEMATIC Kuzmin yeast Horlbeck Jurkat BADGE 932 .8 ± 13 .3
+
+(13 .02% )
+
+151 .4 ± 11 .2
+
+(27 .38% )
+
+2671 .8 ± 25 .2
+
+(24 .90% )
+
+1622 .6 ± 30 .0
+
+(35 .52% )
+
+CoreSet 1693 .6 ± 44 .4
+
+(23 .63% )
+
+182 .0 ± 8.0
+
+(32 .91% )
+
+3417 .0 ± 101 .9
+
+(31 .84% )
+
+2845 .6 ± 78 .3
+
+(62 .29% )
+
+KMeans-Embedding 767 .4 ± 18 .8
+
+(10 .71% )
+
+149 .8 ± 7.8
+
+(27 .09% )
+
+2646 .6 ± 49 .2
+
+(24 .66% )
+
+1316 .0 ± 17 .8
+
+(28 .81% )
+
+Random 1313 .4 ± 59 .8
+
+(18 .33% )
+
+99 .2 ± 10 .0
+
+(17 .94% )
+
+2603 .2 ± 45 .3
+
+(24 .26% )
+
+1339 .0 ± 25 .3
+
+(29 .31% )
+
+D.3 Rank Consistency Across Tasks 
+
+We rank the eleven common methods by their mean final discovery counts over five seeds on each task. DiscoBAX is evaluated on four tasks and is excluded from this comparison. Table D3 summarizes mean ranks, variation across tasks, and top three coverage. TDAL has the best mean rank of 1.63 and the smallest rank standard deviation of 0.74, and is the only method ranked among the top three on all eight tasks. Omitting each task in turn leaves TDAL with the best average rank over the remaining seven tasks. Thus, its leading average rank does not depend on any single task. To assess variation across seeds, we first rank methods separately for each task and seed. We then calculate the rank standard deviation across the five seeds within each task and average it over tasks. TDAL has the smallest rank variation across tasks, while CoreSet has the smallest variation across seeds. 
+
+Table D3: Rank consistency across the eight main tasks. Task ranks are based on mean final discovery counts over five seeds among the eleven common methods. Ties receive average ranks. Rank SD is the sample standard deviation across task ranks. Seed rank SD is the mean of the sample standard deviations across five seeds within each task. Method Mean rank Rank SD Range Top three Seed rank SD TDAL 1.63 0.74 1–3 8/8 0.713 PoH 2.13 1.13 1–4 7/8 0.686 CoreSet 4.63 3.16 1–8 4/8 0.498 OAE 5.38 2.07 3–9 2/8 1.233 UCB 5.63 2.45 3–10 1/8 1.131 TopUncertain 6.00 1.93 3–9 1/8 1.004 EI 6.75 1.39 5–8 0/8 0.878 BADGE 7.13 2.47 4–10 0/8 0.757 TS 7.50 1.93 5–10 0/8 1.003 KMeans-Embedding 9.63 2.00 5–11 0/8 0.594 Random 9.63 2.77 3–11 1/8 0.753 
+
+E Landscape Structure and Active Discovery 
+
+35 E.1 Local Hit Enrichment and Discovery Gains on Real Tasks Local hit enrichment. We compare the hit fraction around hit candidates with the overall hit fraction in the analysis sample to measure how hits cluster in candidate representation space. Neighbors are determined by cosine distance after standardizing the fixed candidate representations 𝜙 (𝑥 ) and applying L2 normalization. For each task, we randomly sample hit candidates and other candidates in their proportions in the full candidate pool, forming an analysis sample P of at most 10,000 candidates. Let P+ = {𝑥 ∈ P : 𝑧 (𝑥 ) = 1} be its hit set. For each hit candidate 𝑥 , let N10 (𝑥 ) contain the ten nearest other candidates within P. We compute the hit fraction among these ten neighbors, average it over all hit candidates, and divide by the overall hit fraction in the sample to obtain Enrich 10 =
+
+1
+
+|P + |∑︁ 𝑥 ∈ P +
+
+110 ∑︁ 𝑦 ∈ N 10 ( 𝑥 )
+
+𝑧 (𝑦 )|P + |/|P | . (74) The numerator is the mean neighbor hit fraction around hit candidates, and the denominator is the overall hit fraction in the analysis sample. For example, an overall hit fraction of 5% and a mean neighbor hit fraction of 15% give 3 × enrichment. Values above one indicate that other hits are more common near hit candidates. Values near one indicate a similar hit fraction to the sample overall, and values below one indicate a lower local hit fraction. We repeat sampling and calculation three times for each task. Table E1 reports the mean enrichment over these three samples. 
+
+Discovery gains. For each task, we divide each method’s final cumulative hit count by Random’s count under the same seed, then average over five seeds. The shared methods are PoH, OAE, UCB, EI, TS, TopUncertain, BADGE, CoreSet, and KMeans-Embedding. Their average gain is the mean of these nine methods’ results. Across the eight tasks, this average gain increases with local hit enrichment (Spearman 𝜌 = 0.95, 𝑛 = 8). Both enrichment and discovery gains are near random levels on NK and higher on Simpson K562, showing a close association between local hit structure and active discovery gains across tasks.                             
+
+> Table E1: Hit clustering and active discovery gains on real tasks. Dataset Hit enrichment (10 nearest neighbors) Shared methods / Random TDAL / Random NK 0.83 ×0.94 ×1.08 ×
+> Carnevale 1.25 ×1.27 ×1.57 ×
+> SCHEMATIC 1.51 ×1.36 ×1.63 ×
+> Kuzmin 1.76 ×1.28 ×1.59 ×
+> IFN-𝛾 2.53 ×2.15 ×2.89 ×
+> IL-2 3.58 ×2.91 ×3.61 ×
+> Horlbeck Jurkat 5.84 ×2.61 ×3.39 ×
+> Simpson K562 6.27 ×3.11 ×5.16 ×
+
+E.2 Noisy Multicluster Landscapes Landscape construction. We construct landscapes in which hits are dispersed or concentrated in six clusters. The 17,660 candidates have fixed two-dimensional coordinates that are defined without phenotype information. KMeans divides these coordinates into six regions, each with a response peak at its center. Within each region, candidates closer to the center receive higher response scores. We sort candidates by distance, negate their ranks, and divide by the region’s hit quota. The quotas are 148 for one region and 147 for each of the other five, giving 883 hits in total. This scaling produces clusters of similar hit counts when no 36 noise is added. We standardize the scores across candidates and mix them with independent standardized Gaussian noise. Increasing the noise contribution disperses hits away from the cluster centers. To keep phenotype values comparable, we rank the mixed scores and assign them the same fixed set of standard normal quantiles. The top 5% are designated as hits. All settings therefore share the phenotype distribution and 883 hits, while hit locations range from nearly random at 1 .05 × mean enrichment to six concentrated clusters at 17 .71 ×. Surrogates receive only candidate coordinates and measured phenotypes. 
+
+Screening settings. We use 𝑛 0 = 128, 𝐵 = 32, and 𝑇 = 60, giving a total query budget of 2,048. Each landscape setting has five paired repetitions with independent noise and selection seeds 5–9. Methods share the landscape, initial set, and budget within each repetition. The 17 .71 × landscape contains no noise, so only selection seeds vary in this setting. Model and training settings follow the real tasks. TDAL and PoH retain their empirical hit frequency and Gaussian tail estimators, respectively. The comparison includes TDAL and the eleven baselines in Figure 4, giving 300 runs across five settings. Their mean hit enrichments are 1 .05, 2 .53, 3 .83, 10 .00, and 17 .71 ×. Enrichment is computed using ten nearest neighbors in the full pool with Euclidean distances in the fixed coordinates, then averaged over the five realizations. The four snapshots in Figure 4b show the first realization with its own enrichment. Table E2 reports final recall for these same methods and settings, and Figure E1 shows their discovery trajectories. 
+
+Discovery performance. With nearly random hit locations, mean discovery gains are close to one. Between the least and most clustered settings, TDAL’s mean gain over Random rises from 1 .04 × to 2 .26 ×, and PoH’s from 1 .06 × to 1 .94 ×. OAE, UCB, and TS reach gains of 1 .62 ×, 1 .62 ×, and 1 .67 ×, respectively, at the highest enrichment. Thus, clustered hits provide useful information for several acquisition functions, although their gains differ across settings. BADGE and KMeans-Embedding do not improve consistently with clustering, while EI, TopUncertain, and DiscoBAX remain below Random in the four structured settings. 
+
+Table E2: Final recall (%) on the five multicluster landscapes in Figure 4b. Column headings give mean hit enrichment. Values are means ± sample standard deviations over five paired repetitions.                                                                                                                                                                                          
+
+> Method 1.05 ×2.53 ×3.83 ×10 .00 ×17 .71 ×
+> TDAL 11 .48 ±0.39 17 .33 ±1.87 16 .78 ±1.38 18 .01 ±9.40 24 .28 ±9.23 PoH 11 .66 ±1.05 10 .83 ±4.00 16 .76 ±2.62 22 .74 ±4.19 20 .82 ±7.05 OAE 11 .78 ±0.60 16 .49 ±1.11 16 .24 ±0.74 16 .99 ±1.07 17 .17 ±0.17 DiscoBAX 11 .51 ±1.56 5.73 ±1.46 5.73 ±2.92 3.15 ±1.57 3.53 ±2.52 UCB 11 .73 ±0.75 16 .19 ±1.30 16 .26 ±1.09 16 .60 ±1.01 17 .19 ±0.17 EI 11 .33 ±1.62 6.34 ±0.76 4.92 ±1.37 2.45 ±1.85 2.27 ±1.35 TS 11 .39 ±1.08 14 .93 ±1.82 15 .52 ±1.41 16 .81 ±1.00 17 .80 ±0.95 TopUncertain 11 .71 ±0.98 5.30 ±1.21 2.63 ±1.08 0.61 ±0.10 0.66 ±0.17 BADGE 12 .75 ±1.33 11 .42 ±0.83 10 .80 ±1.47 10 .51 ±1.19 10 .83 ±0.87 CoreSet 11 .60 ±1.95 9.60 ±0.85 10 .55 ±1.25 12 .71 ±0.43 13 .16 ±0.78 KMeans-Embedding 12 .07 ±0.94 11 .87 ±1.60 11 .01 ±0.67 9.90 ±1.31 8.13 ±0.49 Random 11 .17 ±1.30 11 .80 ±0.79 11 .82 ±0.55 10 .69 ±0.57 10 .65 ±0.45
+
+F Ablation Studies and Selection Dynamics 
+
+F.1 Component Ablations 
+
+We compare five ablations with full TDAL on IFN-𝛾 , IL-2, Kuzmin, and Horlbeck Jurkat. All methods share the surrogate configuration, fixed candidate representations, initial sets, experimental budgets, and five random seeds. Final cumulative hit counts are reported in Table 1. 37 010 20 30 40                    
+
+> Recall (%)
+> 1.05× enrichment 2.53× enrichment 3.83× enrichment
+> 020 40 60
+> Screening round
+> 010 20 30 40
+> Recall (%)
+> 10.00× enrichment
+> 020 40 60
+> Screening round
+> 17.71× enrichment
+> TDAL PoH OAE DiscoBAX UCB EI TS TopUnc BADGE CoreSet KMeans Random
+
+Figure E1: Discovery trajectories for all twelve methods in Figure 4b. Panel titles give mean hit enrichment. Lines show mean recall over five paired repetitions, with shaded 95% confidence intervals. Round 0 is the initial set of 128 candidates. All panels share axis ranges. 
+
+Surrogate only. This ablation refits the same surrogate as TDAL after each round of observations but selects candidates with the highest ˆ 𝑝 𝑡 (𝑥 ) without training an acquisition network, breaking exact probability ties at random. Its mean final recall is 0.54–13.01 percentage points lower than full TDAL across the four tasks. Updating response predictions alone therefore does not recover the full model’s discovery gains. Learning a selection function from batch feedback further improves screening. 
+
+w/o adaptive 𝑤 𝑡 . This ablation retains successor value bootstrapping but replaces the adaptive Hellinger weight with 1, applying the same successor weight in every round. Mean final recall decreases by 3.88–9.03 percentage points across the four tasks. Giving successor value full weight at every round therefore performs less well than adjusting its contribution to the observed prediction changes. 
+
+w/o LBO. This ablation disables LBO transitions constructed from the initial set, the associated initial TD training, and online LBO. The acquisition network learns only after receiving real batch feedback. Mean final recall is 0.42–5.54 percentage points lower than full TDAL across the four tasks. LBO reuses measured outcomes to provide training experience at initialization and supplement the single real transition obtained per online round. 
+
+w/o successor. This ablation sets the training target to 𝑌 = 𝑅 , retaining the hit probability term, acquisition network, and both real and LBO transitions. With surrogate predictions held fixed, the network fits the difference between the observed batch discovery count and its surrogate estimate. Mean final recall exceeds Surrogate only on all four tasks but is 0.15–1.21 percentage points lower than full TDAL. Current feedback can therefore train an effective selection function, while successor value bootstrapping further increases final discoveries. 
+
+w/o anchor. This ablation uses 𝑞 𝜃 (𝑠 𝑡 , 𝑥 ) = 𝑓 𝜃 (𝑠 𝑡 , 𝑐 𝑡 (𝑥 )) . Both current and successor batch values sum network outputs without explicitly adding ˆ 𝑝 𝑡 (𝑥 ). Surrogate prediction features remain in the inputs. Relative 38 to full TDAL, mean final recall decreases by 0.96 and 2.82 percentage points on IFN-𝛾 and IL-2, respectively, and increases by 0.31 and 0.16 points on Kuzmin and Horlbeck Jurkat. The two single perturbation tasks each use 60 screening rounds, whereas the two combinatorial tasks each use 200. More rounds provide the acquisition network with more feedback and training opportunities. The explicit hit probability term is more beneficial on the two tasks with 60 rounds. This pattern is consistent with a useful probability reference early in learning and motivates gradually reducing its contribution as feedback accumulates. Testing such a schedule within the same task would separate the effect of screening horizon from differences between datasets. 
+
+F.2 Training Dynamics and Candidate Reranking Candidates analyzed. On IL-2, 85 hit candidates are discovered during active screening in all five TDAL runs and none of the five Surrogate only runs. We compare their discovery times and selection ranks across the five random seeds. 
+
+Training and discovery across seeds. Figure F1a–b shows TD loss per round and cumulative discoveries among these 85 candidates. Early loss changes vary in direction and magnitude across seeds. For all five seeds, fluctuations are smaller in the last 30 than in the first 10 rounds. Discoveries concentrate in the second half, with 74.1%–87.1% of the set discovered in the last 30 rounds (Table F1). This common timing pattern shows that these candidates mostly enter selected batches after feedback accumulates. 
+
+Candidate reranking at selection. We compare each candidate’s TDAL score rank and concurrent surrogate hit probability rank at selection, using the same unmeasured pool and surrogate predictions. Across seeds, mean TDAL ranks are 16.1–17.2, whereas mean surrogate ranks are 9,442–9,780. Of 425 selection records, 413 have surrogate ranks outside the top 𝐵 = 32 (97.2%, Figure F1c–g). Across seeds, the acquisition network consistently promotes candidates ranked low by concurrent surrogate predictions into the selected batch.                               
+
+> Table F1: Discovery stages and selection ranks of the hit candidates analyzed across five seeds. Stage columns count newly discovered candidates. Ranks are computed in the same unmeasured pool at selection and averaged over the 85 candidates. Seed Rounds 0–9 Rounds 10–29 Rounds 30–59 Mean TDAL rank Mean surrogate rank 04774 16.6 9,780 1115 69 16.1 9,442 2212 71 16.8 9,574 3318 64 17.2 9,522 4418 63 16.4 9,479
+
+G Batch Size Sensitivity and Computational Cost 
+
+G.1 Batch Size Sensitivity Experimental settings. We vary batch size at fixed initial sample size and query budget on IL-2 and Simpson K562 to compare discovery at different feedback frequencies. IL-2 uses 𝑛 0 = 128, 𝑀 = 2,048, and 𝐵 ∈ { 16 , 32 , 64 , 128 }. Simpson K562 uses 𝑛 0 = 1,024, 𝑀 = 26 ,624, and 𝐵 ∈ { 64 , 128 , 256 , 512 }.Tables G1–G2 give the corresponding numbers of rounds. TDAL, PoH, UCB, BADGE, and CoreSet retain their respective model and training hyperparameters and share the candidate pool, initial set, and budget within each task and seed. Each setting uses five seeds. 39 0 15 30 45 60 
+
+> Completed active rounds
+> 01234
+> TD loss
+
+a    
+
+> 015 30 45 60
+> Completed active rounds
+> 025 50 85
+> Discovered hits
+
+b                          
+
+> 132 1k 10k
+> Surrogate rank
+> 116 32
+> TDAL rank
+> cSeed 0
+> 132 1k 10k
+> Surrogate rank
+> dSeed 1
+> 132 1k 10k
+> Surrogate rank
+> eSeed 2
+> 132 1k 10k
+> Surrogate rank
+> fSeed 3
+> 132 1k 10k
+> Surrogate rank
+> gSeed 4 Seed 0 Seed 1 Seed 2 Seed 3 Seed 4
+> Early (0-9) Middle (10-29) Late (30-59)
+
+Figure F1: Training dynamics and candidate reranking on IL-2 across five random seeds. a, TD loss per round. b, 
+
+Cumulative discoveries among the 85 hit candidates analyzed. The dashed line marks 30 completed rounds. c–g, 
+
+Surrogate and TDAL ranks at selection for seeds 0–4, with a logarithmic horizontal axis and a dashed line at surrogate rank 32. Colors indicate selection in rounds 0–9, 10–29, and 30–59. 
+
+Single perturbations. On IL-2, TDAL has the highest mean at 𝐵 = 16 , 32 , 64. At 𝐵 = 128, TDAL’s mean decreases to 252.2 with greater variation across seeds, while PoH reaches 351.4. This setting provides only 15 rounds of experimental feedback and no initial LBO, illustrating performance under limited training experience. 
+
+Table G1: Batch size comparison at a fixed budget on IL-2. Values are final cumulative hits, reported as mean ± sample standard deviation over five seeds. The highest mean in each column is bold and the second highest is underlined. Method 𝐵 = 16 
+
+𝑇 = 120 
+
+𝐵 = 32 
+
+𝑇 = 60 𝐵 = 64 
+
+𝑇 = 30 
+
+𝐵 = 128 
+
+𝑇 = 15 
+
+TDAL 355 .4 ± 7.8 367 .4 ± 3.0 353 .8 ± 10 .1 252 .2 ± 59 .5PoH 348 .8 ± 7.5 347 .8 ± 6.0 347 .0 ± 11 .0 351 .4 ± 8.0
+
+UCB 336 .6 ± 6.2 331 .0 ± 10 .2 340 .0 ± 18 .4 333 .2 ± 15 .3BADGE 263 .8 ± 3.6 237 .0 ± 12 .0 216 .8 ± 9.3 205 .8 ± 8.5CoreSet 301 .2 ± 8.8 298 .4 ± 4.8 297 .0 ± 5.8 297 .2 ± 9.4
+
+Double perturbations. On Simpson K562, TDAL stays in the top two at all four batch sizes, close to PoH. TDAL has the highest means at 𝐵 = 64 , 256, while PoH is slightly higher at 𝐵 = 128 , 512. TDAL’s mean declines with larger batches, remaining above UCB, BADGE, and CoreSet. At a fixed query budget, larger batches leave fewer rounds for incorporating experimental feedback and training the acquisition function. Smaller batches provide more opportunities to update selection, while PoH remains competitive at larger batches. 40 Table G2: Batch size comparison at a fixed budget on Simpson K562. Values are final cumulative hits, reported as mean ± sample standard deviation over five seeds. The highest mean in each column is bold and the second highest is underlined. Method 𝐵 = 64 
+
+𝑇 = 400 𝐵 = 128 
+
+𝑇 = 200 𝐵 = 256 
+
+𝑇 = 100 
+
+𝐵 = 512 
+
+𝑇 = 50 
+
+TDAL 6868 .2 ± 65 .8 6765 .4 ± 102 .5 6669 .2 ± 153 .1 6638 .0 ± 81 .9PoH 6775 .8 ± 41 .5 6771 .0 ± 75 .7 6655 .6 ± 78 .8 6670 .8 ± 80 .0
+
+UCB 5955 .6 ± 52 .5 5955 .4 ± 46 .0 5935 .4 ± 50 .3 5874 .0 ± 25 .6BADGE 921 .2 ± 27 .9 932 .8 ± 13 .3 1006 .8 ± 59 .0 1015 .8 ± 40 .4CoreSet 1827 .0 ± 38 .0 1693 .6 ± 44 .4 1522 .2 ± 32 .9 1377 .6 ± 27 .3
+
+G.2 Computational Cost 
+
+On IL-2, we use 𝑛 0 = 128, 𝐵 = 32, and the full budget 𝑀 = 2,048, measuring active rounds 2–4 for each method with seeds 0–2. Each run has exclusive access to one NVIDIA A800 80 GB GPU and eight CPU cores, with runs for different seeds executed sequentially. Mean time per round excludes initialization and the first round, and includes selection and all model updates within the measured rounds. Peak host memory and reserved GPU memory are recorded over the same window, including persistent model and replay state. 0.03 0.1 0.3 1 3 10 30 100 300            
+
+> Time per round (s)
+> 10 20 30 40
+> Recall (%)
+> TDAL PoH UCB BADGE CoreSet OAE DiscoBAX EI TS TopUnc KMeans Random
+
+Figure G1: Discovery performance and computational cost on IL-2. The horizontal axis shows mean time per round on a logarithmic scale, and the vertical axis shows final hit recall for twelve methods. Circle area is proportional to peak reserved GPU memory. Random uses zero reserved GPU memory and is shown as a hollow circle. Time and memory are means over three seeds over rounds 2–4. Recall is the mean over five seeds in the full screening experiment of 60 rounds. 
+
+TDAL achieves 42.08% final recall on IL-2, with a mean time of 7.40 seconds per round, 1.12 GiB peak host memory, and 0.051 GiB peak reserved GPU memory (Figure G1). DiscoBAX takes 157.78 seconds per round, 21.3 times the TDAL runtime, and reserves 2.674 GiB of GPU memory. 41
