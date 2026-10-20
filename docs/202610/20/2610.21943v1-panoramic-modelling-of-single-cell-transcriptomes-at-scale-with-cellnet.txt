@@ -1,0 +1,6881 @@
+Panoramic modelling of single-cell transcriptomes
+at scale with CellNet
+Xiaoqing Lian1†, Pei Liu1†, Jiahui Tan1, Luoda Tan, Chaoyi Li,
+Quan Zou2, Chen Lin3*, Xiangxiang Zeng4,5*
+1 College of Computer Science and Electronic Engineering, Hunan
+University, Changsha, 410082, China .
+2 University of Electronic Science and Technology of China, Chengdu,
+China .
+3 School of Informatics, National Institute forData Science in Health and
+Medicine, Xiamen University, Xiamen, 361000 China .
+4 State Key Laboratory of Chemo and Biosensing, Institute of
+AI4Science, Hunan University, Changsha, 410082, China .
+5 Yuelushan Laboratory, Changsha, China .
+†These authors contributed equally to this work.
+Abstract
+Comprehensively characterizing cellular diversity is critical for understanding
+tissue development, identifying disease-associated populations and investigating
+gene programmes linked to specialized functions. Advances in single-cell profiling
+reveal additional cell-specific transcripts and molecular associations, yet many
+foundation models represent only a restricted portion of this increasingly rich
+molecular information. Here we present CellNet, which enables panoramic mod-
+elling of single-cell transcriptomes by integrating DNA-derived gene identities
+and measured RNA expression in a shared image representation. Pretrained on
+231 million cell profiles spanning 40 species, CellNet improves rare-population
+and condition-associated state recognition in evaluated cohorts while retaining
+competitive general cell representations. It predicts withheld coding-gene expres-
+sion and selected non-coding targets in total-RNA data, and recovers lineage-
+specific expression patterns in spatial measurements. Prediction also extends
+across species, including to targets without expression-pretraining exposure. Its
+gene representations retrieve known non-coding modules and developmental or
+neural programmes, including from sparsely detected RNA queries. Together,
+these results establish CellNet as a scalable framework for interpreting cellular
+diversity through increasingly comprehensive transcriptomic measurements.
+1
+arXiv:2610.21943v1  [q-bio.GN]  15 Oct 2026
+
+
+1 Introduction
+Understanding the diversity of cellular identities and states remains a fundamental
+challenge in biology [1–4]. Resolving this diversity helps illuminate tissue develop-
+ment, identify cell populations associated with disease and investigate gene-regulatory
+programmes linked to specialized functions [5–7]. Single-cell transcriptomic atlases
+have made these questions approachable across tissues and species [8–10]. However,
+the biological information that can be extracted from these atlases depends on which
+molecules are measured. Conventional poly(A)-based profiling underrepresents many
+RNA classes, potentially obscuring cell-specific molecular signals and relationships.
+Recent total-RNA technologies, including VASA-seq and TotalX, have revealed addi-
+tional cell-type markers, developmental expression patterns and coordinated modules
+spanning coding and non-coding RNAs [9, 11]. These advances create an opportunity
+to study cellular diversity using a more complete view of the genes expressed within
+each cell.
+Foundation models have begun to translate large transcriptomic collections into
+transferable representations, supporting cell identification, integration and molecular
+analysis [12]. Geneformer [13] uses large-scale pretraining for network-biology pre-
+diction, while scGPT [14] applies generative pretraining to single-cell multi-omics.
+UCE [15] and TranscriptFormer [16] extend cellular representations across tissues
+and species. However, even as sequencing assays capture additional transcripts, the
+molecular information accessible to models remains shaped by gene identity and
+input design. Learned gene identifiers depend on predefined vocabularies, while
+protein-derived identities do not directly describe genes without protein products [13–
+16]. Gene-token architectures further make broader coverage more computationally
+demanding; UCE, for example, samples 1,024 expressed genes per cell [15]. Thus, even
+when an assay measures additional RNAs, those molecules may remain unavailable
+for model-based expression prediction or gene-relationship analysis.
+A representation that keeps pace with these measurements must accommodate
+diverse gene identities without making cellular context prohibitively expensive to
+model. Genomic sequence supplies an identity for both coding and non-coding genes,
+independent of a protein product [17–20]. Image-based organization offers a comple-
+mentary way to bring many genes into a structured cellular representation [21, 22]. At
+the same time, the sparsity and noise of single-cell measurements motivate learning
+strategies that capture stable cellular information without solely discarding gene-
+level expression variation [23, 24]. Together, these principles provide a route towards
+modelling an expanded transcriptomic space at both cellular and molecular levels.
+Here we present CellNet, which enables panoramic modelling of single-cell tran-
+scriptomes by bringing DNA-derived gene identities and cellular expression into a
+common image representation. Sequence-derived gene features define species-specific
+layouts for gene expression, while multiview latent learning promotes consistent
+representations under noisy readouts. Gene-conditioned expression prediction is pro-
+gressively introduced to retain gene-level information. Alongside the pretrained model,
+we publicly release a collection of 231 million transcriptomic images spanning 40
+species, establishing a large-scale, reusable resource for image-based single-cell mod-
+elling. CellNet improves identification of rare cell populations and condition-associated
+2
+
+
+a
+b
+From DNA to a compact 2D transcriptome image
+DNA sequence
+(all genes)
+Gene identity
+(from DNA)
+2D gene layout
+(similarity-based)
+Single-cell
+transcriptome image
+(fixed size)
+⋮
+A local patch
+Expression pattern
+(within patch)
++
+Gene features
+(DNA-derived)
+Patch
+token
+Fewer tokens
+than genes
+⋯
+231M cells 40 species ~1M gene identities in pretraining
+c
+Multiview Joint-Embedding Predictive Architecture self-supervised pretraining
+Two global views
+(light masking)
+Six local views
+(heavy masking)
+⋯
+Dinov3
+Encoder
+Latent view consistency
++ distribution regularization
+Gaussian latent space
+(avoid collapse)
+Gene-conditioned decoding (expression reconstruction)
+Query gene
+(DNA identity)
+Visible patches
+(cell context)
+Cell embedding (CLS)
+Decoder
+Gene detection
+p(detect)
+Expression level
+ŷ
+Expression prediction activated after latent learning and gradually increased
+d
+Downstream applications
+1
+Cell representation
+2
+Coding + noncoding gene completion
+3
+Coding–noncoding relationship analysis
+Cell type A
+Cell type B
+Cell type C
+Cell type D
+Cell type E
+⋮
+Cell identity and state recognition
+Partial input
+Predicted
+mRNA
+lncRNA
+⋮
+Gene expression prediction
+mRNA (coding)
+lncRNA (noncoding)
+other gene
+⋮
+Gene association and programme retrieval
+Panoramic modelling of transcriptomes
+Single cell
+Coding and noncoding genes
+mRNA (coding)
+lncRNA
+miRNA
+sno/snRNA
+other ncRNA …
+Gene coverage in the same cell
+Typical gene-token models
+Fixed-length input
+Selected genes
+Most genes outside the input
+CellNet
+All mearsured genes per cell
+Coding + noncoding
+Understand
+cell states
+Explore gene
+program relationships
+Fig. 1 Panoramic modelling of single-cell transcriptomes with CellNet. a, Conventional
+gene-token inputs represent selected genes within a limited context, whereas CellNet organizes a
+broader range of coding and non-coding genes for cellular modelling. b, DNA-derived gene identities
+define species-specific two-dimensional layouts onto which expression measurements are mapped.
+Local patches combine expression information with aggregated gene identities to form contextual
+tokens. c, Multiview latent learning aligns partially masked views of the same cell, with Gaussian
+distribution regularization. Gene-conditioned decoding is progressively introduced to predict gene
+detection and expression magnitude from cellular context. d, The pretrained representations support
+cell identity and state recognition, coding and non-coding gene-expression prediction, and the retrieval
+of molecular associations and biological programmes.
+states while remaining competitive on broader representation tasks. It also recovers
+withheld coding-gene expression and selected non-coding transcripts in total-RNA
+data, with extensions to spatial measurements and targets without expression-
+pretraining exposure. Finally, its gene representations retrieve known molecular
+3
+
+
+modules and developmental or neural programmes, including from sparsely detected
+non-coding RNA queries. These results make a wider range of measured transcripts
+accessible to cellular characterization and gene-level analysis.
+2 Results
+2.1 Panoramic transcriptome modelling with DNA-informed
+images
+To move beyond the restricted gene coverage of conventional gene-token repre-
+sentations, we developed CellNet, which organizes single-cell transcriptomes into
+DNA-informed images (Fig. 1a,b). Gene identities were derived from Evo 2 nucleotide
+sequence representations, providing a common basis for modelling protein-coding and
+non-coding genes[17]. For each gene, nucleotide features were pooled into a 1,920-
+dimensional vector and reduced to 256 dimensions by principal-component projection.
+These features were further used to construct species-specific two-dimensional gene
+layouts through dimensionality reduction and balanced spatial assignment[21]. Each
+gene occupied a distinct pixel on a 384×384 canvas, with positions fixed across cells of
+the same species. Expression measurements were mapped to these positions alongside
+assay-specific masks distinguishing measured zeros from unmeasured genes.
+Each transcriptome image was divided into non-overlapping patches of 16 × 16
+pixels, yielding up to 576 patch tokens (Fig. 1b). Within each patch, aggregated
+DNA-derived gene identities were combined with local expression information before
+entering the DINOv3 backbone [25]. This image-based organization allows many genes
+to contribute to a shared cellular context without allocating a separate global token to
+every gene. The encoder learns a cell-level representation while retaining contextual
+features that can be queried for individual gene predictions.
+To learn from sparse and noisy single-cell measurements, we adopted multiview
+latent-space learning rather than relying exclusively on direct expression reconstruc-
+tion (Fig. 1c). Two lightly masked global views and six more extensively masked
+local views were generated from each cell. Their latent representations were encour-
+aged to agree, while Gaussian distribution regularization prevented representation
+collapse[26]. An auxiliary species-balanced prototype objective incorporated coarse
+cell-type information to support cross-species alignment.
+Latent consistency alone, however, does not ensure that individual gene-expression
+patterns are retained. We therefore coupled representation learning with a gene-
+conditioned expression decoder (Fig. 1c). Using a target gene’s DNA-derived identity
+as a query, the decoder attends to the cell representation and visible patch context
+to predict expression detection and magnitude. Expression prediction was activated
+after a brief warm-up and gradually increased in weight. Together, latent learning
+and gene-conditioned decoding enable CellNet to learn consistent cellular represen-
+tations while preserving the molecular information needed to predict individual gene
+expression.
+We pretrained CellNet on approximately 231 million cell profiles spanning 40
+species, encompassing more than one million gene identities across the training cor-
+pus. Alongside the pretrained model, we publicly released the corresponding collection
+4
+
+
+of 231 million transcriptomic images spanning these 40 species, providing a reusable
+resource for image-based single-cell modelling. The main pretraining run used eight
+NVIDIA A800 GPUs for approximately two weeks. By comparison, UCE was trained
+using 24 A100 GPUs for 40 days[15], while scLong reported 35 GPU days on a cluster
+of 96 A100 GPUs[27]. TranscriptFormer reported training on a CZI computing cluster
+equipped with 1,000 H100 GPUs[16]. By combining broad molecular coverage with
+eﬀicient image-based encoding and complementary pretraining objectives, CellNet
+provides a practical approach to panoramic transcriptome modelling at scale, sup-
+porting cellular representation, gene-expression prediction and molecular association
+analysis within a shared framework (Fig. 1d).
+2.2 Cellular representations across tissues and species
+A broader view of the transcriptome is most useful when molecular information
+can be interpreted in the context of distinct cellular identities. We therefore eval-
+uated whether CellNet retained these identities across tissues and donors. Using
+549,018 annotated cells from 18 tissues in Tabula Sapiens v2[28], we compared seven
+pipelines based on frozen foundation-model representations under donor-held-out
+evaluation[13–16, 27, 29]. CellNet achieved a tissue-equally weighted Macro-F1 of
+0.621, exceeding the strongest comparison pipeline, TranscriptFormer (0.589; Fig. 2a).
+Improvements were observed across multiple organs, including bone marrow, liver and
+subcutaneous adipose tissue (Supplementary Fig. S.1a).
+Reliable cellular representations must also preserve biological differences across
+experiments while accommodating donor-associated variation. We assessed this
+balance across 26 multi-donor tissues comprising 682,741 cells using the scIB
+framework[30]. CellNet achieved the highest biological-conservation score (AvgBIO =
+0.684, compared with 0.680 for UCE), while maintaining a batch-mixing score of 0.886
+(Fig. 2c). Cell-type organization was also preserved across the 13 tissues not used for
+configuration selection (Supplementary Fig. S.1b,c).
+We further examined whether CellNet could represent cellular identities across
+species with different gene repertoires. Evaluations covered immune, germline and
+plant references, including within-species identification and directional cross-species
+label transfer[10, 15, 16] (Fig. 2b; Supplementary Fig. S.2). Within-species recogni-
+tion was particularly strong across seven immune species, with a mean Macro-F1 of
+0.871 versus 0.809 for TranscriptFormer. Cross-species transfer showed task-dependent
+performance: CellNet led the evaluated plant settings, whereas UCE and Transcript-
+Former performed better in several animal tasks. Together, these results establish
+that CellNet retains useful cellular identity information across diverse datasets and
+organisms while extending the molecular scope available for modelling.
+2.3 Resolving rare cell populations and condition-associated
+states
+Cellular diversity extends beyond abundant cell types. Rare populations may have
+specialized functions, while cells sharing the same broad identity can exhibit dis-
+tinct transcriptional states. Recognizing these differences is important for identifying
+5
+
+
+0
+0.5
+1
+Macro-F1
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+Immune
+Germline
+Plants
+CellNet
+UCE
+TranscriptFormer
+scPRINT-2
+0.927
+±0.005
+0.789
+±0.002
+0.247
+±0.003
+0.712
+±0.019
+0.782
+±0.001
+0.233
+±0.003
+0.839
+±0.005
+0.843
+±0.001
+0.321
+±0.003
+0.437
+±0.009
+0.687
+±0.002
+0.325
+±0.001
+0.0
+0.5
+1.0
+0.0
+0.5
+1.0
+Rare-cell Macro-F1
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+0.646
+0.599
+0.635
+0.620
+0.638
+0.532
+0.118
+0.407
+0.0
+0.5
+1.0
+Rare-cell Macro-F1
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+0.762
+0.725
+0.722
+0.735
+0.737
+0.656
+0.120
+0.546
+0.50
+0.75
+1.00
+Macro-F1
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+Th0
+Th2
+Th17
+0.901
+0.953
+0.955
+0.627
+0.770
+0.793
+0.667
+0.801
+0.800
+0.815
+0.905
+0.917
+0.866
+0.926
+0.940
+0.672
+0.843
+0.816
+0.595
+0.764
+0.724
+0.785
+0.892
+0.889
+Replicative
+Irradiation
+Etoposide
+0.984
+0.891
+0.882
+0.924
+0.700
+0.703
+0.941
+0.774
+0.775
+0.976
+0.844
+0.839
+0.982
+0.850
+0.840
+0.901
+0.740
+0.749
+0.875
+0.605
+0.603
+0.923
+0.724
+0.713
+0.0
+0.5
+1.0
+a
+b
+0.621
+0.851
+0.580
+0.826
+0.567
+0.815
+0.531
+0.815
+0.589
+0.835
+0.467
+0.772
+0.400
+0.734
+0.358
+0.708
+F1
+Accuracy
+F1
+c
+CellNet
+0.684
+UCE
+0.680
+scGPT
+0.649
+Geneformer V2
+0.560
+TranscriptFormer
+0.490
+scPRINT-2
+0.445
+scLong
+0.179
+CellFM
+0.179
+d
+e
+f
+g
+h
+● CD4
+    WI-38
+Condition F1
+Tabula Sapiens
+Kidney
+Lung
+CD4
+WI-38
+Fig. 2 Cell representations across tissues, species and conditions. a, Cell-type classification across
+18 Tabula Sapiens v2 tissues. b, Within-species fine-label classification across immune, germline and
+plant references. c, Cell-type embeddings and AvgBIO across 26 tissues. AvgBIO denotes the equal-
+weight mean of normalized mutual information (NMI), adjusted Rand index (ARI) and cell-type
+silhouette rescaled as (s + 1)/2. d,e, Rare-cell classification in kidney and lung. f, Classification of
+CD4 T-cell polarization and WI-38 senescence conditions. g,h, Condition-specific performance in the
+experiments shown in f.
+6
+
+
+the cellular populations and molecular signatures associated with tissue function
+and disease. We therefore examined whether CellNet could resolve such fine-grained
+diversity.
+We first evaluated rare-cell recognition in independently collected human kidney
+and lung atlases[31, 32], comprising 107,344 and 69,650 cells, respectively. Under
+donor-disjoint evaluation, CellNet achieved the highest rare-class Macro-F1 among
+seven comparison pipelines in both tissues: 0.646 in kidney and 0.762 in lung, com-
+pared with 0.638 and 0.737 for TranscriptFormer (Fig. 2d,e). Class-level analyses
+showed recognition of low-abundance populations, including kidney mast cells, parietal
+epithelial cells and lung myofibroblasts (Supplementary Fig. S.4a). Precision–recall
+analyses further characterized rare-population recovery (Supplementary Fig. S.3b,c).
+We next examined transcriptional differences within shared cellular identi-
+ties using CD4 T-cell polarization[33] and WI-38 fibroblast senescence-induction
+experiments[34]. In donor-held-out CD4 T cells, CellNet distinguished Th0, Th2 and
+Th17 conditions with a Macro-F1 of 0.936, compared with 0.911 for TranscriptFormer
+(Fig. 2f,g). Complete-library holdouts in WI-38 cells yielded a Macro-F1 of 0.919 ver-
+sus 0.891 across three induction conditions (Fig. 2h). These advantages were observed
+across individual conditions and biological replicates (Supplementary Fig. S.5a–c).
+The non-coding RNA NEAT1 also exhibited consistent condition-associated expres-
+sion differences across CD4 donors, illustrating a molecular feature of these states
+(Supplementary Fig. S.5d).
+Together, these results show that CellNet preserves both broad cellular identities
+and finer distinctions among rare populations and condition-associated states, pro-
+viding a cellular representation for the subsequent analysis of gene expression and
+molecular relationships.
+2.4 Expression recovery across coding and non-coding genes
+Panoramic transcriptome modelling aims to capture molecular information beyond the
+genes observed in any individual experiment. By learning how gene identities relate to
+cellular context, CellNet offers a means to infer the expression of genes absent from its
+input. Such predictions could extend the molecular information accessible from exist-
+ing single-cell datasets, enabling researchers to investigate transcripts beyond their
+original measurement panels. We evaluated this capability against directly measured
+expression by withholding target genes from TotalX profiles of human peripheral blood
+mononuclear cells (PBMCs) and developing brain [11], using 5,000 query cells from
+each dataset.
+We first examined protein-coding gene recovery under fivefold gene-wise with-
+holding (Fig. 3a,b). Among targets detected in at least 20% of cells, frozen CellNet
+achieved mean gene-wise Pearson correlations (PCCs) of 0.365 in PBMCs and 0.241
+in developing brain, exceeding all four evaluated pretrained comparators. By com-
+parison, scPRINT-2 [29] achieved PCCs of 0.198 and 0.094, respectively (Fig. 3a).
+Predicted immune-marker profiles also reproduced measured expression differences
+among lymphoid, myeloid and platelet populations (Fig. 3b). Detection-stratified
+analyses and additional lineage markers further characterized prediction performance
+across expression prevalence (Supplementary Fig. S.6).
+7
+
+
+−0.2
+0.0
+0.2
+0.4
+PCC
+CellNet
+scPRINT-2
+scGPT
+scLong
+CellFM
+−0.2
+0.0
+0.2
+0.4
+PCC
+All targets
+Detection ≥20%
+T NK B Mo DC Plt
+CD3D
+IL7R
+CD8A
+NKG7
+GNLY
+MS4A1
+CD79A
+LST1
+S100A8
+FCGR3A
+PPBP
+PF4
+T NK B Mo DC Plt
+T NK B Mo DC Plt
+−0.5
+1.0
+3.0
+CellNet
+scPRINT-2
+scGPT
+scLong
+CellFM
+0.0
+0.6
+PCC
+PBMC
+0
+20
+50
+70
+Detection (%)
+0.0
+0.6
+PCC
+Brain
+PBMC
+Brain
+0.0
+0.5
+1.0
+PCC (+ cells)
+T NK B MoDC Plt
+LINC00861
+LINC00926
+NEAT1
+T NK B MoDC Plt
+ENIN
+IP
+RG
+ONGl
+VaIm
+MEG3
+MIAT
+SOX2-OT
+ENIN
+IP
+RG
+ONGl
+VaIm
+PBMC
+Brain
+0.0
+0.2
+0.4
+PCC (all cells)
+0.255
+0.190
+0.167
+0.206
+0.206
+0.174
+0.184
+0.198
+PBMC
+Brain
+0.0
+0.4
+0.8
+PCC (+ cells)
+0.669
+0.651
+0.110
+0.134
+0.642
+0.627
+0.137
+0.144
+CellNet + FT
+CellNet frozen
+Ridge
+kNN
+Chimp.
+Bonobo
+Gorilla
+Macaque
+Platypus
+Chicken
+0.264
+0.200
+0.192
+0.276
+0.069
+0.202
+0.173
+0.174
+0.234
+0.049
+0.318
+0.281
+0.248
+0.317
+-0.041
+0.258
+0.226
+0.163
+0.212
+0.009
+0.158
+0.136
+0.105
+0.146
+-0.023
+0.226
+0.180
+0.197
+0.283
+-0.044
+Chimp.
+Bonobo
+Gorilla
+Macaque
+Platypus
+Chicken
+0.681
+0.672
+0.037
+0.128
+0.146
+0.699
+0.691
+0.019
+0.096
+0.179
+0.739
+0.723
+-0.053
+-0.035
+0.105
+0.772
+0.767
+-0.064
+0.022
+0.093
+0.733
+0.731
+-0.040
+0.008
+0.109
+0.682
+0.676
+0.004
+0.002
+0.110
+−0.3
+0.0
+0.4
+0.8
+−0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+PCC (all cells)
+Bonobo
+Mouse
+Chicken
+−0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+PCC (+ cells)
+Bonobo
+Mouse
+Chicken
+1 mm
+a
+PBMC
+Brain
+b
+Measured
+CellNet
+scPRINT-2
+z-score
+c
+d
+e
+Measured
+CellNet
+PCC
+PBMC
+0.50
+0.65
+0.80
+Brain
+0.23
+0.31
+0.83
+f
+g
+h
+CellNet
+FT
+CellNet
+frozen
+Ridge
+kNN
+scPRINT-2
+frozen
+All cells
+Measured-positive cells
+PCC
+i
+j
+Measured
+CellNet
+Slc17a7
+Gad1
+Aqp4
+Mog
+Fig. 3 Gene-level expression prediction across genes, species and assays. a,b, Frozen coding-gene
+recovery and measured/predicted immune-marker profiles. c–e, ncRNA prediction from coding-only
+inputs, including threshold performance and population profiles. f,g, ncRNA prediction after adapta-
+tion with 500 reference cells, compared with frozen CellNet and matched-reference Ridge/kNN. h,i,
+Prediction across six species, including targets unseen during CellNet expression pretraining; upper
+and lower panels show all-cell and measured-positive intensity PCC, respectively. j, Measured and
+predicted maps for four jointly withheld mouse-brain markers across 12,000 cells. PCCs are gene-
+wise means; error bars show paired 95% bootstrap intervals (2,000 resamples). Maps use independent
+gene/method z-scores without smoothing; scale bar, 1 mm. Supplementary Figs. S.6–S.11 provide
+complementary analyses.
+8
+
+
+We next asked whether this predictive capacity extended beyond protein-coding
+genes. With all non-coding targets withheld simultaneously, CellNet inferred their
+expression using only the observed coding transcriptome as cellular context (Fig. 3c).
+For non-coding targets detected in at least 20% of cells, mean all-cell PCCs reached
+0.285 in PBMCs and 0.265 in developing brain. Among cells with detected target
+expression, conditional intensity PCCs reached 0.716 and 0.577, respectively, exceed-
+ing scGPT, scLong and CellFM [35] on the corresponding targets (Fig. 3d). Recovered
+expression profiles retained population-associated patterns for selected non-coding
+transcripts, including LINC00861, LINC00926 and NEAT1 in PBMCs, and MEG3,
+MIAT and SOX2-OT in developing brain (Fig. 3e). Beyond the shared accuracy bench-
+marks, DNA-derived identities enabled predictions for 18,502 PBMC and 26,113 brain
+non-coding RNA targets, substantially extending the molecular scope of the decoder
+(Supplementary Fig. S.7).
+We further investigated whether limited reference measurements could refine these
+predictions. In a separate reference-adaptation evaluation using fixed sets of 108
+PBMC and 323 brain non-coding targets, adapting the native decoder with 500 ref-
+erence cells increased mean all-cell PCC from 0.190 to 0.255 and from 0.174 to
+0.206, respectively (Fig. 3f). Conditional intensity prediction also exceeded matched-
+reference Ridge regression and nearest-neighbour baselines, with PCCs of 0.669 and
+0.642 (Fig. 3g). Increasing reference size yielded further improvements (Supplementary
+Fig. S.8). These results demonstrate that CellNet can use observed cellular expres-
+sion to predict coding and non-coding targets, with limited reference data providing
+a means to further refine gene-level inference.
+2.5 Extending expression inference across species and assays
+The genes available for molecular analysis vary across organisms [36], while experi-
+mental technologies measure different portions of the transcriptome [37]. We therefore
+investigated whether CellNet could extend gene-level prediction across species, includ-
+ing genes absent from expression pretraining, and recover expression patterns under
+distinct measurement conditions.
+Across six nonhuman species from the spermatogenesis atlas [38], frozen CellNet
+achieved measured-positive expression-intensity PCCs of 0.672–0.767, compared with
+0.093–0.179 for scPRINT-2 (Fig. 3h). Adaptation with 500 within-species reference
+cells yielded conditional intensity PCCs of 0.681–0.772. We further evaluated genes
+without expression-pretraining exposure in bonobo, mouse and chicken, obtaining
+frozen conditional intensity PCCs of 0.696, 0.718 and 0.671, respectively (Fig. 3i).
+These targets retained DNA-derived identities despite lacking expression-pretraining
+exposure, allowing CellNet to generate predictions beyond the gene targets used in its
+expression training. Complete-expression correlations, target coverage and exposure-
+stratified results were evaluated separately (Supplementary Fig. S.9).
+Targeted spatial transcriptomics offers an additional test of expression predic-
+tion [39]. Because these assays use limited gene panels [40], accurate inference of genes
+of interest is particularly valuable [41]. We examined whether CellNet could recover
+such molecular information using a Xenium mouse-brain section [42], jointly with-
+holding 20 predefined genes from 12,000 cells while retaining the remaining measured
+9
+
+
+genes as input. Without spatial coordinates, frozen CellNet reproduced characteris-
+tic spatial expression patterns for Slc17a7, Gad1, Aqp4 and Mog, corresponding to
+major neuronal and glial populations (Fig. 3j). Across all 20 targets, mean all-cell
+PCC reached 0.478 and increased to 0.665 following same-section reference adapta-
+tion (Supplementary Fig. S.10). Even when the observed panel was reduced to 1,000
+genes, adapted predictions retained a mean PCC of 0.606 (Supplementary Fig. S.11a).
+Measured-positive comparisons and additional marker maps supported recovery across
+panel sizes and neuronal, glial, myeloid and vascular populations (Supplementary
+Fig. S.11b,c).
+Together, these evaluations demonstrate the potential of CellNet to infer gene
+expression from incomplete molecular observations across diverse gene repertoires and
+experimental assays. By extending prediction beyond the transcripts supplied as input,
+panoramic modelling provides a means to investigate additional molecular features in
+existing single-cell datasets.
+2.6 Distinct RNA inputs inform coding and non-coding gene
+predictions
+Predicting expression beyond the observed transcriptome provides additional molec-
+ular information, but does not reveal which measured RNAs support individual
+predictions. Identifying these dependencies could help connect gene-level predictions
+to coordinated expression programmes within cells [7, 43]. We therefore asked whether
+CellNet draws on distinct RNA inputs when predicting coding and non-coding targets
+from the same cellular context.
+We first examined the biological organization of the learned gene representations.
+A network constructed from 3,279 genes in 126 monocytes contained eight com-
+munities enriched for processes including translation, RNA splicing and chromatin
+modification (Fig. 4a and Supplementary Fig. S.12). The network also linked the
+MHC-II genes HLA-DRA and HLA-DPA1, whose measured expression was correlated
+(r = 0.552). We then traced predictions of the protein-coding gene CST3 and long
+non-coding RNA NEAT1, withholding both targets in 24 cells spanning monocyte,
+T-cell, B-cell and natural killer-cell populations. Integrated-gradient attribution [44]
+mapped their predictions to measured RNA inputs (Fig. 4b,c). Even within the
+same monocyte image, CST3 predictions emphasized CD74, HLA-DRA, HLA-DPA1,
+IFI30 and HLA-DMB, whereas NEAT1 predictions emphasized DUSP1, FOS, IER2
+and ZFP36. These patterns are consistent with reported links between cystatin C
+and MHC-II processing[45], as well as the involvement of NEAT1 and the identi-
+fied response-associated genes in stress-related programmes[46, 47]. Contributions to
+NEAT1 predictions also varied across cell populations (Supplementary Fig. S.13).
+To test whether these attributed RNAs contributed to the predictions, we selec-
+tively removed their expression from the input while preserving other information.
+Removing each target’s 32 strongest positive contributors reduced its predicted
+expression more than removing the other target’s contributors or expression-matched
+random inputs (Fig. 4d). Relative to random removal, the additional decreases
+averaged 0.165 log-expression units for CST3 and 0.406 for NEAT1, with posi-
+tive contrasts across all 24 cells. Removing the identified antigen-presentation and
+10
+
+
+G1
+G2
+G3
+G4
+G5
+G6
+G7
+G8
+CST3
+NEAT1
+I1 CD74
+I2 HLA-DRA
+I4 IFI30
+I3 HLA-DPA1
+I5 HLA-DMB
+Mono
+T
+B
+NK
+Mono
+T
+B
+NK
+I1 CD74
+I2 HLA-DRA
+I3 HLA-DPA1
+I4 IFI30
+I5 HLA-DMB
+FTH1
+TMSB10
+FAU
+RPL30
+S100A4
+METRNL
+J1 DUSP1
+J2 FOS
+J3 IER2
+J4 ZFP36
+NAMPT
+TNFRSF1B
+S100A9
+S100A8
+FTL
+-0.068
+0
+0.068
+Observed input
+I1
+I2
+I3
+I4
+I5
+J1
+J2
+J3
+J4
+CST3
+I1
+I2
+I3
+I4
+I5
+NEAT1
+J1
+J2
+J3
+J4
+0
+0.63
+-0.081
+0
+0.081
+C1
+C2
+C3
+C4
+N1
+N2
+N3
+N4
+Own
+Other
+Random
+0.0
+0.2
+0.4
+0.6
+0.8
+Prediction decrease
+(log units)
+Own
+Other
+Random
+CST3 (I)
+NEAT1 (J)
+0.00
+0.05
+0.10
+0.15
+Extra prediction decrease
+(log units)
+a
+Grey: model similarity
+Gold: RNA r ≥ 0.30
+G1
+GPCR-related
+G2
+Respiratory electron transport
+G3
+RNA splicing
+G4
+Translation elongation
+G5
+Chromatin modifiers
+G6
+Signal transduction
+G7
+DNA methylation
+G8
+Mito. ribosome quality control
+b
+CST3
+NEAT1
+Signed gene IG
+c
+Predicted 3.23 · measured 2.84
+Predicted 3.93 · measured 3.92
+Input expression
+Signed patch IG
+Monocyte 30207
+29,197 observed genes
+I1  CD74
+I2  HLA-DRA
+I3  HLA-DPA1
+I4  IFI30
+I5  HLA-DMB
+J1  DUSP1
+J2  FOS
+J3  IER2
+J4  ZFP36
+Patch 200 · 16 × 16 gene pixels
+C1  CD74
+C2  TYROBP
+C3  TYMP
+C4  CDKN1A
+Patch 242 · 16 × 16 gene pixels
+N1  FOS
+N2  GAB2
+N3  IRS2
+N4  FOSB
+d
+CST3
+NEAT1
+e
+Fig. 4 Distinct measured RNA inputs support coding and non-coding gene predictions.
+a, Network of gene representations from 126 monocytes. The 3,279 genes were selected by detection
+frequency, platelet expression and prespecified references (Section S.1.12). b, Mean signed integrated-
+gradient (IG) contributions to predictions of withheld CST3 and NEAT1, using six cells from each of
+four populations and a zero-expression baseline. c, A shared monocyte expression image and target-
+specific contribution maps, with enlarged views of the strongest positive contributors (C1–C4 and
+N1–N4). d, Prediction decreases after zeroing the 32 strongest positive-contribution RNAs selected
+for the same target (Own), the alternative target (Other) or eight expression-matched random sets
+(Random). e, Additional prediction decreases relative to matched random removal for the selected
+antigen-presentation and response-associated gene sets in six monocytes. Other input information
+and normalization remain fixed. Points represent cells and bars indicate means; random trials are
+averaged within cells. Further details are provided in Section S.1.13.
+11
+
+
+response-associated gene sets similarly produced target-specific decreases of 0.096 and
+0.029 log units beyond matched random removal in six monocytes, with negligible
+cross-target effects (Fig. 4e and Supplementary Fig. S.16). Additional input-removal
+controls are presented in Supplementary Fig. S.17 and Section S.1.13. Related anal-
+yses linked CD4 T-cell polarization scores [33] and cellular representation features to
+established expression programmes [48] (Supplementary Figs. S.18 and S.19).
+Together, these analyses show that CellNet organizes gene representations into
+biologically coherent modules, uses distinct measured-RNA inputs to predict coding
+and non-coding targets, and captures reproducible cell-state programmes in its cellular
+representations.
+2.7 Panoramic gene representations recover relationships
+across RNA classes
+Cellular specialization involves coordinated molecular programmes that can span
+both coding and non-coding RNAs [9, 11]. Some single-cell foundation models rep-
+resent genes using protein-sequence-derived identities and therefore lack direct gene
+representations for transcripts without protein products [15]. By representing genes
+through DNA-derived identities, CellNet brings both RNA classes into a shared, cell-
+contextual gene space. We investigated whether this expanded representation could
+recover established molecular modules and gene associations.
+Using 30 reference RNAs from a published TotalX non-coding coexpression
+module[11], CellNet recovered 15 known members among the top 20 of 343 candidates
+in naive B cells, compared with four using RNA correlation (Fig. 5a,b). Mean aver-
+age precision (AP) across naive B cells, naive T cells and CD14-positive monocytes
+was 0.612 versus 0.314 (Fig. 5c). Individual queries also retrieved known partners
+across RNA classes. NEAT1 ranked MALAT1 highly across supported cell popula-
+tions, whereas HLA-DRA retrieved the antigen-presentation genes CD74, HLA-DPB1
+and HLA-DPA1 at ranks 2, 3 and 6 (Fig. 5d,e). Prior studies provide context for
+these retrievals: NEAT1 and MALAT1 associate with active chromatin, CD74 inter-
+acts with HLA-DR, and HLA-DPA1/DPB1 form the HLA-DP heterodimer [49–51].
+In an external PBMC dataset [52], 15 and nine of the fixed top-20 neighbours of
+HLA-DRA and CD3D, respectively, were recovered (Fig. 5f).
+We next examined how cellular context influenced these relationships. MALAT1
+retrieved PF4 in platelets, LYZ in monocytes and AFF3 in naive B cells, whereas
+LINC00486 retrieved ITGA2B in platelets (Fig. 5g,h). Prior work reports MALAT1
+activity in platelets, AFF3 function in B-cell class switching, and PF4/ITGA2B
+expression in megakaryocytes [53–55]. These selected pairs ranked above their posi-
+tions under RNA correlation and static gene-identity similarity. All four associations
+remained among the top 20 in both cell halves, while shuffling input expression reduced
+their similarities (Supplementary Fig. S.20e,f). At the programme level, six host-
+response programmes in DENV-exposed Huh7 cells showed greater within-programme
+similarity than size-matched random gene sets (Fig. 5i).
+Together, these results demonstrate that CellNet’s shared gene representation sup-
+ports retrieval of established molecular relationships across RNA classes and cellular
+contexts.
+12
+
+
+1
+10
+20
+Top-20 rank
+CellNet
+RNA |r|
+15/20
+4/20
+0
+50
+100
+Ranked ncRNAs (%)
+0
+50
+100
+Members recovered (%)
+0.0
+0.5
+1.0
+Average precision
+B naïve
+T naïve
+CD14+
+mono
+Brain
+Cortex
+HEK293T
+1
+10
+100
+1,000
+Partner rank
+1
+10
+100
+1,000
+Partner rank
+CD74
+HLA-DPB1
+HLA-DPA1
+2
+3
+6
+1
+10
+20
+Discovery neighbour rank
+HLA-DRA
+CD3D
+15/20
+9/20
+Platelet
+B naïve
+T naïve
+CD14+
+mono
+2
+1034
+1239
+567
+111
+242
+259
+15
+350
+16
+351
+195
+9
+1037
+359
+825
+1
+20
+200
+2,736
+Rank
+1
+20
+200
+2,736
+Partner rank
+2
+15
+16
+9
+UPR / ER
+stress
+MAPK
+signalling
+Chromatin
+regulation
+Stress
+granules
+Chromatin
+remodelling
+Chromatin /
+splicing
+0.1
+0.3
+0.5
+Rank
+Foxl2os
+Mesoderm
+Foxd1
+2
+Eya1
+3
+S1pr3
+5
+C130021I20Rik
+Neural
+Chst2
+2
+Fam181b
+3
+En1
+5
+Gm50321
+Vascular
+Igf2
+2
+Frem1
+13
+Itga8
+15
+Mesoderm
+Neural
+Vascular
+0.00
+0.15
+0.30
+AP
+0.0
+0.5
+1.0
+Recall
+0.00
+0.15
+0.30
+Precision
+AP 0.122
+AP 0.034
+CellNet
+RNA |r|
+Static identity
+a
+b
+c
+d
+NEAT1–MALAT1
+e
+HLA-DRA
+f
+g
+MALAT1–PF4
+MALAT1–LYZ
+MALAT1–AFF3
+LINC00486–ITGA2B
+h
+i
+Within-programme cosine / |r|
+j
+k
+SERTAD4-AS1
+Fig. 5 Recovery of molecular associations and cellular programmes across RNA classes.
+Gene-representation similarity and absolute RNA Pearson correlation were compared on matched
+candidates. a–c, A published non-coding RNA (ncRNA) module (30 reference genes; 343 candidates,
+including 117 known members): top-20 ranking in naive B cells (a), cumulative recovery (b) and
+average precision (AP) across naive B, naive T and CD14-positive monocytes (c); tiles mark known
+members. d, NEAT1-guided ranking of MALAT1 across 45 supported cell populations. e, HLA-DRA
+partner retrieval in 100 memory B cells. f, Recurrence of fixed top-20 neighbours in an external
+PBMC dataset. g,h, Rankings of selected ncRNA–coding-gene pairs in protocol-matched populations
+(g), compared with RNA correlation and static gene-identity similarity (h). i, Within-programme
+representation similarity for six host-response programmes in 500 DENV-exposed Huh7 cells versus
+size-matched random sets. j, Recovery of developmental coding-gene programmes from three ncRNA
+queries in VASA-seq mouse embryos, with representative partners and full-ranking AP. k, Neural
+stem-cell programme retrieval using SERTAD4-AS1 in 3,423 non-targeting human neural-induction
+controls. See Sections S.1.15 and S.1.16 for reference definitions and evaluation protocols.
+13
+
+
+2.8 Non-coding RNA queries retrieve developmental and
+neural programmes
+Many long non-coding RNAs (lncRNAs) show cell-type-specific expression and are
+detected in only a subset of cells, potentially complicating direct expression-correlation
+analysis [56]. Because CellNet defines gene identities independently of protein prod-
+ucts, these RNAs can serve as queries within the same representation used for coding
+genes. We investigated whether this capability could recover coding-gene programmes
+associated with cellular development and specialization.
+In
+VASA-seq
+mouse
+embryos[9],
+the
+non-coding
+RNA
+Foxl2os
+retrieved
+mesenchymal-programme genes including Foxd1 and Eya1; C130021I20Rik retrieved
+neural/ectodermal genes including En1; and Gm50321 retrieved early vascular-lineage
+genes including Igf2, Frem1 and Itga8 (Fig. 5j). Full-ranking AP exceeded RNA cor-
+relation for all three queries, reaching 0.132 versus 0.018 for the vascular programme
+(Supplementary Fig. S.21c,d).
+We further examined SERTAD4-AS1 in human neural induction[57]. Although
+detected in only 13 of 3,423 non-targeting control cells, CellNet retrieved the published
+neural stem-cell programme genes WNT5B, DLK1 and SERPINF1 among its top 20
+neighbours (Fig. 5k). Using all control cells as expression context, CellNet achieved
+an AP of 0.122, compared with 0.034 for RNA correlation. These results illustrate
+how panoramic transcriptome modelling makes sparsely measured non-coding RNAs
+accessible to gene-programme analysis, extending biological interpretation beyond the
+molecules routinely represented by protein-centred models.
+3 Discussion
+CellNet demonstrates that broader molecular coverage can support a more compre-
+hensive analysis of cellular diversity, rather than simply expanding the number of
+input genes. By combining DNA-derived gene identities with image-based transcrip-
+tome representations, CellNet brings diverse RNA molecules into a shared cellular
+context while retaining access to their individual gene representations. The model
+improves recognition of rare cell populations and condition-associated states while
+maintaining competitive performance in dataset integration and cross-species eval-
+uations. These findings show that extending molecular coverage is compatible with
+the general-purpose cellular representations needed to study cellular diversity across
+tissues and biological conditions.
+An important consequence of panoramic transcriptome modelling is the ability to
+investigate genes beyond those observed in individual experiments. CellNet predicts
+withheld expression from partial transcriptomes, extending from protein-coding genes
+to selected non-coding RNAs and targets without expression-pretraining exposure.
+Its ability to recover spatially patterned expression further illustrates the potential
+to investigate transcripts outside targeted measurement panels. Beyond individual
+expression predictions, the learned gene representations recover established molec-
+ular modules and retrieve coding-gene programmes using non-coding RNA queries.
+Notably, the sparsely detected SERTAD4-AS1 retrieved genes associated with a
+14
+
+
+published neural stem-cell programme. These results illustrate how panoramic mod-
+elling can make previously underrepresented RNAs accessible to biological analysis,
+providing hypotheses about their expression and associations with cellular functions.
+The shared representation also provides opportunities to investigate the molecu-
+lar information underlying model predictions. Input-attribution and targeted-removal
+analyses identified distinct sets of measured RNAs contributing to predictions of
+different coding and non-coding targets. Cell-contextual gene representations fur-
+ther recovered known partners and coordinated programmes across diverse cellular
+backgrounds.
+Computational tractability is essential for extending molecular coverage at scale.
+By organizing multiple genes within image patches, CellNet avoids assigning a sepa-
+rate global token to every gene. Multiview latent learning captures shared information
+across incomplete observations, while gene-conditioned expression prediction retains
+gene-level information. This design supported pretraining on 231 million cell pro-
+files spanning 40 species using eight NVIDIA A800 GPUs over approximately two
+weeks. Prediction accuracy nevertheless varies across molecular classes, particularly
+for sparsely detected non-coding transcripts, and inferred associations require inde-
+pendent functional validation. As single-cell profiling continues to expand, more
+comprehensive RNA measurements and perturbation datasets will offer opportuni-
+ties to refine these predictions and investigate their regulatory significance. CellNet
+provides a scalable framework for leveraging this growing molecular information
+to characterize cellular diversity and explore the gene programmes associated with
+specialized functions.
+4 Methods
+4.1 Overview and pretraining collection
+CellNet combines DNA-derived gene identities with image-based expression encod-
+ing to learn cellular representations and gene-level predictions within a shared
+model. Each transcriptome is represented by an expression image and a measurement
+mask. A transformer encodes these inputs into cellular context, which a gene-
+conditioned decoder uses to predict specified transcripts and generate contextual gene
+representations.
+The main pretraining collection comprised 231,190,557 cell profiles from 26,467
+datasets spanning 40 species. Genes were indexed using species-aware identifiers, and
+the model’s molecular representation contained 1,015,163 genes. Expression process-
+ing, sampling and optimization are described in Supplementary Methods S.2.4-S.2.8.
+4.2 DNA-informed transcriptome images
+We represented gene identity using nucleotide sequence features from Evo 2 [17]. For
+gene g, sequence features were averaged over nucleotide positions, yielding a 1,920-
+dimensional vector eg. A frozen principal-component transform provided the 256-
+dimensional representation ag used for trainable adaptation:
+15
+
+
+eg = Pool(fDNA(sg)) ,
+ag = PT(eg −µ).
+(1)
+Here, sg denotes the gene-associated nucleotide sequence, fDNA the pretrained
+sequence encoder, and P and µ the fixed projection basis and centring vector.
+The sequence features remained frozen during transcriptome pretraining, while
+downstream identity projections were learned jointly with the cellular encoder.
+A fixed, species-specific layout was derived from the DNA sequence features by
+principal-component projection followed by t-SNE. The resulting coordinates were
+scaled to the 384×384 canvas and assigned to distinct pixels using balanced greedy k-
+d tree assignment [22]. The assignment distributed genes across 16 × 16 patches while
+retaining one gene per pixel. For cell c, normalized expression xcg was placed at the
+pixel assigned to gene g. A corresponding indicator mcg recorded whether the gene
+was measured by the assay. The same layout was used across cells, retaining measured
+zero-expression genes and accommodating protein-coding and non-coding identities
+through the sequence-based interface.
+The image was divided into non-overlapping 16 × 16 patches. Image organization
+allowed multiple genes to contribute to each contextual token, providing a bounded
+patch grid as molecular coverage increased.
+4.3 Joint encoding of expression and gene identity
+Each patch combined expression, molecular composition and expression-modulated
+molecular identity. Let vcg indicate that gene g is visible in the current view, and let
+Gp denote genes assigned to patch p. Two independent trainable projections produced
+bg = Tmean(ag) and the unit-normalized identity rg = Norm2(Tmod(ag)). Patch tokens
+were constructed as
+texpr
+cp
+= LN(Cexpr([vc ⊙xc, vc]p)) ,
+tid
+cp = LN
+ 
+Wid
+P
+g∈Gp vcgbg
+max(1, P
+g∈Gp vcg)
+!
+,
+tmod
+cp
+= LN
+ Cmod
+ [vcg(xcg + δ)rg]g∈Gp
+
+,
+tcp = texpr
+cp
++ tid
+cp + tmod
+cp
+√
+3
+.
+(2)
+Cexpr and Cmod are convolutional patch projections, Wid is an aﬀine projection,
+and LN denotes layer normalization [58]. The identity offset δ preserves a molecular
+contribution from visible genes with zero expression. Each branch produces a 768-
+dimensional vector.
+A DINOv3 base model encoded the patch tokens into a cellular summary and
+contextual patch representations [25]. Empty patches were omitted, and absolute
+positional embeddings were disabled. During training, local gene permutations varied
+within-patch ordering while preserving the correspondence between expression and
+identity. The resulting encoder supplied a common cellular context for representation
+learning and expression prediction.
+16
+
+
+4.4 Multi-view JEPA representation learning
+We trained cellular representations using two global views and six more strongly
+masked local views of each transcriptome. All views retained the image extent and var-
+ied through patch masking and expression perturbations. Hidden genes were removed
+from the expression and visibility inputs.
+Following the joint-embedding objective of LeJEPA [26], the encoder output was
+mapped to a 256-dimensional projection space. Let z(v)
+c
+denote the projected repre-
+sentation of cell c in view v. Representations were aligned to the mean of the two
+global views:
+zc = 1
+2
+X
+v∈Vglobal
+z(v)
+c ,
+Lalign =
+1
+BV Dz
+B
+X
+c=1
+V
+X
+v=1
+z(v)
+c
+−zc
+
+2
+2 .
+(3)
+Here, B is the batch size, V
+= 8 the number of views and Dz = 256 the
+projection dimension. Gradients propagated through both the individual views and
+their global-view mean. Sketched isotropic Gaussian regularization constrained the
+projected distribution across the training batch, supporting non-collapsed represen-
+tations without a separate teacher encoder. The complete regularizer are given in
+Supplementary Methods S.2.6.
+4.5 Gene-conditioned expression prediction
+A cross-attention decoder queried cellular context using projected DNA identities.
+The context combined the cellular summary with 32 spatially pooled patch tokens.
+For gene g, its query qg interacted with this context through three decoder blocks,
+yielding ucg. The final contextual gene representation was
+qg = Tquery(ag),
+ucg = Dattn(qg, Cc),
+hcg = LN(Wint[ucg; ucg ⊙qg]) .
+(4)
+Tquery includes the learned identity projection and decoder query transformation.
+Cc denotes encoded cellular context, and [ ; ] denotes concatenation. This inter-
+action representation combines gene identity with information retrieved from the
+observed transcriptome. Decoder queries can therefore address sequence-represented
+genes independently of whether their expression appears in the current input.
+Expression was modelled using a compound Poisson–exponential distribution, cor-
+responding to a Tweedie model with power parameter 1.5 [59, 60]. Two decoder
+outputs parameterized the event rate λcg and positive-expression scale θcg:
+Ncg ∼Poisson(λcg),
+Ycg =
+Ncg
+X
+j=1
+Ecgj,
+Ecgj ∼Exponential(mean = θcg),
+bxcg = E[Ycg] = λcgθcg.
+(5)
+17
+
+
+The distribution jointly represents zero expression and continuous positive values.
+Supervision used measured genes hidden from each encoder view. Inverse-sampling
+weights accounted for separate sampling of positive and zero-expression targets. A
+deviation-weighted positive-expression term complemented the likelihood objective,
+emphasizing expression variation relative to source-specific gene statistics.
+4.6 Joint pretraining objective
+Cellular and molecular learning were coupled through the shared encoder. The
+objective coupling cellular and molecular representation learning was
+L = (1 −α)Lalign + αLSIGReg + λexprLexpr
+Lexpr = LCPE + βLdev.
+(6)
+We used α = 0.05, λexpr = 8 and β = 0.25. Expression and prototype gradi-
+ents updated the shared encoder, linking cellular representation learning to gene-level
+prediction.
+4.7 Cellular and molecular readouts
+The pretrained encoder remained frozen for cellular classification, integration and ref-
+erence mapping. Molecular association analyses used the frozen gene decoder. Expres-
+sion completion compared frozen predictions with separately specified reference-based
+decoder adaptation (Supplementary Methods S.2.10). Cellular classification used layer
+normalization of the sum of the final eight raw cellular summary states. Shrinkage
+linear discriminant analysis (LDA) was the default cellular classification readout for
+CellNet, motivated by the isotropic Gaussian regularization used during representa-
+tion learning. The six comparison models used logistic regression, a conventional linear
+probing approach in single-cell representation evaluation [61]. These heads were fit-
+ted using training labels, with feature standardization restricted to the corresponding
+training partition. The Gaussian regularizer acted in the pretraining projection space;
+downstream LDA estimated class means and a shared covariance from the encoder
+features.
+Integration used the raw cellular summary from the sixth block counted from the
+encoder output. Reference mapping used the eighth block counted from the output and
+a shared distance-weighted nearest-neighbour classifier. These readouts and evaluation
+partitions are specified in Supplementary Methods S.2.9.
+Expression completion queried the gene decoder using context assembled exclu-
+sively from observed genes. Withheld targets were absent from encoder expression,
+gene identities and measurement masks. Complete reconstruction used the expected-
+expression output, pcgMcg, across all query cells. Conditional intensity used Mcg and
+was scored separately on measured-positive observations. Total-RNA, multispecies
+and spatial protocols are described in Supplementary Methods S.2.10.
+For molecular association, we extracted the final interaction representation hcg for
+each queried gene. Within a cell population Ck, features were averaged across cells,
+centred across the complete decoder gene panel Pk and normalized:
+18
+
+
+hkg =
+1
+|Ck|
+X
+c∈Ck
+hcg,
+ehkg = hkg −
+1
+|Pk|
+X
+j∈Pk
+hkj,
+Ak(g, j) =
+ehT
+kgehkj
+∥ehkg∥2∥ehkj∥2
+.
+(7)
+This centred cosine score ranked molecular neighbours within each analysed cell
+population. Module retrieval averaged similarities to fixed seed genes. Query-based
+analyses connected individual non-coding transcripts to published developmental and
+neural programmes. For module recovery, encoder expression and measurement masks
+were set to zero across the query panel. Observed-context association analyses retained
+measured query RNA. Gene networks connected each gene to its highest positive-
+cosine neighbours; weighted community detection and pathway enrichment charac-
+terized the resulting molecular organization. Association, gene-network construction,
+host-cell programme analysis and biological programme retrieval are described in Sup-
+plementary Methods S.2.11-S.2.13. Data sources and analysed cohorts are detailed in
+S.2.1, comparison methods in S.2.2, and evaluation metrics and uncertainty in S.2.3.
+4.8 Data availability
+All datasets analysed in this study are publicly available from the original stud-
+ies or oﬀicial repositories; source links and accession details will be provided
+in the project GitHub repository (https://github.com/daydayup-xq/CellNet). The
+pretraining compendium comprised 231,190,557 profiles from GEO, ArrayExpress,
+BioProject-associated and CELLxGENE sources.
+4.9 Code availability
+The code used to construct transcriptomic images, pretrain CellNet and reproduce
+the analyses will be publicly available at GitHub: https://github.com/daydayup-xq/
+CellNet.
+19
+
+
+References
+[1] Bunne, C. et al. How to build the virtual cell with artificial intelligence: Priorities
+and opportunities. Cell 187, 7045–7063 (2024).
+[2] Shapiro, E., Biezuner, T. & Linnarsson, S. Single-cell sequencing-based tech-
+nologies will revolutionize whole-organism science. Nature Reviews Genetics 14,
+618–630 (2013).
+[3] Stegle, O., Teichmann, S. A. & Marioni, J. C. Computational and analytical
+challenges in single-cell transcriptomics. Nature Reviews Genetics 16, 133–145
+(2015).
+[4] Stuart, T. & Satija, R. Integrative single-cell analysis. Nature Reviews Genetics
+20, 257–272 (2019).
+[5] Pijuan-Sala, B. et al. A single-cell molecular map of mouse gastrulation and early
+organogenesis. Nature 566, 490–495 (2019).
+[6] Habermann, A. C. et al. Single-cell rna sequencing reveals profibrotic roles of dis-
+tinct epithelial and mesenchymal lineages in pulmonary fibrosis. Science advances
+6, eaba1972 (2020).
+[7] Aibar, S. et al. Scenic: single-cell regulatory network inference and clustering.
+Nature methods 14, 1083–1086 (2017).
+[8] Tabula Sapiens Consortium. The tabula sapiens: A multiple-organ, single-cell
+transcriptomic atlas of humans. Science 376, eabl4896 (2022).
+[9] Salmen, F. et al.
+High-throughput total rna sequencing in single cells using
+vasa-seq. Nature Biotechnology 40, 1780–1793 (2022).
+[10] Tarashansky, A. J. et al. Mapping single-cell atlases throughout metazoa unravels
+cell type evolution. Elife 10, e66747 (2021).
+[11] Isakova, A. et al.
+Scalable single-cell total rna sequencing unifies coding and
+noncoding transcriptomics. Nature Biotechnology (2026).
+[12] Boiarsky, R. et al. Deeper evaluation of a single-cell foundation model. Nature
+Machine Intelligence 6, 1443–1446 (2024).
+[13] Theodoris, C. V. et al. Transfer learning enables predictions in network biology.
+Nature 618, 616–624 (2023).
+[14] Cui, H. et al. scgpt: toward building a foundation model for single-cell multi-omics
+using generative ai. Nature Methods 21, 1470–1480 (2024).
+20
+
+
+[15] Rosen, Y. et al. Universal cell embedding provides a foundation model for cell
+biology. Nature 656, 183–191 (2026).
+[16] Pearce, J. D. et al. Transcriptformer: A generative cell atlas across 1.5 billion
+years of evolution. Science 393, aec8514 (2026). URL https://github.com/czi-ai/
+transcriptformer.
+[17] Brixi, G. et al. Genome modelling and design across all domains of life with evo
+2. Nature 652, 1349–1361 (2026).
+[18] Dalla-Torre, H. et al. Nucleotide transformer: building and evaluating robust
+foundation models for human genomics. Nature Methods 22, 287–297 (2025).
+[19] Avsec, Z. et al. Effective gene expression prediction from sequence by integrating
+long-range interactions. Nature Methods 18, 1196–1203 (2021).
+[20] de Almeida, B. P. et al. Annotating the genome at single-nucleotide resolution
+with dna foundation models. Nature Methods 22, 2301–2315 (2025).
+[21] Sharma, A., Vans, E., Shigemizu, D., Boroevich, K. A. & Tsunoda, T. Deepin-
+sight: A methodology to transform a non-image data to an image for convolution
+neural network architecture. Scientific reports 9, 11399 (2019).
+[22] Lian, X. et al. Understanding gene expression-to-image learning: Spatial struc-
+ture and information fidelity (2026).
+URL https://arxiv.org/abs/2610.17699.
+arXiv:2610.17699.
+[23] Luecken, M. D. & Theis, F. J.
+Current best practices in single-cell rna-seq
+analysis: a tutorial. Molecular Systems Biology 15, e8746 (2019).
+[24] Xiaoqing, L. et al. Empowering chemical structures with biological insights for
+scalable phenotypic virtual screening. Bioinformatics 8 (2026).
+[25] Siméoni, O. et al.
+Dinov3 (2025).
+URL https://arxiv.org/abs/2508.10104.
+arXiv:2508.10104.
+[26] Balestriero, R. & LeCun, Y.
+Lejepa: Provable and scalable self-supervised
+learning without the heuristics (2025). URL https://arxiv.org/abs/2511.08544.
+arXiv:2511.08544.
+[27] Bai, D. et al. sclong: a billion-parameter foundation model for capturing long-
+range gene context in single-cell transcriptomics. Nature Communications (2026).
+URL https://github.com/BaiDing1234/scLong.
+[28] Tabula Sapiens Consortium & Quake, S. R. Tabula sapiens reveals transcription
+factor expression, senescence effects, and sex-specific features in cell types from
+28 human organs and tissues. bioRxiv (2025). Version 2, posted August 27, 2025.
+21
+
+
+[29] scprint-2:
+oﬀicial
+pretrained
+model
+and
+methods.
+GitHub
+reposi-
+tory.
+URL
+https://github.com/cantinilab/scPRINT-2.
+Documentation:
+https://www.jkobject.com/scPRINT-2/.
+[30] Luecken, M. D. et al. Benchmarking atlas-level data integration in single-cell
+genomics. Nature Methods 19, 41–50 (2022).
+[31] Lake, B. B. et al. An atlas of healthy and injured cell states and niches in the
+human kidney. Nature 619, 585–594 (2023).
+[32] Travaglini, K. J. et al. A molecular cell atlas of the human lung from single-cell
+rna sequencing. Nature 587, 619–625 (2020).
+[33] Cano-Gamez, K. et al. Single-cell transcriptomics identifies an effectorness gra-
+dient shaping the response of cd4+ t cells to cytokines. Nature Communications
+11, 1801 (2020).
+[34] Wechter, N. et al.
+Single-cell transcriptomic analysis uncovers diverse and
+dynamic senescent cell populations. Aging 15, 2824–2851 (2023).
+[35] Zeng, Y. et al. Cellfm: a large-scale foundation model pre-trained on transcrip-
+tomics of 100 million human cells. Nature Communications 16, 4679 (2025). URL
+https://github.com/biomed-AI/CellFM.
+[36] Gallego Romero, I., Ruvinsky, I. & Gilad, Y. Comparative studies of gene expres-
+sion and the evolution of gene regulation. Nature Reviews Genetics 13, 505–516
+(2012).
+[37] Moro, G., Brunner, E. & Basler, K. A practical guide to targeted single-cell rna
+sequencing technologies. Communications Biology 9, 250 (2026).
+[38] Murat, F. et al. The molecular evolution of spermatogenesis across mammals.
+Nature 613, 308–316 (2023).
+[39] Tian, L., Chen, F. & Macosko, E. Z.
+The expanding vistas of spatial
+transcriptomics. Nature Biotechnology 41, 773–782 (2023).
+[40] Zhang, Y. et al.
+Gene panel selection for targeted spatial transcriptomics.
+Genome Biology 25, 35 (2024).
+[41] Sun, E. D., Ma, R., Navarro Negredo, P., Brunet, A. & Zou, J.
+TISSUE:
+uncertainty-calibrated prediction of single-cell spatial transcriptomics improves
+downstream analyses. Nature Methods 21, 444–454 (2024).
+[42] 10x Genomics. Fresh frozen mouse brain hemisphere with 5K mouse pan tissue
+and pathways panel (2024). 10x Genomics dataset, published 31 July 2024. https:
+//www.10xgenomics.com/datasets/xenium-prime-fresh-frozen-mouse-brain.
+22
+
+
+[43] Pratapa, A., Jalihal, A. P., Law, J. N., Bharadwaj, A. & Murali, T. M.
+Benchmarking algorithms for gene regulatory network inference from single-cell
+transcriptomic data. Nature Methods 17, 147–154 (2020).
+[44] Sundararajan, M., Taly, A. & Yan, Q. Axiomatic attribution for deep networks.
+Proceedings of Machine Learning Research 70, 3319–3328 (2017).
+[45] Kitamura, H. et al. Il-6–stat3 controls intracellular mhc class ii alphabeta dimer
+level through cathepsin s activity in dendritic cells. Immunity 23, 491–502 (2005).
+[46] Lellahi, S. M. et al. The long noncoding rna neat1 and nuclear paraspeckles are
+up-regulated by the transcription factor hsf1 in the heat shock response. Journal
+of Biological Chemistry 293, 18965–18976 (2018).
+[47] Canzoneri, R. et al. Identification of an ap1-zfp36 regulatory network associated
+with breast cancer prognosis. Journal of Mammary Gland Biology and Neoplasia
+25, 163–172 (2020).
+[48] Kotliar, D. et al. Identifying gene expression programs of cell-type identity and
+cellular activity with single-cell RNA-seq. eLife 8, e43803 (2019).
+[49] West, J. A. et al.
+The long noncoding rnas neat1 and malat1 bind active
+chromatin sites. Molecular Cell 55, 791–802 (2014).
+[50] Karakikes, I. et al. Interaction of hla-dr and cd74 at the cell surface of antigen-
+presenting cells by single-particle image analysis. The FASEB Journal 26, 4886–
+4896 (2012).
+[51] Hollenbach, J. A. et al. A combined dpa1–dpb1 amino acid epitope is the primary
+unit of selection on the hla-dp heterodimer. Immunogenetics 64, 559–569 (2012).
+[52] Zheng, G. X. Y., Terry, J. M., Belgrader, P. et al.
+Massively parallel digital
+transcriptional profiling of single cells. Nature Communications 8, 14049 (2017).
+[53] Sun, Y. et al. Malat1 promotes platelet activity and thrombus formation through
+pi3k/akt/gsk-3beta signalling pathway. Stroke and Vascular Neurology 8, 181–
+192 (2023).
+[54] Tsukumo, S.-I. et al. Aff3, a susceptibility factor for autoimmune diseases, is
+a molecular facilitator of immunoglobulin class switch recombination. Science
+Advances 8, eabq0008 (2022).
+[55] Liu, C. et al.
+Characterization of cellular heterogeneity and an immune
+subpopulation of human megakaryocytes. Advanced Science 8, e2100921 (2021).
+[56] Liu, S. J., Nowakowski, T. J., Pollen, A. A. et al. Single-cell analysis of long
+non-coding rnas in the developing human neocortex. Genome Biology 17, 67
+(2016).
+23
+
+
+[57] Wu, D. et al. Dual genome-wide coding and lncrna screens in neural induction
+of induced pluripotent stem cells. Cell Genomics 2, 100177 (2022).
+[58] Ba, J. L., Kiros, J. R. & Hinton, G. E.
+Layer normalization (2016).
+arXiv:1607.06450.
+[59] Dunn, P. K. & Smyth, G. K. Series evaluation of tweedie exponential dispersion
+model densities. Statistics and Computing 15, 267–280 (2005).
+[60] Mejia, G. M. et al.
+Diversity by design: Addressing mode collapse improves
+scrna-seq perturbation modeling on well-calibrated metrics (2025).
+[61] Fischer, F. et al. sctab: Scaling cross-tissue single-cell annotation models. Nature
+Communications 15, 6611 (2024).
+[62] McInnes, L., Healy, J., Saul, N. & Großberger, L.
+Umap: Uniform manifold
+approximation and projection. Journal of Open Source Software 3, 861 (2018).
+[63] van der Maaten, L. & Hinton, G. Visualizing data using t-sne. Journal of Machine
+Learning Research 9, 2579–2605 (2008).
+[64] Loshchilov, I. & Hutter, F. Decoupled weight decay regularization. International
+Conference on Learning Representations (2019).
+[65] Ledoit, O. & Wolf, M.
+A well-conditioned estimator for large-dimensional
+covariance matrices. Journal of Multivariate Analysis 88, 365–411 (2004).
+24
+
+
+Supplementary Information
+S.1 Supplementary evidence
+S.1.1 Tissue-resolved cellular identity and AvgBIO
+The tissue-level annotation matrix localizes the variation underlying the aggregate
+Tabula Sapiens results (Supplementary Fig. S.1a). scImagene achieved a Macro-F1 of
+0.537 in bone marrow, compared with 0.469 for UCE, and 0.634 in liver, compared with
+0.575 for TranscriptFormer. AvgBIO was examined jointly with donor mixing across
+all 26 evaluated tissues (Supplementary Fig. S.1b). Overall AvgBIO was 0.684 for
+scImagene and 0.680 for UCE; the corresponding batch-mixing scores were 0.886 and
+0.915. The 13 configuration-selection tissues and 13 internal-validation tissues yielded
+scImagene AvgBIO scores of 0.679 and 0.688, respectively. Tissue-specific AvgBIO
+scores are shown in Supplementary Fig. S.1c; for example, lymph-node AvgBIO was
+0.711 for scImagene and 0.606 for UCE.
+S.1.2 Species-resolved identity and directional reference
+mapping
+Within-species identification retained all 32 task–species combinations, including 18
+with strictly refined labels and 14 with native labels at coarse resolution (Supplemen-
+tary Fig. S.2a). scImagene had the highest mean score in all seven immune species.
+Fine-label F1 in Ciona intestinalis was 0.780, compared with 0.555 for Transcript-
+Former; fine-label germline recognition reached 0.895 in human and 0.951 in mouse.
+Brassica multi-tissue fine-label Macro-F1 averaged 0.247 for scImagene, 0.233 for
+UCE, 0.321 for TranscriptFormer and 0.325 for scPRINT-2. The five-species root-atlas
+and GSE268881 variants yielded scImagene means of 0.671 and 0.671; these variants
+shared biological cells and represented different task-specific feature caches.
+Directional reference mapping evaluated coarse labels separately for the complete
+immune, germline and three plant tasks (Supplementary Fig. S.2b–f). scImagene’s
+mean F1 over evaluable directions was 0.229 for immune and 0.552 for germline
+transfer; UCE and TranscriptFormer scored higher in these animal tasks. Across the
+three plant variants, scImagene achieved the highest directional means among the
+four methods: 0.069 for multi-tissue Brassica, 0.215 for the root atlas and 0.220 for
+GSE268881. The matrices resolve variation by reference and target species rather than
+pooling these settings into one score. Of 42 possible immune directions, 22 had shared
+evaluable labels; all germline and plant directions were evaluable. Within-species and
+directional transfer used different split and k-nearest-neighbour protocols.
+S.1.3 Kidney and lung annotation and rare-population
+detection
+The kidney and lung evaluations retained all 57 and 59 author-defined fine labels,
+respectively (Supplementary Fig. S.3a). scImagene achieved complete-label Macro-F1
+of 0.647 in kidney and 0.635 in lung, compared with 0.640 and 0.620 for Transcript-
+Former. Rare-population detection was then resolved into precision and recall using
+25
+
+
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+adipose tissue
+anterior part of tongue
+ascending colon
+bladder organ
+blood
+bone marrow
+coronary artery
+duodenum
+liver
+lymph node
+muscle of abdomen
+muscle of pelvic diaphragm
+posterior part of tongue
+sigmoid colon
+spleen
+subcutaneous adipose tissue
+thymus
+trachea
+0.62
+0.56
+0.55
+0.48
+0.58
+0.39
+0.42
+0.33
+0.63
+0.61
+0.59
+0.51
+0.59
+0.54
+0.39
+0.33
+0.60
+0.62
+0.59
+0.58
+0.63
+0.49
+0.44
+0.38
+0.82
+0.77
+0.79
+0.75
+0.79
+0.66
+0.55
+0.54
+0.54
+0.55
+0.53
+0.49
+0.51
+0.45
+0.43
+0.40
+0.54
+0.47
+0.45
+0.46
+0.46
+0.36
+0.35
+0.33
+0.60
+0.55
+0.54
+0.51
+0.60
+0.45
+0.45
+0.38
+0.74
+0.69
+0.67
+0.60
+0.71
+0.48
+0.36
+0.31
+0.63
+0.57
+0.54
+0.54
+0.58
+0.46
+0.42
+0.35
+0.53
+0.51
+0.53
+0.53
+0.55
+0.45
+0.42
+0.39
+0.49
+0.48
+0.51
+0.42
+0.50
+0.37
+0.29
+0.27
+0.23
+0.14
+0.14
+0.14
+0.18
+0.15
+0.12
+0.13
+0.69
+0.64
+0.65
+0.55
+0.62
+0.51
+0.40
+0.37
+0.64
+0.62
+0.57
+0.51
+0.61
+0.44
+0.28
+0.22
+0.68
+0.61
+0.62
+0.60
+0.64
+0.53
+0.48
+0.50
+0.71
+0.66
+0.60
+0.57
+0.63
+0.57
+0.45
+0.40
+0.78
+0.75
+0.69
+0.71
+0.75
+0.58
+0.49
+0.46
+0.71
+0.64
+0.64
+0.62
+0.68
+0.52
+0.46
+0.35
+0.0
+0.5
+1.0
+0.6
+0.8
+1.0
+Batch mixing
+0.00
+0.25
+0.50
+0.75
+1.00
+Biological conservation
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+Bladder
+Bone_Marrow
+Eye
+Heart
+Liver
+Lymph_Node
+Muscle
+Pancreas
+Salivary_Gland
+Small_Intestine
+Stomach
+Tongue
+Uterus
+Blood
+Ear
+Fat
+Large_Intestine
+Lung
+Mammary
+Ovary
+Prostate
+Skin
+Spleen
+Thymus
+Trachea
+Vasculature
+0.0
+0.5
+1.0
+a
+TS annotation by tissue
+18 tissues · 49 donor folds
+Test cells
+Donors
+18,627
+3
+9,429
+2
+8,715
+3
+36,715
+3
+17,802
+3
+8,045
+3
+8,059
+3
+15,349
+3
+10,002
+2
+54,938
+3
+11,545
+2
+1,490
+2
+12,070
+2
+6,516
+3
+30,690
+3
+11,114
+3
+9,933
+3
+5,346
+3
+Macro-F1
+b
+Biology–batch tradeoff
+○ Selection       Internal validation
+c
+Integration by tissue
+13 selection · 13 validation
+Selection
+Internal validation
+Biology
+Fig. S.1 Tissue-resolved cellular identity and AvgBIO. a, Annotation Macro-F1 across 18 Tabula
+Sapiens tissues and seven methods. Values average donor-held-out folds within each tissue; right-
+hand columns give test-cell and donor-fold counts. The evaluation comprises 49 folds and 276,385 test
+cells. b, AvgBIO versus batch mixing for 26 multi-donor tissues. Colours identify methods; circles and
+triangles denote the 13 selection and 13 internal-validation tissues, respectively. Both axes increase
+with performance. c, Tissue-specific AvgBIO, with the two partitions separated by a white line.
+AvgBIO is the equal-weight mean of normalized mutual information (NMI), adjusted Rand index
+(ARI) and cell-type silhouette rescaled as (s + 1)/2. Batch mixing is the equal-weight mean of scaled
+batch silhouette and graph connectivity. Scores are calculated in the original feature space; both
+partitions belong to the same study. Source data retain the individual metric components and cell
+supports.
+26
+
+
+Immune (7 species)
+Germline (11 species)
+Brassica multi-tissue
+Root atlas (alias)
+GSE268881 root atlas
+Homo sapiens
+1.000 ± 0.000
+0.998 ± 0.001
+0.985 ± 0.001
+0.960 ± 0.027
+Macaca mulatta
+1.000 ± 0.000
+0.901 ± 0.044
+0.976 ± 0.013
+0.701 ± 0.009
+Pelodiscus sinensis
+1.000 ± 0.000
+0.883 ± 0.015
+0.985 ± 0.011
+0.323 ± 0.024
+Litopenaeus vannamei
+0.969 ± 0.002
+0.773 ± 0.012
+0.822 ± 0.009
+0.618 ± 0.009
+Ciona intestinalis
+0.780 ± 0.014
+0.352 ± 0.020
+0.555 ± 0.017
+0.287 ± 0.018
+Cynoglossus semilaevis
+0.967 ± 0.010
+0.561 ± 0.010
+0.671 ± 0.021
+0.223 ± 0.005
+Chiloscyllium plagiosum
+0.994 ± 0.004
+0.800 ± 0.005
+0.724 ± 0.044
+0.412 ± 0.014
+Pan paniscus
+0.650 ± 0.005
+0.723 ± 0.008
+0.807 ± 0.005
+0.690 ± 0.005
+Gallus gallus
+0.931 ± 0.004
+0.880 ± 0.006
+0.935 ± 0.006
+0.771 ± 0.007
+Pan troglodytes
+0.792 ± 0.007
+0.752 ± 0.005
+0.832 ± 0.006
+0.669 ± 0.007
+Nomascus leucogenys
+0.507 ± 0.006
+0.602 ± 0.003
+0.667 ± 0.005
+0.345 ± 0.006
+Gorilla gorilla
+0.718 ± 0.005
+0.731 ± 0.005
+0.797 ± 0.006
+0.556 ± 0.008
+Homo sapiens
+0.895 ± 0.003
+0.828 ± 0.003
+0.872 ± 0.002
+0.846 ± 0.003
+Macaca mulatta
+0.787 ± 0.008
+0.750 ± 0.005
+0.805 ± 0.004
+0.692 ± 0.004
+Callithrix jacchus
+0.724 ± 0.003
+0.693 ± 0.005
+0.785 ± 0.008
+0.634 ± 0.005
+Mus musculus
+0.951 ± 0.004
+0.920 ± 0.006
+0.932 ± 0.002
+0.907 ± 0.004
+Monodelphis domestica
+0.914 ± 0.005
+0.881 ± 0.005
+0.928 ± 0.003
+0.816 ± 0.003
+Ornithorhynchus anatinus
+0.806 ± 0.007
+0.839 ± 0.003
+0.910 ± 0.003
+0.634 ± 0.005
+Arabidopsis lyrata
+0.216 ± 0.002
+0.283 ± 0.008
+0.352 ± 0.003
+0.281 ± 0.010
+Arabidopsis thaliana
+0.271 ± 0.005
+0.112 ± 0.003
+0.173 ± 0.003
+0.460 ± 0.006
+Brassica oleracea
+0.304 ± 0.006
+0.325 ± 0.012
+0.474 ± 0.006
+0.339 ± 0.004
+Capsella rubella
+0.198 ± 0.004
+0.212 ± 0.005
+0.286 ± 0.009
+0.221 ± 0.005
+Arabidopsis thaliana
+0.722 ± 0.005
+0.475 ± 0.002
+0.666 ± 0.005
+0.805 ± 0.004
+Camelina sativa
+0.606 ± 0.007
+0.447 ± 0.006
+0.609 ± 0.005
+0.275 ± 0.003
+Eutrema salsugineum
+0.629 ± 0.004
+0.445 ± 0.004
+0.574 ± 0.006
+0.288 ± 0.003
+Schrenkiella parvula
+0.688 ± 0.003
+0.537 ± 0.003
+0.658 ± 0.006
+0.371 ± 0.004
+Sisymbrium irio
+0.709 ± 0.002
+0.546 ± 0.006
+0.744 ± 0.003
+0.422 ± 0.000
+Arabidopsis thaliana
+0.720 ± 0.004
+0.472 ± 0.005
+0.666 ± 0.005
+0.807 ± 0.003
+Camelina sativa
+0.606 ± 0.007
+0.419 ± 0.005
+0.609 ± 0.005
+0.265 ± 0.007
+Eutrema salsugineum
+0.629 ± 0.004
+0.442 ± 0.003
+0.574 ± 0.006
+0.284 ± 0.003
+Schrenkiella parvula
+0.688 ± 0.003
+0.546 ± 0.004
+0.658 ± 0.006
+0.369 ± 0.004
+Sisymbrium irio
+0.709 ± 0.002
+0.555 ± 0.003
+0.744 ± 0.003
+0.427 ± 0.001
+1
+2
+3
+4
+5
+6
+7
+1  Homo sapiens
+2  Macaca mulatta
+3  Pelodiscus sinensis
+4  Litopenaeus vannamei
+5  Ciona intestinalis
+6  Cynoglossus semilaevis
+7  Chiloscyllium plagiosum
+−
+−
+−
+−
+−
+−
+−
+1
+2
+3
+4
+5
+6
+7
+−
+−
+−
+−
+−
+−
+−
+1
+2
+3
+4
+5
+6
+7
+−
+−
+−
+−
+−
+−
+−
+1
+2
+3
+4
+5
+6
+7
+−
+−
+−
+−
+−
+−
+−
+1 2 3 4 5 6 7 8 9 10 11
+1  Pan paniscus
+2  Gallus gallus
+3  Pan troglodytes
+4  Nomascus leucogenys
+5  Gorilla gorilla
+6  Homo sapiens
+7  Macaca mulatta
+8  Callithrix jacchus
+9  Mus musculus
+10  Monodelphis domestica
+11  Ornithorhynchus anatinus
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+1 2 3 4 5 6 7 8 9 10 11
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+1 2 3 4 5 6 7 8 9 10 11
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+1 2 3 4 5 6 7 8 9 10 11
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+−
+1
+2
+3
+4
+1  Arabidopsis lyrata
+2  Arabidopsis thaliana
+3  Brassica oleracea
+4  Capsella rubella
+−
+−
+−
+−
+1
+2
+3
+4
+−
+−
+−
+−
+1
+2
+3
+4
+−
+−
+−
+−
+1
+2
+3
+4
+−
+−
+−
+−
+1
+2
+3
+4
+5
+1  Arabidopsis thaliana
+2  Camelina sativa
+3  Eutrema salsugineum
+4  Schrenkiella parvula
+5  Sisymbrium irio
+−
+−
+−
+−
+−
+1
+2
+3
+4
+5
+−
+−
+−
+−
+−
+1
+2
+3
+4
+5
+−
+−
+−
+−
+−
+1
+2
+3
+4
+5
+−
+−
+−
+−
+−
+1
+2
+3
+4
+5
+1  Arabidopsis thaliana
+2  Camelina sativa
+3  Eutrema salsugineum
+4  Schrenkiella parvula
+5  Sisymbrium irio
+−
+−
+−
+−
+−
+1
+2
+3
+4
+5
+−
+−
+−
+−
+−
+1
+2
+3
+4
+5
+−
+−
+−
+−
+−
+1
+2
+3
+4
+5
+−
+−
+−
+−
+−
+0.0
+0.5
+1.0
+a
+Within-species identification
+Mean ± SD
+CellNet
+UCE
+TranscriptFormer
+scPRINT-2
+● Fine labels    ○ Native labels
+Cross-species mapping
+Reference ↓   Target →
+b
+Immune
+c
+Germline
+d
+Brassica multi-tissue
+e
+Root atlas (alias)
+f
+GSE268881 root atlas
+No shared labels
+−  Excluded diagonal
+Macro-F1
+Fig. S.2 Within-species identity and directional reference mapping. a, Macro-F1 for 32 task–species
+combinations and four methods, shown as mean ± sample s.d. across five shared, approximately
+80/20 reference–query splits. Filled and open symbols distinguish strictly refined labels from native
+labels at coarse resolution. b–f, Coarse-label reference mapping for seven immune species, eleven
+germline species, four Brassica multi-tissue species and two five-species root-atlas variants. Rows
+identify reference species; columns identify target species using the numbered scientific-name keys.
+Colour denotes Macro-F1 on a common 0–1 scale. Hatching denotes no shared evaluable labels;
+grey minus signs denote omitted same-species diagonals. The root-atlas and GSE268881 variants use
+the same biological cells. Split s.d. describes sensitivity across overlapping cell partitions. The two
+evaluation protocols are specified in Supplementary Methods S.2.9. Exact scores, label counts and
+query supports are supplied in source data.
+27
+
+
+the same held-out predictions (Supplementary Fig. S.3b,c). In kidney, scImagene’s
+macro precision and recall were 0.632 and 0.697; scGPT had higher precision at 0.670,
+whereas scImagene had the highest recall. In lung, scImagene led both endpoints, with
+precision of 0.803 and recall of 0.777. The precision–recall plots show how rare-cell
+recovery contributed to the F1 results, with enlarged insets distinguishing methods
+with similar mean values.
+S.1.4 Class-resolved rare-population performance and error
+outcomes
+Class-resolved analysis retained every eligible identity, together with cell abundance,
+held-out support, donor coverage and eligible-fold count (Supplementary Fig. S.4a).
+Kidney mast cells (MAST) constituted 0.026% of the cohort and achieved scIma-
+gene F1 of 0.658, compared with 0.609 for Geneformer V2. Kidney parietal epithelial
+cells (PEC) achieved F1 of 0.622, compared with 0.513 for TranscriptFormer. Lung
+myofibroblasts comprised 300 cells and achieved F1 of 0.806, compared with 0.769 for
+Geneformer V2.
+Pooling eligible rare truth cells across test folds, scImagene correctly assigned
+61.8% of kidney cells and 73.1% of lung cells (Supplementary Fig. S.4b,c). The highest
+comparator proportions were 53.8% for scGPT in kidney and 66.6% for Geneformer
+V2 in lung. These cell-weighted proportions describe correct identities and error
+destinations; class-macro performance is reported in Fig. 2d,e. A projection of all
+69,650 lung cells locates the 17 eligible author identities within the frozen scImagene
+representation (Supplementary Fig. S.4d).
+S.1.5 Condition recognition across donors and libraries
+Donor-resolved CD4 evaluation yielded scImagene Macro-F1 values of 0.935, 0.941,
+0.926 and 0.943, leading the comparison methods in every donor holdout (Supple-
+mentary Fig. S.5a). scImagene also had the lowest pooled error percentage for each
+directed condition pair (Supplementary Fig. S.5b). For example, 6.2% of Th0 cells
+were assigned to Th2, compared with 9.5% for TranscriptFormer. WI-38 accuracy was
+highest for scImagene in five of six held-out libraries (Supplementary Fig. S.5c), with
+values ranging from 0.854 to 0.992 across both author culture replicates of the three
+conditions.
+Measured NEAT1 expression provided a non-coding-transcript correlate of the
+CD4 conditions (Supplementary Fig. S.5d). Mean log1p-normalized expression fol-
+lowed Th17 > Th0 > Th2 in all four donors. Th17–Th0 differences ranged from 0.022
+to 0.388, and Th2–Th0 differences ranged from −0.332 to −0.137. These measure-
+ments describe expression associated with the author-defined conditions; classification
+labels were taken from the original experimental metadata.
+28
+
+
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+Macro-F1
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+Kidney
+Lung
+0.00
+0.25
+0.50
+0.75
+Precision
+0.00
+0.25
+0.50
+0.75
+Recall
+0.50
+0.75
+0.45
+0.78
+0.00
+0.25
+0.50
+0.75
+Precision
+0.00
+0.25
+0.50
+0.75
+Recall
+0.62
+0.87
+0.60
+0.86
+a
+Fine-label annotation
+b
+Kidney rare-cell detection
+c
+Lung rare-cell detection
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+Fig. S.3 Kidney and lung annotation and rare-population detection. a, Complete-label Macro-F1
+in kidney and lung. Kidney comprises 107,344 cells, 45 donors and 57 labels; lung comprises 69,650
+cells, three donors and 59 labels. Large circles and triangles show three-fold means for kidney and
+lung, respectively; small points show individual donor-disjoint test folds. Horizontal lines span the
+observed fold range. b,c, Rare-population macro precision and recall in kidney and lung. Large points
+show fold means; small points show individual folds, and insets enlarge the mean clusters. These
+are classification operating points, with higher values on both axes indicating better detection. Rare
+eligibility requires training prevalence ≤1%, at least 20 cohort cells represented in at least three
+donors, and positive training and test support. There are 34 kidney and 17 lung identities eligible
+in at least one fold. Metrics average eligible classes within each fold, then average the three folds.
+Method colours are shared across panels.
+29
+
+
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+MAST
+cycEC
+MyoF
+EC-LYM
+MC
+REN
+aFIB
+PT-S3
+NK2
+cycMNP
+pDC
+cycEPI
+cycT
+T-REG
+POD
+dEC-PTC
+ncMON
+PL
+dIC-A
+CNT-PC
+PEC
+IC-B
+FIB
+NK1
+dVSMC
+MAC-M2
+T-CYT
+aTAL1
+M-TAL
+B
+NKT
+tPC-IC
+DTL1
+dCNT-PC
+Neutrophil
+Plasmacytoid Dendritic
+Myeloid Dendritic Type 1
+Proliferating Macrophage
+Myeloid Dendritic Type 2
+B
+IGSF21+ Dendritic
+Myofibroblast
+CD4+ Naive T
+Goblet
+Lymphatic
+Nonclassical Monocyte
+Vascular Smooth Muscle
+Basal
+Adventitial Fibroblast
+CD8+ Memory/Effector T
+Vein
+.03
+.3
+3
+Test n
+Donors
+Folds
+28
+6
+2
+39
+19
+3
+73
+26
+3
+103
+26
+3
+130
+28
+3
+163
+29
+3
+173
+34
+3
+174
+23
+3
+203
+30
+3
+206
+22
+3
+206
+24
+3
+218
+25
+3
+231
+30
+3
+238
+29
+3
+242
+28
+3
+258
+31
+3
+364
+30
+3
+406
+22
+3
+425
+37
+3
+547
+28
+3
+623
+41
+3
+649
+39
+3
+687
+41
+3
+774
+43
+3
+830
+45
+3
+879
+35
+3
+915
+34
+3
+792
+27
+2
+867
+34
+2
+929
+41
+2
+757
+34
+1
+1090
+25
+1
+1054
+35
+1
+2628
+35
+1
+102
+3
+3
+125
+3
+3
+130
+3
+3
+226
+3
+3
+243
+3
+3
+266
+3
+3
+286
+3
+3
+300
+3
+3
+307
+3
+3
+392
+3
+3
+511
+3
+3
+615
+3
+3
+529
+3
+2
+361
+3
+1
+632
+3
+2
+414
+3
+1
+844
+3
+1
+0.0
+0.5
+1.0
+Mean F1
+0
+50
+100
+Rare truth cells (%)
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+0
+50
+100
+Rare truth cells (%)
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+a
+Rare-cell F1 and support
+Kidney
+Lung
+Cohort %
+b
+Kidney prediction outcomes
+c
+Lung prediction outcomes
+d
+Lung rare identities · CellNet
+Author identity
+Cells
+1  Neutrophil
+102
+2  Plasmacytoid Dendritic
+125
+3  Myeloid Dendritic Type 1
+130
+4  Proliferating Macrophage
+226
+5  Myeloid Dendritic Type 2
+243
+6  B
+266
+7  IGSF21+ Dendritic
+286
+8  Myofibroblast
+300
+9  CD4+ Naive T
+307
+10  Goblet
+392
+11  Lymphatic
+511
+12  Nonclassical Monocyte
+615
+13  Vascular Smooth Muscle
+645
+14  Basal
+670
+15  Adventitial Fibroblast
+715
+16  CD8+ Memory/Effector T
+771
+17  Vein
+1197
+Correct
+Other rare identity
+Other identity
+Rare identity
+Other identity
+Fig. S.4 Complete rare-population performance, support and errors. a, Class-level F1 for all 34
+kidney and 17 lung eligible identities across seven methods, ordered by cohort abundance. Colour
+shows each class’s mean across its eligible test folds. Side columns show cohort prevalence, eligible-
+fold test-cell support, donor count and eligible-fold count. Exact F1 values are supplied in source
+data. b,c, Outcomes for eligible rare truth cells in kidney and lung, pooled across the test folds. Bars
+partition cells into correct identity, another eligible rare identity and any other identity, summing to
+100% per method. These proportions are weighted by cell counts. d, Fixed UMAP of all 69,650 lung
+cells in the scImagene classification representation. Pink marks the 17 eligible author identities; grey
+marks other identities. Numbers correspond to the full identity key and whole-cohort cell counts.
+Whole-cohort counts in d differ from eligible-fold test supports in a. Rare eligibility and classification
+settings follow Fig. 2d,e and Supplementary Fig. S.3.
+30
+
+
+Th0
+Th2
+Th17
+Th0
+Th2
+Th17
+Th0
+Th2
+Th17
+Th0
+Th2
+Th17
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+0.90
+0.94
+0.96
+0.88
+0.97
+0.97
+0.90
+0.95
+0.93
+0.92
+0.95
+0.95
+0.67
+0.81
+0.81
+0.55
+0.82
+0.84
+0.63
+0.75
+0.78
+0.66
+0.70
+0.74
+0.70
+0.82
+0.83
+0.61
+0.85
+0.84
+0.68
+0.78
+0.78
+0.69
+0.76
+0.74
+0.82
+0.91
+0.92
+0.79
+0.94
+0.95
+0.81
+0.88
+0.90
+0.84
+0.90
+0.90
+0.87
+0.92
+0.94
+0.85
+0.96
+0.96
+0.85
+0.90
+0.93
+0.89
+0.93
+0.93
+0.69
+0.85
+0.83
+0.63
+0.88
+0.86
+0.69
+0.82
+0.79
+0.68
+0.82
+0.78
+0.67
+0.81
+0.75
+0.56
+0.84
+0.80
+0.55
+0.69
+0.66
+0.60
+0.72
+0.68
+0.80
+0.89
+0.90
+0.76
+0.93
+0.92
+0.78
+0.85
+0.87
+0.79
+0.90
+0.87
+D1
+D2
+D3
+D4
+0.0
+0.5
+1.0
+F1
+Th0 → Th2
+Th0 → Th17
+Th2 → Th0
+Th2 → Th17
+Th17 → Th0
+Th17 → Th2
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+6.2
+4.0
+3.2
+1.0
+3.3
+1.3
+23.0
+14.7
+14.2
+8.8
+9.8
+9.4
+21.4
+14.2
+10.1
+8.6
+9.0
+9.3
+11.9
+7.2
+6.6
+2.2
+5.2
+2.6
+9.5
+5.0
+4.7
+1.8
+3.3
+2.3
+17.5
+16.8
+9.7
+5.0
+10.6
+6.7
+25.9
+19.7
+9.2
+10.3
+10.4
+16.2
+13.8
+9.9
+6.3
+2.8
+6.2
+4.4
+0
+10
+20
+30
+%
+Rep 1
+Rep 2
+Rep 1
+Rep 2
+Rep 1
+Rep 2
+CellNet
+UCE
+scGPT
+Geneformer V2
+TranscriptFormer
+scPRINT-2
+scLong
+CellFM
+0.99
+0.96
+0.92
+0.89
+0.85
+0.91
+0.96
+0.87
+0.73
+0.69
+0.64
+0.76
+0.96
+0.91
+0.80
+0.76
+0.71
+0.83
+0.98
+0.96
+0.85
+0.83
+0.81
+0.89
+0.99
+0.96
+0.89
+0.82
+0.80
+0.89
+0.92
+0.87
+0.76
+0.74
+0.69
+0.80
+0.93
+0.74
+0.70
+0.59
+0.50
+0.69
+0.95
+0.89
+0.74
+0.73
+0.66
+0.75
+RS
+IR
+ETO
+0.0
+0.5
+1.0
+Accuracy
+Th0
+Th2
+Th17
+0
+1
+2
+Mean log1p(CP10k)
+D1
+Th0
+Th2
+Th17
+D2
+Th0
+Th2
+Th17
+D3
+Th0
+Th2
+Th17
+D4
+a
+CD4 condition F1 by donor
+b
+CD4 misclassification (%)
+c
+WI-38 accuracy by library
+d
+NEAT1 expression by donor
+Fig. S.5 Condition recognition across donors and libraries. a, Condition-specific F1 for Th0, Th2
+and Th17 in each of four CD4 donor holdouts, covering 9,777 cells. b, Directed misclassification
+percentages pooled across donor holdouts. Arrows indicate true →predicted condition; denomina-
+tors are 2,543 Th0, 4,040 Th2 and 3,194 Th17 cells. Lower values indicate fewer errors. c, WI-38
+accuracy for six complete held-out libraries, covering 14,457 cells. RS, IR and ETO denote replica-
+tive, irradiation-induced and etoposide-induced senescence conditions; each has two author culture
+replicates. Each fold holds out one library per condition, and single-condition library performance is
+reported as accuracy. d, Measured NEAT1 expression by CD4 donor and condition. Points show cell-
+mean log1p(CP10k), normalized using all 20,953 supplied genes; lines join conditions from the same
+donor. NEAT1 supplies condition-associated expression context. Heatmaps in a,c use a common 0–1
+score scale; b shows error percentages. Library accessions, cell supports and expression measurements
+are supplied in source data.
+31
+
+
+S.1.6 Testable coding outputs across target prevalence
+Coding threshold curves evaluated both all-cell recovery and intensity among
+measured-positive cells (Supplementary Fig. S.6a,b). All twelve prescribed immune
+markers were retained without a detection cutoff, testing lineage-associated predic-
+tions beyond the representative heatmap. Their scImagene PCCs ranged from 0.547
+to 0.880 and exceeded both recorded comparators. Measured detection ranged from
+1.92% to 53.92% (Supplementary Fig. S.6c).
+S.1.7 Non-coding identities as prediction targets
+Measured-positive threshold curves and transcript-class summaries tested expression
+output across ncRNA prevalence and classes (Supplementary Fig. S.7a,b). The DNA-
+identity extension supplied actual predictions for every annotated assay ncRNA while
+preserving the original accuracy pools (Supplementary Fig. S.7c). The two analyses
+established predictive accuracy on shared targets and output availability across the
+assay’s wider molecular repertoire.
+S.1.8 Refinement of molecular predictions with reference
+expression
+Four matched reference sizes tested whether additional cellular examples improved
+ncRNA outputs on fixed target pools (Supplementary Fig. S.8). At full reference, all-
+cell PCC reached 0.333 in PBMCs and 0.334 in brain. Measured-positive intensity
+PCC reached 0.698 and 0.689, respectively, with an advantage over Ridge and nearest-
+neighbour prediction across all reference sizes.
+S.1.9 Prediction scope across gene identities and expression
+exposure
+Frozen scImagene exceeded scPRINT-2 in mean all-cell PCC for both expression-
+pretraining-seen and unseen bonobo and chicken targets (Supplementary Fig. S.9a).
+Species support counts described the original registered target universes independently
+of accuracy (Supplementary Fig. S.9b). Detection and vocabulary intersections yielded
+2,108 bonobo, twelve mouse and 533 chicken unseen targets, specifying the evaluated
+extension beyond expression-training exposure (Supplementary Fig. S.9c).
+S.1.10 Spatial recovery across the prescribed marker repertoire
+All twenty prescribed targets were evaluated with physical-block uncertainty estimates
+(Supplementary Fig. S.10). Every marker’s all-cell PCC increased after same-section
+adaptation, extending the quantitative evidence beyond the four frozen maps in the
+main figure. With 4,986 observed genes, adapted scImagene achieved mean all-cell
+PCC of 0.665, compared with 0.620 for Ridge and 0.563 for nearest neighbours.
+32
+
+
+S.1.11 Prediction under restricted spatial measurement
+With 1,000 observed genes, adaptation increased mean all-cell PCC from 0.166 to
+0.606 (Supplementary Fig. S.11a). Measured-positive intensity PCC reached 0.831
+with 4,986 observed genes and 0.792 with 1,000, exceeding both supervised com-
+parators (Supplementary Fig. S.11b). Maps of Pvalb, Pdgfra, Aif1 and Pecam1
+tested recovery of additional population-associated spatial patterns (Supplementary
+Fig. S.11c). These analyses assessed dependence on measured input breadth and
+biological coverage within the same tissue section.
+33
+
+
+−0.4
+−0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+PCC (all cells)
+PBMC
+0
+20
+50
+70
+Minimum measured detection (%)
+−0.4
+−0.2
+0.0
+0.2
+0.4
+0.6
+0.8
+PCC (all cells)
+Brain
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+PCC (+ cells)
+PBMC
+0
+20
+50
+70
+Minimum measured detection (%)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+PCC (+ cells)
+Brain
+CellNet
+scPRINT-2
+scGPT
+scLong
+CellFM
+CD3D
+IL7R
+CD8A
+NKG7
+GNLY
+MS4A1
+CD79A
+LST1
+S100A8
+FCGR3A
+PPBP
+PF4
+0.0
+0.5
+1.0
+PCC (all cells)
+a
+b
+c
+All 12 prespecified immune markers; fixed 5,000 query cells.
+Fig. S.6 a,b, All-cell PCC (a) and measured-positive intensity PCC (b) across cumulative gene-
+detection thresholds in TotalX PBMC and brain. Five frozen models are evaluated on comparison-
+specific shared targets from five complementary hidden-gene folds and 5,000 fixed query cells per
+tissue. Detection is the fraction of query cells with positive raw counts; it selects genes, not cells for all-
+cell scoring. Positive PCC uses only each gene’s measured-positive cells; scImagene supplies m. Bands
+are paired 95% target-gene bootstrap intervals (2,000 draws). c, All-cell PCC for all twelve markers
+shown in Fig. 3b, retaining their prescribed order without a detection cutoff. Bars are gene-wise scores
+in the fixed cohort, not estimates from independent biological replicates. Baseline expression outputs
+retain their native definitions.
+34
+
+
+0
+20
+50
+70
+Minimum measured detection (%)
+0.0
+0.5
+1.0
+PCC (+ cells)
+PBMC
+0
+20
+50
+70
+Minimum measured detection (%)
+0.0
+0.5
+1.0
+Brain
+CellNet
+scGPT
+scLong
+CellFM
+PBMC
+lncRNA
+PBMC
+Other
+Brain
+lncRNA
+Brain
+Other
+−0.2
+0.0
+0.2
+0.4
+0.6
+PCC (all cells)
+0
+50
+100
+Supported ncRNA features (%)
+Brain / CellFM
+Brain / scLong
+Brain / scGPT
+Brain / CellNet
+PBMC / CellFM
+PBMC / scLong
+PBMC / scGPT
+PBMC / CellNet
+100.0
+33.6
+33.3
+18.1
+100.0
+38.1
+27.1
+18.4
+a
+b
+c
+Fig. S.7 a, Measured-positive ncRNA intensity PCC across cumulative gene-detection thresholds in
+TotalX PBMC and brain, using only coding inputs and withholding all nonprotein targets together.
+Each tissue contains 5,000 fixed query cells. Scoring uses each gene’s raw-count-positive cells; scIma-
+gene supplies m and comparators supply native expression predictions. b, All-cell PCC for annotated
+lncRNAs and other ncRNAs detected in at least 20% of cells. The shared pools contain 28/4 tar-
+gets in PBMC and 69/7 in brain, respectively. Bands and error bars are paired 95% target-gene
+bootstrap intervals (2,000 draws). c, Coverage of 18,502 PBMC and 26,113 brain assay ncRNA iden-
+tities. scImagene coverage includes actual hidden-target predictions after DNA-identity extension
+with the original DNA encoder, fixed identity transformation and frozen expression model. Com-
+parator coverage reflects native vocabulary support. Coverage establishes molecular range; it is not
+a prediction-accuracy percentage. Accuracy pools in a,b and Fig. 3c–e remain unchanged.
+35
+
+
+500
+2,000
+10,000
+All
+(39,970)
+Training reference cells
+0.0
+0.2
+0.4
+PCC (all cells)
+PBMC (n=108)
+500
+2,000
+10,000
+All
+(225,765)
+Training reference cells
+0.0
+0.2
+0.4
+PCC (all cells)
+Brain (n=323)
+500
+2,000
+10,000
+All
+(39,970)
+Training reference cells
+0.0
+0.4
+0.8
+PCC (+ cells)
+PBMC
+500
+2,000
+10,000
+All
+(225,765)
+Training reference cells
+0.0
+0.4
+0.8
+PCC (+ cells)
+Brain
+CellNet FT
+Ridge
+kNN
+Frozen CellNet
+a
+b
+c
+d
+Fig. S.8 a,b, All-cell PCC in PBMC (a) and brain (b). c,d, Corresponding intensity PCC within
+measured-positive cells, using scImagene m. Native decoder adaptation, Ridge and kNN use identi-
+cal training-reference members at 500, 2,000, 10,000 and all non-test cells (39,970 PBMC; 225,765
+brain). Dashed lines denote frozen scImagene; the reference-count axis is logarithmic. The fixed com-
+parison pools comprise 108 and 323 ncRNAs detected in at least 20% of the 5,000 query cells per
+tissue. Shading denotes paired 95% target-gene bootstrap intervals (2,000 draws). Smaller cohorts
+use 2,000 separate validation cells for epoch selection; full-reference fits reincorporate these cells after
+epoch selection is fixed. Native fits use thirty epochs for smaller cohorts and 29/30 epochs for full
+PBMC/brain. Fig. 3f,g shows the 500-training-reference endpoint.
+36
+
+
+Bonobo
+Seen
+(n=301)
+Bonobo
+Unseen
+(n=2,108)
+Chicken
+Seen
+(n=410)
+Chicken
+Unseen
+(n=533)
+−1
+0
+1
+PCC (all cells)
+0
+10k
+20k
+30k
+Supported completion targets
+Chicken
+Platypus
+Mouse
+Macaque
+Gorilla
+Bonobo
+Chimp.
+14,648
+14,552
+14,686
+14,591
+14,444
+14,408
+13,333
+13,260
+23,730
+17,105
+11,146
+10,984
+10,398
+10,217
+CellNet
+scPRINT-2
+Native unseen
+Detection ≥20%
+Main common pool
+10
+100
+1,000
+10,000
+Unseen target genes
+Bonobo
+12,736
+2,128
+2,108
+Mouse
+3,764
+30
+12
+Chicken
+5,852
+558
+533
+a
+b
+c
+Exposure is specific to CellNet expression pretraining.
+Fig. S.9 a, Frozen scImagene/scPRINT-2 all-cell PCC distributions for scImagene-expression-
+pretraining-seen and unseen targets in bonobo (301/2,108 genes) and chicken (410/533). All genes
+belong to the prespecified common pools used in Fig. 3h. Violin densities have equal widths; points and
+intervals denote means and paired 95% target-gene bootstrap intervals (2,000 draws). b, Exact vocab-
+ulary support within the original registered completion-target universes of seven species. scPRINT-2
+uses checkpoint-native identities or oﬀicial frozen species extensions, including gene embeddings and
+positions, for gorilla, platypus and legacy chicken. Support counts describe identity range, not accu-
+racy or full-universe inference in this evaluation. c, Counts of original scImagene-supported unseen
+identities, measured-detection-qualified genes (≥20%) and current common scoring targets. The
+final pools are 2,108 bonobo, twelve mouse and 533 chicken genes; mouse support is twelve of thirty
+detection-qualified candidates. “Unseen” refers exclusively to scImagene expression pretraining; DNA
+identities remain available.
+37
+
+
+0.0
+0.5
+1.0
+PCC (all cells)
+Foxp2
+Rorb
+Cux2
+Vip
+Sst
+Pvalb
+Mog
+Aqp4
+Gad1
+Slc17a7
+0.0
+0.5
+1.0
+PCC (all cells)
+Pecam1
+Itgam
+Cx3cr1
+Aif1
+Aldoc
+Cspg4
+Pdgfra
+Sox10
+Reln
+Tbr1
+Frozen CellNet
+CellNet FT (30 epochs)
+a
+b
+All 20 prespecified markers; paired physical-block 95% intervals.
+Fig. S.10 a,b, All-cell PCC for all twenty prescribed Xenium mouse-brain markers, retaining their
+order across two columns. Markers are withheld together from 12,000 fixed query cells with 4,986
+observed genes. Open/filled symbols denote frozen scImagene and its native decoder after thirty
+fixed adaptation epochs with 51,173 nonquery cells from the same section. Lines connect paired
+marker estimates. Intervals are paired 95% percentiles from 2,000 shared resamples of 130 nonempty
+500 × 500 µm physical blocks, recalculating each marker’s PCC in every draw. Fig. 3j shows four
+representative frozen maps; this figure retains quantitative results for the entire marker set. Supervised
+comparisons and measured-positive intensity scoring are provided in Supplementary Fig. S.11a,b.
+38
+
+
+4,986
+1,000
+Observed genes
+0.0
+0.5
+1.0
+Mean PCC (all cells)
+4,986
+1,000
+Observed genes
+0.0
+0.5
+1.0
+Mean PCC (+ cells)
+Frozen
+FT (30 epochs)
+Ridge
+kNN
+1 mm
+−0.5
+1.0
+3.0
+a
+b
+c
+Pvalb
+Measured
+Frozen
+FT (30 epochs)
+Pdgfra
+Aif1
+Pecam1
+Gene z-score; no spatial smoothing.
+Fig. S.11 a,b, Mean all-cell PCC (a) and measured-positive intensity PCC (b) across the same
+twenty prescribed markers with 4,986 or 1,000 observed genes. Frozen scImagene, its thirty-epoch
+adapted decoder, Ridge and kNN share 12,000 query cells; supervised methods share 51,173 same-
+section nonquery references. In b, each gene is scored only in its raw-count-positive query cells (300–
+9,015 per gene). This scorer-only mask changes neither inputs nor marker membership. scImagene
+supplies m; comparators supply native expression predictions. Error bars are paired 95% physical-
+block bootstrap intervals from 2,000 shared resamples of 130 blocks (500 × 500 µm), recalculating
+each marker’s PCC before equal averaging. c, Measured, frozen and adapted maps of Pvalb, Pdgfra,
+Aif1 and Pecam1, extending Fig. 3j to interneuronal, precursor, myeloid and endothelial populations.
+Maps retain original coordinates and independent gene/method z-scores without smoothing; scale bar,
+1 mm. Adaptation uses thirty fixed epochs, without spatial validation or test-based epoch selection.
+39
+
+
+S.1.12 Biological organization of gene representations
+The network used 126 CD14-positive monocytes with observed RNA available. Its
+3,279 query genes were selected before network analysis. The preparation cohort
+contained 126 platelets and 300 cells each from naive B, naive T and monocyte pop-
+ulations. We combined the 2,048 protein-coding and 512 other annotated genes with
+the highest detection rates across these 1,026 cells, all 1,625 supported coding genes
+detected in at least seven platelets, and 83 prespecified platelet-reference and query
+genes. Removing duplicates and retaining supported, unambiguous gene mappings
+yielded the 3,279-gene panel. The 512-gene annotated group was not restricted to
+non-coding RNA. The network queries did not restrict the full measured-RNA input.
+Gene vectors were averaged across monocytes, centred across the query panel and
+normalized to unit length. Connecting each gene to its 15 highest positive-cosine neigh-
+bours, retaining a link selected in either direction, produced 36,638 links and eight
+weighted Leiden communities. All eight communities showed Reactome enrichment
+after global Benjamini–Hochberg correction over 10,720 tests against the 3,279-gene
+background (Supplementary Fig. S.12). Representative enrichments included trans-
+lation elongation (q = 6.28 × 10−79) and mRNA splicing (q = 2.64 × 10−9). The
+HLA-DRA–HLA-DPA1 link joined curated MHC-II pathway members with measured
+RNA r = 0.552. Across the network, 3.96% of links had RNA r ≥0.30, compared
+with 0.38% of random non-edge partners matched to the source gene. These analy-
+ses characterize biological organization of the representations. Prediction attribution
+used the separate hidden-target design below.
+S.1.13 Target-specific input evidence and removal controls
+The prediction analysis used 24 cells from one SSTX PBMC library, six each from
+monocyte, T-cell, B-cell and natural killer-cell groups. Within each population, cells
+were selected at equally spaced ranks spanning the 55th–90th percentiles of summed
+original CST3 and NEAT1 predictions. The entire 7,302-gene target partition, includ-
+ing both targets, was withheld from input expression, measurement indicators and
+input gene identities; 29,197 measured genes supplied the image. Expression was
+log-transformed after normalization to 10,000 observed-gene counts per cell. The
+monocyte displayed in Fig. 4c was subsequently selected for measured targets and
+the strongest combined two-target removal contrast among the selected monocytes.
+The four NEAT1 examples in Supplementary Fig. S.13 required detected targets and
+absolute prediction errors no greater than 0.4 log units, and were selected by the
+largest removal contrast within each group, excluding the main monocyte. All 24 cells
+contributed to the summaries and complete map collections.
+Integrated gradients[44] followed a 24-step path from zero to observed expression,
+with measurement indicators, gene identities and detection information fixed. Signed
+gene contributions were summed within 16 × 16 image patches. In Supplementary
+Fig. S.13, full signed gene-contribution vectors were more similar within than between
+monocyte, B-cell and natural killer-cell groups; the T-cell contrast was approximately
+zero. The complete CST3 and NEAT1 collections use a common scale across all 48
+cell/target maps (Supplementary Figs. S.14 and S.15).
+40
+
+
+Expression-only removal set selected input values to zero while retaining mea-
+surement information, gene identity and the original normalization. Eight random
+sets were averaged within each cell before comparison. Complete hiding addition-
+ally removed measurement, identity and detection information. For the 32-gene sets,
+target-selected removal exceeded random removal in every cell under complete hiding;
+patch-removal contrasts were positive in 23 or 24 of 24 cells, depending on target and
+removal protocol (Supplementary Fig. S.17). Summed integrated gradients approxi-
+mated the prediction change from the zero-expression reference with a median relative
+residual of 1.18%. The maximum residual was 98.15%, with large relative errors in
+low-contrast CST3 cases. The figure retains all residuals and expression-matching
+diagnostics.
+The complete named-set comparison gave extra decreases of 0.0963, −0.0018,
+−0.0002 and 0.0293 log units for the antigen-presentation set on CST3 and NEAT1,
+and the response-associated set on CST3 and NEAT1, respectively (Supplementary
+Fig. S.16). In 2,273 reference monocytes excluding attribution cells, the response-set
+expression score correlated negatively with measured NEAT1 (r = −0.138), although
+removing that set lowered its prediction relative to random removal. Thus, mea-
+sured expression covariation and the model’s use of an input set conveyed different
+information in this cohort.
+S.1.14 Cell-state evidence across donors and
+expression-associated features
+For the Th17–Th2 analysis, a linear discriminant classifier was trained on three donors
+and applied to the fourth, rotating across four donors. Attribution explained each held-
+out cell’s Th17-minus-Th2 log-posterior score. Gradient multiplied by input expression
+gave signed contributions; positive values favoured Th17. The 96 attribution cells com-
+prised 12 cells per state and donor. Within-state donor-mean gene contributions had
+Spearman correlations of 0.717–0.752 (Supplementary Fig. S.18). The rotating clas-
+sifiers shared training donors. Two displayed examples were selected retrospectively
+from correctly classified cells by the largest existing patch-removal contrasts.
+Removing the 10% strongest supporting patches was compared with random
+removal of the same patch count. Of six random sets per cell, only sets match-
+ing removed expression mass and detected-gene count within 10% were averaged.
+This strict matching yielded 38 eligible cells, all Th17, and each showed a larger
+score decrease after targeted removal. Ribosomal genes were prominent among the
+classifier’s contributing inputs.
+Separately, six-component sparse nonnegative matrix factorization was fitted to
+cell representations from 2,700 cells sampled across donors D1–D3 and Th0, Th17
+and Th2 conditions, then applied to all 9,777 cells. D4 was held out from fitting and
+gene ranking. Four selected features were associated with DNA replication, mitosis,
+endoplasmic-reticulum stress and interferon programmes (Supplementary Fig. S.19).
+The eight genes per feature with the highest within-donor expression correlations in
+D1–D3 were drawn from genes detected in at least 488 cells. All 32 selected correlations
+remained positive in D4, and the training-defined high/low state polarity persisted
+41
+
+
+across all four donors. Feature activations also covaried with total RNA counts, as
+shown for each feature.
+S.1.15 Module and partner retrieval across RNA classes
+Module recovery used a 1,020-gene query panel whose expression and measurement
+indicators were withheld from the input. Thirty reference genes were excluded from the
+343 ranked non-coding candidates, which contained 117 additional published members
+and 226 candidates outside the member list. Scores averaged candidate-to-reference
+model cosine similarities or absolute RNA Pearson correlations. Average precision
+sums precision over the complete ranking, weighted by each increase in reference-
+member recall. Across naive B, naive T and monocyte populations, it was 0.601, 0.611
+and 0.624 for scImagene, compared with 0.275, 0.341 and 0.325 for RNA correlation.
+Module membership was defined by the published TotalX coexpression analysis from
+the same resource[11].
+Other neighbourhood and programme analyses retained measured query RNA.
+Population-mean gene vectors were centred across the analysed gene panel and nor-
+malized before cosine scoring; query self-matches were excluded. RNA comparators
+used absolute Pearson correlation of log-transformed expression in the same cells,
+including measured zeros. These rankings measured associations between representa-
+tions. TCP1 retrieved CCT4, CCT5, CCT2, CCT6A and CCT3 at ranks 1–5 in both
+HEK293T and untreated Huh7, with CCT7 at rank 17 or 9, respectively (Supple-
+mentary Fig. S.20a,b). RNA correlation retrieved no CCT partners in either top 20.
+In the external PBMC cohort, HLA-DRA’s partners CD74, HLA-DPB1 and HLA-
+DPA1 retained ranks 4, 7 and 11. The complete discovery lists include recurrent and
+non-recurrent neighbours (Supplementary Fig. S.20c,d).
+The four cell-context examples were selected after an exploratory screen, including
+comparison with baseline ranks. Each primary population contained 126 cells with
+matched protocol composition: eight 10X-dUTSO, 74 SSTX and 44 SSTX-pA+ cells.
+All used the same 2,736 coding candidates. Their observed similarities ranged from
+0.211 to 0.369, compared with −0.088 to 0.034 after a single within-cell expression-
+value shuffle (Supplementary Fig. S.20e). Paired, protocol-stratified cell bootstrap
+intervals used 1,000 resamples of the observed and shuffled populations and describe
+that cohort and shuffle realization. All four partners remained within the top 20 in
+both disjoint 63-cell halves. Support across sequencing protocols varied: MALAT1–
+AFF3 ranked 27 in SSTX-pA+, while its half-cell ranks were 17 and 15 and its
+expanded-population rank was 15 (Supplementary Fig. S.20f).
+S.1.16 Host programme organization and non-coding entry
+points
+The Huh7 analysis contained 500 untreated and 500 DENV-exposed cells. Host-
+expression scores assigned 267 exposed cells to an active-like group and 233 to a
+quiescent-like group (Supplementary Fig. S.21a,b). Scores averaged gene-wise stan-
+dardized log-expression within predefined signatures; standardization used all 1,000
+cells. Five scores defined the exposed-cell annotations, and the stress-granule score
+42
+
+
+supplied additional expression context. Each displayed programme had a higher mean
+within-programme cosine than the mean of 200 size-matched random gene sets. The
+gene cosine and RNA Pearson scores in Fig. 5i summarize programme organization
+within their respective association spaces.
+Developmental references came from the published VASA-seq combined-stage
+marker table[9]. Coding markers with adjusted P < 0.01 and log fold change greater
+than 1 were ranked by the published marker score, retaining up to 60 genes before
+measurement-support filtering. The Foxl2os, C130021I20Rik and Gm50321 analyses
+contained 60 of 2,149, 60 of 2,152 and 46 of 2,117 reference members/candidates,
+respectively. Coding candidates required detection in at least max(5, ⌈0.05N⌉) of the
+context’s N cells; non-coding queries required at least five RNA-positive cells. All
+cells contributed, including those with zero measured query expression. VASA-seq
+contributed to pretraining; these analyses evaluated recovery of known programmes
+in the specified developmental contexts.
+The complete developmental top-20 lists contained eight, seven and three refer-
+ence members, compared with six, four and zero for RNA correlation (Supplementary
+Fig. S.21c). Each method used identical cells and fixed full-population candidate and
+reference sets in the disjoint half-population comparisons. scImagene retained higher
+average precision in all six halves (Supplementary Fig. S.21d).
+The human neural analysis used the published neural stem-cell state-12 marker
+programme[57]. Coding markers with adjusted P < 0.01 and average log2 fold change
+greater than 0.25 were ranked by the published fold change, retaining the top 60
+before coverage filtering. The eligible reference contained 59 genes among 2,082
+coding candidates. All 3,423 verified non-targeting controls contributed to both meth-
+ods’ associations; 13 had measured SERTAD4-AS1. WNT5B, DLK1 and SERPINF1
+were recovered at ranks 7, 10 and 17. The original perturbation study supplied the
+programme reference; this retrieval analysis used its control cells.
+43
+
+
+I1 CD74
+CDKN1A
+CST3
+DUSP1
+TYROBP
+TYMP
+TNFRSF1B
+GAB2
+TMSB10
+FTL
+NAMPT
+FOSB
+S100A8
+FAU
+RPL30
+S100A9
+FTH1
+FOS
+METRNL
+IRS2
+S100A4
+I2 HLA-DRA
+I4 IFI30
+I3 HLA-DPA1
+I5 HLA-DMB
+NEAT1
+Platelet
+B naive
+T naive
+Mono
+G1
+G2
+G3
+G4
+G5
+G6
+G7
+G8
+−0.4
+−0.2
+0.0
+0.2
+0.4
+0
+20
+40
+60
+80
+−log10(global BH q)
+G1  GPCR-related
+G2  Respiratory electron transport
+G3  RNA splicing
+G4  Translation elongation
+G5  Chromatin modifiers
+G6  Signal transduction
+G7  DNA methylation
+G8  Mito. ribosome quality control
+a
+Gold edges: model links with measured RNA r ≥ 0.30 (350)
+b
+RNA z-score means; n=126/type
+c
+d
+RNA r ≥ 0.30: 3.96% model
+vs 0.38% same-source random
+Mean RNA r: 0.0396 / 0.0102
+Fixed-edge split-cell ρ: 0.9975
+Mean cosine loss, value shuffle: 0.123
+Fig. S.12 Biological organization and measured RNA support of the gene network. The network
+contains 3,279 genes selected as described in Section S.1.12, using 126 monocytes with observed RNA.
+a, A neighbourhood induced by 26 displayed genes and their eight highest-similarity neighbours: 158
+genes and 814 existing links. Gold identifies 350 links with measured RNA Pearson r ≥0.30. b, Mean
+standardized community RNA scores across 504 protocol-matched PBMCs, 126 per population. Gene
+expression is standardized across cells, averaged within each community, then within population.
+c, Strongest Reactome enrichment per community against the 3,279-gene background. Benjamini–
+Hochberg correction covers 10,720 tests; point size indicates gene overlap. d, RNA support among
+model links and random non-edge partners matched to the source gene, cosine agreement between
+disjoint monocyte halves, and mean cosine changes after within-cell expression shuffling. The displayed
+summaries characterize the existing representation network.
+44
+
+
+Mono
+T
+B
+NK
+0
+0.64
+Normalized input expression
+−0.076
+0
+0.076
+Signed patch-summed IG (log units)
+0.00
+0.02
+0.04
+Signed gene IG
+ZFP36
+S100A9
+NAMPT
+DUSP1
+FOS
+Mono
+0.00
+0.02
+0.04
+Signed gene IG
+ANXA4
+FKBP5
+FTL
+ANXA2
+FTH1
+T
+0.00
+0.02
+0.04
+Signed gene IG
+FTH1
+SAT1
+FTL
+AHNAK
+ATF3
+B
+0.00
+0.01
+0.02
+Signed gene IG
+JUN
+DUSP1
+IER2
+METRNL
+TGFBR3
+NK
+Mono
+T
+B
+NK
+Mono
+T
+B
+NK
+0.0
+0.5
+1.0
+Mono
+T
+B
+NK
+0.0
+0.2
+Mean cosine difference
+a
+Pred. 4.23 / measured 3.97
+Pred. 1.86 / measured 2.05
+Pred. 1.94 / measured 2.17
+Pred. 2.47 / measured 2.30
+b
+c
+d
+e
+Fig. S.13 Cell-context variation in the measured inputs supporting NEAT1 predictions. NEAT1 is
+withheld from the input in 24 PBMC cells, six per population; cell selection and integrated gradients
+are defined in Section S.1.13. a, Measured-input images for one monocyte, T, B and natural killer cell,
+selected retrospectively for detected targets, absolute prediction error ≤0.4 log units and the largest
+removal contrast within group. b, Signed contributions summed within 16×16 patches. All four maps
+share a symmetric 99th-percentile scale. c, Five highest positive-contribution measured genes in each
+displayed cell. d, Cosine similarity of full signed gene-contribution vectors across all 24 cells. Diagonal
+entries denote self-similarity. e, Each cell’s mean similarity to its five same-group neighbours minus
+its mean similarity to the 18 other-group cells. Points denote cells and bars group means; pairwise
+entries share cells. Input-image and contribution colours have separate scales. Coordinates identify
+genes.
+45
+
+
+-0.066
+0
+0.066
+a
+Monocyte · 30207
+P 3.23 / M 2.84
+Monocyte · 30228
+P 2.69 / M 2.64
+Monocyte · 21261
+P 3.19 / M 3.99
+Monocyte · 30782
+P 2.87 / M 2.52
+Monocyte · 21483
+P 2.90 / M 2.97
+Monocyte · 31005
+P 3.10 / M 3.12
+T · 19838
+P 0.10 / M 1.17
+T · 21258
+P 0.22 / M 0.00
+T · 31093
+P 0.05 / M 0.00
+T · 21838
+P 0.14 / M 0.00
+T · 22244
+P 0.08 / M 0.00
+T · 31893
+P 0.14 / M 0.00
+B · 30300
+P 0.08 / M 0.00
+B · 30344
+P 0.12 / M 0.00
+B · 30843
+P 0.05 / M 0.00
+B · 31120
+P 0.08 / M 0.00
+B · 22239
+P 0.08 / M 0.00
+B · 31725
+P 0.05 / M 0.00
+NK · 20038
+P 0.25 / M 0.00
+NK · 20223
+P 0.21 / M 1.70
+NK · 19659
+P 0.18 / M 0.00
+NK · 21069
+P 0.22 / M 0.00
+NK · 22004
+P 0.13 / M 0.00
+NK · 22371
+P 0.27 / M 0.00
+Signed patch IG
+Fig. S.14 Complete input-contribution maps for CST3 predictions. All 24 selected PBMC cells are
+shown, with six cells per monocyte, T, B and natural killer-cell column. Cells span the 55th–90th
+percentiles of summed original CST3 and NEAT1 predictions within population. The complete target
+partition is withheld from the input (Section S.1.13). Each 24 × 24 map sums signed integrated
+gradients within 16 × 16 patches. Positive and negative colours indicate inputs that raise or lower
+the CST3 prediction relative to the zero-expression reference. Cell identifiers and predicted (P) and
+measured (M) log-expression values accompany each map. The scale uses the absolute 99th percentile
+across all 48 maps in this figure and Supplementary Fig. S.15. Coordinates identify gene positions.
+46
+
+
+-0.066
+0
+0.066
+b
+Monocyte · 30207
+P 3.93 / M 3.92
+Monocyte · 30228
+P 4.40 / M 3.69
+Monocyte · 21261
+P 3.77 / M 2.38
+Monocyte · 30782
+P 4.15 / M 3.66
+Monocyte · 21483
+P 4.34 / M 3.57
+Monocyte · 31005
+P 4.23 / M 3.97
+T · 19838
+P 1.97 / M 1.17
+T · 21258
+P 1.61 / M 3.00
+T · 31093
+P 1.68 / M 1.46
+T · 21838
+P 1.47 / M 3.97
+T · 22244
+P 1.86 / M 2.05
+T · 31893
+P 2.12 / M 2.17
+B · 30300
+P 1.94 / M 2.17
+B · 30344
+P 1.34 / M 0.00
+B · 30843
+P 1.77 / M 2.16
+B · 31120
+P 1.20 / M 0.00
+B · 22239
+P 1.54 / M 2.09
+B · 31725
+P 1.33 / M 1.69
+NK · 20038
+P 2.26 / M 0.00
+NK · 20223
+P 2.47 / M 2.30
+NK · 19659
+P 2.38 / M 3.18
+NK · 21069
+P 2.39 / M 1.72
+NK · 22004
+P 2.31 / M 1.80
+NK · 22371
+P 2.48 / M 2.70
+Signed patch IG
+Fig. S.15 Complete input-contribution maps for NEAT1 predictions. All 24 selected PBMC cells
+are shown, six per monocyte, T, B and natural killer-cell column, using the cell selection and hidden-
+target protocol in Section S.1.13. Each map sums signed integrated gradients within 16 × 16 patches;
+positive and negative colours indicate contributions that raise or lower the NEAT1 prediction relative
+to zero input expression. Cell identifiers and predicted (P) and measured (M) log-expression values
+accompany each map. The symmetric 99th-percentile scale is shared with Supplementary Fig. S.14,
+allowing direct comparisons across the two targets and all cells. Coordinates identify gene positions.
+47
+
+
+−1.5
+−1.0
+−0.5
+0.0
+0.5
+1.0
+1.5
+MHC-II input score
+0
+2
+4
+CST3 measured
+(log1p CPM10k)
+r = 0.717
+−1.5
+−1.0
+−0.5
+0.0
+0.5
+1.0
+1.5
+MHC-II input score
+0
+1
+2
+3
+4
+5
+NEAT1 measured
+(log1p CPM10k)
+r = -0.330
+−2
+−1
+0
+1
+2
+Response input score
+0
+2
+4
+CST3 measured
+(log1p CPM10k)
+r = 0.453
+−2
+−1
+0
+1
+2
+Response input score
+0
+1
+2
+3
+4
+5
+NEAT1 measured
+(log1p CPM10k)
+r = -0.138
+CST3
+NEAT1
+I1–I5
+0.00
+0.05
+0.10
+0.15
+Set−random decrease
+(log units)
+CST3
+NEAT1
+J1–J4
+0.00
+0.05
+0.10
+0.15
+Set−random decrease
+(log units)
+a
+b
+Fig. S.16 Expression context and target-specific removal of named input sets. I1–I5 denote CD74,
+HLA-DRA, HLA-DPA1, IFI30 and HLA-DMB; J1–J4 denote DUSP1, FOS, IER2 and ZFP36.
+a, Measured target expression against each set’s mean standardized log-expression in 2,273 refer-
+ence monocytes, excluding attribution cells. Points denote cells; r is Pearson correlation. b, Joint
+expression-only removal of either set for both hidden targets in six selected monocytes. Eight random
+sets per cell match expressed-input count and expression mass; other input information and normal-
+ization remain fixed. Points show the named-set prediction decrease minus the cell’s mean random
+decrease; bars show cell means. I–CST3, I–NEAT1, J–CST3 and J–NEAT1 contrasts average 0.0963,
+−0.0018, −0.0002 and 0.0293 log units. Expression relationships and removal effects are discussed in
+Section S.1.13.
+48
+
+
+CST3
+NEAT1
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Own−random decrease
+(log units)
+32 genes · expression-only
+CST3
+NEAT1
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Own−random decrease
+(log units)
+32 genes · complete hiding
+CST3
+NEAT1
+−0.05
+0.00
+0.05
+0.10
+0.15
+0.20
+Own−random decrease
+(log units)
+3 patches · expression-only
+CST3
+NEAT1
+−0.05
+0.00
+0.05
+0.10
+0.15
+Own−random decrease
+(log units)
+3 patches · complete hiding
+CST3
+NEAT1
+10−1
+100
+101
+102
+Relative residual (%)
+CST3
+genes
+NEAT1
+genes
+CST3
+patches
+NEAT1
+patches
+−30
+−25
+−20
+−15
+−10
+−5
+0
+5
+Random mass mismatch (%)
+a
+b
+c
+Fig. S.17 Input-removal controls and integrated-gradient diagnostics. Both targets are hidden in
+the 24 selected PBMC cells described in Section S.1.13. a, Removal of each target’s 32 highest
+positive-contribution detected genes or three highest-contribution patches. Expression-only removal
+sets expression to zero; complete hiding also removes measurement, identity and detection informa-
+tion. Original normalization is retained. Points show target-selected minus mean matched-random
+prediction decreases; eight random trials are averaged per cell and bars show cell means. Gene controls
+approximately match expression mass; patch controls also match detected-gene count. b, Relative dis-
+crepancy between summed integrated gradients and the prediction change from the zero-expression
+reference: 100 × | ∑
+g IGg −∆ˆx|/|∆ˆx|, with denominator floor 10−8. All 48 cell/target values are
+retained on a symmetric logarithmic scale; median and maximum residuals are 1.18% and 98.15%. c,
+Percentage removed-expression mismatch, 100×(mean random mass−selected mass)/selected mass,
+with the same denominator floor. Points denote cells and bars medians.
+49
+
+
+1
+2
+3
+4
+0
+2
+4
+Signed margin contribution
+RPLP2
+RPS27
+GAPDH
+RPS28
+VIM
+RPS21
+RPS29
+1
+2
+3
+4
+−6
+−4
+−2
+0
+Signed margin contribution
+RPL13A
+RPL18A
+RPS14
+RPS9
+RPS2
+RPL13
+RPS3
+−3.4
+0
+3.4
+Signed patch gradient × input
+0
+0.72
+Normalized input expression
+D1
+D2
+D3
+D4
+D1
+n=11
+D2
+n=10
+D3
+n=8
+D4
+n=9
+0
+10
+20
+30
+40
+Extra margin decrease
+(log posterior odds)
+a
+b
+c
+d
+Th17 · D3
+1 VIM; 2 KRT7
+3 KRT10; 4 SPTAN1
+Th2 · D1
+1 RPS2; 2 RPL3
+3 RPL10; 4 RPS5
+e
+Th17
+Th2
+f
+Fig. S.18 Cell-state prediction evidence across donors. A linear discriminant classifier trained on
+three donors predicts Th17 and Th2 conditions in the fourth, rotating across four donors. Gradient
+multiplied by input expression explains the Th17-minus-Th2 log-posterior score; positive contribu-
+tions favour Th17. a–d, Two correctly classified examples selected retrospectively by the largest 10%
+patch-removal contrasts: input images (a), signed patch contributions (b), enlarged strongest support-
+ing regions (c), and seven strongest class-supporting gene contributions (d). Numbers in c identify
+the four strongest contributors within each region. e, Donor/state mean maps from 96 cells, 12 per
+state and donor, on a common scale. Within-state donor-mean gene contributions have Spearman
+correlations of 0.717–0.752. f, Removal of the 10% strongest supporting patches against random sets
+of the same patch count. Eligible random sets match expression mass and detected-gene count within
+10%. All 38 qualifying cells are Th17. Points show each cell’s extra score decrease relative to random
+removal; bars show donor means. Sampling and classifier relationships are given in Section S.1.14.
+50
+
+
+Th0
+Th17
+Th2
+0
+10
+20
+30
+C2 activation
+Th0
+Th17
+Th2
+D1
+D2
+D3
+D4
+0.0
+0.5
+1.0
+MCM7
+ATP5G1
+MCM3
+PCNA
+FEN1
+NME1
+HNRNPAB
+RANBP1
+Th0
+Th17
+Th2
+0
+10
+20
+30
+C3 activation
+Th0
+Th17
+Th2
+D1
+D2
+D3
+D4
+0.0
+0.5
+1.0
+NUSAP1
+DLGAP5
+CENPF
+MKI67
+UBE2C
+TPX2
+TOP2A
+ASPM
+Th0
+Th17
+Th2
+0
+10
+20
+30
+C4 activation
+Th0
+Th17
+Th2
+D1
+D2
+D3
+D4
+0.0
+0.5
+1.0
+VIMP
+ATF3
+ARF4
+SLC3A2
+SELK
+HERPUD1
+DNAJB9
+HSPA5
+Th0
+Th17
+Th2
+0
+10
+20
+C6 activation
+Th0
+Th17
+Th2
+D1
+D2
+D3
+D4
+0.0
+0.5
+1.0
+BST2
+XAF1
+ISG15
+SAMD9L
+MX1
+LY6E
+B2M
+IFI6
+−2
+0
+2
+Within-feature mean activation z
+D4 cells
+Mean activation
+RNA Pearson r
+a
+All-cell r(log1p nUMI) = +0.353
+b
+All-cell r(log1p nUMI) = +0.344
+c
+All-cell r(log1p nUMI) = +0.027
+d
+All-cell r(log1p nUMI) = -0.439
+D1–D3: bars; D4: points
+Fig. S.19 Expression-associated features of cell representations. Six-component sparse nonnegative
+matrix factorization was fitted using 2,700 cells from donors D1–D3 and applied to all 9,777 CD4 cells;
+D4 was held out from fitting and gene ranking (Section S.1.14). a–d, Selected features associated
+with DNA replication, mitosis, endoplasmic-reticulum stress and interferon programmes. Left, D4
+activation distributions by state; violins show distributions and horizontal marks medians (Th0, 712;
+Th17, 655; Th2, 1,012 cells). Centre, donor/state mean activations standardized within feature; frames
+identify D4. Correlations with log-transformed total RNA counts describe depth dependence. Right,
+eight genes per feature with the highest within-donor expression correlations in D1–D3. Grey bars
+show these training correlations and coral points the corresponding D4 correlations. All 32 selected
+associations remain positive in D4. Gene expression is log-transformed counts per 10,000, with donor
+means removed before correlation.
+51
+
+
+a
+TCP1 · HEK293T
+Known partners: 6/7
+Rank
+Retrieved gene
+Rank
+Retrieved gene
+1
+CCT4
+2
+CCT5
+3
+CCT2
+4
+CCT6A
+5
+CCT3
+6
+PSMA5
+7
+PSMD1
+8
+MTREX
+9
+HSPD1
+10
+SERBP1
+11
+PSMA2
+12
+EIF6
+13
+TBCA
+14
+BPTF
+15
+ANKRD11
+16
+ANP32A
+17
+CCT7
+18
+PSMA6
+19
+HNRNPD
+20
+EIF3A
+b
+TCP1 · untreated Huh7
+Known partners: 6/7
+Rank
+Retrieved gene
+Rank
+Retrieved gene
+1
+CCT4
+2
+CCT5
+3
+CCT2
+4
+CCT6A
+5
+CCT3
+6
+PSMA5
+7
+PSMD1
+8
+PSMA2
+9
+CCT7
+10
+HSPD1
+11
+EIF6
+12
+NDUFS1
+13
+CNBP
+14
+MTREX
+15
+SERBP1
+16
+PSMB7
+17
+BPTF
+18
+TBCA
+19
+HDLBP
+20
+PSMA3
+Known CCT member
+a
+HLA-DRA
+15/20 recurrent
+Discovery
+rank
+Retrieved
+gene
+Discovery
+RNA+ cells
+(out of 100)
+External
+rank
+1
+TMSB10
+89
+2
+2
+CD74
+98
+4
+3
+HLA-DPB1
+83
+7
+4
+RPL34
+94
+13
+5
+B2M
+96
+1
+6
+HLA-DPA1
+83
+11
+7
+RPS7
+86
+3
+8
+RPLP1
+96
+5
+9
+RPS15A
+89
+25
+10
+RPS23
+93
+9
+11
+RPS3A
+86
+14
+12
+RPL39
+94
+32
+13
+RPS13
+91
+17
+14
+FAU
+88
+12
+15
+RPL12
+89
+19
+16
+RPL41
+97
+44
+17
+RPL11
+94
+28
+18
+RPLP2
+90
+15
+19
+JUND
+90
+157
+20
+RPL18
+87
+16
+b
+CD3D
+9/20 recurrent
+Discovery
+rank
+Retrieved
+gene
+Discovery
+RNA+ cells
+(out of 100)
+External
+rank
+External
+RNA+ cells
+(out of 100)
+1
+HCST
+25
+1
+38
+2
+HLA-C
+57
+11
+98
+3
+CD52
+56
+2
+83
+4
+CD3G
+46
+36
+20
+5
+HLA-E
+61
+32
+65
+6
+HLA-A
+81
+21
+96
+7
+RBM3
+25
+48
+45
+8
+EEF2
+50
+9
+85
+9
+UBA52
+74
+5
+97
+10
+RPLP1
+95
+6
+100
+11
+SSH2
+66
+343
+7
+12
+RPS16
+69
+3
+99
+13
+BTF3
+57
+29
+78
+14
+CD3E
+35
+151
+88
+15
+NDUFB2
+11
+185
+20
+16
+RPL19
+91
+27
+100
+17
+JAK1
+56
+192
+10
+18
+SEM1
+13
+188
+6
+19
+FTH1
+87
+13
+97
+20
+RPL34
+91
+4
+92
+External top 20
+c
+d
+−0.1
+0.0
+0.1
+0.2
+0.3
+0.4
+Gene cosine
+MALAT1–PF4 / platelet
+MALAT1–LYZ / monocyte
+MALAT1–AFF3 / B naive
+LINC00486–ITGA2B / platelet
+H1
+H2
+10X
+SSTX
+SSTX-pA+
+Expanded
+2
+2
+4
+2
+2
+2
+13
+15
+9
+16
+12
+12
+17
+15
+11
+14
+27
+15
+9
+9
+20
+9
+9
+9
+a
+Input shuffle
+b
+Subset stability
+MALAT1–PF4 / platelet
+110 | 115
+MALAT1–LYZ / monocyte
+126 | 125
+MALAT1–AFF3 / B naive
+126 | 120
+LINC00486–ITGA2B / platelet
+76 | 86
+Query | partner
+RNA+ cells /126
+Observed
+Value shuffle
+Rank ≤20
+Rank >20
+e
+f
+Fig. S.20 Partner identities, cross-dataset recurrence and cell-context support. a,b, TCP1 top-20
+neighbours in HEK293T and untreated Huh7, 500 cells per population. Blocks continue ranks 1–10
+and 11–20; blue names identify six of seven eligible CCT partners. c,d, Fixed discovery lists for HLA-
+DRA and CD3D. Columns report discovery/external ranks and available RNA-positive cell counts
+for each candidate, out of 100; coral marks external ranks ≤20. e, Observed (circles) and within-
+cell expression-shuffled (squares) similarities for the four cases in Fig. 5g,h. Horizontal intervals are
+paired percentile 95% cell-bootstrap intervals from 1,000 protocol-stratified resamples of the same
+cohort and shuffle realization. f, Complete-pool ranks in disjoint 63-cell halves (H1, H2), individual
+protocols (10X-dUTSO, n = 8; SSTX, n = 74; SSTX-pA+, n = 44), and expanded populations (126
+platelets or 300 B, T or monocyte cells). Blue cells indicate ranks ≤20. Query and partner RNA-
+positive counts each use 126 cells.
+52
+
+
+UMAP 1
+UMAP 2
+Control
+Active
+Quiescent
+UPR / ER stress
+Antiviral / inflammatory
+Quiescent lncRNA
+(signed)
+MAPK signaling
+Chromatin regulation
+Stress granules
+-0.21
+0.50
+-0.12
+-0.05
+0.13
+-0.03
+-0.10
+0.04
+0.17
+-0.06
+0.21
+-0.11
+-0.03
+0.21
+-0.18
+-0.03
+0.25
+-0.21
+−0.5
+0.0
+0.5
+a
+Host states
+b
+Expression signatures
+Control (500)
+Active-like (267)
+Quiescent-like (233)
+Full
+H1
+H2
+0.0
+0.1
+0.2
+0.3
+Average precision
+Foxl2os
+Full
+H1
+H2
+C130021I20Rik
+Full
+H1
+H2
+Gm50321
+a
+VASA neighbours
+Foxl2os
+Rank
+CellNet
+Expression
+1
+Gm14226
+Jag1
+2
+Foxd1
+Tmem132c
+3
+Eya1
+Cadm1
+4
+Mycl
+Rbpms
+5
+S1pr3
+Slc2a1
+6
+a
+Nrp1
+7
+Ebf2
+Ndnf
+8
+Ebf1
+Prrx1
+9
+H2ac4
+Ldha
+10
+Col23a1
+Iqsec1
+11
+Rfx4
+Lamc1
+12
+Vangl2
+Eya1
+13
+Gstcd
+Ebf1
+14
+Fst
+Six1
+15
+Pcdhgc3
+Lrp2
+16
+Wdfy2
+Pgk1
+17
+Fbxl19
+Dlk1
+18
+Alg10b
+Dapk1
+19
+Bard1
+Afdn
+20
+Cacna1g
+Itga9
+Known: 8/20
+6/20
+C130021I20Rik
+Rank
+CellNet
+Expression
+1
+Sdc3
+Zfp462
+2
+Chst2
+Plxnb2
+3
+Fam181b
+Ep400
+4
+Rps2
+Il17rd
+5
+En1
+Rps6ka3
+6
+Rdm1
+Sec63
+7
+Gm38394
+Lrp2
+8
+En2
+Zfp608
+9
+Sp8
+Pdlim5
+10
+Rpl12
+Igf2
+11
+Rpl29
+Supt6
+12
+Runx1t1
+Stard7
+13
+Col2a1
+Kdm2b
+14
+Cyp26c1
+Ptpn12
+15
+Pdgfra
+En1
+16
+Fzd2
+Mid1
+17
+Rpsa
+En2
+18
+Mycl
+Ube2o
+19
+Tns1
+Kdm3b
+20
+Col5a1
+Rock2
+Known: 7/20
+4/20
+Gm50321
+Rank
+CellNet
+Expression
+1
+Rpl29
+Gpi1
+2
+Igf2
+Ppp6r3
+3
+Plxnc1
+Palld
+4
+H4c1
+Tcf7l2
+5
+Fat4
+Prrc2c
+6
+Frem2
+Ankib1
+7
+Rpl36a
+Fnbp1l
+8
+Ptn
+Hspd1
+9
+Rpsa
+Smarce1
+10
+Rps2
+Rtn3
+11
+H4c12
+Bclaf1
+12
+Col23a1
+Rngtt
+13
+Frem1
+Fstl1
+14
+Clmp
+Poldip3
+15
+Itga8
+Gabpb2
+16
+Ednra
+Uck2
+17
+H4c4
+Msh3
+18
+Cdh11
+Ppp2r1a
+19
+Ddr2
+Epc2
+20
+mt.Co1
+Map2k2
+Known: 3/20
+0/20
+b
+Subset AP
+CellNet
+Expression
+c
+d
+Fig. S.21 Host-expression context and developmental programme support. a, Huh7 cell embeddings:
+500 untreated controls and 500 DENV-exposed cells, with the latter annotated as active-like (267) or
+quiescent-like (233) from host expression. Each point denotes a cell. b, Mean standardized expression-
+programme scores in the three groups. Red and blue denote higher and lower scores; five scores define
+the exposed-cell annotations and stress granules supply additional expression context. c, Complete
+top-20 lists for each developmental query in Fig. 5j. Independently ranked model and RNA candidates
+are shown side by side; coloured names denote published programme members. Model member counts
+are 8, 7 and 3, compared with 6, 4 and 0 for RNA correlation. d, Complete-ranking average precision
+in full populations and disjoint matched halves (50/50, 50/50 and 61/61 cells). Both methods use the
+same cells and fixed full-population candidate and reference sets. Model half-population AP values
+are 0.268/0.272, 0.149/0.150 and 0.133/0.131. Programme references, host annotations and evaluation
+conditions are specified in Section S.1.16.
+53
+
+
+S.2 Supplementary Methods
+S.2.1 Datasets
+We used a public pretraining collection and fifteen public datasets or dataset col-
+lections spanning human tissues, cell lines, vertebrate and invertebrate cell atlases,
+plant tissues and spatial transcriptomics. Table S.1 summarizes the datasets and
+adopted cohort sizes; their sources, biological material and measurement details are
+described below. Species-level composition of the multispecies atlases is provided in
+Table S.2. Original donor, sample, cell-type and experimental-condition annotations
+were retained. Data partitioning, analysis-specific sampling and evaluation procedures
+are described in S.2.9–S.2.13 and S.2.3.
+Main pretraining collection. The main collection contained 231,190,557 cell
+or nucleus profiles from 26,467 constituent expression-matrix entries, represent-
+ing 40 source species designations, 1,015,163 species-qualified gene identities and
+2,233 harmonized cell-type categories. Data were obtained from GEO, ArrayExpress,
+BioProject-associated repositories and CELLxGENE. The collection included 189
+CELLxGENE entries comprising 44,489,429 profiles within these totals. Constituent
+entries denote expression matrices rather than independent publications or biologi-
+cal replicates. Source quality control and measured-gene annotations were retained;
+expression normalization and species-aware gene harmonization are described in
+S.2.4–S.2.6.
+Tabula Sapiens 2.0. We used the Tabula Sapiens 2.0 human multi-organ atlas,
+retaining source tissue, donor and cell-type annotations. The dataset is available from
+Figshare. The adopted collections comprised a 692,102-profile matrix and a 549,018-
+profile labelled collection from nine donors; nine profiles without valid labels were
+excluded from the latter. These numbers describe the supplied subsets used here rather
+than the complete atlas. Eligibility of tissues and labelled cells is specified in S.2.9.
+Human kidney atlas. The atlas of healthy and injured human kidney was
+obtained from the corresponding CELLxGENE collection. The adopted cohort con-
+tained 107,344 profiles from 45 donors and 57 author-provided cell labels. Donor
+identities and injury annotations were retained. Proximal-tubule subsets were drawn
+from this same atlas.
+Human lung atlas. We used the Travaglini et al. human lung atlas, available
+from its CELLxGENE collection, combining its 10x and Smart-seq2 lung transcrip-
+tomes. After excluding blood samples, the adopted cohort comprised 69,650 cells from
+three donors with 59 author-provided labels. The original donor identities and cell
+annotations were retained.
+Cano-Gamez CD4 T-cell dataset. The Cano-Gamez et al. CD4 T-cell dataset
+was obtained from BioStudies accession S-BSST2978. We retained the author-defined
+Naive starting population in 10x technical batch 1 under Th0, Th2 and Th17 con-
+ditions. The resulting collection contained 9,777 cells from four donors and 20,953
+measured genes. Condition labels were taken from the experimental metadata.
+WI-38 senescence dataset. The WI-38 fibroblast transcriptomes were obtained
+from GSE226225. Six 10x libraries, GSM7068355–GSM7068360, represented replica-
+tive senescence, irradiation-associated senescence and etoposide-associated senescence,
+54
+
+
+with two libraries per condition. The adopted matrix contained 14,457 cells and 36,601
+measured genes after the quality-control criteria described in S.2.9. Library replicates
+were derived from the same human cell line.
+Circulating immune-cell atlas. Author-annotated circulating immune-cell
+matrices were obtained from the seven-species Figshare collection 28008611. Species
+comprised human, rhesus macaque, Chinese softshell turtle, Pacific white shrimp,
+Ciona intestinalis, half-smooth tongue sole and whitespotted bamboo shark. The
+adopted labelled cohort contained 19,727 profiles in total (Table S.2). The human
+matrix was supplied as counts per million without raw counts and retained its source
+expression convention.
+Spermatogenesis atlas. We used the single-nucleus transcriptomes from [38],
+The molecular evolution of spermatogenesis across mammals, with data available
+through the author portal. The adopted atlas encompassed human, chimpanzee,
+bonobo, gorilla, gibbon, rhesus macaque, common marmoset, mouse, opossum, platy-
+pus and chicken, with 96,464 labelled nuclei in total (Table S.2). Original cell
+annotations were retained. Gibbon is reported using the established common species
+designation for the analysed collection.
+Brassicaceae multi-tissue atlas. The adopted author-annotated matrices,
+deposited under GEO accession GSE297576, contained 86,015 profiles from Arabidop-
+sis thaliana, Arabidopsis lyrata, Brassica oleracea and Capsella rubella (Table S.2).
+Source tissue and sample annotations were retained, together with the species-specific
+cell labels and shared coarse labels supplied with the matrices.
+Brassicaceae root atlas. Root transcriptomes were obtained from GSE268881.
+The adopted collection contained 184,951 profiles from Arabidopsis thaliana,
+Camelina sativa, Eutrema salsugineum, Schrenkiella parvula and Sisymbrium irio,
+spanning control and author-defined stress conditions. Source condition, replicate and
+cell-type annotations were retained. The root atlas and its accession refer to the same
+underlying collection.
+TotalX
+dataset
+collection. The TotalX study provided human PBMC,
+developing-brain, HEK293T and Huh7 total-RNA transcriptomes. Processed matri-
+ces and annotations were obtained from Figshare 29803628. Raw brain and PBMC
+sequencing data were deposited under Synapse accession syn72382564, and cell-line
+sequencing data under GSE315939. The PBMC and brain source matrices contained
+58,467 and 301,515 profiles, respectively. PBMC assay groups 10X-dUTSO, SSTX
+and SSTX-pA+ contained 19,431, 18,497 and 20,539 profiles. These are technical cap-
+ture groups rather than distinct biological conditions. Cell-line collections included
+untreated and author-defined DENV-exposed Huh7 profiles. Original cell-type, sample
+and assay annotations were retained.
+Xenium Prime 5K mouse-brain dataset. We used the public 10x Xenium
+Prime fresh-frozen mouse-brain dataset [42], comprising one coronal section with
+63,173 cells and 5,006 assayed genes. Direct gene measurements, cell annotations and
+original micrometre coordinates were retained. Query and reference subsets from this
+single section are specified in S.2.10.
+Purified PBMC dataset. The Zheng et al. purified human PBMC collec-
+tions [52] were obtained in the processed form distributed through scvi-tools. The
+55
+
+
+supplied matrix contained 105,868 cells, 21,932 measured genes and ten annotated
+populations. Original population and sample annotations were retained.
+Perirhinal cortex dataset. Human perirhinal-cortex nuclear transcriptomes
+were obtained from the Human Brain Cell Atlas v1.0 collection, using the processed
+release distributed with the scGPT datasets. The source matrix represented the ros-
+tral subdivision of perirhinal area 35 and contained 17,535 nuclei, 59,357 measured
+genes, ten annotated cell types and two sample groups.
+VASA-seq developmental dataset. Mouse developmental total-RNA tran-
+scriptomes were obtained from the VASA-seq study, accession GSE176588. The
+adopted profiles spanned embryonic stages E6.5, E7.5 and E8.5, retaining author-
+provided lineage and developmental-stage annotations. Published coding-gene pro-
+grammes were obtained from the original Supplementary Table 5. This source
+contributed to pretraining; the developmental programme analyses are described in
+S.2.13.
+Human neural-induction dataset. We used the Wu et al. human neural-
+induction study, accession GSE150062. The adopted transcriptomes comprised all
+3,423 author-verified non-targeting control cells. Source log-transformed expression
+and published neural-state marker annotations were retained. The non-targeting con-
+trols supplied observed transcriptomes; the original study supplied the programme
+reference.
+Table S.1: Summary of datasets and adopted cohorts.
+Dataset or collection
+Adopted cohort used in this study
+Main pretraining collection
+231,190,557 cell or nucleus profiles; 26,467 expression matri-
+ces; 40 source species
+Tabula Sapiens 2.0
+Two adopted collections: 692,102-profile matrix and 549,018
+labelled profiles
+Human kidney atlas
+107,344 profiles; 45 donors; 57 labels
+Travaglini lung atlas
+69,650 cells; three donors; 59 labels
+Cano-Gamez
+CD4
+T-cell
+dataset
+9,777 cells; four donors; Th0, Th2 and Th17 conditions
+WI-38 senescence dataset
+14,457 cells; six libraries; three conditions
+Circulating
+immune-cell
+atlas
+19,727 labelled profiles across seven species
+Spermatogenesis atlas
+96,464 labelled nuclei across eleven species
+Brassicaceae
+multi-tissue
+atlas
+86,015 labelled profiles across four species
+Brassicaceae
+root
+atlas,
+GSE268881
+184,951 labelled profiles across five species
+TotalX collection
+58,467 PBMC profiles; 301,515 developing-brain profiles;
+author-provided cell-line matrices
+Xenium Prime 5K mouse
+brain
+63,173 cells; 5,006 assayed genes
+Purified PBMC dataset
+105,868 cells; 21,932 genes
+Perirhinal cortex dataset
+17,535 nuclei; 59,357 genes; two sample groups
+56
+
+
+Dataset or collection
+Adopted cohort used in this study
+VASA-seq
+developmental
+dataset
+Author-annotated developmental and lineage subsets at
+E6.5, E7.5 and E8.5
+Human
+neural-induction
+dataset, GSE150062
+3,423 verified non-targeting control cells
+Repositories and accession identifiers are given in the dataset descriptions above.
+Counts refer to the adopted source matrices or labelled atlas cohorts, rather than the
+size of every source publication. Smaller analysis subsets and training, validation and
+test memberships are specified in the corresponding methods.
+Table S.2: Species composition of the adopted multispecies atlases.
+Dataset
+Species
+Retained
+labelled profiles
+Brassicaceae roots (GSE268881)
+Arabidopsis
+thaliana
+47,033
+Brassicaceae roots (GSE268881)
+Camelina sativa
+27,485
+Brassicaceae roots (GSE268881)
+Eutrema
+salsugineum
+33,975
+Brassicaceae roots (GSE268881)
+Schrenkiella
+parvula
+36,021
+Brassicaceae roots (GSE268881)
+Sisymbrium irio
+40,437
+Circulating immune cells
+Whitespotted
+bamboo shark
+1,580
+Circulating immune cells
+Ciona intestinalis
+2,016
+Circulating immune cells
+Half-smooth
+tongue sole
+6,567
+Circulating immune cells
+Human
+3,005
+Circulating immune cells
+Pacific
+white
+shrimp
+4,625
+Circulating immune cells
+Rhesus macaque
+984
+Circulating immune cells
+Chinese
+softshell
+turtle
+950
+Testis
+Common
+marmoset
+6,384
+Testis
+Chicken
+8,413
+Testis
+Gorilla
+7,323
+Testis
+Human
+16,011
+Testis
+Rhesus macaque
+7,618
+Testis
+Opossum
+9,926
+Testis
+Mouse
+5,264
+Testis
+Gibbon
+6,572
+Testis
+Platypus
+6,751
+Testis
+Bonobo
+9,873
+Testis
+Chimpanzee
+12,329
+Brassicaceae multi-tissue
+Arabidopsis lyrata
+13,495
+57
+
+
+Dataset
+Species
+Retained
+labelled profiles
+Brassicaceae multi-tissue
+Arabidopsis
+thaliana
+42,108
+Brassicaceae multi-tissue
+Brassica oleracea
+7,682
+Brassicaceae multi-tissue
+Capsella rubella
+22,730
+S.2.2 Third-party comparison methods
+Model releases and task scope. Released pretrained models and their origi-
+nal inference procedures supplied frozen cell representations or native expression
+predictions. Gene mapping followed each model’s supported identities and species
+conventions. Unsupported species or genes had unavailable predictions rather than
+zero scores. Geneformer V2, scGPT, scLong, scPRINT-2, TranscriptFormer and UCE
+formed the six cellular comparators in Fig. 2. Expression comparisons in Fig. 3 addi-
+tionally included CellFM. The model subset varied with the task and native output
+support.
+Geneformer V2. The V2-104M release [? ] used Ensembl-mapped expression and
+the authors’ rank-value tokenization. Its frozen 768-dimensional CLS representation
+used the oﬀicial second-to-last-layer extraction setting. Downstream labels trained
+only the classifier described in S.2.9.
+scGPT. The whole-human release [14] used its supported vocabulary and oﬀi-
+cial binning. Cell analysis used 512-dimensional CLS features and maximum sequence
+length 1,200. Completion used 51 expression bins and at most 600 nonzero visible-
+context genes. Hidden expression was excluded from bin construction. Native predic-
+tions were inverse-binned through visible-expression boundaries to log1p counts per
+10,000 without query-truth calibration.
+scLong. The released model [27] retained the fixed 27,000-gene axis used for these
+analyses. Cell features mean-pooled merged gene decodings, excluding the terminal
+padding position. Completion retained the frozen native expression-regression head.
+Missing expression on the fixed gene axis followed the authors’ input convention;
+target measurements were excluded from visible-context normalization and input.
+scPRINT-2. The small-v2 release [29] used oﬀicial gene encoding, positional
+encoding, expression preprocessing and generative inference. Cell analysis used the
+256-dimensional base summary representation, at most 1,200 context genes and the
+released expression-dependent sampling procedure. Expression inference used visi-
+ble raw counts and explicit gene queries. Human comparisons jointly normalized
+generated target counts and observed counts. Current multispecies comparisons nor-
+malized predictions to observed-input library size only, with depth multiplier one.
+With native intensity µ and zero-inflation logit z, complete output before normal-
+ization was µ[1 −sigmoid(z)] and the intensity endpoint used µ. The latter was not
+interpreted as the strict mean conditional on a positive observed count.
+Gorilla, platypus and legacy chicken identities were added through the oﬀicial
+frozen gene-encoding and positional-encoding extension without updating pretrained
+weights. Bonobo assay identifiers followed the chimpanzee namespace used by the
+58
+
+
+comparison. Exact gene support fixed multispecies target membership before reading
+new prediction scores; identifier conventions did not change the biological species of
+the cells.
+TranscriptFormer. TF-Metazoa [16] used raw counts, supported protein-
+sequence-derived identities and oﬀicial inference. Its 2,048-dimensional cell represen-
+tations supplied annotation, integration and reference mapping without task-specific
+representation fitting. Species and gene support were retained for each atlas.
+UCE. The released 33-layer model [15] used oﬀicial raw-expression preprocessing
+and protein-sequence-derived identities. Inference sampled 1,024 gene tokens with
+padded length 1,536 and returned 1,280-dimensional cell representations. Additional
+cell filtering was disabled to preserve the common cohort; gene eligibility followed
+native vocabulary support. Features supplied classification, integration and reference
+mapping.
+CellFM. Completion used the released 800-million-parameter model [35] and its
+original scalar cell-wise expression decoder. Weights were frozen, with no new head or
+query-truth recalibration. Human vocabulary support defined eligible targets; human
+identities were not substituted for unsupported nonhuman identities. CellFM therefore
+entered human completion comparisons without fabricated nonhuman scores.
+Classification and mapping. Third-party cell representations used training-fold
+standardization and logistic regression with C = 1, L-BFGS, at most 2,000 itera-
+tions, no class weighting. scImagene used automatically regularized LDA, as in S.2.9.
+Reference mapping used a common cosine kNN classifier for scImagene, scPRINT-2,
+TranscriptFormer and UCE, with identical partitions, class-frequency correction and
+validation-selected settings.
+Reference-supervised expression. Ridge used at most 512 high-variance visi-
+ble genes selected from reference cells, reference-fitted standardization and α = 100,
+with the target mean as intercept. Cosine kNN used the same feature selection and
+ten neighbours. Expression predictions were weighted averages of measured reference
+expression, with weights proportional to nonnegative cosine similarity, normalized to
+sum to one; zero total similarity gave uniform weights. Predictions were constrained
+to nonnegative log-expression values. Reference membership matched the adapted
+decoder for each budget. These methods received target-expression supervision from
+reference cells and were distinguished from frozen pretrained prediction.
+Molecular associations. Expression comparison used absolute Pearson cor-
+relation over the same selected cells, candidate genes and measured zeros. Static
+identity comparison used cosine similarity between learned 64-dimensional gene-
+identity vectors. Published reference sets and full eligible candidate rankings were
+shared. These comparisons measured co-expression or context-independent identity
+similarity, respectively.
+S.2.3 Evaluation metrics and statistical summaries
+Classification. Accuracy was the fraction of correctly labelled query cells. For class
+k, precision was Pk = TPk/(TPk + FPk) and recall was Rk = TPk/(TPk + FNk).
+Class F1 was 2PkRk/(Pk + Rk), with undefined class contributions assigned zero.
+Macro-F1 averaged class F1 equally. Tabula Sapiens tissue-conditioned evaluation
+59
+
+
+used biological labels present in each true test fold, first averaging donor folds within
+tissue and then weighting eighteen tissues equally. Global all-class scores used their
+predefined union of true and predicted labels; seen-class results were reported sepa-
+rately. Balanced accuracy averaged recall over true test classes. Experimental-state
+classification reported macro-F1 and balanced accuracy averaged equally over held-out
+donor/library folds; per-state scores, predicted probabilities and confusion matrices
+were retained.
+Rare-cell F1 used labels with training prevalence at most 1%, at least twenty cohort
+cells across at least three donors, and positive training and test support in the fold.
+Eligible labels could differ by fold. Eligible-class F1 was averaged within each fold,
+then across the three donor-held-out folds equally rather than pooling predictions.
+The separately reported 5% minority threshold did not define the primary rare-cell
+endpoint. Cell counts and donor- or library-held-out scores described distinct sampling
+and evaluation units.
+Reference mapping. Within-species F1 used predefined fine labels; cross-species
+F1 used shared coarse labels. Coverage was the fraction of all target-test cells with
+a true label present in the source reference. F1 was evaluated on this eligible sub-
+set. Empty subsets retained coverage but undefined F1. Within-species family means
+weighted species equally; cross-species means weighted eligible ordered directions
+equally. Shared cross-species kNN settings were selected by validation macro-F1,
+weighting the four comparison methods and five development task families equally. SD
+across five overlapping splits described partition sensitivity rather than independent
+biological replication.
+Integration. Metrics followed scIB definitions [30]. NMI normalized mutual infor-
+mation between graph clusters and cell labels by the arithmetic mean of their
+entropies. ARI corrected pairwise cluster–label agreement for chance. Cell-label silhou-
+ette width was rescaled as (s+1)/2. The equal-weight mean of NMI, ARI and rescaled
+cell-type silhouette defined AvgBIO. Batch silhouette used 1 −|sbatch| within labels,
+averaged within each label and then across eligible labels. Graph connectivity aver-
+aged each label’s fraction of cells in its largest connected neighbourhood component.
+Their arithmetic mean defined batch performance. Higher values indicated better con-
+servation or mixing. Aggregate scores weighted eligible tissues equally. Metrics used
+high-dimensional representations and graphs; UMAP supplied visualization [62].
+Expression
+reconstruction. Complete reconstruction used the expected-
+expression output pcgMcg across all query cells, including measured zeros. Conditional
+intensity used decoder magnitude Mcg only for measured-positive cells. For gene g,
+complete and positive-intensity PCC were
+ρcomplete
+g
+= corrc∈C
+ ycg, bycomplete
+cg
+
+,
+ρ+
+g = corrc∈C+
+g
+ ycg, byintensity
+cg
+
+,
+C+
+g = {c : ncg > 0}.
+(S.1)
+Conditional-intensity PCC required at least 20 measured-positive cells per target,
+with the positive-cell mask applied only during scoring and held identical across meth-
+ods. Detection dg = N −1 P
+c 1(ncg > 0) defined cumulative gene-eligibility thresholds
+of 0, 1, 2, 5, 10, 20, 30, 50 and 70%. Thresholding occurred after inference and did
+60
+
+
+not expose target-positive labels to the model; complete PCC at the 20% threshold
+still used all cells. Primary summaries averaged finite gene-wise PCC values equally
+over the specified target sets. Reference-adaptation duration was selected using mean
+all-cell ncRNA PCC on a separate validation cohort.
+Undefined correlations were not replaced by zero. Human comparisons used com-
+mon supported, finite target sets defined separately for each model combination.
+Updated multispecies comparisons used identity-supported, assay-qualified sets fixed
+before reading new scores, without score-dependent exclusions. Output-component
+controls used common finite target intersections where specified, including targets
+with at least 20 measured-positive cells. Coverage, eligibility and defined correlation
+were reported separately. On K matched cell–gene entries, error metrics were
+MAE = 1
+K
+X
+(c,g)
+|bycg −ycg|,
+RMSE =
+v
+u
+u
+t 1
+K
+X
+(c,g)
+(bycg −ycg)2.
+(S.2)
+Errors used matched cells, targets and expression scales. Reference-mean pre-
+dictions had applicable errors but undefined gene-wise PCC. Cell-wise correlations,
+where reported, compared each cell’s matched target genes. Heatmaps standardized
+expression separately per gene for display; scoring preceded display transformation.
+Molecular retrieval and network scores. For a candidate gene g and fixed seed
+set S, module-retrieval score was the mean centred cosine similarity
+Rk(g) = 1
+|S|
+X
+s∈S
+Ak(g, s),
+g /∈S.
+(S.3)
+Average precision integrated precision over recall increments along the complete
+candidate ranking:
+AP =
+X
+t
+ Recallt −Recallt−1
+
+Precisiont .
+(S.4)
+Seeds and query genes were excluded where appropriate. PBMC module AP was
+calculated separately in B Naive, T Naive and monocytes and averaged equally. Top-
+20 recall was the fraction of evaluable reference partners among the retrieved top
+twenty after excluding the query. External recurrence counted discovery top-twenty
+members retained in the second cohort’s top twenty, with discovery lists fixed before
+validation. Coding retrieval candidates required model support and detection in at
+least max(5, ⌈0.05N⌉) of N context cells; queries required at least five measured-
+positive cells. Published reference sets and eligible candidate rankings were shared
+between methods.
+Programme coherence was mean pairwise within-programme association:
+Ck(P) =
+2
+|P|(|P| −1)
+X
+g,j∈P
+g<j
+Ak(g, j).
+(S.5)
+Expression comparisons used absolute Pearson correlation over the same selected
+cells, candidates and measured zeros. Background z-scores used 200 size-matched
+random programmes. Network pathway enrichment used upper-tail hypergeometric
+61
+
+
+tests against the analysed gene panel; pathways with 5–1,000 background genes were
+eligible. Benjamini–Hochberg correction was applied jointly across 10,720 community–
+pathway tests, and community annotations required at least three overlapping genes
+and adjusted P < 0.05. For community expression scores, variable genes were stan-
+dardized across 504 protocol-matched PBMC cells, averaged over community genes
+per cell and then within cell type.
+Network sensitivity used RNA Pearson correlations across the 126 monocytes used
+to estimate representations; links with r ≥0.30 were highlighted. Descriptive non-
+edge controls matched each model link to one random non-edge partner for the same
+source gene, excluding self-pairs and existing links, and compared finite correlations
+on paired eligible links. Representation sensitivity used two disjoint 63-cell halves
+and a within-cell expression-value permutation; Spearman correlation between half-
+cell cosine scores and mean permutation-associated score change was evaluated on
+the original edge set. Genes, links and pathway tests were not treated as biological
+replicates.
+Prediction attribution and input removal (Fig. 4). The attribution cohort
+comprised 24 TotalX SSTX cells, six each from monocyte, T, B and NK populations.
+CST3 and NEAT1 were jointly absent within a 7,302-gene hidden partition, leaving
+29,197 observed genes. Before attribution calculation, six cells per population were
+sampled across the interval between the 55th and 90th percentiles of summed original
+predictions for the two targets. This selected cohort was distinct from the observed-
+context network cohort in S.2.11. Integrated gradients [44] explained hidden-target
+complete log-expression prediction fg. For observed expression x, zero-expression
+reference x0 and coordinate j,
+IGj,g = (xj −x0j)
+Z 1
+0
+∂fg(x0 + t(x −x0))
+∂xj
+dt.
+(S.6)
+The integral used 24-step trapezoidal approximation with fixed gene identity, mea-
+surement and detection information. Signed gene-pixel contributions were summed
+within native 16-by-16 patches. Attribution completeness compared summed contribu-
+tions with the actual-minus-reference prediction; it was a numerical diagnostic rather
+than reconstruction accuracy.
+Removal tests zeroed selected expression without renormalizing remaining inputs
+or changing identity, measurement or detection information. Decrease was original
+minus modified prediction. Each cell’s 32 highest positive-contribution detected inputs
+were compared with the other target’s selected inputs and eight expression-matched
+random sets. Random trials were averaged within cell. Named-set controls matched
+expressed-input count and expression mass. Extra decrease was the selected set’s
+decrease minus the same cell’s mean random decrease. The observation unit was the
+cell. These computational changes assessed dependence of the specified prediction on
+its input.
+Cellular interpretation (Fig. 4 supplements). CD4 attribution used the
+donor-held-out LDA score difference between Th17 and Th2. Gradient multiplied by
+input gave signed local contributions to this log-posterior-odds contrast. Ninety-six
+prespecified cells, twelve per donor/state, supplied summaries. Removal of the 10%
+62
+
+
+strongest supporting patches was compared with six equal-patch-count random tri-
+als per cell. Only trials matching removed expression mass and detected-gene count
+within 10% were averaged. The strictly matched subset contained 38 Th17 cells.
+Retrospectively selected illustrations were distinguished from cohort summaries.
+Six-component sparse NMF decomposed frozen final-eight-layer cellular features.
+Standardization used donors D1–D3; values were clipped to [−4, 4] and split into
+positive/negative channels. Fitting used 300 cells per donor/state, giving 2,700 cells,
+nonnegative double singular-value initialization, factor regularization 0.001, L1 ratio
+0.8, tolerance 3×10−4, at most 1,000 iterations. The fitted transformation was applied
+to donor D4 without refitting: 712 Th0, 655 Th17 and 1,012 Th2 cells. Gene associa-
+tions correlated log1p counts per 10,000 with activations after removing donor-specific
+means. Eligible genes were detected in at least 488 cells. Ranking used D1–D3, with
+selected associations evaluated in D4. Functional names were annotations based on
+associated genes. Binary ROC AUC compared training-defined highest- and lowest-
+activation states in D4, measuring the probability that a positive-state cell had a larger
+activation than a negative-state cell, with half weight for ties; it was not three-class
+classification accuracy.
+Uncertainty. Expression means and paired differences used 2,000 shared target-
+gene bootstrap draws and percentile 95% intervals. Complementary gene partitions
+reused query cells and were not independent cell cohorts. Spatial intervals resampled
+130 nonempty physical blocks of 500 × 500 µm with 2,000 shared draws, recomput-
+ing PCC; they describe within-section variation. Selected PBMC context comparisons
+used 1,000 within-protocol cell draws, shared across conditions. Attribution trials
+were averaged within cells, and paired cell-bootstrap summaries described the selected
+cohort. Output-component comparisons used shared target-gene bootstrap indices
+where specified. Spatial marker permutation controls preserved the prediction dis-
+tribution while permuting cell assignments. Tissue, donor, library, species, gene and
+cell aggregation units were retained according to the endpoint. Descriptive SD and
+conditional bootstrap intervals were distinguished from independent-donor confidence
+intervals.
+S.2.4 Expression processing and sampling
+Species-qualified identifiers were retained throughout gene matching and image gen-
+eration. The principal pretraining collection contained 231,190,557 cell profiles, with
+1,015,163 genes represented by sequence-derived identities.
+For count inputs, expression was normalized to 10,000 counts per cell and trans-
+formed using log1p. With ncg denoting the input count and Lc its measured library
+size, the image value was
+xcg = 1
+6 clip
+
+log
+
+1 + 104 ncg
+Lc
+
+, 0, 6
+
+.
+(S.7)
+The preprocessing policy preferred an available raw expression source and other-
+wise used the supplied expression matrix. Inputs identified as already log-transformed
+retained that scale before clipping and image rescaling. Dataset-level measurement
+masks recorded the gene coverage independently of expression values. No additional
+63
+
+
+filtering by cell or gene counts was applied during construction of the principal
+pretraining collection.
+The principal pretraining collection was used without a separate validation or test
+partition. Sampling probabilities were proportional to n0.4
+r , where nr is the number
+of profiles in sampling group r, moderating differences in group abundance.
+S.2.5 Sequence features, image mapping and augmentation
+Gene-associated DNA sequences were matched to species-aware gene identifiers before
+feature extraction. Sequence features were extracted from the 1-billion-parameter
+Evo 2 base model, using the output of the third linear projection in the multilayer
+perceptron of block 20. Features at valid nucleotide positions were mean-pooled;
+long sequences were encoded as overlapping chunks, whose pooled features were
+then averaged to obtain one 1,920-dimensional vector per gene. A frozen incre-
+mental principal-component transform reduced these vectors to 256 dimensions.
+Independent learned projections generated the 64-dimensional mean-identity and
+expression-modulated identity features in equation (2).
+For image mapping, DNA-derived gene vectors were first reduced to 64 dimen-
+sions by PCA and then projected to two dimensions by t-SNE, using cosine distance,
+perplexity 30, PCA initialization and an automatic learning rate [63]. The coordi-
+nates were scaled to the image grid. Balanced greedy k-d tree assignment placed genes
+at nearby available pixels while favouring less occupied patches, producing a fixed,
+species-specific mapping with at most one gene per pixel. For each cell, normalized
+expression and the assay measurement indicator were written at each gene’s assigned
+pixel. Thus, measured zero-expression genes remained distinguishable from genes not
+measured by the assay.
+The expression branch used two channels, expression and visibility. The expression-
+modulated branch used 64 identity channels, with δ = 0.02. Each branch projected
+to 768 dimensions. During training, adjacent horizontal positions could be swapped
+within a patch. Patches were selected with probability 0.5 and neighbouring pairs
+with probability 0.3. Gene identities and their expression values moved together. The
+permutations were disabled at inference.
+Each cell generated two global views with patch-mask fractions sampled from
+[0, 0.1], and six local views with fractions from [0.35, 0.8]. Additional global/local
+augmentation parameters are summarized in Table S.3.
+Table S.3: Global and local view augmentation parameters.
+Augmentation
+Global views
+Local views
+Expression noise scale
+0.005
+0.01
+Expression dropout base
+0.005
+0.02
+Expression dropout amplitude
+0.03
+0.12
+Gamma range
+0.97–1.03
+0.93–1.07
+Patch bias standard deviation
+0.03
+0.08
+64
+
+
+The additional gene-mask ratio was 0.01. Patch masking propagated to the visi-
+bility channel. Shape augmentation, cropping, global layout augmentation and image
+mixing were disabled.
+S.2.6 Projector and Gaussian regularization
+The cellular projector used hidden width 1,024 and output dimension 256. SIGReg
+pooled the view and cell axes before evaluating the projected distribution. For random
+unit direction dr, its empirical characteristic function was
+bφr(t) =
+1
+BV
+B
+X
+c=1
+V
+X
+v=1
+exp
+
+it dT
+r z(v)
+c
+
+.
+(S.8)
+The regularizer compared this function with the standard Gaussian characteristic
+function:
+LSIGReg = BV
+R
+R
+X
+r=1
+Z 3
+0
+2e−t2/2 bφr(t) −e−t2/2
+2
+dt.
+(S.9)
+We used R = 1, 024 directions and trapezoidal integration at 17 equally spaced
+points. Characteristic-function moments were aggregated across all training devices,
+pooling views and cells for the regularization objective.
+S.2.7 Decoder, likelihood and expression weighting
+The decoder used hidden dimension 512, eight attention heads and three cross-
+attention blocks. Patch context was read from the final four encoder layers and pooled
+into 32 spatial bins. The cellular summary was appended as an additional context
+token. Empty context bins were excluded from attention.
+With fixed context keys and values, decoder block ℓupdated its contextual state as
+u(0)
+cg = 0,
+b(ℓ)
+cg = u(ℓ−1)
+cg
++ MHAℓ
+
+qg + u(ℓ−1)
+cg
+, Kc, Vc
+
+,
+u(ℓ)
+cg = b(ℓ)
+cg + FFNℓ
+
+LNℓ(b(ℓ)
+cg )
+
+.
+(S.10)
+The final state was normalized before the interaction projection in equation (4).
+Separate expression-output branches produced a raw magnitude acg and a rate param-
+eter bcg. For the compound Poisson–exponential model, parameters were obtained
+using
+Mcg = softplus50(acg) + ϵ,
+λcg = softplus(bcg) + ϵ,
+pcg = 1 −e−λcg,
+θcg = pcgMcg
+λcg
+,
+bxcg = pcgMcg,
+(S.11)
+65
+
+
+where ϵ = 10−6 and softplus50 denotes softplus with sharpness parameter 50.
+Mcg is the conditional positive-expression mean, and pcg is the probability of positive
+expression.
+The compound distribution has mass e−λ at zero. For positive y, its density is
+f(y | λ, θ) = e−λ−y/θ
+s
+λ
+θy I1
+ 
+2
+r
+λy
+θ
+!
+,
+y > 0,
+(S.12)
+where I1 denotes the modified Bessel function of the first kind. The likelihood was
+evaluated using numerically stabilized Bessel functions.
+Targets were drawn from measured genes hidden in each encoder view. Up to 256
+targets with scaled expression greater than 0.03 and 256 measured-zero targets were
+sampled per cell. The likelihood used their retained expression values. For sampling
+stratum s, let Ncs be the candidate count and Kcs the sampled count. The corrected
+likelihood was
+LCPE = −
+1
+Bvalid
+X
+c∈Bvalid
+1
+P
+s N cs
+X
+s
+X
+g∈Tcs
+N cs
+Kcs
+log f(xcg | λcg, θcg),
+(S.13)
+with N cs
+= max(Ncs, 1) and Kcs
+= max(Kcs, 1), matching the numerical
+treatment of empty strata. Losses were averaged equally over valid cells and views.
+Positive-expression protection used the raw magnitude output acg and frozen
+source-conditioned gene statistics. For positive target set T +
+c , a reliable standardized
+deviation was clipped and squared:
+dcg =
+
+clip
+|xcg −µsg|
+|σsg| + ϵ , 0, 1
+2
+,
+ωcg ∝
+ρ
+|T +
+c | + (1 −ρ)
+dcg
+P
+j∈T +
+c dcj + ϵ,
+Ldev =
+1
+B+
+X
+c∈B+
+X
+g∈T +
+c
+ωcg(acg −xcg)2.
+(S.14)
+Here, s indexes the source dataset, ρ = 0.25, and target weights were normalized
+to sum to one within each cell. Unreliable statistics received no deviation contribu-
+tion; cells without reliable deviation signal used uniform weights. Source-specific gene
+statistics were used when available; otherwise, gene-level estimates were used. These
+statistics entered loss weighting only.
+S.2.8 Architecture and optimization
+The selected model used a base transformer with 768-dimensional hidden states.
+Its gene identity table and principal-component basis were frozen. The learned
+input projections, encoder, projector and expression decoder were optimized jointly.
+Architecture and optimization settings are summarized in Table S.4.
+66
+
+
+Table S.4: Model architecture and optimization settings.
+Component or setting
+Value
+Transcriptome image
+384 × 384
+Patch size
+16 × 16
+Encoder hidden dimension
+768
+Encoder depth / attention heads
+12 / 12
+Mean and modulated identity dimensions
+64 each
+Projector hidden / output dimensions
+1,024 / 256
+Decoder hidden dimension / blocks / heads
+512 / 3 / 8
+Pooled patch context tokens
+32
+Encoder layers supplying decoder patch context
+Final 4
+Stochastic depth
+0.1
+Devices
+8 GPUs
+Cells per device
+74
+Effective batch size
+592
+Gradient accumulation
+1
+Precision
+bfloat16 mixed preci-
+sion
+Optimizer
+AdamW [64]
+Peak learning rate
+2 × 10−5
+Minimum learning rate
+5 × 10−7
+Weight decay
+0.05
+Gradient norm clipping
+1
+Training ran for 14 days with a cosine learning-rate schedule, including learning-
+rate warm-up and delayed decoder activation with a separate decoder loss-weight
+warm-up. The final saved checkpoint was used for all analyses.
+S.2.9 Cellular representation evaluation
+Representations and classification heads. Annotation, rare-population recogni-
+tion and experimental-state classification used the 768-dimensional feature
+rc = LN
+ 
+L
+X
+ℓ=L−7
+c(ℓ)
+c
+!
+,
+uc = Standardizetrain(rc),
+byc = arg max
+k
+"
+uT
+c bΣ−1bµk −1
+2 bµT
+k bΣ−1bµk
++ log bπk
+#
+.
+(S.15)
+Here, L is the final encoder block, c(ℓ)
+c
+is its raw CLS state, and bµk and bπk
+are training-estimated class means and empirical priors. bΣ is the shared within-class
+covariance estimated with automatic shrinkage [65]. LDA used a least-squares solution
+67
+
+
+with automatically estimated covariance shrinkage. The Gaussian discriminant read-
+out was motivated by scImagene’s distributional pretraining objective; its covariance
+was estimated from the downstream features rather than fixed to an identity matrix.
+Geneformer V2, scGPT, scLong, scPRINT-2, TranscriptFormer and UCE supplied
+their respective frozen cell representations. Their classification heads used logistic
+regression with inverse regularization strength C = 1, L-BFGS optimization, a maxi-
+mum of 2,000 iterations, no class weighting. Feature means and standard deviations
+were estimated independently within every training fold. External annotation and
+state recognition retained the classifier settings established for Tabula Sapiens. scLong
+representations were obtained by mean-pooling its merged gene decodings over its
+27,000-gene axis, excluding the terminal padding position.
+Tabula Sapiens annotation. The complete Tabula Sapiens input contained
+549,018 labelled cells after excluding nine cells without valid labels. Tissue-conditioned
+leave-one-donor-out evaluation scored 276,385 cells across 18 tissues and 49 eligible
+tissue–donor folds. Each fold fitted its classifier on the remaining donors in that tissue;
+score definitions and tissue-level aggregation are given in S.2.3.
+External cohorts and rare populations. The kidney cohort comprised 107,344
+cells, 45 donors and 57 author-defined labels. The lung cohort comprised 69,650 cells,
+three donors and 59 labels. Each cohort used three fixed, label-blind GroupKFold
+partitions over donors, with every cell tested once. Classification used the same scIm-
+agene CLS aggregation and LDA head described above; comparison models retained
+logistic regression.
+The union of eligible labels contained 34 kidney and 17 lung populations. Rare-
+label criteria and fold-level score aggregation are specified in S.2.3.
+Experimental cellular states. CD4 polarization used 9,777 cells from four
+donors, restricted to the author-defined Naive starting population, 10X technical batch
+1 and Th0, Th2 or Th17 conditions. Four leave-one-donor-out folds evaluated the
+original experimental condition labels. WI-38 evaluation used 14,457 cells from six
+culture libraries spanning RS, IR and ETO induction. Source quality control required
+at least 300 detected genes, 1,000–120,000 counts and a mitochondrial fraction below
+12%. Two folds held out one complete library per condition, swapping the Rep1 and
+Rep2 groups. The WI-38 replication unit was a culture/library from the same cell line.
+Both tasks used the frozen final-eight-layer representation, training-fitted stan-
+dardization and LDA for scImagene, with logistic regression for the six comparators.
+State-classification metrics and fold summaries are specified in S.2.3. An exploratory
+kidney analysis evaluated frozen features from 3,262 author-defined PT-S1/S2 cells
+from 26 donors, comparing AKI and CKD across three state-stratified donor folds. It
+used the same heads and was reported separately from the primary experimental-state
+cohorts.
+Integration. The full Tabula Sapiens visualization index comprised 692,102 cells.
+The analysis included 682,741 labelled cells from 26 eligible multi-donor tissues. scIm-
+agene supplied the raw CLS state from the sixth block counted from the output,
+without additional feature postprocessing. Feature and graph settings were selected
+68
+
+
+using 13 tuning tissues and then fixed for evaluation, including 13 internally held-
+out tissues. The graph used 90 Euclidean neighbours, Leiden resolution 0.05. All
+comparison models used their respective frozen features with the same graph settings.
+UMAP visualization used PCA with 50 components, 15 neighbours, minimum
+distance 0.05, 200 epochs. Kidney and lung integration reused the selected feature and
+graph protocol; external metric computation used at most 100,000 cells per cohort.
+Classification continued to use the final-eight-layer features on the complete cohorts.
+Reference mapping. The reported mapping comparison included scImagene,
+UCE, TranscriptFormer and scPRINT-2. scImagene used the raw CLS state from
+the eighth block counted from the output. All four methods shared cosine distance
+and inverse-distance weighting; within-species identification and cross-species transfer
+used the distinct protocols below.
+Within-species evaluation assigned approximately 80% of retained cells to reference
+and 20% to query. Shared settings were 10 neighbours and class-frequency correc-
+tion exponent γ = 0.25, selected by reference-internal cross-validation on scImagene
+and then fixed for all four methods. Evaluation was repeated five times with differ-
+ent random seeds, using matched reference and query splits across all four methods.
+Queries were sampled by stratification by author-provided labels from the previ-
+ously defined test partition; prior parameter-selection validation cells were excluded
+from these query pools. Reference and query cell identifiers were disjoint. Standard-
+ization and class frequencies were estimated from the new reference partition. The
+fine-label summaries included three immune, eleven germline and four plant species
+whose author-provided labels refined the corresponding coarse labels. Author-provided
+labels at coarse resolution were reported separately in the species-level analysis. The
+repeated splits overlapped in cells, and their SD described split sensitivity. Root-atlas
+and GSE268881 analyses of the same biological cells used identical reference and query
+membership.
+Cross-species mapping used three mutually exclusive partitions within each
+species, stratified by harmonized coarse cell labels: approximately 50% reference, 25%
+validation and 25% test cells. The reference partition contained at least one cell of each
+retained class; class-wise integer rounding produced small deviations from the nomi-
+nal fractions. For each ordered source–target pair, only source-reference cells supplied
+kNN neighbours and labels. A separate standardization transform was fitted for each
+species using that species’ reference features. Thus, target-reference features informed
+target-domain normalization without using their labels, while target validation and
+test cells did not contribute to the fitted normalization parameters.
+Shared kNN settings were selected from 10, 30 or 100 neighbours, uniform or
+inverse-distance weights, and class-frequency correction exponents of 0 or 0.5. Selec-
+tion followed the validation macro-F1 criterion summarized in S.2.3. With these
+settings fixed, scImagene’s final-eight-layer representation and single raw CLS states
+from the sixth and eighth blocks counted from the output were compared using the
+validation cells. The selected configuration used the eighth-from-last raw CLS state,
+30 neighbours, inverse-distance weighting and γ = 0.5. For class k, the neighbour-vote
+score was multiplied by π−γ
+k , where πk was its frequency in the source reference parti-
+tion. Validation cells were not added to the reference set for final testing. Additional
+69
+
+
+plant tasks retained this selected configuration without further parameter selection;
+their validation partitions were reserved and did not enter the reported test scores.
+Final cross-species eligibility, coverage and score aggregation followed S.2.3. These
+analyses evaluate transfer with access to unlabelled target-reference features. The
+cells had been examined in earlier analyses, so the results represent internal cell-level
+holdout evaluation rather than an independent external test. Ordered directions share
+species and were not treated as independent biological replicates.
+Table S.5 gives the actual retained reference, validation and test counts for each
+cross-species mapping cohort. Membership was mutually exclusive and exhaustive
+within each row; the nominal 50:25:25 proportions reflect class-wise stratification and
+integer rounding. Root-atlas entries under the atlas name and GSE268881 share the
+same cells and partitions and are represented once.
+Table S.5: Reference, validation and test partitions for cross-species
+mapping.
+Atlas
+Species
+Retained
+profiles
+Reference
+Validation
+Test
+Brassicaceae
+roots
+(GSE268881)
+Arabidopsis
+thaliana
+47,033
+23,514
+11,757
+11,762
+Brassicaceae
+roots
+(GSE268881)
+Camelina
+sativa
+27,485
+13,740
+6,871
+6,874
+Brassicaceae
+roots
+(GSE268881)
+Eutrema
+salsugineum
+33,975
+16,984
+8,492
+8,499
+Brassicaceae
+roots
+(GSE268881)
+Schrenkiella
+parvula
+36,021
+18,008
+9,005
+9,008
+Brassicaceae
+roots
+(GSE268881)
+Sisymbrium
+irio
+40,437
+20,216
+10,109
+10,112
+Circulating
+immune cells
+Whitespotted
+bamboo shark
+1,580
+789
+394
+397
+Circulating
+immune cells
+Ciona
+intestinalis
+2,016
+1,008
+503
+505
+Circulating
+immune cells
+Half-smooth
+tongue sole
+6,567
+3,282
+1,640
+1,645
+Circulating
+immune cells
+Human
+3,005
+1,501
+749
+755
+Circulating
+immune cells
+Pacific
+white
+shrimp
+4,625
+2,312
+1,156
+1,157
+Circulating
+immune cells
+Rhesus
+macaque
+984
+491
+246
+247
+Circulating
+immune cells
+Chinese
+softshell turtle
+950
+472
+238
+240
+70
+
+
+Atlas
+Species
+Retained
+profiles
+Reference
+Validation
+Test
+Testis
+Common
+mar-
+moset
+6,384
+3,191
+1,596
+1,597
+Testis
+Chicken
+8,413
+4,205
+2,103
+2,105
+Testis
+Gorilla
+7,323
+3,661
+1,830
+1,832
+Testis
+Human
+16,011
+8,004
+4,002
+4,005
+Testis
+Rhesus
+macaque
+7,618
+3,808
+1,903
+1,907
+Testis
+Opossum
+9,926
+4,962
+2,481
+2,483
+Testis
+Mouse
+5,264
+2,630
+1,315
+1,319
+Testis
+Gibbon
+6,572
+3,285
+1,642
+1,645
+Testis
+Platypus
+6,751
+3,375
+1,687
+1,689
+Testis
+Bonobo
+9,873
+4,936
+2,467
+2,470
+Testis
+Chimpanzee
+12,329
+6,164
+3,081
+3,084
+Brassicaceae
+multi-tissue
+Arabidopsis
+lyrata
+13,495
+6,744
+3,372
+3,379
+Brassicaceae
+multi-tissue
+Arabidopsis
+thaliana
+42,108
+21,049
+10,524
+10,535
+Brassicaceae
+multi-tissue
+Brassica
+oleracea
+7,682
+3,837
+1,919
+1,926
+Brassicaceae
+multi-tissue
+Capsella
+rubella
+22,730
+11,360
+5,679
+5,691
+Expression-input diagnostics and visualization. Kidney input diagnostics
+retained the model weights, complete gene identities, measurement masks, pixel
+layout, cell identifiers and donor folds. Four settings used all expression, zeroed non-
+protein-coding expression, zeroed LINC01187 and LINC00996, or zeroed the matched
+coding controls PHLDA2 and BDNF. Coding controls were selected from the near-
+est 50 genes by mean expression and detection rate. These experiments refitted the
+same training-fold LDA head on the resulting frozen features. State and rare-cell
+UMAP overlays used the evaluated CLS features; displayed RNA values came from
+the original measurements.
+S.2.10 Withheld-expression evaluation
+Visible inputs and target truth. Frozen gene-completion analyses used the pre-
+trained expression decoder; reference-based adaptation was evaluated separately as
+described below. For each evaluation, visible genes Oc and hidden targets Tc were
+fixed before inference. Targets were absent from encoder expression, gene identifiers
+and measurement masks, while their DNA-derived identities were supplied to decoder
+queries. Input normalization used only counts that actually entered the encoder:
+71
+
+
+Lobs
+c
+=
+X
+g∈Oc
+ncg,
+xinput
+cg
+= 1
+6 clip
+
+log
+
+1 + 104 ncg
+Lobs
+c
+
+, 0, 6
+
+,
+ycg = log
+
+1 + 104 ncg
+Lassay
+c
+
+.
+(S.16)
+Oc contains supported, measured, visible encoder genes, including measured zeros.
+Lassay
+c
+is the full measured library used only to construct the separate scoring truth
+ycg. Predictions were returned to the log1p CP10k scale using the fixed training range.
+Frozen scImagene predictions used no task-specific fitting or truth-based calibration.
+Human total-RNA completion. TotalX PBMC and developing human brain
+each supplied 5,000 fixed query cells. Coding-panel and full-assay evaluations used five
+complementary gene partitions, with approximately four fifths of genes visible and one
+fifth withheld in each pass. Each gene was scored from the pass in which it was hidden;
+the query cells were shared across passes. A separate coding-to-non-protein-coding
+setting retained all measured protein-coding context and simultaneously withheld all
+non-protein-coding targets.
+Non-coding RNA summaries included annotated lncRNAs and the explicitly
+defined other-RNA biotypes. Other non-protein-coding features, including pseudogene
+categories outside this RNA scope, were tracked separately. Native molecular cover-
+age was assessed using assay annotations and supported identities before score-based
+filtering.
+Output-component controls. Within the full-assay evaluation, gene-wise scores
+for conditional magnitude, complete prediction and a one-UMI control were aligned
+by dataset, target and gene partition. The control was uc = min{log(1+104/Lobs
+c
+), 6}.
+Metric eligibility and uncertainty were handled as described in S.2.3. These full-
+assay diagnostics were reported separately from the common-coding-panel model
+comparison; no additional model inference or target-based calibration was performed.
+Comparison methods and output scale. scGPT supplied frozen expression
+predictions using 51-bin visible-expression input and at most 600 nonzero context
+genes. Its inverse-bin predictions were already on the log1p CP10k scale. scPRINT-2
+supplied model-generated counts from visible raw-count context. Its prediction library
+combined observed counts and generated target counts before conversion to log1p
+CP10k. These human comparisons used the same measured truth and target identifiers
+as scImagene within supported vocabularies. scLong retained its released expression-
+regression head, and CellFM retained the frozen 800-million-parameter model’s scalar
+expression decoder without target-based recalibration. Multispecies scPRINT-2 used
+observed-input-depth normalization, as specified in S.2.2.
+Ridge and kNN used target-expression supervision from a reference partition
+disjoint from the query cells. Up to 10,000 reference cells were sampled without
+replacement. Feature selection retained at most 512 high-variance visible genes. Ridge
+used training-fitted standardization and α = 100; kNN used cosine similarity and
+k = 10, with nonnegative similarities normalized to sum to one and uniform weights
+when their sum was zero. These methods transferred reference target information to
+72
+
+
+the same held-out queries. A constant reference-mean predictor was retained as a
+baseline.
+Reference-based decoder adaptation. Adaptation started independently from
+the pretrained decoder for each cohort and expression-hiding protocol. The encoder,
+DNA-derived gene identities, image layout and context pooling remained fixed.
+Decoder parameters were updated using the expression objective described in S.2.7,
+with target expression supplied only by non-test reference cells. Hidden targets
+remained absent from the corresponding encoder inputs. Ridge and kNN used the
+same reference-cell membership as the adapted decoder.
+For the primary human coding-to-non-protein-coding comparison, 500 cells were
+used for decoder training. A separate set of 2,000 non-test validation cells per cohort
+was excluded from training and used to select the number of epochs under the
+expression-reconstruction criterion in S.2.3; the selected duration was 30 epochs.
+Thus, 500 denotes the training-reference budget, with an additional labelled vali-
+dation set used for model selection. Decoder optimization used a learning rate of
+2 × 10−5, batches of 256 cells. The complete predefined test partition was excluded
+from development, and final evaluation used the original 5,000 query cells per cohort.
+Multispecies adaptation used 500 non-test reference cells with the fixed 30-epoch
+duration. Under gene-axis five-fold evaluation, each reference cell was assigned one
+expression-independent hidden fold, and all folds trained a shared cohort decoder.
+A gene contributed supervision only when hidden from that cell’s encoder input.
+Receiving target-expression labels during adaptation was distinguished from frozen
+prediction of genes lacking expression-pretraining exposure.
+Reference-size sensitivity analysis used 500, 2,000, 10,000 or all available non-
+test reference cells. Smaller human reference budgets retained the separate 2,000-
+cell validation cohort for epoch selection. After selection was fixed, full-reference fits
+used all 39,970 PBMC or 225,765 brain non-test cells. These are completion-reference
+counts; annotation training retained its separate partitions.
+Multispecies completion and exposure status. Five gene partitions were
+evaluated separately in chimpanzee (1,849 cells), bonobo (1,481), gorilla (1,098),
+macaque (1,143), mouse (790), platypus (1,012) and chicken (1,262). Multispecies
+scoring followed the all-cell and measured-positive criteria in S.2.3. Each target was
+matched to its actual decoder gene identity; a species-independent identifier suﬀix
+was accepted only when it uniquely identified a supported gene.
+Expression-pretraining exposure was assigned by matching the actual decoder
+gene identity to genes with measured expression exposure during pretraining. Genes
+represented by sequence identity but lacking measured expression exposure were dis-
+tinguished from identities absent from the pretraining gene collection. Bonobo targets
+decoded through previously active chimpanzee identities were assigned the exposure
+status of those actual identities. The current scPRINT-2 comparisons used a common
+target set fixed by exact gene-identity support before examining prediction scores.
+Support included pretrained identities and species identities added through the oﬀi-
+cial frozen gene encoder. The common expression-unseen subsets comprised 2,108
+bonobo, 12 mouse and 533 chicken genes. This exposure definition refers specifically
+to scImagene pretraining.
+73
+
+
+Direct spatial validation. One Xenium Prime 5K mouse-brain coronal section
+supplied 63,173 cells. A fixed uniform sample of 12,000 cells was drawn with-
+out replacement. Twenty prespecified lineage markers were simultaneously withheld
+from encoder expression, identities and measurement masks. The remaining 4,986
+supported measured genes supplied observed context under equation (S.16).
+Complete predictions were evaluated against direct measurements of the same
+markers in the same 12,000 cells. Original micrometre coordinates were used for paired
+expression maps and uncertainty estimation. Model input consisted of expression and
+gene identity. Slc17a7, Gad1, Aqp4 and Mog were the prespecified main display mark-
+ers. A smaller-panel sensitivity analysis used the same cells and targets with 1,000
+randomly sampled visible non-target genes.
+Reference-based spatial prediction used the remaining 51,173 non-query cells
+from the same section. Decoder adaptation, ridge and kNN therefore received same-
+section reference measurements, with all 12,000 query identities excluded. Coordinates
+supplied visualization and uncertainty estimation rather than model input.
+S.2.11 Gene associations, molecular networks and non-coding
+module recovery
+Associations used the frozen 512-dimensional final interaction state in equation (4).
+For each cell population, gene features were averaged across cells, centred across the
+complete decoder panel and L2-normalized before cosine scoring, as in equation (7).
+Static learned identity and expression-based comparators were evaluated as specified
+in S.2.3.
+The principal association cohorts included TotalX PBMC (1,671 selected cells
+across 17 types), TotalX brain (3,700 across 37 types), PurifiedPBMC (1,000 across
+ten types) and perirhinal cortex (720 across ten types). At most 100 cells were sampled
+per annotated type. Measured genes with supported molecular identities supplied the
+encoder context. Already log-transformed sources retained their supplied values before
+clipping and image rescaling; raw-count sources used library normalization and log1p
+transformation.
+Hidden-panel module recovery. The fixed PBMC decoder panel contained
+1,020 genes, including 373 non-coding candidates. Expression values and measurement
+masks were set to zero at every panel target location; the fixed pixel identity layout
+was retained. Thirty members of the published TotalX PBMC module were randomly
+selected as seeds. Removing seeds left 343 candidates, comprising 117 held-out module
+members and 226 background candidates.
+Observed-context neighbourhoods. Pair and programme association analyses
+retained measured query expression. Decoder panels combined reference-programme
+genes, fixed queries, the established non-coding pool, up to 2,048 frequently detected
+genes and up to 512 non-coding genes. Eligibility required detection in at least five
+cells of the analysed type. Each query was excluded from its own ranking. All eligible
+cells contributed to the population mean and expression comparator, including cells
+with zero query expression.
+Cross-dataset comparisons mapped discovery genes into the second cohort and
+repeated the same feature aggregation and cosine scoring. For HLA-DRA and CD3D,
+74
+
+
+the discovery top-20 neighbours were fixed before external recurrence evaluation.
+Supplementary complex retrieval queried each of the eight CCT members separately
+in HEK293T and untreated Huh7. Top-20 recall followed the common definition in
+S.2.3. Additional complex retrieval analyses included the MCM2–7 and RNA-exosome
+reference screens.
+Gene-network construction. The molecular network used 126 TotalX CD14-
+positive monocytes, matched by assay protocol to the primary PBMC comparisons.
+The encoder received all 36,499 measured genes supported by the model, including
+expression of the queried genes. Source log1p expression was clipped to [0, 6] and
+divided by 6. The 3,279-gene decoder panel was the deduplicated union of the 2,048
+protein-coding genes and 512 genes of other annotated biotypes with the highest
+detection rates across 1,026 selected PBMC cells, all 1,625 supported protein-coding
+genes detected in at least seven of the 126 platelets, and supported platelet-module
+reference genes and prespecified queries or markers, including SMANTIS, LINC01750,
+SMILR, GP9 and ITGA2B. Genes required a supported molecular identity and an
+unambiguous gene-symbol and pixel assignment. The decoder panel defined network
+nodes; it did not restrict the genes observed by the encoder.
+For each gene, the final 512-dimensional interaction states were averaged across
+the 126 monocytes, centred across all 3,279 panel genes and L2-normalized, following
+equation (7). Let A(g, j) denote the resulting cosine similarity, and let N15(g) contain
+the 15 highest-scoring other genes. An undirected edge was retained when its cosine
+was positive and either gene selected the other:
+wgj =
+(
+A(g, j),
+A(g, j) > 0 and
+
+j ∈N15(g) or g ∈N15(j)
+
+,
+0,
+otherwise,
+g̸ = j.
+(S.17)
+Duplicate undirected edges were merged, yielding 36,638 links. Communities
+were identified by weighted Leiden optimization [? ] of the Reichardt–Bornholdt
+configuration-model objective [? ], using cosine edge weights, resolution 1.0, with iter-
+ations continued to convergence. This yielded eight communities. Network display
+coordinates used a weighted Fruchterman–Reingold layout [? ] with 500 iterations.
+Expression correlations and pathway annotations did not determine edges, community
+assignments or graph coordinates.
+Community enrichment and expression scores. Community annotations and
+expression-based scores followed the common definitions and statistical procedures in
+S.2.3.
+Network sensitivity analyses. Sensitivity analyses used the same 126 mono-
+cytes and two disjoint 63-cell halves, with one within-cell expression-value permuta-
+tion. Correlation, matched non-edge and half-cell comparison statistics followed S.2.3.
+These analyses characterize association scores within the sampled population; they
+do not estimate independent biological replication, de novo graph recovery or causal
+regulation.
+Exploratory PBMC cell-context cases. The frozen model encoded 126
+platelets and 300 cells each from B Naive, T Naive and CD14-positive monocyte
+75
+
+
+populations. Primary comparisons matched each population to 126 cells with 8
+10X-dUTSO, 74 SSTX and 44 SSTX-pA+ profiles. All 36,499 supported measured
+genes supplied encoder context, including query expression; the decoder panel con-
+tained 3,279 genes. A common pool of 2,736 protein-coding candidates required
+measured-positive expression in at least seven cells of any primary population. Cosine
+similarities between the learned 64-dimensional gene-identity vectors provided a
+context-independent comparator.
+The ncRNA panel was screened post hoc for population-preferred neighbours. Pri-
+oritization used top-20 model ranks, query/target detection, contrasts with the other
+populations, ranks relative to expression and identity, and preservation in cell halves
+and the two larger protocol strata. Four representative cases were displayed in Fig.
+5g,h: MALAT1–PF4, MALAT1–LYZ, MALAT1–AFF3 and LINC00486–ITGA2B.
+Partner programme assignments were supported by external primary literature [53–
+55]. A single within-cell expression-value-shuffled input realization was re-encoded
+with the same frozen model. Uncertainty used the within-protocol cell-bootstrap pro-
+cedure in S.2.3. Technical analyses used disjoint 63-cell halves, protocol subsets and
+expanded B/T/monocyte populations of 300 cells; platelets remained at 126. The
+candidate pool remained fixed.
+S.2.12 Host-cell states and programme coherence
+The host-cell analysis used 500 untreated and 500 DENV-exposed Huh7 profiles,
+with host RNA providing the expression context. Frozen CLS features supplied cel-
+lular representations for UMAP visualization. Programme scores were constructed
+by standardizing each measured host gene across the 1,000 selected cells and averag-
+ing the relevant signature members; the quiescent-lncRNA score subtracted the mean
+down-signature score from the mean up-signature score.
+Within the 500 exposed profiles, the five scores for active UPR stress, antiviral
+inflammation, quiescent lncRNA, MAPK signalling and chromatin regulation were
+standardized across cells and clustered using k-means with two clusters, 10 initializa-
+tions. The cluster with the higher active-UPR-stress score was labelled active-like; the
+other was labelled quiescent-like, yielding 267 and 233 cells, respectively. Because the
+host-only matrix lacked viral-load measurements, these groups approximate the pub-
+lished infection states using host expression signatures. Separation was measured in
+the original high-dimensional CLS space, with UMAP used for display. This analysis
+did not fit the LDA state-recognition head described in S.2.9.
+Frozen final interaction features were extracted separately for each cell group.
+Programme coherence, its expression comparator and background calibration followed
+S.2.3.
+S.2.13 Developmental and neural programme retrieval
+Published programme members provided reference sets for query-based retrieval.
+scImagene supplied frozen final interaction states, averaged within each biological
+context and centred across the entire decoder panel. All mapped measured RNA con-
+tributed to encoder context, including the non-coding query. Decoder panels defined
+76
+
+
+the queried and ranked genes; they did not restrict the full encoder input to those
+panel genes. Candidate eligibility and retrieval scoring followed S.2.3.
+Mouse developmental programmes (Fig. 5j). VASA-seq analysis used a
+2,695-gene decoder panel. The main query contexts comprised Foxl2os in 100 E8.5
+mesenchymal cells, C130021I20Rik in 100 E8.5 neural/ectodermal cells, and Gm50321
+in 122 early vascular-lineage cells. The vascular context contained three E6.5 and 119
+E7.5 cells.
+Programme references came from the original VASA-seq Supplementary Table 5.
+Coding markers were filtered by adjusted P < 0.01 and log fold change greater than 1,
+followed by the top 60 genes in the published marker-score ranking. Candidate cover-
+age retained 60/2,149 members/candidates for Foxl2os, 60/2,152 for C130021I20Rik
+and 46/2,117 for Gm50321. The VASA source contributed to pretraining; this analysis
+assessed programme retrieval in the specified biological contexts.
+For within-cohort stability, sorted cell indices were assigned alternately to two
+disjoint halves. Foxl2os and C130021I20Rik used 50/50 cells; Gm50321 used 61/61.
+Each half’s gene features were averaged and centred independently, and expression
+correlations were recomputed on the identical half-cell set. Candidate and reference
+sets remained fixed to the full-cohort definitions.
+Human neural programme (Fig. 5k). GSE150062 analysis used all 3,423
+author-verified non-targeting control cells and a 2,615-gene decoder panel. SERTAD4-
+AS1 was measured in 13 cells; all 3,423 cells contributed to gene representations and
+expression correlations. Input expression was already log-transformed and retained its
+original normalization before clipping to [0, 6] and dividing by 6.
+The published NSC density-state-12 marker table defined the programme refer-
+ence. Markers were filtered by adjusted P < 0.01 and average log2 fold change greater
+than 0.25, followed by the top 60 in the author-provided fold-change ranking. Coverage
+retained 59 members among 2,082 eligible coding candidates. The original perturba-
+tion study supplied the biological reference; model inference used the non-targeting
+controls with observed query RNA.
+77

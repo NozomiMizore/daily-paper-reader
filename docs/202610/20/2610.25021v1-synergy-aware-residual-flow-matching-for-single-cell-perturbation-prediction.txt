@@ -1,0 +1,425 @@
+Title: Synergy-Aware Residual Flow Matching for Single-Cell Perturbation Prediction
+
+URL Source: https://arxiv.org/pdf/2610.25021v1
+
+Published Time: Tue, 20 Oct 2026 01:19:15 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Synergy-Aware Residual Flow Matching for Single-Cell Perturbation Prediction 
+
+Jingrui Wu 
+
+Department of Statistics Rice University 
+
+Houston, TX, USA 
+
+Wangyun Dan 
+
+Department of Biostatistics and Bioinformatics Emory University 
+
+Atlanta, GA, USA 
+
+Abstract —Predicting single-cell responses to genetic and chem-ical perturbations is important for understanding regulatory mechanisms and prioritizing therapeutic interventions. Exist-ing methods have made progress by modeling perturbation-conditioned expression shifts with neural networks, graph priors, foundation-model representations, or distributional generative models. However, combinatorial perturbation prediction remains challenging because much of the response can be explained by additive single-perturbation effects, while the biologically infor-mative signal often lies in a smaller non-additive residual induced by perturbation interactions. Directly generating the full post-perturbation expression profile may therefore allocate substantial capacity to the dominant additive component and underempha-size synergy-specific structure. To address this issue, we propose SynGeneFlow, a synergy-aware flow matching framework that anchors the source distribution at an additive prior and learns a residual flow toward the true perturbed state. SynGeneFlow further incorporates perturbation-conditioned gene interaction modeling, where a static gene-gene mask provides biological structure and a perturbation-dependent deformation bias dy-namically modulates gene-gene coupling. To preserve population-level response structure, we align both endpoint distributions and biological residual distributions with MMD-based regularization. We evaluate SynGeneFlow on genetic and drug perturbation benchmarks under observed-single, held-out, and cross-modality settings. The results demonstrate that residualizing flow matching around additive perturbation effects provides a biologically grounded and robust framework for single-cell perturbation response prediction. 
+
+Index Terms —Single-cell perturbation prediction, flow match-ing, combinatorial perturbation synergy. 
+
+I. I NTRODUCTION 
+
+Predicting cellular responses to genetic or chemical pertur-bations at single-cell resolution is a central problem in func-tional genomics, drug discovery, and therapeutic design [1], [2]. Accurate in silico perturbation models can help uncover regulatory mechanisms, identify candidate intervention targets, and reduce the cost of large-scale experimental screening [3], [4]. This need becomes particularly urgent for combinatorial perturbations, where the number of possible gene or drug combinations grows rapidly as the perturbation space ex-pands [5], [6]. Since exhaustive profiling of all combinations is experimentally infeasible, a useful model must generalize from observed perturbations to unseen combinations while preserving the biological structure of cellular responses. A key difficulty is that the response to multiple perturbations is not simply the sum of individual effects. Recent benchmarks show that simple mean-based or additive baselines can perform surprisingly well against more complex neural models [7], [8], [4]. This suggests that a large part of the observed response can be approximated by additive components inherited from single perturbations. However, the scientifically important sig-nal often lies in the remaining non-additive residual, which reflects interactions between perturbations and is commonly interpreted as combinatorial synergy. Such synergy is crucial for understanding genetic interactions, drug combinations, and context-dependent regulatory mechanisms [9], [5]. Therefore, a model that only reconstructs the full perturbed expression profile may spend most of its capacity on the dominant additive signal while underrepresenting the smaller but more informative non-additive response. Single-cell perturbation data further make this problem challenging. Because RNA sequencing is destructive, the same cell cannot be observed before and after perturbation, making the data inherently unpaired and preventing direct cell-level supervision. In addition, single-cell expression profiles are sparse, zero-inflated, and affected by technical noise. Dropout can create missing values that do not correspond to true biological absence [10], while batch effects and sequencing-depth variation can distort gene-level dependencies [11]. These issues make it difficult to distinguish true perturbation-induced changes from technical artifacts. Moreover, perturbation ef-fects are nonlinear and context-dependent [12], [13]. A static gene co-expression graph can provide useful biological prior knowledge, but it only describes an average dependency pattern. Under different perturbation contexts, the effective coupling between the same pair of genes may be strengthened, weakened, or redirected. Models that treat genes as indepen-dent features, or rely only on fixed gene-gene priors, may therefore fail to capture the dynamic regulatory rewiring that gives rise to non-additive combinatorial responses. We propose SynGeneFlow , a synergy-aware generative framework for single-cell perturbation prediction based on conditional flow matching. The central idea of SynGeneFlow is to model non-additive synergy explicitly rather than treating it as an implicit by-product of full-profile generation. At the representation level, SynGeneFlow introduces a perturbation-conditioned cell encoder. Each gene is represented as a token, and a gene-gene co-expression mask restricts attention to biologically plausible interactions. Instead of using this mask as a fixed graph, the encoder uses the perturbation embedding to generate a dynamic deformation bias for each allowed gene arXiv:2610.25021v1 [cs.LG] 18 Oct 2026 pair. This bias modulates gene-gene attention under the current perturbation, allowing the same gene network to produce different cell representations across perturbation contexts. In this way, SynGeneFlow preserves the denoising benefit of biological structure while capturing perturbation-dependent gene network rewiring. At the generative level, SynGeneFlow introduces synergy-decomposed flow matching. Rather than transporting noise directly to the full perturbed expression profile, we first construct an additive prior from the control expression and estimated single-perturbation effects. The flow then starts from this additive prediction and learns the residual between the additive prior and the true perturbed expression, which corre-sponds to the non-additive synergy that cannot be explained by independent perturbation effects. To preserve distributional fidelity, we combine the flow matching objective [14] with Maximum Mean Discrepancy [15]. Beyond aligning the fi-nal generated expression distribution, we further align the predicted and true synergy-residual distributions, encouraging the model to capture population-level statistics of the non-additive response. We evaluate SynGeneFlow on the Norman combinatorial genetic perturbation dataset [9] and the Com-boSciPlex drug perturbation dataset [6]. Across additive and holdout generalization settings, SynGeneFlow improves the accuracy and robustness of in silico perturbation prediction, demonstrating the benefit of jointly modeling perturbation-conditioned gene rewiring and synergy-residual distributions. II. R ELATED WORK 
+
+A. Foundation Models for Single-Cell Biology. 
+
+Large-scale pretraining has become an increasingly im-portant direction for learning transferable representations of single-cell transcriptomes. Instead of training task-specific models from scratch, foundation-style models aim to learn reusable cell and gene embeddings from large collections of expression profiles. Representative examples include Gene-former, scBERT, scGPT, UCE, and related transformer-based single-cell models [16], [17], [18], [19], [20]. These models typically use masked prediction, tokenized gene representa-tions, or large-scale self-supervised objectives to capture broad transcriptomic structure. As a result, they have shown promise in tasks such as cell-type annotation, representation learning, transfer learning, and biological network prediction. Despite their broad applicability, the role of foundation models in perturbation-response prediction remains less set-tled. Most of these models are pretrained on unperturbed or weakly conditioned expression profiles, where the learning objective mainly encourages the recovery of general tran-scriptomic patterns rather than intervention-specific changes. This mismatch becomes important when the downstream task requires predicting how a cell actively moves from one state to another after a genetic or chemical perturbation. Recent evaluations suggest that foundation models do not consistently outperform simpler baselines in post-perturbation prediction, especially in zero-shot or distribution-shifted settings [7], [8], [21]. Broader efforts toward virtual cells and context-aware perturbation models further highlight that transferable representations alone are insufficient unless the model also captures the causal or functional effect of interventions [22], [23]. These observations motivate methods that go beyond generic cell embeddings and explicitly model perturbation-conditioned response dynamics. 
+
+B. Models Tailored to Perturbation Effects. 
+
+A second line of work directly targets perturbation-response prediction by incorporating perturbation identities, biological priors, uncertainty modeling, or generative transition mecha-nisms. CPA models perturbation composition by embedding drugs, genes, dosages, and cellular contexts in a shared latent space, enabling extrapolation to unseen combinations through learned condition embeddings [2]. GEARS instead injects biological structure into the architecture by using gene-gene prior knowledge, including co-expression and Gene Ontology relationships, to improve generalization to unseen genetic perturbations [5]. PerturbNet and GPerturb further explore probabilistic formulations for predicting responses under un-seen chemical or genetic conditions, aiming to better quan-tify uncertainty and distributional variation [24], [12]. Other works study large-scale chemical or combinatorial perturbation profiling, providing important datasets and benchmarks for evaluating whether models can generalize beyond observed interventions [25], [6], [3]. More recently, generative models have been used to de-scribe perturbation response as a transition between cellular distributions. Methods such as scDiffusion, CellFlow, and UNLASTING formulate this problem using diffusion, flow matching, or bridge-based generative modeling, allowing the model to learn continuous transformations from control states to perturbed states [1], [26], [14], [27], [28]. These approaches move beyond deterministic mean prediction and are better aligned with the unpaired and distributional nature of single-cell perturbation data. At the same time, recent studies have emphasized that evaluation should not only reward mean recovery, since perturbations can change variance, hetero-geneity, and subpopulation structure [29], [30], [4], [31]. In combinatorial settings, an additional difficulty is that many methods compose perturbations implicitly or approximately additively. Such a design can explain the dominant response but may underemphasize the smaller non-additive component produced by interactions between perturbations. SynGeneFlow is designed around this gap: it dynamically modulates gene-gene interactions according to the perturbation context and uses an additive prior only as a starting point, forcing the flow model to focus on the synergy residual rather than reconstructing the entire response from scratch. III. M ETHOD 
+
+We introduce SynGeneFlow , a synergy-aware flow match-ing framework for single-cell perturbation response prediction. Let G = {g1, . . . , g G} denote the set of profiled genes. A control cell is represented by its expression vector cx ∈ RG
+
+> +
+
+,and the corresponding post-perturbation expression is denoted by x1 ∈ RG
+
+> +
+
+. The perturbation condition is encoded as a multi-hot vector cp ∈ { 0, 1}dp , where cp[j] = 1 indicates that the 
+
+j-th genetic or chemical perturbation is applied. We denote the active perturbation set by supp( cp) = {j : cp[j] = 1 }.Because single-cell perturbation data are unpaired, we do not assume that cx and x1 come from the same cell. For each condition, we sample a control cell cx ∼ q0(·) and an independently observed perturbed cell x1 ∼ q1(· | cp). The resulting tuple (cx, c p, x 1) is used for conditional distribution matching, with the objective of learning pθ (x1 | cx, c p) to capture the population-level distribution of perturbed cells and generalize to unseen perturbation combinations. SynGeneFlow is motivated by the structure of combinatorial perturbation responses: a large fraction of the response can often be explained by additive single-perturbation effects, while the biologically informative signal lies in the non-additive residual induced by perturbation interactions. Instead of transporting a generic noise source to the full perturbed profile, SynGeneFlow anchors the source distribution at an additive prior and learns a residual flow toward the true perturbed state. The framework further couples this residu-alized generative process with perturbation-conditioned gene interaction modeling, where a static co-expression mask de-fines biologically plausible edges and a perturbation-dependent deformation bias modulates their strengths. This design links dynamic gene-network rewiring at the representation level with synergy-residual modeling at the generative level. 
+
+A. Synergy-Residual Flow Matching 
+
+Flow matching learns a time-dependent velocity field that transports samples from a source distribution to a target distribution along a continuous path [14]. In standard con-ditional flow matching, the source distribution is often chosen as random noise or another generic base distribution. For combinatorial perturbation prediction, this forces the model to reconstruct the full post-perturbation expression profile, including the dominant additive component. We instead define a biologically anchored source distribution centered at an additive prediction, so that the learned flow focuses on the non-additive response. We first define an additive operator 
+
+A(cx, c p) = cx + X
+
+> j∈supp( cp)
+
+δj , δj = gϕ(epj , c x), (1) where epj ∈ Rd′ 
+
+> p
+
+is the embedding of the j-th perturbation, 
+
+d′ 
+
+> p
+
+is the perturbation embedding dimension, and gϕ is a learnable effect decoder that predicts the single-perturbation shift δj ∈ RG conditioned on the control state. For a multi-perturbation condition, A(cx, c p) sums the estimated effects of all active perturbations and represents the response explained by independent perturbation effects. When single-perturbation profiles are unavailable, the corresponding effect is extrapo-lated from the perturbation embedding through gϕ.To retain within-condition variability, we add a small control-anchored noise term to the additive prior: 
+
+z0 = A(cx, c p) + ϵ, ϵ ∼ qτ (ϵ | cx), (2) where z0 is the stochastic additive anchor, qτ is a control-anchored source noise distribution, and τ controls the noise magnitude. In our implementation, qτ is a diagonal Gaussian whose scale is estimated from training control-cell statistics and fixed at validation and test time. The case τ = 0 recovers the deterministic additive source. Randomness is injected only at the source anchor, while the ODE trajectory conditioned on a sampled z0 remains deterministic. Given a real perturbed expression x1 ∼ q1(· | cx, c p), we define the interpolation path 
+
+xt = (1 − t)z0 + tx 1, t ∼ U (0 , 1) . (3) Under this path, the reference velocity is 
+
+v⋆ = x1 − z0 = x1 − A (cx, c p) − ϵ ≜ sτ . (4) Here sτ is the stochastic transport residual used for veloc-ity supervision. We separately define the biological synergy residual as 
+
+s = x1 − A (cx, c p), (5) which removes the additive component and represents the non-additive perturbation response. The velocity field 
+
+vθ (xt, t, c x, c p) is trained to predict sτ , while the residual dis-tribution alignment in Section III-B is applied to the biological residual s.The corresponding continuous dynamics are 
+
+dX t
+
+dt = vθ (Xt, t, c x, c p), (6) where Xt denotes the generated expression state at time t. The synergy-residual flow matching loss is 
+
+LSFM = E
+
+h
+
+∥vθ (xt, t, c x, c p) − sτ ∥22
+
+i
+
+, (7) where the expectation is taken over (cx, c p, x 1), t ∼ U (0 , 1) ,and ϵ ∼ qτ (ϵ | cx). Since the source state is already close to the target under the additive prior, the transport path is shorter and the model capacity is directed toward the interaction-induced residual. To prevent the additive operator from absorbing non-additive effects, we impose a single-perturbation consistency loss: 
+
+Lsingle = Ea∈P train single 
+
+
+
+A(cx, {a}) − x(a)1
+
+> 22
+
+
+
+, (8) where Ptrain single denotes the set of single perturbations observed in the training set, and x(a)1 is the observed expression under the single perturbation a. This term encourages A to learn additive single-perturbation effects, leaving higher-order inter-actions to the residual velocity field. Fig. 1. Overview of SynGeneFlow. A , Perturbation-conditioned cell encoder. B, Perturbation-aware velocity Transformer. C, Conventional full-profile flow matching. D, Additive-prior residual flow matching for non-additive perturbation effects. 
+
+B. Dual Distribution Alignment 
+
+The velocity loss in Eq. 7 supervises sample-wise stochastic transport residuals along the interpolation path, but it does not explicitly constrain the generated population distribution. We therefore introduce a dual distribution alignment objective based on Maximum Mean Discrepancy (MMD) [15]. MMD is suitable for single-cell perturbation data because it can be estimated from unpaired mini-batches and does not require cell-level correspondence. For a sampled intermediate state xt, we form a one-step endpoint approximation 
+
+ˆx1 = xt + (1 − t)vθ (xt, t, c x, c p), (9) and compute the predicted synergy residual by subtracting the additive prior: 
+
+ˆs = ˆ x1 − A (cx, c p). (10) The target residual is the biological residual s = x1 −A(cx, c p).We align both the endpoint distribution and the biological residual distribution: 
+
+Lend MMD = MMD 2({ˆx1}, {x1}),
+
+Lsyn MMD = MMD 2({ˆs}, {s}). (11) The endpoint term improves population-level fidelity, while the synergy term explicitly matches the distribution of non-additive residuals. These two terms are complementary: end-point alignment constrains the final generated cell population, whereas residual alignment encourages the model to preserve the variance and subpopulation structure of the synergy com-ponent. We compute MMD with a multi-kernel Gaussian RBF mixture: 
+
+kmix (u, v ) = 1
+
+LmLmX
+
+> ℓ=1
+
+exp 
+
+
+
+− ∥u − v∥22
+
+2σ2
+
+> ℓ
+
+
+
+, (12) where Lm is the number of kernels and σℓ is the ℓ-th band-width. Bandwidths are estimated from mini-batch pairwise distances, allowing the kernel scale to adapt to expression profiles or residual vectors. The final objective is 
+
+L = LSFM + λ1Lend MMD + λ2Lsyn MMD + λ3Lsingle , (13) where λ1, λ 2, λ 3 > 0 balance endpoint fidelity, synergy-distribution fidelity, and additive single-perturbation consis-tency. 
+
+C. Perturbation-Conditioned Gene Encoding 
+
+SynGeneFlow encodes each cell as a sequence of gene tokens. Because the number of genes can be large, training may be performed on a selected subset I ⊆ { 1, . . . , G } with 
+
+|I| = NI ≪ G. The expression vectors restricted to this subset are denoted as c(I) 
+
+> x
+
+and x(I) 
+
+> t
+
+. Let GI = ( gi)i∈I be the ordered gene identity sequence. A gene identity encoder Eg and a scalar value encoder Ev produce aligned token sequences: 
+
+hc = Ev (c(I) 
+
+> x
+
+) + ZI ,h0 
+
+> v
+
+= Ev (x(I) 
+
+> t
+
+) + ZI ,ZI = Eg (GI ; MI , e p).
+
+(14) Here hc is the control representation, h0 
+
+> v
+
+is the initial latent representation for the intermediate state, ZI ∈ RNI ×d denotes contextualized gene identity tokens, d is the hidden dimension, 
+
+MI is the subgraph of the full gene-gene mask restricted to the selected genes, and ep = Emb( cp) is the perturbation embedding. We construct the static gene-gene prior from the training data. For genes i and j, the edge weight is defined by the absolute Pearson correlation 
+
+wij = Cov( xi, x j )
+
+σ(xi)σ(xj ) , (15) where xi and xj are expression vectors across cells. A k-nearest-neighbor procedure retains the strongest correlated neighbors for each gene and yields a sparse adjacency matrix. We convert this adjacency into an attention mask Mij , where allowed edges receive finite values and disallowed edges are masked out during attention. A static co-expression graph provides a useful biological prior, but it only reflects average dependency structure. Per-turbations can change the effective coupling between genes. To capture this context dependence, we introduce a perturbation-conditioned deformation bias for each allowed gene pair. For gene representations hi and hj , we compute qi = WQhi,
+
+kj = WK hj , and vj = WV hj . The perturbation-conditioned attention score is 
+
+apij = q⊤ 
+
+> i
+
+kj
+
+√d + Mij + ∆ pij ,
+
+∆pij = w⊤ 
+
+> ψ
+
+σ(Wψ [hi∥hj ∥ep] + bψ ) .
+
+(16) Here apij is the attention logit from gene i to gene j under perturbation condition cp, ∆pij is the perturbation-dependent deformation bias, ∥ denotes concatenation, σ(·) is a nonlinear activation, and Wψ , bψ , and wψ are learnable parameters. The mask Mij defines biologically plausible gene interactions, while ∆pij dynamically adjusts their strengths under the current perturbation. The resulting attention weights and structural gene repre-sentation are 
+
+αpij = softmax j (apij ), hgene  
+
+> i
+
+= X
+
+> j
+
+αpij vj . (17) The final cell token combines this structural representation with the expression-value embedding: 
+
+hcell  
+
+> i
+
+= hgene  
+
+> i
+
++ hexpr  
+
+> i
+
+, (18) where hexpr  
+
+> i
+
+is the expression-value embedding of gene i.Thus, the encoder uses the static graph as a biologically plausible interaction space and learns perturbation-specific edge modulation within that space. 
+
+D. Perturbation-Aware Velocity Transformer 
+
+The velocity network estimates the stochastic transport residual sτ from sparse and noisy single-cell measurements. It takes the intermediate-state tokens h0 
+
+> v
+
+, the control tokens 
+
+hc, the perturbation embedding ep, and a time embedding as inputs: 
+
+temb = MLP(SinCos( t)) . (19) We use a perturbation-aware Transformer backbone. At layer 
+
+ℓ, the latent representation hℓv is first conditioned on the perturbation by 
+
+¯hℓv = MLP ℓ
+
+ [hℓv ∥1NI ⊗ ep] , (20) where 1NI ⊗ ep replicates the perturbation embedding across gene tokens. It is then refined by self-attention and cross-attention against the control representation: 
+
+˜hℓv = ¯hℓv + Attn( ¯hℓv , ¯hℓv ; temb ),hℓ+1  
+
+> v
+
+= ˜hℓv + Attn( ˜hℓv , h c; temb ). (21) Here Attn( ·) denotes a time-conditioned attention block. In implementation, it can be instantiated with differential at-tention to suppress shared noisy attention patterns, but the residual-flow formulation is independent of this backbone choice. After Lv layers, the final representation is decoded into the velocity field: 
+
+v(I) 
+
+> θ
+
+= D  [hLv 
+
+> v
+
+∥1NI ⊗ ep] , (22) where D is the velocity decoder and Lv is the number of velocity Transformer layers. This velocity is used in Eq. 7 to predict the stochastic transport residual sτ .
+
+E. Training and Inference 
+
+During training, each mini-batch contains triplets 
+
+(cx, c p, x 1). When subset training is used, all source, path, residual, and loss terms are computed on the selected gene subset I. Specifically, we construct A(I)(cx, c p), sample 
+
+ϵ(I) ∼ qτ (ϵ(I) | c(I) 
+
+> x
+
+), form z(I)0 = A(I)(cx, c p) + ϵ(I), and compute the interpolation state x(I) 
+
+> t
+
+= (1 − t)z(I)0 + tx (I)1 .The velocity Transformer predicts v(I) 
+
+> θ
+
+, and the endpoint and residual used for distribution alignment are 
+
+ˆx(I)1 = x(I) 
+
+> t
+
++(1 −t)v(I) 
+
+> θ
+
+, ˆs(I) = ˆ x(I)1 −A (I)(cx, c p). (23) Endpoint MMD is evaluated on ˆx(I)1 and x(I)1 , while synergy MMD is evaluated on ˆs(I) and s(I) = x(I)1 − A (I)(cx, c p).At inference time, SynGeneFlow samples the same type of stochastic additive anchor: 
+
+X(I)0 = A(I)(cx, c p) + ϵ(I), ϵ(I) ∼ qτ (ϵ(I) | c(I) 
+
+> x
+
+). (24) The scale of qτ is estimated from training control-cell statistics and kept fixed at test time. Given a sampled X(I)0 , the ODE trajectory is deterministic. We integrate Eq. 6 from t = 0 to 
+
+t = 1 using Euler steps: 
+
+X(I) 
+
+> k+1
+
+= X(I) 
+
+> k
+
++ ∆ t v θ (X(I) 
+
+> k
+
+, t k, c x, c p), tk = kK . (25) The final output ˆx(I)1 = X(I) 
+
+> K
+
+is the predicted post-perturbation expression on the selected gene set. For population-level pre-diction, we propagate a batch of control cells under the same perturbation condition; when τ > 0, independent stochastic anchors are sampled to provide additional within-condition variability. The computational cost of the gene encoder and velocity Transformer attention is O(N 2 
+
+> I
+
+) per layer. The deformation bias is evaluated only on retained graph edges; with EI
+
+allowed edges and edge-MLP hidden dimension dψ , its cost is O(EI dψ ). The additive prior requires | supp( cp)| effect-decoder evaluations, and the two MMD terms require O(B2)
+
+pairwise kernel evaluations for mini-batch size B.IV. E XPERIMENTS 
+
+We evaluate SynGeneFlow under three perturbation predic-tion regimes. The first tests whether the model can predict unseen double perturbations when the corresponding single perturbations are observed during training. The second evalu-ates a harder holdout setting, where selected single perturba-tions and all combinations involving them are excluded from training. The third tests transfer from genetic perturbations to drug-induced transcriptional responses. Across these settings, we examine whether additive-prior residual flow matching improves reconstruction accuracy and perturbation-response recovery while preserving population-level structure. 
+
+A. Evaluation Design 
+
+We use two single-cell perturbation benchmarks. The Nor-man dataset contains CRISPR-based gene overexpression pro-files in K562 cells, including both single and double per-turbations [9]. We evaluate two splits on Norman. In the additive split, test double perturbations are composed of single perturbations observed during training, which tests whether a model can recover non-additive interaction effects beyond simple composition. In the holdout split, selected single per-turbations and all combinations involving them are removed from training, creating a more difficult extrapolation setting. We further evaluate on ComboSciPlex to test whether the same framework transfers from genetic perturbations to drug perturbations [25], [2]. All methods are evaluated under the same preprocessing pipeline, gene set, and train/validation/test splits. For Norman, we follow the same additive and holdout protocols used by the direct flow-matching baseline, and for ComboSciPlex we follow the held-out drug-combination evaluation setting. We compare SynGeneFlow with statistical baselines, task-specific perturbation models, foundation-model baselines, and generative transition baselines. These include the con-trol response, additive composition, CPA [2], GEARS [5], CellFlow [26], STATE [23], Geneformer [16], scGPT [18], and scDFM. The comparison with scDFM is particularly important because it separates the effect of the proposed additive-prior residual formulation from the general benefit of using flow matching. Performance is evaluated using reconstruction metrics, including L2, MSE, and MAE; perturbation-response metrics, including Pearson ∆, Pearson ˆ∆, Pearson ˆ∆20 , and DE-Spearman ρ; and the Discrimination Score (DS), which measures whether predicted perturbation populations remain separable [22]. 
+
+B. Observed-Single Combinatorial Prediction 
+
+We first evaluate the Norman additive split, where the single perturbations composing each test double perturbation are already observed during training. This setting focuses on whether a model can recover non-additive residual effects beyond independent single-perturbation composition. As shown in Table I, the additive baseline is highly compet-itive on Pearson-based perturbation-response metrics, reaching 0.9024 on Pearson ∆, 0.8584 on Pearson ˆ∆, and 0.9244 on Pearson ˆ∆20 . This confirms that a large part of the combi-natorial response can be explained by first-order composition. Among neural baselines, CellFlow gives strong reconstruction performance, while GEARS achieves the strongest non-flow baseline DE-Spearman ρ. scDFM further improves recon-struction, DE ranking, and distributional separation, indicating that direct flow matching is already a strong baseline for combinatorial perturbation prediction. SynGeneFlow provides consistent gains over scDFM across all metrics in this setting. It reduces L2 from 1.7043 to 1.6736, MSE from 0.00315 to 0.00296, and MAE from 0.02155 to 0.02091. It also improves DE-Spearman ρ from 0.5705 to 0.5928, Pearson ∆ from 0.8853 to 0.9086, Pearson ˆ∆
+
+from 0.8468 to 0.8642, and Pearson ˆ∆20 from 0.9260 to 0.9347. DS also increases from 0.9737 to 0.9779. These results suggest that anchoring the flow at an additive prior helps recover perturbation-response directions, DE-gene structure, and population separability beyond direct full-profile flow matching. 
+
+C. Held-Out Perturbation Generalization 
+
+We next evaluate the Norman holdout split, where selected single perturbations and all double perturbations involving them are excluded from training. This setting is substantially more challenging than the additive split because the model must extrapolate both unseen single-perturbation effects and their combinatorial interactions. Table II reports results for held-out single and double perturbations. For held-out single perturbations, SynGeneFlow achieves the best performance on all metrics except DS. Com-pared with the strongest direct flow-matching baseline scDFM, SynGeneFlow reduces L2 from 1.6186 to 1.5482, MSE from 0.0030 to 0.0026, and MAE from 0.0190 to 0.0182. It also improves DE-Spearman ρ from 0.6957 to 0.7248, Pearson ∆
+
+from 0.7127 to 0.7426, Pearson ˆ∆ from 0.6659 to 0.7045, and Pearson ˆ∆20 from 0.8116 to 0.8462. scDFM remains slightly stronger on DS, suggesting that direct flow matching still pre-serves population-level separability well under extrapolation, while SynGeneFlow more effectively recovers perturbation-response structure. For held-out double perturbations, the advantage of Syn-GeneFlow becomes more pronounced. SynGeneFlow again TABLE I COMPARISON OF DIFFERENT METHODS ACROSS EVALUATION METRICS ON THE NORMAN ADDITIVE SPLIT .
+
+Model L2 ↓ MSE ↓ MAE ↓ DE-Spearman ρ ↑ Pearson ∆ ↑ DS ↑ Pearson ˆ∆ ↑ Pearson ˆ∆20 ↑
+
+Control 3.9937 0.01839 0.03953 N.A. N.A. 0.5135 -0.1695 -0.1297 Additive 1.9395 0.00448 0.02276 0.5564 0.9024 0.9686 0.8584 0.9244 scGPT 3.4112 0.01349 0.03796 1.07e-5 0.5304 0.5404 0.2165 0.2414 Geneformer 1.9132 0.00410 0.02360 0.3741 0.7732 0.8241 -0.0078 0.2239 GEARS 3.5531 0.01387 0.06624 0.5624 0.7421 0.8601 -0.0089 0.2032 CPA 5.7629 0.03435 0.07894 0.0713 0.3845 0.6021 -0.0039 0.2254 STATE 17.3330 0.30059 0.24705 0.5288 -0.0108 0.5135 -0.0069 0.2515 CellFlow 1.7064 0.00392 0.02207 0.5503 0.8678 0.9321 0.8395 0.8988 scDFM 1.7043 0.00315 0.02155 0.5705 0.8853 0.9737 0.8468 0.9260 SynGeneFlow (ours) 1.6736 0.00296 0.02091 0.5928 0.9086 0.9779 0.8642 0.9347 
+
+outperforms scDFM on all metrics except DS, reducing L2 from 2.0309 to 1.8846, MSE from 0.0047 to 0.0041, and MAE from 0.0235 to 0.0221. It also improves DE-Spearman 
+
+ρ from 0.5676 to 0.6312, Pearson ∆ from 0.8357 to 0.8624, Pearson ˆ∆ from 0.7769 to 0.8136, and Pearson ˆ∆20 from 0.8688 to 0.8965. Although scDFM still attains the highest DS, SynGeneFlow shows consistently stronger reconstruction and response-correlation performance in the hardest extrapolation regime. Overall, these results show that residualizing the transport around additive effects substantially improves held-out perturbation generalization while maintaining competitive population-level structure. 
+
+D. Non-additive Synergy Prediction 
+
+To directly evaluate whether SynGeneFlow captures interaction-induced effects rather than only improving full-profile reconstruction, we further assess non-additive synergy prediction on Norman double perturbations. For each dou-ble perturbation, we decompose the transcriptional response into an additive component estimated from single-perturbation effects and a residual synergy component that captures non-additive interactions. Figure 2 summarizes the results. SynGeneFlow achieves the lowest additive reconstruction error and the lowest synergy reconstruction error, reducing Additive MSE from 0.00315 to 0.00296 and Synergy MSE from 0.00488 to 0.00391 relative to scDFM. More importantly, SynGeneFlow also achieves the strongest residual recovery, improving Synergy Pearson from 0.487 to 0.573, Synergy DE-Spearman ρ from 0.438 to 0.526, and Non-additive Recall@50 from 0.462 to 0.548. These gains indicate that the advantage of SynGeneFlow does not merely come from better endpoint fitting. Instead, the additive-prior residual-flow formulation more effectively isolates and mod-els the non-additive component of combinatorial perturbation responses. This is consistent with the design of SynGeneFlow, where the additive anchor absorbs first-order effects and allows the generative model to focus its capacity on synergy-specific residual structure. These results highlight that the main benefit of SynGene-Flow lies in modeling the residual structure of combinatorial responses rather than simply improving average reconstruc-0 0.007 0.014              
+
+> Additive GEARS CellFlow scDFM
+> 0.00448 0.01387 0.00392 0.00315
+> Additive MSE
+> 00.003 0.006
+> 0.00692 0.00635 0.00571 0.00488
+> Synergy MSE
+> 00.3 0.6
+> 0.312 0.386 0.421 0.487
+> Synergy Pearson
+> 00.3 0.6
+> 0.284 0.351 0.392 0.438
+> Synergy DE-Spearman
+> 00.3 0.6
+> 0.318 0.374 0.416 0.462
+> Non-additive Recall@50
+> SynGeneFlow 0.00296 0.00391 0.573 0.526 0.548
+
+Fig. 2. Non-additive synergy prediction on Norman double pertur-bations. Each panel reports one evaluation metric using the raw metric values. Lower values are better for Additive MSE and Synergy MSE, while higher values are better for Synergy Pearson, Synergy DE-Spearman ρ, and Non-additive Recall@50. SynGeneFlow consistently improves both residual reconstruction and interaction recovery over existing baselines. 
+
+tion. In this setting, the additive component captures the dominant first-order response, whereas the residual compo-nent contains the interaction-dependent signal that determines whether a model can recover true perturbation synergy. By anchoring generation at the additive estimate, SynGeneFlow reduces the burden of modeling the full transcriptional profile and concentrates the flow on the biologically informative non-additive deviation. This provides a direct explanation for its stronger Synergy Pearson, DE-Spearman ρ, and Non-additive Recall@50. 
+
+E. Drug Perturbation Transfer 
+
+We further evaluate on ComboSciPlex to test transfer from genetic perturbations to drug perturbations. Unlike Norman, ComboSciPlex measures transcriptional responses to chemical interventions, which can involve broader pathway-level effects and different response structures. This setting tests whether the proposed residual-flow formulation extends beyond CRISPR-based perturbations. Table III reports results on ComboSciPlex. CPA is a strong non-flow baseline and achieves the highest DS, while scGPT obtains a competitive Pearson ∆ but negative DE-Spearman ρ.scDFM is again a strong direct flow-matching baseline, achiev-ing strong reconstruction and perturbation-response metrics. SynGeneFlow improves over scDFM on L2, MSE, MAE, DE-Spearman ρ, and Pearson ∆, reducing MAE from 0.0220 to 0.0207 and increasing DE-Spearman ρ from 0.8289 to 0.8618. Its DS is lower than CPA but higher than scDFM, suggesting that residual-flow modeling improves response recovery while TABLE II 
+
+PERFORMANCE ON THE NORMAN HOLDOUT SPLIT . RESULTS ARE REPORTED FOR HELD -OUT SINGLE AND DOUBLE PERTURBATIONS ACROSS RECONSTRUCTION , RESPONSE -CORRELATION , AND DISTRIBUTIONAL METRICS . B EST RESULTS ARE SHOWN IN BOLD AND SECOND -BEST RESULTS ARE UNDERLINED .
+
+Setting Model L2 ↓ MSE ↓ MAE ↓ DE-Spearman ρ ↑ Pearson ∆ ↑ DS ↑ Pearson ˆ∆ ↑ Pearson ˆ∆20 ↑
+
+Single Control 2.6834 0.0095 0.0263 N.A. N.A. 0.5217 0.1618 0.1982 Single scGPT 2.5007 0.0080 0.0259 -0.1139 0.4503 0.5680 0.0747 0.0798 Single GEARS 2.5641 0.0075 0.0466 0.3569 0.6646 0.8271 0.6356 0.7914 Single Geneformer 1.6962 0.0036 0.0191 0.3669 0.6955 0.8070 0.5620 0.6513 Single CPA 5.8060 0.0356 0.0853 0.1168 0.2837 0.5796 -0.0028 0.0802 Single STATE 18.2543 0.3333 0.2693 0.6116 0.0004 0.5236 0.0154 0.2386 Single CellFlow 1.6758 0.0035 0.0191 0.2860 0.7109 0.8072 0.6138 0.6753 Single scDFM 1.6186 0.0030 0.0190 0.6957 0.7127 0.8914 0.6659 0.8116 Single SynGeneFlow (ours) 1.5482 0.0026 0.0182 0.7248 0.7426 0.8873 0.7045 0.8462 
+
+Double Control 4.1882 0.0207 0.0423 N.A. N.A. 0.5322 -0.1303 -0.0265 Double scGPT 3.5171 0.0153 0.0362 -0.0665 0.5693 0.5578 0.2814 0.2652 Double GEARS 3.7458 0.0156 0.0708 0.2543 0.7552 0.8766 0.6407 0.8413 Double Geneformer 2.0819 0.0050 0.0237 0.3468 0.7361 0.8067 0.6245 0.7261 Double CPA 5.7891 0.0357 0.0796 0.3652 0.4176 0.6311 0.2432 0.2870 Double STATE 18.4458 0.3404 0.2733 0.4071 0.0061 0.5289 -0.0023 0.2580 Double CellFlow 2.1042 0.0049 0.0236 0.5074 0.8095 0.8622 0.6780 0.7155 Double scDFM 2.0309 0.0047 0.0235 0.5676 0.8357 0.9189 0.7769 0.8688 Double SynGeneFlow (ours) 1.8846 0.0041 0.0221 0.6312 0.8624 0.9142 0.8136 0.8965 
+
+TABLE III PERFORMANCE ON COMBO SCI PLEX DRUG -COMBINATION PERTURBATION PREDICTION .                                            
+
+> Model L2 ↓MSE ↓MAE ↓DE-Spearman ρ↑Pearson ∆↑DS ↑
+> Control 5.3716 0.0324 0.0698 N.A. N.A. 0.5714 scGPT 1.6934 0.0031 0.0251 -0.1261 0.8322 0.8571 CPA 1.6592 0.0029 0.0240 0.7906 0.8150 0.8980
+> scDFM 1.6567 0.0028 0.0220 0.8289 0.8933 0.8776 SynGeneFlow (ours) 1.5814 0.0025 0.0207 0.8618 0.9146 0.8892
+
+maintaining competitive population separability under drug perturbation transfer. These results indicate that additive-prior residual flow generalizes beyond CRISPR-based perturbations to a distinct chemical perturbation modality. 
+
+F. Ablation Study 
+
+We perform ablation experiments on the Norman holdout double-perturbation split to examine the main components of SynGeneFlow. This setting stresses both unseen pertur-bation extrapolation and combinatorial response modeling. Each variant removes or simplifies one component, covering residual flow design, additive-effect supervision, distribution alignment, perturbation-conditioned gene interaction, and ve-locity backbone design. As shown in Figure 3, the full model achieves the best MAE, DE-Spearman ρ, Pearson ∆, and Pearson ˆ∆20 . Removing the additive prior increases MAE from 0.0224 to 0.0236 and reduces Pearson ˆ∆20 from 0.8794 to 0.8653, showing that direct full-profile transport is weaker than additive-prior resid-ual transport. The additive-prior-only variant further degrades DE-Spearman ρ and Pearson-based metrics, indicating that additive composition captures the dominant response but can-not replace residual velocity modeling. Removing Lsingle also hurts performance, suggesting that single-effect supervision constrains the additive operator and prevents it from absorbing higher-order interactions. Distribution and gene-interaction ablations show similar trends. Removing endpoint MMD or synergy-residual MMD reduces response recovery, with synergy-residual MMD caus-ing a larger drop in DE-Spearman ρ and Pearson ˆ∆20 .This suggests that residual alignment preserves perturbation-sensitive structure beyond endpoint fidelity. Removing ∆pij or the gene mask weakens performance, supporting perturbation-aware gene rewiring within a constrained biological interaction space. Replacing differential attention with standard attention also reduces the main response metrics. Although the variant without the additive prior obtains the highest DS, the full model gives the best overall balance between reconstruction accuracy, perturbation-response recovery, and population-level fidelity. V. C ONCLUSION 
+
+We presented SynGeneFlow , a flow matching framework that anchors generation at an additive prior to focus on non-additive perturbation effects. By combining residual flow matching with perturbation-conditioned gene interaction mod-eling and residual distribution alignment, SynGeneFlow targets interaction-driven responses. Experiments across observed-single, held-out, and drug perturbation settings show that this formulation improves reconstruction and response-direction recovery while preserving distributional fidelity. These results support residual modeling for unseen combinatorial and cross-modality response prediction. REFERENCES [1] C. Bunne, S. G. Stark, G. Gut, J. S. Del Castillo, M. Levesque, K.-V. Lehmann, L. Pelkmans, A. Krause, and G. R¨ atsch, “Learning single-cell MAE ↓ DE-Spearman ↑ Pearson Δ ↑ DS ↑ Pearson Δ̂20 ↑                                       
+
+> Full SynGeneFlow w/o additive prior additive prior only w/o ¤single
+> w/o endpoint MMD w/o synergy MMD w/o Δ pij
+> w/o gene mask standard attention
+> Full Full Full Full Full
+> +5.4% +1.1% +1.0% -0.5% +1.6% +7.6% +9.4% +3.3% +2.4% +5.4% +4.0% +5.2% +1.7% +1.8% +2.4% +3.1% +1.3% +0.6% +1.6% +1.2% +2.2% +4.6% +0.8% +2.1% +2.0% +3.6% +3.5% +1.1% +1.2% +1.8% +5.4% +5.8% +1.9% +2.0% +3.1% +4.0% +2.1% +0.9% +0.9% +1.5%
+> Ablation impact on the Norman holdout double split
+> Better than full on this metric Worse than full
+> 012345678
+> Performance drop vs. full model (%)
+
+Fig. 3. Ablation impact on the Norman holdout double split. Each cell reports the relative performance change compared with the full SynGeneFlow model. Positive values indicate degradation relative to the full model, while negative values indicate slight improvement. Darker purple denotes a larger performance drop, while orange denotes a slight improvement over the full model on that metric. perturbation responses using neural optimal transport,” Nature methods ,vol. 20, no. 11, pp. 1759–1768, 2023. [2] M. Lotfollahi, A. Klimovskaia Susmelj, C. De Donno, L. Hetzel, Y. Ji, I. L. Ibarra, S. R. Srivatsan, M. Naghipourfar, R. M. Daza, B. Martin 
+
+et al. , “Predicting cellular responses to complex perturbations in high-throughput screens,” Molecular systems biology , vol. 19, no. 6, p. MSB202211517, 2023. [3] X. Qi, L. Zhao, C. Tian, Y. Li, Z.-L. Chen, P. Huo, R. Chen, X. Liu, B. Wan, S. Yang et al. , “Predicting transcriptional responses to novel chemical perturbations using deep generative model for drug discovery,” 
+
+Nature Communications , vol. 15, no. 1, p. 9256, 2024. [4] R. Vi˜ nas Torn´ e, M. Wiatrak, Z. Piran, S. Fan, L. Jiang, S. A. Teichmann, M. Nitzan, and M. Brbi´ c, “Systema: a framework for evaluating genetic perturbation response prediction beyond systematic variation,” Nature Biotechnology , pp. 1–10, 2025. [5] Y. Roohani, K. Huang, and J. Leskovec, “Predicting transcriptional outcomes of novel multigene perturbations with gears,” Nature Biotech-nology , vol. 42, no. 6, pp. 927–935, 2024. [6] L. Mathur, B. Szalai, N. Du, R. Utharala, M. Ballinger, J. Landry, M. Ryckelynck, V. Benes, J. Saez-Rodriguez, and C. A. Merten, “Combi-seq for multiplexed transcriptome-based profiling of drug com-binations using deterministic barcoding in single-cell droplets,” Nature communications , vol. 13, no. 1, p. 4450, 2022. [7] C. Ahlmann-Eltze, W. Huber, and S. Anders, “Deep-learning-based gene perturbation effect prediction does not yet outperform simple linear baselines,” Nature Methods , vol. 22, no. 8, pp. 1657–1661, 2025. [8] G. Csendes, G. Sanz, K. Z. Szalay, and B. Szalai, “Benchmarking foundation cell models for post-perturbation rna-seq prediction,” BMC genomics , vol. 26, no. 1, p. 393, 2025. [9] T. M. Norman, M. A. Horlbeck, J. M. Replogle, A. Y. Ge, A. Xu, M. Jost, L. A. Gilbert, and J. S. Weissman, “Exploring genetic interac-tion manifolds constructed from rich single-cell phenotypes,” Science ,vol. 365, no. 6455, pp. 786–793, 2019. [10] H. Dai, I. Ng, G. Luo, P. Spirtes, P. Stojanov, and K. Zhang, “Gene regulatory network inference in the presence of dropouts: a causal view,” 
+
+arXiv preprint arXiv:2403.15500 , 2024. [11] Y. Zhou, Q. Sheng, G. Wang, L. Xu, and S. Jin, “Quantifying batch effects for individual genes in single-cell data,” Nature Computational Science , vol. 5, no. 8, pp. 612–620, 2025. [12] H. Xing and C. Yau, “Gperturb: Gaussian process modelling of single-cell perturbation data,” Nature Communications , vol. 16, no. 1, p. 5423, 2025. [13] B. Song, D. Liu, W. Dai, N. F. Mcmyn, Q. Wang, D. Yang, A. Krejci, A. Vasilyev, N. Untermoser, A. Loregger et al. , “Decoding heteroge-neous single-cell perturbation responses,” Nature cell biology , vol. 27, no. 3, pp. 493–504, 2025. [14] Y. Lipman, R. T. Chen, H. Ben-Hamu, M. Nickel, and M. Le, “Flow matching for generative modeling,” arXiv preprint arXiv:2210.02747 ,2022. [15] A. Gretton, K. Borgwardt, M. Rasch, B. Sch¨ olkopf, and A. Smola, “A kernel method for the two-sample-problem,” Advances in neural information processing systems , vol. 19, 2006. [16] C. V. Theodoris, L. Xiao, A. Chopra, M. D. Chaffin, Z. R. Al Sayed, M. C. Hill, H. Mantineo, E. M. Brydon, Z. Zeng, X. S. Liu et al. ,“Transfer learning enables predictions in network biology,” Nature , vol. 618, no. 7965, pp. 616–624, 2023. [17] F. Yang, W. Wang, F. Wang, Y. Fang, D. Tang, J. Huang, H. Lu, and J. Yao, “scbert as a large-scale pretrained deep language model for cell type annotation of single-cell rna-seq data,” Nature machine intelligence ,vol. 4, no. 10, pp. 852–866, 2022. [18] H. Cui, C. Wang, H. Maan, K. Pang, F. Luo, N. Duan, and B. Wang, “scgpt: toward building a foundation model for single-cell multi-omics using generative ai,” Nature methods , vol. 21, no. 8, pp. 1470–1480, 2024. [19] Y. Rosen, Y. Roohani, A. Agarwal, L. Samotorˇ can, T. S. Consortium, S. R. Quake, and J. Leskovec, “Universal cell embeddings: A foundation model for cell biology,” BioRxiv , pp. 2023–11, 2023. [20] S. A. Khan, A. Maillo, V. Lagani, R. Lehmann, N. A. Kiani, D. Gomez-Cabrero, and J. Tegner, “Reusability report: Learning the transcriptional grammar in single-cell rna-sequencing data using transformers,” Nature Machine Intelligence , vol. 5, no. 12, pp. 1437–1446, 2023. [21] C. Yu, C. Wang, B. Liao, and T. Wu, “scdfm: Distributional flow matching model for robust single-cell perturbation prediction,” arXiv preprint arXiv:2602.07103 , 2026. [22] Y. H. Roohani, T. J. Hua, P.-Y. Tung, L. R. Bounds, F. B. Yu, A. Dobin, N. Teyssier, A. Adduri, A. Woodrow, B. S. Plosky et al. , “Virtual cell challenge: Toward a turing test for the virtual cell,” Cell , vol. 188, no. 13, pp. 3370–3374, 2025. [23] A. K. Adduri, D. Gautam, B. Bevilacqua, A. Imran, R. Shah, M. Naghipourfar, N. Teyssier, R. Ilango, S. Nagaraj, M. Dong et al. ,“Predicting cellular responses to perturbation across diverse contexts with state,” BioRxiv , pp. 2025–06, 2025. [24] H. Yu, W. Qian, Y. Song, and J. D. Welch, “Perturbnet predicts single-cell responses to unseen chemical and genetic perturbations,” Molecular Systems Biology , vol. 21, no. 8, p. 960, 2025. [25] S. R. Srivatsan, J. L. McFaline-Figueroa, V. Ramani, L. Saunders, J. Cao, J. Packer, H. A. Pliner, D. L. Jackson, R. M. Daza, L. Christiansen et al. ,“Massively multiplex chemical transcriptomics at single-cell resolution,” 
+
+Science , vol. 367, no. 6473, pp. 45–51, 2020. [26] D. Klein, J. S. Fleck, D. Bobrovskiy, L. Zimmermann, S. Becker, A. Palma, L. Dony, A. Tejada-Lapuerta, G. Huguet, H.-C. Lin et al. ,“Cellflow enables generative single-cell phenotype modeling with flow matching,” bioRxiv , pp. 2025–04, 2025. [27] S. Xi, S. Hu, S. Wang, H. Ding, Y. Li, W. He, K. Zhang, L. Del Balzo, C. Zhong, M. Hu et al. , “Grounding radiology report findings into medical image segmentation,” npj Digital Medicine , 2026. [28] S. Xi, S. Hu, Y. Lai, W. Dan, Y. Liu, S. Wang, and X. Yang, “Medlvr: Latent visual reasoning for reliable medical visual question answering,” 
+
+arXiv preprint arXiv:2604.09757 , 2026. [29] G. M. Mejia, H. E. Miller, F. J. Leblanc, B. Wang, B. Swain, and L. P. d. L. Camillo, “Diversity by design: Addressing mode collapse improves scrna-seq perturbation modeling on well-calibrated metrics,” 
+
+arXiv preprint arXiv:2506.22641 , 2025. [30] K. Ramakrishnan, J. G. Hedley, S. Qu, P. K. Dokania, P. H. Torr, C. A. Prada-Medina, J. Fauqueur, and K. Martens, “Modeling gene expression distributional shifts for unseen genetic perturbations,” arXiv preprint arXiv:2507.02980 , 2025. [31] S. Xi, S. Hu, S. Wang, M. Safari, L. del Balzo, E. U. Karim, M. Hu, K. Zhang, T. Wang, R. R. Weichselbaum et al. , “A radiographic world model for clinical reasoning and evidence generation,” arXiv preprint arXiv:2609.07719 , 2026.
