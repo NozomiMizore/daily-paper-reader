@@ -1,0 +1,2773 @@
+Title: Active Learning of Conditional Generative Models via the Transport Neural Tangent Kernel
+
+URL Source: https://arxiv.org/pdf/2610.35652v1
+
+Published Time: Tue, 27 Oct 2026 02:53:06 GMT
+
+Number of Pages: 47
+
+Markdown Content:
+# Active Learning of Conditional Generative Models via the Transport Neural Tangent Kernel 
+
+Jayoung Ryu 1 Kyunghyun Cho 1 Romain Lopez 1,21Department of Computer Science, Courant Institute School of Mathematics, Computing, and Data Science, New York University 
+
+> 2
+
+Department of Biology, New York University 
+
+{jayoung.ryu, kyunghyun.cho, romain.lopez}@nyu.edu 
+
+## Abstract 
+
+Many high-throughput scientific experiments produce distributional outputs, re-quiring conditional generative models to interpret the data, and to predict outcomes at new inputs. Acquiring experimental data at new conditions (e.g., for a new antigen or a new cell type) is often expensive, motivating the need for automated experimental design methods. However, existing active learning frameworks are limited as they assume scalar or vector-valued outputs. We first show that the Wasserstein test risk of a conditional generative task decomposes into a mean term and a shape term, demonstrating why mean-based active learning is blind to distributional shape. To capture both, we propose the transport Neural Tangent Kernel (tNTK), a tractable kernel that measures how sensitive a generative model’s predicted distribution is with respect to its parameters. The tNTK recovers the standard NTK in the deterministic limit and upper-bounds the posterior Fréchet variance of the prediction under small parameter perturbations. It admits a closed-form expression for affine Gaussian transport and tractable Monte Carlo estimators otherwise. Treating the tNTK as the covariance function of a Gaussian process, we greedily select inputs that minimize the total GP posterior variance across the pool, yielding a distribution-aware active learning strategy. We evaluate this strategy across four classes of conditional generative models, including conditional flow matching and conditional Monge gap, on synthetic distributions, intent-labeled sentences, and single-cell perturbation responses. In these experiments, the tNTK outperforms the baseline NTK computed from the conditional mean, demonstrating the value of distribution-aware active learning for generative-modeling tasks. 
+
+## 1 Introduction 
+
+Decades after a logic-based “robot scientist” first autonomously characterized gene functions in yeast metabolism [1, 2], machine learning has become a standard tool for the automated design of scientific experiments. These approaches have demonstrated impact across a wide range of scientific fields, including inorganic materials synthesis [3], drug discovery [4–7], and single-cell perturbation biology [8–12]. They have also been applied to large-scale image classification [13] and to the alignment of large language models [14, 15]. We consider the setup of pool-based active learning (AL) [16, 17], in which the acquisition strategy iteratively assembles a training set Xtrain from a set of candidate inputs Xpool ⊆ X . For each selected input x ∈ X train , the corresponding output o ∈ O is acquired using the experimental system. The goal of an AL strategy is to assemble a training set with a fixed number of data points so that a surrogate 
+
+> 40th Conference on Neural Information Processing Systems (NeurIPS 2026). arXiv:2610.35652v1 [cs.LG] 26 Oct 2026
+
+predictive model f (x) will generalize best to unseen inputs (i.e., a test set) — a problem extensively studied for classification [13, 18–22] ( O = { 1, . . . , K }) and regression [23–26] (single- or multi-task, 
+
+O ⊆ Rd). In many scientific applications, however, the experimental output is a probability distribution: O = P(Y) for some underlying sample space Y ⊆ Rd, observed through a finite set of samples for each input. For example, chemical or genetic perturbation assays measure genomics data for hundreds of cells per perturbation, profiling entire distributions over cell states [8]. Regulatory genomics assays capture hundreds of thousands of hypersensitive DNA sequences in the genome for each cell type [27]. In both cases, the output mean E[y ∣ x] is a poor substitute for the entire output p(y ∣ x) as the distribution itself is of scientific interest. For this reason, existing AL paradigms are not suited to distributional outputs because they have no other option but to reduce the output to a pre-specified scalar functional (e.g., mean or an event probability [28, 29]). Conditional generative models such as conditional optimal transport [30, 31], flow matching [32], and diffusion models [33] are compelling options for predictive modeling of distributions. They demonstrated impressive performance for image and text generation [34, 35], as well as perturbation effect prediction [31, 36–39] and conditional DNA sequence generation [40]. Despite their adoption in these domains, no existing acquisition strategies directly leverage these generative models within an active learning framework for experimental design. To address this gap, we develop a framework for active learning of conditional generative models that operates natively on distributional outputs. Specifically, we introduce the transport Neural Tangent Kernel (tNTK), a tractable kernel that measures the sensitivity of the predicted distribution pθ (y ∣ x)
+
+to perturbations of the model parameters θ. The tNTK admits two complementary interpretations: it upper-bounds the Fréchet posterior variance under a Laplace approximation to the parameter posterior, and it controls the metric derivative of the predicted distribution on the Wasserstein manifold. We characterize the geometric gap and show the bound is tight in dimension one. To propose the first distribution-aware active learning strategy, we treat the tNTK as a Gaussian Process (GP) covariance function, and greedily select inputs that minimize the total posterior variance across the pool, following existing kernel-based active learning frameworks [25, 26]. After introducing the necessary background (Section 2), we decompose the risk of a conditional generative prediction task into a mean and a shape term, and illustrate on a tractable 1D example that mean-based acquisition is suboptimal (Section 3). We then introduce the transport Neural Tangent Kernel (tNTK) as well as our distribution-aware AL strategy (Section 4). Finally, we conduct an empirical evaluation across four classes of conditional generative models — affine Gaussian transport, conditional quantile prediction, conditional flow matching, and conditional Monge gap — on simulated data where ground truth is available, as well as on real-world data from intent-labeled sentences and single-cell perturbation datasets (Section 5). Across 26 out of 30 settings, the tNTK outperforms baselines that operate on the conditional mean alone. 
+
+## 2 Background 
+
+2.1 Conditional Generative Models (CGMs) 
+
+We consider training data D = {( xi, {yi,j }ni
+
+> j=1
+
+)} Ni=1, where each input xi ∈ X train is paired with a set of ni independent and identically distributed samples {yi,j }ni 
+
+> j=1
+
+drawn from an unknown conditional distribution μ(xi) ∈ P(Y) . Transport-based CGMs induce output distributions by pushing forward a fixed base measure ν ∈ P(Y) through a parametric map Tθ (x) ∶ Y → Y :
+
+μθ (x) = Tθ (x)#ν, (1) where θ ∈ Rp denotes the model parameters. Concretely, a sample from μθ (x) is obtained by drawing 
+
+y ∼ ν and returning Tθ (x)( y). This formulation covers various common families of conditional generative models, two of which we now briefly detail. 
+
+Conditional optimal transport Conditional optimal transport frameworks learn a parametric map 
+
+Tθ (x) that approximates the optimal transport map from ν to μ(x) across all input points x ∈ X train .CondOT [30] parameterizes Tθ (x)( y) = ∇ y Φθ (x, y ) where Φθ is a partially input convex neural network (PICNN) [41], which ensures that Tθ (x) is a valid Monge map. Conditional Monge gap [31] 2drops the PICNN constraint and instead trains an unconstrained neural network with two terms: a distributional loss between Tθ (x)#ν and μ(x), and the Monge gap regularizer [42], which penalizes the suboptimality of Tθ (x) as a transport map between ν and its own pushforward. This approach improves numerical stability and empirical performance over CondOT. 
+
+Conditional flow matching (CFM) CFM [32] 1 learns a parametric, time- and condition-dependent vector field vt,x θ ∶ Y → Y by regressing on a target field ut,x constructed from a chosen conditional probability path interpolating between ν at t = 0 and μ(x) at t = 1. The flow ϕt,x (y) is defined as the solution of the following ordinary differential equation: 
+
+ddt ϕt,x (y) = vt,x θ (ϕt,x (y)) , ϕ0,x (y) = y. (2) At inference time, samples from μθ (x) = ( ϕ1,x )#ν are obtained by sampling y ∼ ν and integrating the ODE from t = 0 to t = 1 with initial condition ϕ0,x (y) = y. Although CFM specifically applies to the case where ν is a noise distribution, variants such as OT-CFM [43] extend CFM to cases where ν
+
+is a data distribution using optimal transport couplings. 
+
+2.2 Active Learning for Regression 
+
+In pool-based AL, the acquisition strategy has access to a candidate set Xpool ⊆ X of unlabeled inputs and selects a subset S ⊆ X pool for which outputs are measured with the experimental system. A key heuristic in the field is to select the input that minimizes the total posterior variance of the surrogate model fθ on the pool, 
+
+x∗ = arg min 
+
+> x′∈X pool
+
+∑
+
+> x∈X pool
+
+Var [fθ (x) ∣ X train ∪ { x′}] . (3) Such candidates are often the most informative for generalization to a test set [26]. Active learning strategies for regression are further discussed in [25]. For neural network-based models, predictive uncertainty is intractable in general and must be approxi-mated. Common approaches include approximate Bayesian inference over the model parameters [44], Monte-Carlo dropout [45], and kernel-based approximations derived from the finite-width Neural Tangent Kernel (NTK) [46, 47]: 
+
+kNTK  
+
+> θ
+
+(x, x ′) = ∇ θ f (x)⊺∇θ f (x′). (4) The predictive distribution f after linearization around the trained parameters θ is well approximated by a Gaussian process with covariance kNTK  
+
+> θ
+
+. Informative candidates can then be selected using standard kernel-based acquisition strategies [25], such as the total-posterior-variance minimization described above. All of these methods assume that f (x) is a scalar or low-dimensional prediction, and do not extend to settings where the model’s output is a probability distribution. 
+
+## 3 Distributional Risk Decomposition 
+
+We illustrate the need for distribution-aware AL methods by analyzing the test risk of conditional generative models under the 2-Wasserstein loss. These derivations suggest that existing AL methods based on test risk minimization for conditional mean prediction are suboptimal. We then present a fully-tractable one-dimensional example alongside a numerical experiment. 
+
+3.1 Mean-shape decomposition of distributional risk 
+
+For the following theoretical derivations, we assume that distribution μ(xi) (or equivalently, infinite samples from it) is observed for each input xi. This allows us to define our training data as D = {( xi, μ (xi))} Ni=1. We also assume the availability of a posterior distribution θ ∣ D over the parameters   
+
+> 1We use “conditional” to refer to conditioning on an external covariate x(e.g., [37]). This differs from the original usage in Lipman et al. [32], where “conditional” refers to per-sample conditional probability paths used to train an unconditional vector field.
+
+3θ of a CGM that reflects uncertainty in the predicted distribution μθ (x) = Tθ (x)#ν. For a test point 
+
+x ∈ X , the risk under the squared Wasserstein loss is defined as: 
+
+R( x, D) = Eθ∣D [W 22 (μθ (x), μ (x))] , (5) and admits the following decomposition: 
+
+Proposition 1 (Mean-shape decomposition of risk) . The Wasserstein risk defined in Equation (5) 
+
+decomposes as 
+
+R( x, D) = Eθ∣D [∥ mθ (x) − m(x)∥ 2]´¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¸¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¶ 
+
+> Rmean (x, D)
+
++ Eθ∣D [W 22 (μcθ (x), μ c(x))] ´¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¸¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¶ 
+
+> Rshape (x, D)
+
+, (6) 
+
+where mρ = ∫ y dρ (y) denotes the mean of ρ, and ρc is obtained by centering ρ for any ρ ∈ P 2(Y) .
+
+The proof is given in Appendix A.1. Classical regression-based active learning traditionally aims at (approximately) minimizing the mean-risk Ex∼ptest Rmean (x, D) [23]. Because they do not consider the additional shape-related term, these methods may perform poorly whenever shape matters. 
+
+3.2 One-dimensional example 
+
+The one-dimensional case is a remarkable instance since Wasserstein distances admit closed-form expressions. Let F −1(x; τ ) (resp. F −1 
+
+> θ
+
+(x; τ )) denote the τ -th quantile of distribution μ(x) (resp. 
+
+μθ (x)) for τ ∈ [ 0, 1]. We have the following identities: 
+
+Lemma 1 (1D posterior risk) . Assume the model is unbiased at the mean and every quantile level, i.e., Eθ∣D [mθ (x)] = m(x) and Eθ∣D [F −1 
+
+> θ
+
+(x; τ )] = F −1(x; τ ) for all x, τ . Then 
+
+Rmean (x, D) = Var θ∣D [mθ (x)] , Rshape (x, D) = ∫ 
+
+> 10
+
+Var θ∣D [gθ (x; τ )] dτ, (7) 
+
+where gθ (x; τ ) = F −1 
+
+> θ
+
+(x; τ ) − mθ (x) denotes the centered quantile function of μθ (x).
+
+The proof appears in Appendix A.2. The shape-related term becomes tractable as it reduces to an integral of marginal posterior variances over quantile levels τ ∈ [ 0, 1].We numerically illustrate this on simulated data (details in Appendix D.1). Briefly, μ(x) is a two-component Gaussian mixture model with mean and variance depending on x ∈ [ 0, 1] (Figure 1A). 
+
+m(x) and g(x; τ ) are modeled for a discrete grid of τ levels using independent Gaussian processes. This approach provides direct access to the posterior variances in (7). We run AL campaigns to compare three acquisition strategies: Wasserstein AL, which minimizes the expected total risk, mean AL, which minimizes only its mean component, 
+
+x∗ 
+
+> W
+
+= arg min 
+
+> x′∈X pool
+
+Ex∼ptest R( x, Dtrain ∪ { x′}) , (8) 
+
+x∗ 
+
+> mean
+
+= arg min 
+
+> x′∈X pool
+
+Ex∼ptest Rmean (x, Dtrain ∪ { x′}) , (9) and random sampling. Wasserstein AL outperforms Mean AL by over an order of magnitude (Figure 1B). Mean AL still improves over random in terms of mean error (Figure 1C) but plateaus on shape error (Figure 1D). These results illustrate that ignoring distribution shape for active learning is suboptimal. 
+
+## 4 Transport Kernels for Active Learning of Conditional Distributions 
+
+For most applications of interest, neither the test risk nor the shape term from (6) is tractable. Most fundamentally, the ground-truth distribution μ(x) is unknown at unseen inputs Xpool . Even if it were known, the 2-Wasserstein distance remains intractable for neural transport maps. Those represent significant challenges for distribution-aware active learning. We circumvent these issues by considering the posterior Fréchet variance as a measure of uncertainty in a generative model’s predictions μθ (x). We bound this quantity by linearizing the transport map Tθ (x) around its parameters θ, which yields the transport Neural Tangent Kernel (tNTK). We briefly discuss properties of the tNTK, how to estimate it efficiently, and then use it to design a distribution-aware active learning strategy. 40 1                   
+
+> x
+> 02
+> y
+> A.
+> Mean( x)Modes( x)p(y|x)
+> 5678910 Number of observations −8 −6 −4 −2 log( W22 error)
+> B.
+> 5678910 Number of observations −8 −6 −4 log(Mean error)
+> C.
+> 5678910 Number of observations −8 −6 −4 log(Shape error) D.
+> Random Mean AL Wasserstein AL
+
+Figure 1: Synthetic conditional density estimation. (A) Ground truth conditional density μ(x). (B–D) Test error after active learning as a function of training set size: total risk (B), mean prediction error (C), and shape error (D). Results averaged over 50 random initializations; shaded bands show ±2
+
+standard errors. 
+
+4.1 Quantifying model uncertainty via parameter sensitivity 
+
+We consider the posterior Fréchet variance ,
+
+VF (x) ∶= Var W2 [μθ (x) ∣ D] = inf  
+
+> ρ∈P 2(Y)
+
+Eθ∣D [W 22 (μθ (x), ρ )] , (10) defined as the minimum mean squared Wasserstein distance from a fixed reference measure to a posterior draw μθ (x) [48]. The minimizer is the Wasserstein barycenter ¯μθ (x) of the posterior law of μθ (x) [49]. The posterior Fréchet variance VF (x) has two properties that make it especially relevant for active learning. First, it lower bounds the risk VF (x) ≤ R( x, D) , with equality when the Wasserstein barycenter equals the data-generating distribution ¯μθ (x) = μ(x). Second, in the deterministic limit, where μθ (x) collapses to a Dirac mass at fθ (x), VF (x) recovers the standard posterior variance Var θ∣D [fθ (x)] .Although VF (x) is intractable in general, since the Wasserstein barycenter of the posterior law of 
+
+μθ (x) has no closed form, we show that linearizing the transport map yields a tractable upper bound. 
+
+Theorem 1 (Upper bound on the posterior Fréchet variance) . Let θ ∣ D ∼ N ( ˆθ, Σ), with Σ ∈ Rp×p
+
+positive definite and ∥Σ∥op < 1. Assume that for every x ∈ X and for ν-almost every y ∈ Y , the map 
+
+θ ↦ Tθ (x)( y) is C2(Rp), and that the Jacobian Dθ Tˆθ (x)(⋅) and the pointwise supremum of the operator norm of the Hessian, sup θ ∥D2 
+
+> θ
+
+Tθ (x)(⋅)∥ op , are in L2(ν). Then, there exists C(x) such that: 
+
+VF (x) ≤ Tr (Gˆθ (x) Σ) + C(x)∥ Σ∥3/2op , (11) 
+
+where the p × p parameter sensitivity matrix at input x is 
+
+Gˆθ (x) = ∫ Dθ Tˆθ (x)( y)⊺Dθ Tˆθ (x)( y) dν (y). (12) 
+
+Inequality (11) is tight to leading order when dim (Y) = 1 and Tθ (x) is monotone in y.
+
+The proof is given in Appendix A.3. Theorem 1 identifies that under a Laplace approximation [50, 51] to the parameter posterior, Tr (Gˆθ (x) Σ) plays the role of a tractable measure of the predictive variance in the generative model’s predictions, in the limit of small variance. This is important given that exact computations of the Wasserstein metric tensor are otherwise intractable for neural transport maps [52, 53]. The tightness of the bound from (11) is an important consideration that we investigate in several ways. First, we give a geometric interpretation of Gθ (x) by upper-bounding the Wasserstein metric derivative of trajectories of μθ (x) for small deviations around θ and characterize when the bound is tight (Appendix B). Second, for affine transport of Gaussian distributions (Appendix E.1), we find numerically that the bound is exact for d = 1 and overestimates the true variance by at most 70% for 
+
+d = 50 , i.e., by less than a factor of two. Finally, our experiments on active learning benchmarks (Section 5) suggest that the parameter sensitivity matrix Gˆθ (x) is informative for active learning across multiple model classes. 54.2 Transport Neural Tangent Kernel 
+
+The parameter sensitivity matrix Gθ (x) extends naturally to a pairwise object by considering two distinct inputs x and x′. Specifically, we define the transport Neural Tangent Kernel (tNTK) as: 
+
+kθ (x, x ′) = ∫ Tr [Dθ Tθ (x)( y)⊺Dθ Tθ (x′)( y)] dν (y). (13) This kernel measures the alignment between the parameter sensitivities of the transport maps at x
+
+and x′, integrated over the base measure ν. The diagonal of the kernel recovers the trace of the parameter sensitivity matrix, kθ (x, x ) = Tr [Gθ (x)] . Under an isotropic posterior Σ = σ2I – the standard choice in kernel-based active learning [25] – Theorem 1 implies that 
+
+VF (x) ≤ σ2kθ (x, x ) + O(σ3). (14) This identifies the kernel diagonal as a tractable scalar measure of predictive uncertainty. The tNTK is positive semi-definite (Appendix A.4). When ν degenerates to a Dirac measure, μθ (x) collapses to a single point and the tNTK reduces to the finite-width NTK [46], justifying the name. 
+
+Kernel Computation and Estimation The tNTK may be computed over all parameters θ or re-stricted to the last layer parameters. When the transport map takes the form Tθ (x)( y) = W ⊺hθ (x, y )
+
+with penultimate features hθ (x, y ) ∈ Rm and a linear last layer W ∈ Rm×d, the tNTK has a simple expression: 
+
+kll  
+
+> θ
+
+(x, x ′) = d ∫ hθ (x, y )⊺hθ (x′, y ) dν (y). (15) The proof appears in Appendix A.5. (15) involves the inner product of penultimate features at x
+
+and x′ integrated over the base measure ν and therefore represents the distributional analog of the last-layer NTK [25]. In practice, we approximate the integral with Monte Carlo samples from ν,requiring only forward passes through the network hθ .
+
+4.3 Kernel Decomposition for Affine Gaussian Transport Maps 
+
+We show that when Tθ (x) is an affine transport map, the tNTK admits a clean decomposition into mean- and shape-sensitivity terms. 
+
+Lemma 2. Let us assume that Tθ (x) is an affine map: Tθ (x)( y) = bθ (x) + Mθ (x)y and that the base measure ν is centered and isotropic (i.e., Ey∼ν [y] = 0 and Ey∼ν [yy ⊺] = I). Then 
+
+kθ (x, x ′) = Tr [Dθ bθ (x)⊺Dθ bθ (x′)] + 
+
+> d
+
+∑
+
+> j=1
+
+Tr [Dθ M jθ (x)⊺Dθ M jθ (x′)] , (16) 
+
+where M jθ (x) denotes the j-th column of Mθ (x).
+
+The proof appears in Appendix A.6. This decomposition mirrors the one from Proposition 1 at the kernel level: the first term captures sensitivity of the predicted mean, the second captures sensitivity of the predicted shape. Additionally, we demonstrate that when Mθ (x) is further restricted to be lower-triangular (e.g., via Cholesky decomposition), for any perturbation h ∈ Rp, h⊺Gθ (x)h coincides with the squared metric derivative at 0 of the curve t ↦ μθ+th (x) under the Knothe–Rosenblatt (KR) transport metric (Appendix C). This suggests that in the setting of linear maps, the parameter sensitivity matrix Gθ (x) effectively captures shape variations. 
+
+4.4 Active Learning Methods via the Transport NTK 
+
+Let Xtrain denote the conditions for which we have observed output samples, and Xpool the set of inputs for which experimental data is not available. Treating the tNTK as the covariance function of a Gaussian process, the GP posterior variance at a test point x′ after conditioning on a set XS ⊆ X is: 
+
+σ2 
+
+> θ
+
+(x′ ∣ X S ) = kθ (x′, x ′) − kθ (X S , x ′)⊺ (kθ (X S , XS ) + λI )−1 kθ (X S , x ′), (17) where λ > 0 is a regularization parameter. We greedily select the next candidate as the one that minimizes the average posterior variance over the whole dataset: 
+
+x∗ = arg min 
+
+> x∈X pool
+
+1
+
+∣X pool ∣ + ∣X train ∣ ∑
+
+> x′∈X pool ∪X train
+
+σ2 
+
+> θ
+
+(x′ ∣ X train ∪ { x}) . (18) 6We apply this rule sequentially to design an entire batch (Algorithm 1). 
+
+Algorithm 1 Active learning with the transport neural tangent kernel 
+
+Require: Pool of conditions X , batch size B, number of rounds T , regularization λ > 0 
+
+> 1:
+
+Initialize Xtrain ⊂ X with ∣X train ∣ = B0; set Xpool = X ∖ X train  
+
+> 2:
+
+for t = 1, . . . , T do  
+
+> 3:
+
+Fit generative model on Xtrain to obtain parameters θt 
+
+> 4:
+
+B ← ∅ ▷ current batch  
+
+> 5:
+
+XC ← X train ▷ conditioning set  
+
+> 6:
+
+for b = 1, 2, . . . , B do  
+
+> 7:
+
+x∗ ← arg min 
+
+> x∈X pool ∖B
+
+∑
+
+> x′∈X
+
+σ2 
+
+> θt
+
+(x′ ∣ X C ∪ { x}) ▷ select point  
+
+> 8:
+
+B ← B ∪ { x∗} 
+
+> 9:
+
+XC ← X C ∪ { x∗} 
+
+> 10:
+
+Xtrain ← X train ∪ B ▷ update training set  
+
+> 11:
+
+Xpool ← X pool ∖ B ▷ update pool  
+
+> 12:
+
+return Final model parameters θT
+
+## 5 Experiments 
+
+We investigate the empirical performance of our active learning strategy based on the tNTK, following Algorithm 1, across four conditional generative modeling tasks. We consider as baseline the selection rule in (18) applied to the NTK computed on a neural network fitting the mean of the distribution (“NTK”) and a random sampling baseline (see Appendix D.2 for more details). The NTK baseline matches BAIT [26] as defined in Holzmüller et al. [25], and is among the best active learning methods for regression tasks in Holzmüller et al. [25]. Unless mentioned otherwise, we use the Monte Carlo estimate of the last layer tNTK for all experiments with finite data (using M = 4, 096 samples). Full experimental details can be found in Appendix D. 
+
+5.1 Affine transport of 2D Gaussian distributions 
+
+We first investigate the active learning performance of the kernel when Gθ (x) can be computed in closed form (Lemma 2). We consider 2-dimensional isotropic Gaussian y ∼ N ( 0, I 2) and conditional transport maps of the form 
+
+Tθ (x)( y) = bθ (x) + Lθ (x)y , (19) where bθ (x) ∈ R2 is the predicted mean and Lθ (x) ∈ R2×2 is a lower-triangular matrix with strictly positive diagonal entries, so that Σθ (x) = Lθ (x) Lθ (x)⊺ is a valid covariance matrix. bθ (x) and 
+
+Lθ (x) are parameterized by neural networks, and trained against the analytical Gaussian parameters observed for each input x (under an infinite-sample assumption). We generate data so that the input region x1 ≈ 0 has high variation in the mean but nearly constant covariance, with the opposite pattern for the region x1 ≈ 1 (Figure 2A-B). While the mean-based NTK does not improve over random 0.0 0.5 1.0                    
+
+> x1
+> 0.00 0.25 0.50 0.75 1.00
+> x2
+> A.
+> Mean( x)0.0 0.5 1.0
+> x1
+> 0.00 0.25 0.50 0.75 1.00
+> x2
+> B.
+> Cov( x)
+> 57911 13 15 Training set size −2.0 −1.5 −1.0 −0.5
+> log ( W22)
+> C.
+> 57911 13 15 Training set size −4 −3 −2
+> log ( W22 mean)
+> D.
+> 57911 13 15 Training set size −2.0 −1.5 −1.0
+> log ( W22 cov)
+> E.
+> tNTK NTK Random
+
+Figure 2: Results on the synthetic Gaussian 2D dataset. (A) Ground truth conditional mean E[y ∣ x].(B) Ground truth conditional covariance Cov [y ∣ x]. (C) Test Wasserstein error after active learning as a function of training set size (lower is better). (D-E) Mean (D) and covariance (E) components of the test Wasserstein error. Results are averaged over 30 independent random initializations; shaded bands show standard errors. 7Table 1: Change in Wasserstein test risk from iteration 0 (lower is better). For each seed, we average over T = 5 iterations and K = 5 folds; we then report mean ± standard error across N = 10 seeds, in units of 10 −3. Column headers indicate B0 + B, the initial training set size and the number of conditions added per AL round. Best mean per column shown in bold.                                                                                                                                                                       
+
+> Dataset Strategy 5 + 1 5 + 5 10 + 1 Gaussian mixture Random −296 .12 ±16 .29 −609 .61 ±17 .10 −121 .02 ±10 .93
+> NTK −416 .43 ±16 .15 −685 .12 ±17 .58 −168 .28 ±11 .23
+> NTK (mean-var) −367 .99 ±17 .59 −686 .29 ±17 .39 −162 .85 ±11 .04
+> NTK (quartile) −388 .93 ±16 .43 −681 .29 ±17 .62 −176 .86 ±10 .72
+> BALSA-EMD −332 .16 ±16 .06 −552 .52 ±17 .07 −133 .59 ±12 .12
+> tNTK −429 .52 ±16 .39 −695 .82 ±17 .89 −205 .01 ±12 .38
+> Temperature Random −89 .04 ±12 .88 −219 .96 ±14 .43 −41 .02 ±7.44
+> NTK −185 .55 ±14 .66 −255 .65 ±15 .29 −84 .57 ±9.70
+> NTK (mean-var) −186 .51 ±15 .31 −258 .48 ±15 .55 −86 .88 ±9.69
+> NTK (quartile) −182 .63 ±14 .97 −255 .01 ±15 .86 −88 .36 ±9.66
+> BALSA-EMD −155 .37 ±13 .64 −199 .14 ±15 .87 −71 .14 ±9.57
+> tNTK −189 .94 ±15 .22 −267 .93 ±15 .36 −89 .84 ±10 .01
+> Dew Point Random −79 .90 ±14 .55 −280 .77 ±21 .75 −76 .55 ±10 .15
+> NTK −178 .44 ±18 .98 −364 .19 ±21 .53 −158 .94 ±10 .97
+> NTK (mean-var) −172 .47 ±17 .97 −372 .49 ±22 .06 −159 .24 ±10 .32
+> NTK (quartile) −173 .21 ±18 .59 −375 .47 ±22 .57 −158 .70 ±11 .14
+> BALSA-EMD −79 .51 ±14 .23 −178 .00 ±17 .91 −124 .13 ±9.39
+> tNTK −221 .18 ±17 .13 −442 .25 ±22 .34 −212 .74 ±11 .73
+
+selection, the tNTK achieves a 1.2x lower Wasserstein loss than random by the end of the campaign (Figure 2C). As in the one-dimensional example of Section 3.2, NTK improves over random in mean loss but not in covariance loss (Figure 2D-E). We further show that this result also holds for the affine transport of d-dimensional Gaussian distributions, where the tNTK outperforms NTK up to d = 50 
+
+(Appendix E.2). Model and experimental details appear in Appendix D.3. 
+
+5.2 Conditional quantile prediction 
+
+We next consider the case where dim (Y) = 1 with Tθ (x) monotone in y. As shown in Appendix A.3, this yields the quantile representation Tθ (x) = F −1 
+
+> θ
+
+(x; ⋅)○ Fν , where F −1 
+
+> θ
+
+(x; ⋅) is the quantile function of μθ (x). In this setting, the bound from Theorem 1 is tight at the leading order, and the tNTK admits the following closed-form expression: 
+
+k1D  
+
+> θ
+
+(x, x ′) = ∫ 
+
+> 10
+
+∇θ F −1 
+
+> θ
+
+(x; τ )⊺∇θ F −1 
+
+> θ
+
+(x′; τ ) dτ. (20) We discretize τ on a uniform grid and parameterize conditional quantiles F −1 
+
+> θ
+
+(x; τ ) with non-crossing quantile networks [54]. We evaluate the performance of our method on one simulated and two real datasets. Simulated data are based on three-component Gaussian mixture models whose parameters are functions of the input x. Real data are based on yearly distributions of surface temperature and dew point [55], predicted from the location of the measuring station. In this experiment, we include as baseline the NTK from multiple networks that were fitted on summary statistics of the data, such as the mean, the mean and the variance (mean-var), as well as all quartiles (quartile) of the distribution. We also report results for Bayesian Active Learning By Distribution Disagreement (BALSA EMD ) [56]. The tNTK consistently outperforms all baselines across differing numbers of initial conditions ( B0)and the number of conditions selected in each iteration ( B) (Table 1 and Figure S2). Model and dataset details appear in Appendix D.4. 
+
+5.3 Conditional Flow Matching 
+
+In conditional flow matching, the transport map is the time-1 flow Tθ (x)( y) = ϕ1,x (y) obtained by integrating the ODE from Equation 2. We approximate the total derivative by the integration of 8Table 2: Change in Sinkhorn divergence from iteration 0 (lower is better). For each seed, we average over T = 3 iterations and K = 5 folds; we then report mean ± standard error across N = 10 seeds, in units of 10 −3. Column headers indicate B0 + B, the initial training set size and the number of conditions added per AL round. Best mean per column shown in bold.                                                                                      
+
+> Dataset Strategy 5 + 1 5 + 5 10 + 5 Radial flow Random −17 .70 ±3.97 −40 .24 ±8.42 −24 .60 ±4.16
+> NTK −26 .71 ±6.35 −43 .07 ±7.61 −24 .24 ±4.86
+> tNTK −35 .50 ±5.36 −53 .55 ±6.83 −38 .39 ±5.03
+> Van der Pol oscillator Random −121 .87 ±31 .66 −336 .33 ±34 .17 −171 .39 ±28 .31
+> NTK −196 .36 ±32 .59 −408 .15 ±37 .03 −220 .98 ±33 .08
+> tNTK −200 .73 ±37 .15 −441 .51 ±24 .25 −259 .98 ±37 .37
+> CLINC 150 Random −350 .07 ±91 .54 −883 .23 ±155 .74 −436 .98 ±133 .64
+> NTK −306 .01 ±111 .84 −884 .02 ±162 .84 −480 .66 ±96 .75
+> tNTK −672 .85 ±107 .66 −852 .31 ±133 .11 −580 .94 ±93 .76
+
+Dθ vt,x θ , and compute the tNTK as 
+
+kFlow  
+
+> θ
+
+(x, x ′) = ∫ Tr [(∫ 
+
+> 10
+
+Dθ vt,x θ (ϕt,x (y)) dt )
+
+> ⊺
+
+(∫ 
+
+> 10
+
+Dθ vt,x ′ 
+
+> θ
+
+(ϕt,x ′
+
+(y)) dt )] dν (y). (21) We estimate the integral over ν in (21) with Monte Carlo sampling, and compute both the inner time integration and the flow ODE for ϕt,x (y) with Tsitouras’ 5/4 adaptive Runge–Kutta method [57]. For this experiment, we use a Gaussian conditional probability path with mean μt = t y 1 and standard deviation σt = 1 − t, where y1 ∼ μ(x) is a target sample and the path interpolates between N ( 0, I ) at 
+
+t = 0 and a Dirac at y1 at t = 1, following Lipman et al. [32]. We evaluate our kernel on two simulated and one real-world dataset. The simulated systems generate particle distributions in R2: radial flows with attractors at varying radii and steepness, and Van der Pol oscillators [58] with varying parameters and initial particle distributions; we use 100 conditions for each. For the real-world data, we use the CLINC150 intent classification dataset [59, 60]: each conditioning input is the fine-tuned MINILM [61] text embedding of an intent class label, and the target distribution is the empirical distribution of sentences in that class, embedded into an 8-dimensional latent space using PCA on BART [62] sentence embeddings. tNTK outperforms NTK across 8 out of 9 (dataset, budget) configurations (Table 2 and Figure S3). In the remaining configuration (CLINC 150; B0 = 5; B = 5), NTK does not significantly outperform tNTK ( p > 0.5, paired t-test). This result demonstrates that the kernel remains useful even when its computation requires numerical integration of the flow ODE. Full experimental details appear in Appendix D.5. 
+
+5.4 Conditional Monge Gap 0 1 2 3 4 5
+
+> AL iteration
+> 2.30 2.32 2.34 2.36 2.38 2.40
+> Sinkhorn div. ( ↓ )
+> BMDM-Genetic, 30 + 5
+> Random NTK tNTK
+
+Figure 3: Mean Sinkhorn diver-gence per active learning iteration across 5 folds and 10 random seeds. Shade shows standard error. We use the conditional Monge gap [31, 42] to predict single-cell responses in two perturbation datasets, where mapping unperturbed cell states to perturbed cell states has often been modeled using optimal transport [63, 36]. The K562-Chemical task uses the SciPlex3 dataset [64]: x is the mean transcriptomic response in MCF7 cells (adenocarcinoma cell line) under a small-molecule drug treatment, and the target is the single-cell transcriptomic response in K562 cells (leukemia cell line) under the same treatment, embedded into a 10-dimensional latent space. The BMDM-Genetic task uses a genetic screen of bone marrow-derived macrophages: x is the imaging outcome from a matched optical pooled screen, and the target is the transcriptomic response in a 10-dimensional latent space. Data processing details appear in Appendix D.6. 9Table 3: Change in Sinkhorn divergence from iteration 0 (lower is better). For each seed, we average over T = 5 iterations and K = 5 folds; we then report mean ± standard error across N = 10 seeds, in units of 10 −3. Column headers indicate B0 + B, the initial training set size and the number of conditions added per AL round. Best mean per column shown in bold.                                                                                                                         
+
+> Dataset Strategy B0+B
+> K562-Chemical 10 + 1 10 + 5 20 + 5 Random −9.56 ±0.69 −29 .06 ±1.09 −15 .27 ±0.69
+> NTK −9.33 ±0.75 −30 .44 ±1.45 −20 .04 ±0.80
+> tNTK −8.65 ±1.16 −30 .26 ±1.48 −21 .00 ±1.30
+> 20 + 10 30 + 5 30 + 10 Random −24 .14 ±1.29 −10 .70 ±1.19 −17 .19 ±1.34
+> NTK −30 .86 ±0.84 −17 .57 ±1.06 −25 .53 ±0.97
+> tNTK −31 .63 ±1.22 −19 .30 ±1.18 −26 .13 ±1.13
+> BMDM-Genetic 10 + 1 10 + 5 20 + 5 Random −23 .67 ±5.56 −98 .81 ±6.38 −67 .70 ±5.29
+> NTK −38 .16 ±4.98 −127 .30 ±6.24 −92 .80 ±5.00
+> tNTK −32 .01 ±4.33 −130 .46 ±7.60 −102 .63 ±5.20
+> 20 + 10 30 + 5 30 + 10 Random −111 .13 ±3.87 −48 .73 ±2.41 −79 .70 ±3.97
+> NTK −130 .32 ±5.70 −54 .90 ±4.17 −90 .86 ±4.54
+> tNTK −144 .90 ±3.50 −70 .59 ±4.84 −106 .25 ±4.91
+
+tNTK outperforms NTK and random baselines in 9 out of 12 (dataset, budget) configurations (Table 3 and Figure S4). In the remaining cases, NTK did not outperform significantly the tNTK ( p > 0.1,paired t-test). 
+
+## 6 Discussion 
+
+We introduced an active learning framework for conditional distributions based on the transport neural tangent kernel . The tNTK captures the sensitivity of a conditional generative model’s predicted distribution to perturbations of its parameters, and generalizes the NTK to distributional outputs. We derived the tNTK as an upper bound on the posterior Fréchet variance (Theorem 1) and provided a geometric interpretation on the Wasserstein manifold (Appendix B). Across four conditional generative model classes and on simulated and real datasets, total-posterior-variance-minimizing selection with the tNTK as GP covariance function outperforms the same strategy applied to the NTK of the conditional mean, as well as random sampling. Sequential greedy total posterior variance minimization, while a principled choice, may be outper-formed by selection methods explicitly designed for batch diversity [25], especially in large-batch regimes. However, the tNTK can be paired with any kernel-based selection method, so combining it with existing or novel selection strategies offers a natural extension of our framework to large-batch settings. The framework extends naturally to other model classes, including diffusion models: in their probability-flow ODE formulation [65], the model is deterministic and the same Jacobian-integration argument as in CFM applies. Conditional normalizing flows [66] provide direct access to the inverse map and pushforward density, and score-based kernels with theoretical guarantees in the regression setting [67, 19, 25] could be extended to the distributional case as an alternative to the tNTK. In dimensions greater than one, neither the Fréchet variance bound (Theorem 1) nor the metric derivative bound (Lemma 4) is generally tight. While we have characterized the gap and tightness conditions for the metric derivative, our experiments evaluate output dimensions only up to d = 50 .How the tNTK behaves at substantially higher dimensions remains an open question. 10 Acknowledgments and Disclosure of Funding 
+
+We thank Jiequn Han for early discussions about distribution-aware active learning. This work was supported through the NYU IT High Performance Computing (HPC) resources, services, and staff expertise. Jayoung Ryu was partially supported by a Betty Moore Postdoctoral Fellowship, a Google TPU Research & Education Award. Romain Lopez and Jayoung Ryu were partially supported by a Schmidt Sciences AI2050 Fellowship Award. Kyunghyun Cho was supported by the Institute of Information & Communications Technology Planning & Evaluation (IITP) with a grant funded by the Ministry of Science and ICT (MSIT) of the Republic of Korea in connection with the Global AI Frontier Lab International Collaborative Research Agreement. (No. RS-2024-00469482 & RS-2024-00509279) Kyunghyun Cho was partly supported in part by the NYUAD Center for Interdisciplinary Data Science & AI (CIDSAI), funded by Tamkeen under the NYUAD Research Institute Award CG016. Disclosures: Romain Lopez has been an employee of Genentech since August 31st, 2021. 
+
+## References 
+
+[1] Ross D King, Kenneth E Whelan, Ffion M Jones, Philip GK Reiser, Christopher H Bryant, Stephen H Muggleton, Douglas B Kell, and Stephen G Oliver. Functional genomic hypothesis generation and experimentation by a robot scientist. Nature , 427(6971):247–252, 2004. [2] Ross D King, Jem Rowland, Stephen G Oliver, Michael Young, Wayne Aubrey, Emma Byrne, Maria Liakata, Magdalena Markham, Pinar Pir, Larisa N Soldatova, et al. The automation of science. Science , 324(5923):85–89, 2009. [3] Nathan J Szymanski, Bernardus Rendy, Yuxing Fei, Rishi E Kumar, Tanjin He, David Milsted, Matthew J McDermott, Max Gallant, Ekin Dogus Cubuk, Amil Merchant, Haegyeom Kim, Anubhav Jain, Christopher J Bartel, Kristin Persson, Yan Zeng, and Gerbrand Ceder. An autonomous laboratory for the accelerated synthesis of novel materials. Nature , 624(7990): 86–91, 2023. [4] Christopher Tosh, Mauricio Tec, Jessica B White, Jeffrey F Quinn, Glorymar Ibanez Sanchez, Paul Calder, Andrew L Kung, Filemon S Dela Cruz, and Wesley Tansey. A Bayesian active learning platform for scalable combination drug screens. Nature Communications , 16(1):156, 2025. [5] Nathan C Frey, Isidro Hötzel, Samuel D Stanton, Ryan Kelly, Robert G Alberstein, Emily K Makowski, Karolis Martinkus, Daniel Berenberg, Jack Bevers III, Tyler Bryson, et al. Lab-in-the-loop therapeutic antibody design with deep learning. bioRxiv , 2025. [6] Jason Yang, Ravi G Lal, James C Bowden, Raul Astudillo, Mikhail A Hameedi, Sukhvinder Kaur, Matthew Hill, Yisong Yue, and Frances H Arnold. Active learning-assisted directed evolution. Nature Communications , 16(1):714, 2025. [7] Kaiyi Jiang, Zhaoqing Yan, Matteo Di Bernardo, Samantha R Sgrizzi, Lukas Villiger, Alisan Kayabolen, BJ Kim, Josephine K Carscadden, Masahiro Hiraizumi, Hiroshi Nishimasu, et al. Rapid in silico directed evolution by a protein language model with EVOLVEpro. Science , 387 (6732):6006, 2024. [8] Jennifer E Rood, Anna Hupalowska, and Aviv Regev. Toward a foundation model of causal cell and tissue biology with a perturbation cell and tissue atlas. Cell , 187(17):4520–4545, 2024. [9] Jiaqi Zhang, Louis Cammarata, Chandler Squires, Themistoklis P Sapsis, and Caroline Uhler. Active learning for optimal intervention design in causal models. Nature Machine Intelligence ,5(10):1066–1075, 2023. [10] Kexin Huang, Romain Lopez, Jan-Christian Hütter, Takamasa Kudo, Antonio Rios, and Aviv Regev. Sequential optimal experimental design of perturbation screens guided by multi-modal priors. In Research in Computational Molecular Biology (RECOMB) , pages 17–37. 2024. 11 [11] Jason Qin, Hans-Hermann Wessels, Carlos Fernandez-Granda, and Yuhan Hao. Active learning for efficient discovery of optimal combinatorial perturbations. In International Conference on Machine Learning , volume 267, pages 50363–50383, 13–19 Jul 2025. [12] Benjamin DeMeo, Charlotte Nesbitt, Samuel A Miller, Daniel B Burkhardt, Inna Lipchina, Doris Fu, Peter Holderrieth, David Kim, Sergey Kolchenko, Artur Szalata, et al. Active learning framework leveraging transcriptomics identifies modulators of disease phenotypes. Science ,390(6776):8577, 2025. [13] Ozan Sener and Silvio Savarese. Active learning for convolutional neural networks: A core-set approach. In International Conference on Learning Representations , 2018. [14] Viraj Mehta, Syrine Belakaria, Vikramjeet Das, Ojash Neopane, Yijia Dai, Ilija Bogunovic, Barbara E Engelhardt, Stefano Ermon, Jeff Schneider, and Willie Neiswanger. Sample efficient preference alignment in LLMs via active exploration. In Second Conference on Language Modeling , 2025. [15] William Muldrew, Peter Hayes, Mingtian Zhang, and David Barber. Active preference learning for large language models. In International Conference on Machine Learning , pages 36577– 36590. PMLR, 2024. [16] David Cohn, Les Atlas, and Richard Ladner. Improving generalization with active learning. 
+
+Machine learning , 15(2):201–221, 1994. [17] David A Cohn, Zoubin Ghahramani, and Michael I Jordan. Active learning with statistical models. Journal of artificial intelligence research , 4:129–145, 1996. [18] Burr Settles. Active learning literature survey. Technical report, 2009. [19] Jordan T Ash, Chicheng Zhang, Akshay Krishnamurthy, John Langford, and Alekh Agarwal. Deep batch active learning by diverse, uncertain gradient lower bounds. In International Conference on Learning Representations , 2020. [20] Neil Houlsby, Ferenc Huszár, Zoubin Ghahramani, and Máté Lengyel. Bayesian active learning for classification and preference learning. arXiv , 2011. [21] Andreas Kirsch, Joost van Amersfoort, and Yarin Gal. BatchBALD: Efficient and diverse batch acquisition for deep Bayesian active learning. In Advances in Neural Information Processing Systems , 2019. [22] Robert Pinsler, Jonathan Gordon, Eric T. Nalisnick, and José Miguel Hernández-Lobato. Bayesian batch active learning as sparse subset approximation. In Advances in Neural In-formation Processing Systems , 2019. [23] Masashi Sugiyama. Active learning in approximately linear regression based on conditional expectation of generalization error. Journal of Machine Learning Research , 7(6):141–166, 2006. [24] Roi Reichart, Katrin Tomanek, Udo Hahn, and Ari Rappoport. Multi-task active learning for linguistic annotations. In Annual Meeting of the Association for Computational Linguistics ,pages 861–869, 2008. [25] David Holzmüller, Viktor Zaverkin, Johannes Kästner, and Ingo Steinwart. A framework and benchmark for deep batch active learning for regression. Journal of Machine Learning Research ,24(164):1–81, 2023. [26] Jordan T. Ash, Surbhi Goel, Akshay Krishnamurthy, and Sham M. Kakade. Gone fishing: Neural active learning with Fisher embeddings. In Advances in Neural Information Processing Systems , 2021. [27] Wouter Meuleman, Alexander Muratov, Eric Rynes, Jessica Halow, Kristen Lee, Daniel Bates, Morgan Diegel, Douglas Dunn, Fidencio Neri, Athanasios Teodosiadis, Alex Reynolds, Eric Haugen, Jemma Nelson, Audra Johnson, Mark Frerker, Michael Buckley, Richard Sandstrom, Jeff Vierstra, Rajinder Kaul, and John Stamatoyannopoulos. Index and biological spectrum of human DNase I hypersensitive sites. Nature , 584(7820):244–251, 2020. 12 [28] Julien Bect, David Ginsbourger, Ling Li, Victor Picheny, and Emmanuel Vazquez. Sequential design of computer experiments for the estimation of a probability of failure. Statistics and Computing , 22(3):773–793, 2012. [29] Themistoklis P Sapsis. Output-weighted optimal sampling for Bayesian regression and rare event statistics using few samples. Proceedings of the Royal Society A: Mathematical, Physical and Engineering Sciences , 476(2234), 2020. [30] Charlotte Bunne, Andreas Krause, and Marco Cuturi. Supervised training of conditional Monge maps. In Advances in Neural Information Processing Systems , volume 35, pages 6859–6872, 2022. [31] Alice Driessen, Benedek Harsanyi, Marianna Rapsomaniki, and Jannis Born. Towards gen-eralizable single-cell perturbation modeling via the conditional Monge gap. Nature Machine Intelligence , 2026. [32] Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow matching for generative modeling. In International Conference on Learning Representations ,2023. [33] Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In 
+
+Advances in Neural Information Processing Systems , 2020. [34] Zheyuan Zhan, Defang Chen, Jian-Ping Mei, Zhenghe Zhao, Jiawei Chen, Chun Chen, Siwei Lyu, and Can Wang. Conditional image synthesis with diffusion models: A survey. Transactions on Machine Learning Research , September 2025. [35] Xun Liang, Hanyu Wang, Yezhaohui Wang, Shichao Song, Jiawei Yang, Simin Niu, Jie Hu, Dan Liu, Shunyu Yao, Feiyu Xiong, and Zhiyu Li. Controllable text generation for large language models: A survey. arXiv , 2024. [36] Charlotte Bunne, Stefan G Stark, Gabriele Gut, Jacobo Sarabia Del Castillo, Mitch Levesque, Kjong-Van Lehmann, Lucas Pelkmans, Andreas Krause, and Gunnar Rätsch. Learning single-cell perturbation responses using neural optimal transport. Nature Methods , 20(11):1759–1768, November 2023. [37] Dominik Klein, Jonas Simon Fleck, Daniil Bobrovskiy, Lea Zimmermann, Sören Becker, Alessandro Palma, Leander Dony, Alejandro Tejada-Lapuerta, Guillaume Huguet, Hsiu-Chuan Lin, Nadezhda Azbukina, Fátima Sanchís-Calleja, Theo Uscidda, Artur Szalata, Manuel Gander, Aviv Regev, Barbara Treutlein, J Gray Camp, and Fabian J Theis. CellFlow enables generative single-cell phenotype modeling with flow matching. bioRxiv , 2025. [38] Jayoung Ryu, Charlotte Bunne, Luca Pinello, Aviv Regev, and Romain Lopez. Cross-modality matching and prediction of perturbation responses with labeled Gromov-Wasserstein optimal transport. In International Conference on Artificial Intelligence and Statistics , pages 4258–4266, 2025. [39] Martin Rohbeck, Edward De Brouwer, Charlotte Bunne, Jan-Christian Huetter, Anne Biton, Kelvin Y Chen, Aviv Regev, and Romain Lopez. Modeling complex system dynamics with flow matching across time and conditions. In The Thirteenth International Conference on Learning Representations , 2025. [40] Lucas Ferreira DaSilva, Simon Senan, Judith F Kribelbauer-Swietek, Zain Munir Patel, Lithin Karmel Louis, Aniketh Janardhan Reddy, Sameer Gabbita, Jonathan D Rosen, Zach Nussbaum, César Miguel Valdez Córdova, Aaron Wenteler, Noah Weber, Tin M Tunjic, Mar-tino Mansoldo, Talha Ahmad Khan, Gue-Ho Hwang, Vincent Gardeux, David T Humphreys, Cameron Smith, Matei Bejan, Peter Bromley, Will Connell, Bart Deplancke, Michael I Love, Emily S Wong, Wouter Meuleman, and Luca Pinello. Designing synthetic regulatory elements using the generative AI framework DNA-diffusion. Nature Genetics , 58(1):180–194, 2026. [41] Brandon Amos, Lei Xu, and J. Zico Kolter. Input convex neural networks. In International Conference on Machine Learning , volume 70, pages 146–155, 2017. 13 [42] Théo Uscidda and Marco Cuturi. The Monge gap: a regularizer to learn all transport maps. In 
+
+International Conference on Machine Learning , 2023. [43] Alexander Tong, Kilian Fatras, Nikolay Malkin, Guillaume Huguet, Yanlei Zhang, Jarrid Rector-Brooks, Guy Wolf, and Yoshua Bengio. Improving and generalizing flow-based generative models with minibatch optimal transport. Transactions on Machine Learning Research , 2024. [44] Vineeth Rakesh and Swayambhoo Jain. Efficacy of Bayesian neural networks in active learning. In IEEE/CVF conference on computer vision and pattern recognition , pages 2601–2609, 2021. [45] Yarin Gal and Zoubin Ghahramani. Dropout as a Bayesian approximation: representing model uncertainty in deep learning. In International Conference on Machine Learning , volume 48, pages 1050–1059, 2016. [46] Mohammad Emtiyaz Khan, Alexander Immer, Ehsan Abedi, and Maciej Korzepa. Approximate inference turns deep networks into Gaussian processes. In Advances in Neural Information Processing Systems , volume 32, 2019. [47] Roman Novak, Jascha Sohl-Dickstein, and Samuel S Schoenholz. Fast finite width neural tangent kernel. In International Conference on Machine Learning , pages 17018–17044, 2022. [48] Maurice Fréchet. Les éléments aléatoires de nature quelconque dans un espace distancié. 
+
+Annales de l’institut Henri Poincaré , 10(4):215–310, 1948. [49] Martial Agueh and Guillaume Carlier. Barycenters in the Wasserstein space. SIAM Journal on Mathematical Analysis , 43(2):904–924, 2011. [50] David J. C. MacKay. A practical Bayesian framework for backpropagation networks. Neural Computation , 4(3):448–472, 1992. [51] Erik Daxberger, Agustinus Kristiadi, Alexander Immer, Runa Eschenhagen, Matthias Bauer, and Philipp Hennig. Laplace redux – effortless Bayesian deep learning. In Advances in Neural Information Processing Systems , 2021. [52] Wuchen Li and Jiaxi Zhao. Wasserstein information matrix. Information Geometry , 6(1): 203–255, 2023. [53] Shu Liu, Wuchen Li, Hongyuan Zha, and Haomin Zhou. Neural parametric Fokker–Planck equation. SIAM Journal on Numerical Analysis , 60(3):1385–1449, 2022. [54] Sang Jun Moon, Jong-June Jeon, Jason Sang Hun Lee, and Yongdai Kim. Learning multiple quantiles with neural networks. Journal of Computational and Graphical Statistics , 30(4): 1238–1248, 2021. [55] NOAA National Centers for Environmental Information. Global surface summary of the day - gsod. https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id= gov.noaa.ncdc:C00516 , 1999. Temperature data between 2023-2025. [56] Thorben Werner and Lars Schmidt-Thieme. Bayesian active learning by distribution disagree-ment. arXiv , 2025. [57] Ch Tsitouras. Runge–Kutta pairs of order 5 (4) satisfying only the first column simplifying assumption. Computers & Mathematics with Applications , 62(2):770–775, 2011. [58] B. van der Pol. On “relaxation-oscillations”. The London, Edinburgh, and Dublin Philosophical Magazine and Journal of Science , 7(2):978–992, 1926. [59] Stefan Larson, Anish Mahendran, Joseph J. Peper, Christopher Clarke, Andrew Lee, Parker Hill, Jonathan K. Kummerfeld, Kevin Leach, Michael A. Laurenzano, Lingjia Tang, and Jason Mars. An evaluation dataset for intent classification and out-of-scope prediction. In Empirical Methods in Natural Language Processing (EMNLP) , pages 1311–1316, 2019. [60] CLINC150. UCI Machine Learning Repository, 2020. DOI: https://doi.org/10.24432/C5MP58. 14 [61] Wenhui Wang, Furu Wei, Li Dong, Hangbo Bao, Nan Yang, and Ming Zhou. MINILM: deep self-attention distillation for task-agnostic compression of pre-trained transformers. In Advances in Neural Information Processing Systems , 2020. [62] Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Veselin Stoyanov, and Luke Zettlemoyer. BART: Denoising sequence-to-sequence pre-training for natural language generation, translation, and comprehension. In Annual Meeting of the Association for Computational Linguistics , pages 7871–7880, 2020. [63] Geoffrey Schiebinger, Jian Shu, Marcin Tabaka, Brian Cleary, Vidya Subramanian, Aryeh Solomon, Joshua Gould, Siyan Liu, Stacie Lin, Peter Berube, Lia Lee, Jenny Chen, Justin Brumbaugh, Philippe Rigollet, Konrad Hochedlinger, Rudolf Jaenisch, Aviv Regev, and Eric S Lander. Optimal-transport analysis of single-cell gene expression identifies developmental trajectories in reprogramming. Cell , 176(4):928–943.e22, 2019. [64] Sanjay R Srivatsan, José L McFaline-Figueroa, Vijay Ramani, Lauren Saunders, Junyue Cao, Jonathan Packer, Hannah A Pliner, Dana L Jackson, Riza M Daza, Lena Christiansen, Fan Zhang, Frank Steemers, Jay Shendure, and Cole Trapnell. Massively multiplex chemical transcriptomics at single-cell resolution. Science , 367(6473):45–51, 2020. [65] Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. Score-based generative modeling through stochastic differential equations. In 
+
+International Conference on Learning Representations , 2021. [66] Christina Winkler, Daniel Worrall, Emiel Hoogeboom, and Max Welling. Learning likelihoods with conditional normalizing flows. arXiv , 2019. [67] Kamalika Chaudhuri, Sham Kakade, Praneeth Netrapalli, and Sujay Sanghavi. Convergence rates of active learning for maximum likelihood estimation. Advances in Neural Information Processing Systems , 2012. [68] Luigi Ambrosio, Nicola Gigli, and Giuseppe Savaré. Gradient flows: In metric spaces and in the space of probability measures . Lectures in Mathematics. Birkhauser Verlag AG, 2004. [69] Cédric Villani et al. Optimal transport: Old and New , volume 338. Springer, 2009. [70] Murray Rosenblatt. Remarks on a multivariate transformation. The annals of mathematical statistics , 23(3):470–472, 1952. [71] Herbert Knothe. Contributions to the theory of convex bodies. Michigan Mathematical Journal ,4(1):39–52, 1957. [72] Clark R. Givens and Rae Michael Shortt. A class of Wasserstein metrics for probability distributions. Michigan Mathematical Journal , 31(2):231–240, 1984. [73] Stefan Elfwing, Eiji Uchibe, and Kenji Doya. Sigmoid-weighted linear units for neural network function approximation in reinforcement learning. Neural Networks , 107:3–11, 2018. [74] Dan Hendrycks and Kevin Gimpel. Gaussian error linear units (GELUs). arXiv , 2016. [75] Zoe Piran. sciplex3. 2023. doi: 10.6084/m9.figshare.22122701.v1. [76] Romain Lopez, Jeffrey Regier, Michael B Cole, Michael I Jordan, and Nir Yosef. Deep generative modeling for single-cell transcriptomics. Nature Methods , 15(12):1053–1058, December 2018. [77] Takamasa Kudo, Romain Lopez, Ana M. Meireles, Antonio Rios, Paula Coelho, Vineethkrishna Chandrasekar, Dylan C. Lam, Jan-Christian Huetter, Mineto Ota, Orit Rozenblatt-Rosen, Levi Garraway, Kathryn Geiger-Shuller, Avtar Singh, Jonathan K. Pritchard, and Aviv Regev. Scalable multimodal mapping of macrophage regulatory architecture by integrating optical and transcriptomic pooled screens. bioRxiv , 2026. [78] Ethan Weinberger, Chris Lin, and Su-In Lee. Isolating salient variations of interest in single-cell data with contrastiveVI. Nature Methods , 20(9):1336–1345, 2023. 15 [79] David Feldman, Avtar Singh, Jonathan L Schmid-Burgk, Rebecca J Carlson, Anja Mezger, Anthony J Garrity, Feng Zhang, and Paul C Blainey. Optical pooled screens in human cells. 
+
+Cell , 179(3):787–799.e17, October 2019. [80] Pedro C Álvarez Esteban, E del Barrio, J A Cuesta-Albertos, and C Matrán. A fixed-point approach to barycenters in Wasserstein space. arXiv , November 2015. [81] Carsten Lüth, Till Bungert, Lukas Klein, and Paul Jaeger. Navigating the pitfalls of active learning evaluation: A systematic framework for meaningful performance assessment. In 
+
+Advances in Neural Information Processing Systems , volume 36, pages 9789–9836, 2023. 16 Code Availability Statement 
+
+The code to reproduce the figures and tables, as well as to run the model can be found at https: //github.com/biologicalML/transport_ntk .
+
+## Supplementary Materials 
+
+This appendix is organized as follows. • Appendix A: Theoretical derivations for the motivation for distribution-aware active learning and the properties of the tNTK. 
+
+– Appendix A.1: Proof of Proposition 1 on risk decomposition. 
+
+– Appendix A.2: Proof of Lemma 1 on mean-variance decomposition of risk in one dimension. 
+
+– Appendix A.3: Proof of Theorem 1 on the upper bound of the Fréchet variance. 
+
+– Appendix A.4: Positive semi-definiteness of the tNTK. 
+
+– Appendix A.5: Simplified kernel computation for models with a linear output layer, using sensitivity to last-layer parameters. 
+
+– Appendix A.6: Proof of Lemma 2 on kernel decomposition for affine transport. • Appendix B: Geometric interpretation of the tNTK as an upper bound on the metric derivative on the 2-Wasserstein space, and relationship to metric derivative on the Knothe–Rosenblatt distance. 
+
+– Appendix B.1: Background on curves and metric derivatives on Wasserstein space. 
+
+– Appendix B.2: The norm induced by Gθ (x) upper-bounds the metric derivative of a curve induced by parameter perturbation. 
+
+– Appendix B.3: Analysis of the gap between the bound and the metric derivative, and conditions under which it is tight. • Appendix C: Exact metric tensor under the Knothe–Rosenblatt distance: the tNTK recovers the squared metric derivative for lower-triangular affine maps. • Appendix D: Experimental details. 
+
+– Appendix D.1: Conditional histogram example from Section 3.2. 
+
+– Appendix D.2: NTK baseline calculation. 
+
+– Appendix D.3: Affine transport of 2D Gaussians (Section 5.1). 
+
+– Appendix D.4: Conditional quantile prediction (Section 5.2). 
+
+– Appendix D.5: Conditional flow matching (Section 5.3). 
+
+– Appendix D.6: Conditional Monge gap (Section 5.4). • Appendix E: Additional results. 
+
+– Appendix E.1: Empirical calculation of gap of the upper bound in Theorem 1. 
+
+– Appendix E.2: Active learning results on the higher-dimensional affine Gaussian transport. 
+
+– Appendix E.3: Results on tNTK computation. 
+
+– Appendix E.4: Additional baselines for the experiments presented in the main text. • Appendix F: Supplementary Figures. 17 A Theory of the Transport Neural Tangent Kernel 
+
+A.1 Proof of Proposition 1 Proposition 1 (Mean-shape decomposition of risk) . The Wasserstein risk defined in Equation (5) 
+
+decomposes as 
+
+R( x, D) = Eθ∣D [∥ mθ (x) − m(x)∥ 2]´¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¸¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¶ 
+
+> Rmean (x, D)
+
++ Eθ∣D [W 22 (μcθ (x), μ c(x))] ´¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¸¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¶ 
+
+> Rshape (x, D)
+
+, (6) 
+
+where mρ = ∫ y dρ (y) denotes the mean of ρ, and ρc is obtained by centering ρ for any ρ ∈ P 2(Y) .Proof. We drop the dependence on x for readability. For any vector v ∈ Y , we denote by τv ∶ Y → Y 
+
+the translation operator τv (y) = y − v. For any measure ρ ∈ P 2(Y) with mean mρ, the centered measure is then ρc = ( τmρ )#ρ. We extend this notation to product spaces by writing τv,v ′ (y, y ′) = (y − v, y ′ − v′) for the translation acting on couplings. Let π ∈ Π(μ, μ θ ) be an optimal coupling for W 22 (μ, μ θ ), and let πc ∈ Π(μc, μ cθ ) be an optimal coupling for W 22 (μc, μ cθ ). We will use the following algebraic identity twice: 
+
+∥( y − m) − ( y′ − mθ )∥ 2 = ∥ y − y′∥2 + ∥ mθ − m∥2 + 2(mθ − m)⊺(y − y′). (22) 
+
+Step 1: (τm,m θ )#π is admissible for μc, μ cθ. Define ˆπ = ( τm,m θ )#π. Since π has marginals μ
+
+and μθ , the pushforward ˆπ has marginals (τm)#μ = μc and (τmθ )#μθ = μcθ , so ˆπ ∈ Π(μc, μ cθ ).Applying (22) with u = y − m and u′ = y′ − mθ, and integrating against π, using Eπ [y] = m and 
+
+Eπ [y′] = mθ :
+
+∬ ∥u − u′∥2 dˆπ(u, u ′) = ∬ ∥( y − m) − ( y′ − mθ )∥ 2 dπ (y, y ′) (23) 
+
+= ∬ ∥y − y′∥2 dπ 
+
+´¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¸¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¶     
+
+> =W22(μ,μ θ)
+
++∥ mθ − m∥2 + 2(mθ − m)⊺ Eπ [y − y′]´¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¸¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¶  
+
+> =m−mθ
+
+(24) 
+
+= W 22 (μ, μ θ ) − ∥ mθ − m∥2. (25) Since ˆπ is admissible for μc, μ cθ but not necessarily optimal, 
+
+W 22 (μc, μ cθ ) ≤ W 22 (μ, μ θ ) − ∥ mθ − m∥2. (26) 
+
+Step 2: (τ−m, −mθ )#πc is admissible for μ, μ θ . Symmetrically, define ˜π = ( τ−m, −mθ )#πc. Since 
+
+πc has marginals μc and μcθ , the pushforward ˜π has marginals μ and μθ , so ˜π ∈ Π(μ, μ θ ).Applying (22) with y = u + m and y′ = u′ + mθ, and integrating against πc, using Eπc [u] = 0 and 
+
+Eπc [u′] = 0:
+
+∬ ∥y − y′∥2 d˜π(y, y ′) = ∬ ∥( u + m) − ( u′ + mθ )∥ 2 dπ c(u, u ′) (27) 
+
+= ∬ ∥u − u′∥2 dπ c
+
+´¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¸¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¶     
+
+> =W22(μc,μ cθ)
+
++∥ mθ − m∥2 + 2(mθ − m)⊺ Eπc [u′ − u]´¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¸¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¶  
+
+> =0
+
+(28) 
+
+= W 22 (μc, μ cθ ) + ∥ mθ − m∥2. (29) Since ˜π is admissible for μ, μ θ but not necessarily optimal, 
+
+W 22 (μ, μ θ ) ≤ W 22 (μc, μ cθ ) + ∥ mθ − m∥2. (30) 
+
+Step 3: Conclusion. Combining (26) and (30), 
+
+W 22 (μ, μ θ ) = W 22 (μc, μ cθ ) + ∥ mθ − m∥2. (31) Reinstating the dependence on x and taking expectations over θ ∣ D :
+
+R( x, D) = Eθ∣D [W 22 (μθ (x), μ (x))] (32) 
+
+= Eθ∣D [∥ mθ (x) − m(x)∥ 2] + Eθ∣D [W 22 (μcθ (x), μ c(x))] (33) 
+
+= R mean (x, D) + R shape (x, D) , (34) which proves the proposition. 18 A.2 Proof of Lemma 1 Lemma 1 (1D posterior risk) . Assume the model is unbiased at the mean and every quantile level, i.e., Eθ∣D [mθ (x)] = m(x) and Eθ∣D [F −1 
+
+> θ
+
+(x; τ )] = F −1(x; τ ) for all x, τ . Then 
+
+Rmean (x, D) = Var θ∣D [mθ (x)] , Rshape (x, D) = ∫ 
+
+> 10
+
+Var θ∣D [gθ (x; τ )] dτ, (7) 
+
+where gθ (x; τ ) = F −1 
+
+> θ
+
+(x; τ ) − mθ (x) denotes the centered quantile function of μθ (x).Proof. We drop the dependence on x for readability. Throughout, all variances, covariances, and expectations are taken with respect to the posterior θ ∣ D .
+
+Step 1: Quantile representation of W 22 . For one-dimensional distributions, the squared 2-Wasserstein distance admits the closed-form quantile representation: 
+
+W 22 (μθ , μ ) = ∫ 
+
+> 10
+
+(F −1 
+
+> θ
+
+(τ ) − F −1(τ )) 2 dτ, (35) where we remind the reader that F −1(τ ) (resp. F −1 
+
+> θ
+
+(τ )) corresponds to the τ quantile of the distribution μ (resp. μθ ). 
+
+Step 2: Derivation of the mean risk. Under the assumption E[mθ ] = m, the squared error reduces to the posterior variance: 
+
+Rmean (x, D) = E[( mθ − m)2] = Var [mθ ]. (36) 
+
+Step 3: Derivation of the shape risk. The centered measures μcθ and μc have quantile functions 
+
+gθ (τ ) = F −1 
+
+> θ
+
+(τ ) − mθ and g(τ ) = F −1(τ ) − m, respectively. Applying (35) to the centered measures: 
+
+W 22 (μcθ , μ c) = ∫ 
+
+> 10
+
+(gθ (τ ) − g(τ )) 2 dτ. (37) Taking expectations and exchanging the integral and expectation by Fubini’s theorem: 
+
+Rshape (x, D) = ∫ 
+
+> 10
+
+E[( gθ (τ ) − g(τ )) 2] dτ. (38) Because we have that E[mθ ] = m and that for all τ ∈ [ 0, 1], E[F −1 
+
+> θ
+
+(τ )] = F −1(τ ), it implies that 
+
+E[gθ (τ )] = g(τ ) by linearity of the expectation. Therefore, the squared error reduces to the posterior variance: 
+
+E[( gθ (τ ) − g(τ )) 2] = Var [gθ (τ )] , (39) and consequently 
+
+Rshape (x, D) = ∫ 
+
+> 10
+
+Var [gθ (τ )] dτ. (40) Combining (36) and (40) proves the lemma. 
+
+A.3 Proof of Theorem 1 Theorem 1 (Upper bound on the posterior Fréchet variance) . Let θ ∣ D ∼ N ( ˆθ, Σ), with Σ ∈ Rp×p
+
+positive definite and ∥Σ∥op < 1. Assume that for every x ∈ X and for ν-almost every y ∈ Y , the map 
+
+θ ↦ Tθ (x)( y) is C2(Rp), and that the Jacobian Dθ Tˆθ (x)(⋅) and the pointwise supremum of the operator norm of the Hessian, sup θ ∥D2 
+
+> θ
+
+Tθ (x)(⋅)∥ op , are in L2(ν). Then, there exists C(x) such that: 
+
+VF (x) ≤ Tr (Gˆθ (x) Σ) + C(x)∥ Σ∥3/2op , (11) 
+
+where the p × p parameter sensitivity matrix at input x is 
+
+Gˆθ (x) = ∫ Dθ Tˆθ (x)( y)⊺Dθ Tˆθ (x)( y) dν (y). (12) 
+
+Inequality (11) is tight to leading order when dim (Y) = 1 and Tθ (x) is monotone in y.Proof. The proof has three parts: (i) we reduce VF (x) to an integrated L2(ν) distance between transport maps, (ii) we expand the integrand in Σ and bound each term and collect the bounds, (iii) we analyze tightness. 19 Part 1: Reduction to an L2(ν) functional Reducing VF to a single-draw expectation. By definition of the infimum, taking ρ = μˆθ (x) in (10) yields 
+
+VF (x) ≤ Eθ∣D [W 22 (μθ (x), μ ˆθ (x))] . (41) The remainder of the proof bounds the right-hand side. 
+
+Synchronized coupling. We momentarily drop the dependence on x and derive an upper bound on 
+
+W 22 (μθ , μ ˆθ ) for fixed θ. Let Φθ, ˆθ ∶ Y → Y × Y denote the map y ↦ ( Tθ (y), T ˆθ (y)) , and introduce the synchronized coupling π = ( Φθ, ˆθ )#ν. The measure π is a coupling of μθ and μˆθ: for any test function φ, the first marginal satisfies 
+
+∫ φ(u) dπ 1(u) = ∫ φ(Tθ (y)) dν (y) = ∫ φ(u) dμ θ (u), (42) where we applied the pushforward identity twice, using μθ = Tθ #ν. The same argument yields 
+
+π2 = μˆθ , so π ∈ Π(μθ , μ ˆθ ). Applying the pushforward identity to the cost function (u, u ′) ↦ ∥ u−u′∥2
+
+gives the transport cost of π:
+
+∫ ∥u − u′∥2 dπ (u, u ′) = ∫ ∥Tθ (y) − Tˆθ (y)∥ 2 dν (y). (43) Because W 22 is the infimum of the transport cost over all admissible couplings, 
+
+W 22 (μθ , μ ˆθ ) ≤ ∫ ∥Tθ (y) − Tˆθ (y)∥ 2 dν (y). (44) Reinstating the dependence on x and combining with (41), 
+
+VF (x) ≤ Eθ∣D [∫ ∥Tθ (x)( y) − Tˆθ (x)( y)∥ 2 dν (y)] . (45) 
+
+Taylor expansion around ˆθ. We continue to drop the dependence on x and write J(y) ∶= Dθ Tˆθ (y)
+
+for the Jacobian at the posterior mean. By the smoothness assumption, for ν-a.e. y and all θ ∈ Rp, a second-order Taylor expansion gives 
+
+Tθ (y) = Tˆθ (y) + J(y)( θ − ˆθ) + r(θ, y ), (46) where the remainder satisfies 
+
+∥r(θ, y )∥ ≤ 12 κ(y) ∥ θ − ˆθ∥2, κ(y) ∶= sup 
+
+> θ
+
+∥D2 
+
+> θ
+
+Tθ (y)∥ op , (47) and κ ∈ L2(ν) by assumption. Squaring and expanding the inner product, 
+
+∥Tθ (y) − Tˆθ (y)∥ 2 = ∥ J(y)( θ − ˆθ)∥ 2
+
+´¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¸¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¶ 
+
+> =∶ A(y,θ )
+
++ 2 ⟨J(y)( θ − ˆθ), r (θ, y )⟩ ´¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¸¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¶ 
+
+> =∶ B(y,θ )
+
++ ∥ r(θ, y )∥ 2
+
+´¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¸¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¹¶ 
+
+> =∶ C(y,θ )
+
+. (48) 
+
+Part 2: Term-by-term bounds Leading term. Since θ ∼ N ( ˆθ, Σ), we have E[( θ − ˆθ)( θ − ˆθ)⊺] = Σ. Using the cyclicity of the trace, 
+
+E[A(y, θ )] = E[( θ − ˆθ)⊺J(y)⊺J(y) ( θ − ˆθ)] = Tr (J(y)⊺J(y) Σ) . (49) By linearity of the trace operator, 
+
+∫ E[A(y, θ )] dν (y) = Tr ((∫ J(y)⊺J(y) dν (y)) Σ) = Tr (Gˆθ (x) Σ) . (50) 
+
+Cross term. By Cauchy–Schwarz applied pointwise in y and then in L2(P),
+
+E∣B(y, θ )∣ ≤ 2 E[∥ J(y)( θ − ˆθ)∥ 2]1/2
+
+E[∥ r(θ, y )∥ 2]1/2 . (51) The first factor equals √Tr (J(y)⊺J(y) Σ) by (49). For the second factor, applying (47), 
+
+E[∥ r(θ, y )∥ 2] ≤ 14 κ(y)2 E[∥ θ − ˆθ∥4] . (52) 20 For θ ∼ N ( ˆθ, Σ), the standard fourth-moment identity gives E∥θ − ˆθ∥4 = ( Tr Σ )2 + 2 Tr (Σ2) ≤ 
+
+3(Tr Σ )2 ≤ 3p2∥Σ∥2op , so 
+
+E[∥ r(θ, y )∥ 2] ≤ 34 p2 κ(y)2 ∥Σ∥2op . (53) Substituting into (51) and integrating over ν via Cauchy–Schwarz, 
+
+∫ E∣B(y, θ )∣ dν (y) ≤ √3 p ∥Σ∥op ∫ κ(y) √Tr (J(y)⊺J(y) Σ) dν (y) (54) 
+
+≤ √3 p ∥Σ∥op ∥κ∥L2(ν)
+
+√
+
+Tr (Gˆθ (x) Σ) (55) 
+
+≤ √3 p ∥κ∥L2(ν)
+
+√
+
+Tr (Gˆθ (x)) ∥ Σ∥3/2op , (56) where the last step uses Tr (Gˆθ (x) Σ) ≤ Tr (Gˆθ (x)) ∥ Σ∥op (since Gˆθ (x) is positive semi-definite) and Tr (Gˆθ (x)) < ∞ by the integrability assumption. 
+
+Quadratic remainder. Using (53) and integrating over ν,
+
+∫ E[C(y, θ )] dν (y) ≤ 34 p2 ∥κ∥2 
+
+> L2(ν)
+
+∥Σ∥2op ≤ 34 p2 ∥κ∥2 
+
+> L2(ν)
+
+∥Σ∥3/2op , (57) where the last step uses ∥Σ∥op < 1.
+
+Combining the bounds. Combining (45), (48), (50), (56), and (57), 
+
+VF (x) ≤ ∫ E[A(y, θ ) + B(y, θ ) + C(y, θ )] dν (y) (58) 
+
+≤ Tr (Gˆθ (x) Σ) + √3 p ∥κ∥L2(ν)
+
+√
+
+Tr (Gˆθ (x)) ∥ Σ∥3/2op + 34 p2 ∥κ∥2 
+
+> L2(ν)
+
+∥Σ∥3/2op (59) 
+
+= Tr (Gˆθ (x) Σ) + C(x) ∥ Σ∥3/2op , (60) where 
+
+C(x) = √3 p ∥κ∥L2(ν)
+
+√
+
+Tr (Gˆθ (x)) + 34 p2 ∥κ∥2
+
+> L2(ν)
+
+, (61) which is the claimed bound. 
+
+Part 3: The 1D monotone case 
+
+We show that when dim (Y) = 1 and Tθ (x) is monotone in y, the inequality (11) becomes tight in the leading order. In this setting, VF (x) admits a closed-form expression that we compute directly. We drop the dependence on x throughout, and write Qθ (τ ) ∶= F −1 
+
+> μθ
+
+(τ ) for the quantile function of 
+
+μθ. Monotonicity of Tθ gives the quantile representation Tθ = Qθ ○ Fν , and the change of variables 
+
+τ = Fν (y) yields the isometry 
+
+W 22 (μθ , μ θ′ ) = ∫ 
+
+> 10
+
+(Qθ (τ ) − Qθ′ (τ )) 2 dτ = ∥ Qθ − Qθ′ ∥2
+
+> L2[0,1]
+
+. (62) The Wasserstein-2 geometry on {μθ } is therefore the Euclidean geometry of L2[0, 1] on {Qθ }, and standard L2 identities give a closed form for the Fréchet barycenter and variance. The barycenter quantile function is ¯Q(τ ) ∶= Eθ∣D [Qθ (τ )] , and the Fréchet variance is 
+
+VF (x) = Eθ∣D [∥ Qθ − ¯Q∥2
+
+> L2[0,1]
+
+] = ∫ 
+
+> 10
+
+Var θ∣D [Qθ (τ )] dτ, (63) by Fubini and the L2 bias-variance decomposition. The argument of Parts 1–2 now applies pointwise in τ to Qθ (τ ) instead of to Tθ (y), with the synchronized-coupling step replaced by the isometry (62) (which is exact rather than an inequality). Because Equation 50 is an equality, the upper bound from Theorem 1 is tight at leading order. More precisely, when ∥Σ∥op → 0:
+
+VF (x) = Tr (Gˆθ (x)Σ) + O(∥ Σ∥3/2op ). (64) 21 A.4 Positive semi-definiteness of the tNTK Proposition 2. The tNTK kθ ∶ X × X → R defined in Equation 13 is positive semi-definite. Proof. Let n ∈ N∗, and x1, . . . , x n ∈ X denote n input points. Let c1, . . . , c n ∈ R be weights. Writing 
+
+Jx(y) = Dθ Tθ (x)( y) ∈ Rd×p for the parameter Jacobian, we have that: 
+
+> n
+
+∑
+
+> i=1
+> n
+
+∑
+
+> j=1
+
+cicj kθ (xi, x j ) = ∑ 
+
+> i,j
+
+cicj ∫ Tr [Jxi (y)⊺Jxj (y)] dν (y) (65) 
+
+= ∫ ∑
+
+> i,j
+
+cicj ⟨Jxi (y), J xj (y)⟩ F dν (y) (66) 
+
+= ∫ ∥
+
+> n
+
+∑
+
+> i=1
+
+ci Jxi (y)∥ 
+
+> 2
+> F
+
+dν (y) ≥ 0, (67) where ⟨⋅ , ⋅⟩ F and ∥ ⋅ ∥ F denote the Frobenius inner product and norm. The final inequality holds because the squared Frobenius norm is non-negative and ν is a positive measure. 
+
+A.5 Closed-form expression for the last-layer tNTK Proposition 3. Let the transport map have a linear last layer, Tθ (x)( y) = W ⊺hθ (x, y ), where 
+
+hθ (x, y ) ∈ Rm is the penultimate-layer output and W ∈ Rm×d is the last-layer weight matrix. Then the tNTK (13) restricted to the last-layer parameters admits the closed form: 
+
+kll  
+
+> θ
+
+(x, x ′) = d ∫ hθ (x, y )⊺hθ (x′, y ) dν (y). (68) 
+
+Proof. For (i, j, k ) ∈ [ m] × [ d] × [ d], the last-layer Jacobian satisfies 
+
+∂T kθ (x)( y)
+
+∂W ij 
+
+= δkj hiθ (x, y ), (69) where δkj is the Kronecker delta and superscripts denote scalar components: T kθ (x)( y) is the k-th component of Tθ (x)( y), and hiθ (x, y ) is the i-th component of hθ (x, y ). Substituting into (13): 
+
+kll  
+
+> θ
+
+(x, x ′) = ∫ ∑
+
+> i,j,k
+
+δkj hiθ (x, y ) δkj hiθ (x′, y ) dν (y) (70) 
+
+= ∫ ∑
+
+> i,j
+
+hiθ (x, y ) hiθ (x′, y ) dν (y) (71) 
+
+= d ∫ hθ (x, y )⊺hθ (x′, y ) dν (y), (72) where the second equality uses ∑k δ2 
+
+> kj
+
+= 1, and the third uses that the summand is independent of j,so the sum across j contributes a factor of d.
+
+A.6 Proof of Lemma 2 Lemma 2. Let us assume that Tθ (x) is an affine map: Tθ (x)( y) = bθ (x) + Mθ (x)y and that the base measure ν is centered and isotropic (i.e., Ey∼ν [y] = 0 and Ey∼ν [yy ⊺] = I). Then 
+
+kθ (x, x ′) = Tr [Dθ bθ (x)⊺Dθ bθ (x′)] + 
+
+> d
+
+∑
+
+> j=1
+
+Tr [Dθ M jθ (x)⊺Dθ M jθ (x′)] , (16) 
+
+where M jθ (x) denotes the j-th column of Mθ (x).Proof. For an affine map Tθ (x)( y) = bθ (x) + Mθ (x)y, the parameter Jacobian is linear in y:
+
+Dθ Tθ (x)( y) = Dθ bθ (x) + 
+
+> d
+
+∑
+
+> j=1
+
+yj Dθ M jθ (x), (73) 22 where M jθ (x) ∈ Rd is the j-th column of Mθ (x) and yj is the j-th component of y. Substituting (73) into the kernel definition (13) and expanding the inner product, we get four groups of terms: 
+
+kθ (x, x ′) = ∫ Tr [A(x, x ′) + B(x, x ′; y) + B(x′, x ; y) + C(x, x ′; y)] dν (y), (74) where 
+
+A(x, x ′) = Dθ bθ (x)⊺Dθ bθ (x′),B(x, x ′; y) = Dθ bθ (x)⊺ d
+
+∑
+
+> j=1
+
+yj Dθ M jθ (x′),C(x, x ′; y) = ⎛⎝
+
+> d
+
+∑
+
+> j=1
+
+yj Dθ M jθ (x)⎞⎠
+
+> ⊺
+
+⎛⎝
+
+> d
+
+∑
+
+> j′=1
+
+yj′ Dθ M j′ 
+
+> θ
+
+(x′)⎞⎠ .
+
+We compute each term in turn. 
+
+Constant term A. A(x, x ′) is independent of y, so the integral leaves it unchanged: 
+
+∫ Tr [A(x, x ′)] dν (y) = Tr [Dθ bθ (x)⊺Dθ bθ (x′)] . (75) 
+
+Cross terms B. The cross terms are linear in y, so under the centering assumption E[y] = 0,
+
+∫ Tr [B(x, x ′; y)] dν (y) = Tr 
+
+⎡⎢⎢⎢⎢⎢⎣
+
+Dθ bθ (x)⊺ d
+
+∑
+
+> j=1
+
+E[yj ]² 
+
+> =0
+
+Dθ M jθ (x′)⎤⎥⎥⎥⎥⎥⎦= 0, (76) and similarly ∫ Tr [B(x′, x ; y)] dν (y) = 0.
+
+Quadratic term C. Expanding the product and using the trace’s linearity, 
+
+Tr [C(x, x ′; y)] = 
+
+> d
+
+∑
+
+> j,j ′=1
+
+yj yj′ Tr [Dθ M jθ (x)⊺Dθ M j′ 
+
+> θ
+
+(x′)] . (77) Integrating against ν and using the isotropy assumption E[yy ⊺] = I, i.e., E[yj yj′ ] = δjj ′ :
+
+∫ Tr [C(x, x ′; y)] dν (y) = 
+
+> d
+
+∑
+
+> j,j ′=1
+
+δjj ′ Tr [Dθ M jθ (x)⊺Dθ M j′ 
+
+> θ
+
+(x′)] = 
+
+> d
+
+∑
+
+> j=1
+
+Tr [Dθ M jθ (x)⊺Dθ M jθ (x′)] .
+
+(78) 
+
+Combining the terms. Summing the contributions of A, B, B⊺,
+
+kθ (x, x ′) = Tr [Dθ bθ (x)⊺Dθ bθ (x′)] + 
+
+> d
+
+∑
+
+> j=1
+
+Tr [Dθ M jθ (x)⊺Dθ M jθ (x′)] . (79) 23 B Geometry of parameter perturbations on the Wasserstein manifold 
+
+The parameter sensitivity matrix Gˆθ (x) that appears in Theorem 1 admits a geometric interpretation as an (approximate) metric tensor on the Wasserstein manifold. This appendix makes this interpretation precise. We view a parameter perturbation h ∈ Rp as inducing a curve t ↦ μθ+th (x) on the 2-Wasserstein space W2(Y) and study its metric derivative at t = 0. Section B.1 reviews the necessary background on metric derivatives, absolutely continuous curves, and the tangent bundle of W2.Section B.2 bounds the squared metric derivative of this curve by h⊺Gθ (x)h, providing an alternative derivation of Gθ (x) via a different proof technique than Theorem 1. Section B.3 characterizes when this bound is tight: in dimension one and for monotone maps it is always exact, and in higher dimensions the gap is governed by the divergence-free component of the velocity field. The latter result points to a concrete avenue for constructing a tighter proxy in future work. 
+
+B.1 Background on metric derivatives in Wasserstein space 
+
+We restate the key facts about absolutely continuous curves in Wasserstein space and their charac-terization via the continuity equation. We work throughout in W2(Y) with Y = Rd. We need three preliminary objects: absolutely continuous curves, the metric derivative, and the tangent space of 
+
+P2(Y) at a measure μ.
+
+Definition 1 (Absolutely continuous curve) . A curve (μt)t∈( a,b ) ∶ ( a, b ) → P 2(Y) is absolutely continuous of second order on the open interval (a, b ) if there exists m ∈ L2(a, b ) such that 
+
+W2(μs, μ t) ≤ ∫ 
+
+> ts
+
+m(r) dr ∀ a < s ≤ t < b. (80) 
+
+The set of such curves is denoted by AC 2(a, b ; P2(Y)) .
+
+Definition 2 (Metric derivative) . Let (μt)t∈( a,b ) ∈ AC 2(a, b ; P2(Y)) . The metric derivative at 
+
+t ∈ ( a, b ) is 
+
+∣μ′∣( t) ∶= lim 
+
+> s→t
+
+W2(μs, μ t)∣s − t∣ , (81) 
+
+whenever this limit exists, and the upper metric derivative is 
+
+∣μ′∣+(t) ∶= lim sup 
+
+> s→t
+
+W2(μs, μ t)∣s − t∣ , (82) 
+
+which is always defined and coincides with ∣μ′∣( t) whenever the latter exists. 
+
+Definition 3 (Tangent space) . Let μ ∈ P 2(Y) . The tangent space of P2(Y) at μ is 
+
+Tan μP2(Y) ∶= {∇ ϕ ∶ ϕ ∈ C∞ 
+
+> c
+
+(Y)} L2(μ; Rd)
+
+, (83) 
+
+where C∞ 
+
+> c
+
+(Y) denotes the space of smooth functions with compact support, and the closure is taken in L2(μ; Rd).
+
+Results from Ambrosio et al. [68] tie these definitions together. First, the metric derivative of an absolutely continuous curve exists almost everywhere and is its minimal speed. 
+
+Proposition 4 (68, Theorem 1.1.2) . Let (μt)t∈( a,b ) ∈ AC 2(a, b ; P2(Y)) . Then ∣μ′∣( t) exists for a.e. t ∈ ( a, b ), and belongs to L2(a, b ). Moreover, the function t ↦ ∣ μ′∣( t) satisfies (80) , and 
+
+∣μ′∣( t) ≤ m(t) for a.e. t for any other m satisfying (80) . In this sense, ∣μ′∣ is the smallest admissible speed bound. 
+
+Second, absolutely continuous curves are exactly those driven by a velocity field of square-integrable norm through the continuity equation . Every absolutely continuous curve admits such a field: 
+
+Theorem 2 (68, Theorem 8.3.1) . Let (μt)t∈( a,b ) ∈ AC 2(a, b ; P2(Y)) . Then there exists a Borel vector field v∶ ( y, t ) ↦ vt(y) such that 
+
+vt ∈ L2(μt; Rd), ∥vt∥L2(μt) ≤ ∣ μ′∣( t) for a.e. t ∈ ( a, b ), (84) 
+
+and the continuity equation 
+
+∂tμt + ∇ ⋅ ( vtμt) = 0 in Y × ( a, b ) (85) 
+
+holds in the distributional sense. Moreover, vt ∈ Tan μt P2(Y) for a.e. t ∈ ( a, b ).
+
+24 Conversely, any curve driven by a velocity field with square-integrable norm is absolutely continuous, and the norm of that field bounds the metric derivative: 
+
+Proposition 5 (68, Theorem 8.3.1) . Let (μt)t∈( a,b ) be a curve in P2(Y) that is continuous with respect to W2 and satisfies (85) for some Borel vector field vt with ∫ ba ∥vt∥2 
+
+> L2(μt)
+
+dt < ∞ . Then 
+
+(μt) ∈ AC 2(a, b ; P2(Y)) and 
+
+∣μ′∣( t) ≤ ∥ vt∥L2(μt) for a.e. t ∈ ( a, b ). (86) Third, the velocity field driving a curve is not unique: adding any field wt with ∇ ⋅ ( wtμt) = 0
+
+leaves (85) unchanged. By Proposition 5, every such field satisfies ∥vt∥L2(μt) ≥ ∣ μ′∣( t) for a.e. t. The next result characterizes the fields achieving equality: they are exactly the tangent ones, and they are unique. 
+
+Proposition 6 (68, Proposition 8.4.5) . Let (μt)t∈( a,b ) ∈ AC 2(a, b ; P2(Y)) and let vt ∈ L2(μt; Rd)
+
+be a vector field solving (85) . Then 
+
+∥vt∥L2(μt) = ∣ μ′∣( t) for a.e. t ∈ ( a, b ) (87) 
+
+if and only if vt ∈ Tan μt P2(Y) for a.e. t ∈ ( a, b ). Moreover, such a vt is uniquely determined for a.e. 
+
+t.
+
+We use this characterization in Lemma 4 to identify the gap in the upper bound derived in Theorem 3. 
+
+B.2 Metric-derivative bound 
+
+We now apply Theorem 2 to the curve traced out on W2(Y) by perturbing the parameters of the transport map. For a fixed input x ∈ X and a direction h ∈ Rp in parameter space, we consider the curve 
+
+t ↦ μht ∶= Tθ+th (x)# ν. (88) The main theorem below shows that the curve is absolutely continuous in W2(Y) under mild regularity on T . The metric derivative at t = 0 measures the local Wasserstein-rate of change of the predicted distribution under the perturbation h, which we bound by a quadratic form in h involving the parameter sensitivity matrix Gθ (x).
+
+Theorem 3 (Metric-derivative bound) . Fix x ∈ X and h ∈ Rp. Assume there exists an open neighborhood U ∋ θ such that (θ′, y ) ↦ Tθ′ (x)( y) is C1 on U × Y , that Tθ′ (x) ∶ Y → Y is a 
+
+C1 diffeomorphism for every θ′ ∈ U , and that ∫ sup θ′∈U ∥Dθ Tθ′ (x)( y)∥ 2op dν (y) < ∞ . Then in a neighborhood of t = 0, the curve 
+
+μht ∶= Tθ+th (x)# ν (89) 
+
+is absolutely continuous in W2(Y) , and its upper metric derivative at t = 0 satisfies 
+
+∣μ′
+
+> h
+
+∣+(0)2 ≤ h⊺Gθ (x) h, (90) 
+
+where Gθ (x) is given by (12) . In particular, whenever the metric derivative ∣μ′
+
+> h
+
+∣( 0) exists, (90) holds also for ∣μ′
+
+> h
+
+∣( 0).Proof. We drop the dependence on x throughout. Let U ∋ θ be the open neighborhood from the hypotheses. Choose δ > 0 small enough that θ + th ∈ U for all t ∈ [− δ, δ ]. We define 
+
+M ∶= ∫ sup 
+
+> θ′∈U
+
+∥Dθ Tθ′ (y)∥ 2op dν (y), (91) which is finite by the integrability assumption. Consider the candidate vector field 
+
+vht (y) ∶= Dθ Tθ+th (T −1
+
+> θ+th
+
+(y)) h, t ∈ (− δ, δ ). (92) This is well-defined: Tθ+th is a C1 diffeomorphism for t ∈ (− δ, δ ), so T −1
+
+> θ+th
+
+(y) ∈ Y exists for every 
+
+y ∈ Y , and Dθ Tθ+th exists at every point of Y by joint C1 regularity on U × Y . The curve (μht )
+
+is continuous with respect to W2, since W2(μhs , μ ht ) ≤ ∥ Tθ+sh − Tθ+th ∥L2(ν) → 0 as s → t and dominated convergence. We verify the remaining hypotheses of Proposition 5. 25 Step 1: vht has bounded L2(μht ) norm. By definition of the L2(μht ) norm and the pushforward identity μht = Tθ+th #ν,
+
+∥vht ∥2  
+
+> L2(μht)
+
+= ∫ ∥Dθ Tθ+th (T −1
+
+> θ+th
+
+(y)) h∥2 dμ ht (y) (93) 
+
+= ∫ ∥Dθ Tθ+th (z) h∥2 dν (z) (94) 
+
+= h⊺Gθ+th (x) h, (95) where the second equality uses the change of variables z = T −1
+
+> θ+th
+
+(y) (justified by the diffeomorphism assumption), and the third equality applies the definition of G from (12). Bounding the integrand in (94) by ∥h∥2 sup θ′∈U ∥Dθ Tθ′ (z)∥ 2op and using (91), 
+
+∥vht ∥2  
+
+> L2(μht)
+
+≤ ∥ h∥2M. (96) Hence ∫ δ 
+
+> −δ
+
+∥vht ∥2  
+
+> L2(μht)
+
+dt ≤ 2δ ∥h∥2M < ∞ .
+
+Step 2: vht solves the continuity equation. For any test function ϕ ∈ C∞ 
+
+> c
+
+(Y) , the pushforward identity μht = Tθ+th #ν gives 
+
+ddt ∫ ϕ(y) dμ ht (y) = ddt ∫ ϕ(Tθ+th (z)) dν (z). (97) Since ∇ϕ is bounded, the derivative of the integrand is dominated by 
+
+∥∇ ϕ∥∞∥h∥ sup θ′∈U ∥Dθ Tθ′ (z)∥ op , which is ν-integrable by the integrability assumption. By dominated convergence, we interchange d/dt and the integral, and apply the chain rule: 
+
+ddt ∫ ϕ(Tθ+th (z)) dν (z) = ∫ ∇ϕ(Tθ+th (z)) ⊺Dθ Tθ+th (z) h dν (z). (98) Changing variables back via y = Tθ+th (z) and using (92): 
+
+∫ ∇ϕ(Tθ+th (z)) ⊺Dθ Tθ+th (z) h dν (z) = ∫ ∇ϕ(y)⊺vht (y) dμ ht (y). (99) Integration by parts yields: 
+
+∫ ∇ϕ(y)⊺vht (y) dμ ht (y) = − ∫ ϕ(y) ∇ ⋅ ( vht μht )( y) dy. (100) Combining all the equalities, we have 
+
+∫ ϕ ∂ tμht = − ∫ ϕ ∇ ⋅ ( vht μht ) for all ϕ ∈ C∞ 
+
+> c
+
+(Y) , (101) which is the weak form of the continuity equation 
+
+∂tμht + ∇ ⋅ ( vht μht ) = 0 on Y × (− δ, δ ). (102) 
+
+Step 3: Conclusion. By Steps 1 and 2, Proposition 5 applies: (μht )t∈(− δ,δ ) is absolutely continuous in W2(Y) , and 
+
+∣μ′
+
+> h
+
+∣( r) ≤ ∥ vhr ∥L2(μhr ) for a.e. r ∈ (− δ, δ ). (103) Since this bound only holds almost everywhere, we integrate it to obtain the limit superior around zero. By Proposition 4 and (103), for 0 < ∣ s∣ < δ,
+
+W2(μhs , μ h 
+
+> 0
+
+) ≤ ∣∫ 
+
+> s
+> 0
+
+∣μ′
+
+> h
+
+∣( r) dr ∣ ≤ ∣∫ 
+
+> s
+> 0
+
+∥vhr ∥L2(μhr ) dr ∣ . (104) By (95), ∥vhr ∥L2(μhr ) = √h⊺Gθ+rh (x) h, which is continuous in r: the integrand in (94) is continuous in r by joint C1 regularity and dominated by ∥h∥2 sup θ′∈U ∥Dθ Tθ′ (z)∥ 2op , which is integrable by (91). Dividing by ∣s∣, the right-hand side converges to √h⊺Gθ (x) h as s → 0. Taking the lim sup of the left-hand side gives 
+
+∣μ′
+
+> h
+
+∣+(0)2 ≤ h⊺Gθ (x) h, (105) which is the claimed bound (90). Finally, since ∣μ′
+
+> h
+
+∣+(0) = ∣ μ′
+
+> h
+
+∣( 0) whenever the latter exists (Definition 2), the bound also holds for ∣μ′
+
+> h
+
+∣( 0) in that case. 26 Theorem 3 establishes that the parameter sensitivity matrix Gθ (x) approximately controls the local Wasserstein-rate of change of the predicted distribution under any parameter perturbation h: along the curve t ↦ Tθ+th (x)#ν, the metric derivative at t = 0 is bounded by the quadratic form √h⊺Gθ (x) h.This recovers the parameter sensitivity matrix that appears in Theorem 1, but via a route that is purely geometric: rather than passing through a posterior expectation and Taylor expansion, the bound emerges from the velocity field that the parameter perturbation induces on the Wasserstein manifold. 
+
+B.3 Gap analysis 
+
+Theorem 3 bounds the upper metric derivative ∣μ′
+
+> h
+
+∣+(0) by ∥h∥Gθ , but the inequality is strict in general. We characterize the gap in two cases. First, in dimension one with monotone transport maps, the bound is exact: Gθ (x) recovers the true metric derivative. Second, in higher dimensions the gap is governed by the orthogonal decomposition of the velocity field into a tangent component and a divergence-free component, with the tangent component achieving equality. The two results are summarized in Lemma 3 and Lemma 4, respectively. 
+
+B.3.1 Tightness in dimension one Lemma 3 (1D tightness) . Under the hypotheses of Theorem 3 with dim (Y) = 1, assume further that 
+
+ν is absolutely continuous with respect to the Lebesgue measure, and that Tθ′ (x) monotone in y for every θ′ ∈ U . Then, the inequality (90) becomes an equality: 
+
+∣μ′
+
+> h
+
+∣( t)2 = h⊺Gθ+th (x) h for all t ∈ (− δ, δ ). (106) 
+
+Proof. Monotonicity of Tθ+th (x) gives the quantile representation Tθ+th (x) = F −1
+
+> θ+th
+
+(x; ⋅) ○ Fν ,where F −1
+
+> θ+th
+
+(x; τ ) is the τ -quantile of μht = Tθ+th (x)#ν.
+
+Step 1: metric derivative. The 1D quantile representation of the squared 2-Wasserstein distance gives, for s, t ∈ (− δ, δ ),
+
+W 22 (μht+s, μ ht ) = ∫ 
+
+> 10
+
+(F −1
+
+> θ+( t+s)h
+
+(x; τ ) − F −1
+
+> θ+th
+
+(x; τ )) 2 dτ. (107) Dividing by s2 and passing to the limit s → 0 (interchanging limit and integral by dominated convergence), 
+
+∣μ′
+
+> h
+
+∣( t)2 = ∫ 
+
+> 10
+
+∣ ∂∂t F −1
+
+> θ+th
+
+(x; τ )∣ 
+
+> 2
+
+dτ. (108) 
+
+Step 2: L2 norm of the velocity field. By (95) from the proof of Theorem 3, 
+
+h⊺Gθ+th (x) h = ∥ vht ∥2  
+
+> L2(μht)
+
+= ∫ ∥vht (y)∥ 2 dμ ht (y). (109) The velocity field, defined in (92), satisfies 
+
+vht (y) = Dθ Tθ+th (x)( T −1
+
+> θ+th
+
+(x)( y)) h = ∂∂t Tθ+th (x)( T −1
+
+> θ+th
+
+(x)( y)) , (110) where the second equality applies the chain rule to the parameterization t ↦ Tθ+th (x)( z) at fixed z.Substituting, 
+
+∥vht ∥2  
+
+> L2(μht)
+
+= ∫ ∣ ∂∂t Tθ+th (x)( T −1
+
+> θ+th
+
+(x)( y))∣ 
+
+> 2
+
+dμ ht (y). (111) Now we use monotonicity to rewrite this in quantile form. Since Tθ+th (x) = F −1
+
+> θ+th
+
+(x; ⋅) ○ Fν , we have T −1
+
+> θ+th
+
+(x)( y) = F −1 
+
+> ν
+
+(Fθ+th (x; y)) , where Fθ+th (x; ⋅) is the CDF of μht . Combining, 
+
+∂∂t Tθ+th (x)( T −1
+
+> θ+th
+
+(x)( y)) = ∂∂t F −1
+
+> θ+th
+
+(x; Fθ+th (x; y)) . (112) Applying the change of variables τ = Fθ+th (x; y) (so dμ ht (y) = dτ ) in (111), 
+
+∥vht ∥2  
+
+> L2(μht)
+
+= ∫ 
+
+> 10
+
+∣ ∂∂t F −1
+
+> θ+th
+
+(x; τ )∣ 
+
+> 2
+
+dτ. (113) Comparing (108) and (113) gives ∣μ′
+
+> h
+
+∣( t)2 = h⊺Gθ+th (x) h, which is the claimed equality. 27 B.3.2 Decomposition of the velocity field in higher dimensions 
+
+Let L2(μht ; Rd) denote the Hilbert space of Rd-valued vector fields v ∶ Y → Rd that are square-integrable with respect to μht , equipped with the inner product ⟨u, v ⟩L2(μht ) = ∫ ⟨ u(y), v (y)⟩ dμ ht (y).The tangent space Tan μht P2(Y) is a closed subspace of L2(μht ; Rd), and its orthogonal complement consists of the vector fields w that are divergence-free with respect to μht , i.e., ∇ ⋅ ( w μ ht ) = 0
+
+in the distributional sense; equivalently, ∫ ⟨∇ ϕ, w ⟩ dμ ht = 0 for every ϕ ∈ C∞ 
+
+> c
+
+(Y) . This is the Helmholtz–Hodge decomposition in L2(μht ) [68, 69]. We may therefore consider the orthogonal projection operator 
+
+Π ∶ L2(μht ; Rd) → Tan μht P2(Y) , (114) that sends each vector field to its component along Tan μht P2(Y) . Given that we characterized the tangent space as the closure of gradient fields (Definition 3), the projection Π(v) returns the best 
+
+L2(μht )-approximation of v by such fields. The next lemma shows that this projection characterizes the gap in Theorem 3. 
+
+Lemma 4 (Gap as the divergence-free component) . Let vht be the velocity field defined in (92) , and write 
+
+vht = vtan  
+
+> t
+
++ wt, vtan  
+
+> t
+
+∶= Π(vht ), wt ∶= vht − vtan  
+
+> t
+
+, (115) 
+
+so that vtan  
+
+> t
+
+∈ Tan μht P2(Y) and wt is divergence-free with respect to μht . Then the gap in (90) 
+
+satisfies 
+
+h⊺Gθ+th (x)h = ∥ wt∥2  
+
+> L2(μht)
+
++ ∣ μ′
+
+> h
+
+∣( t)2, a.e. t. (116) 
+
+In particular, equality in (90) holds if and only if wt = 0, i.e., the velocity field vht lies in the tangent space. Proof. By orthogonality of the decomposition vht = vtan  
+
+> t
+
++ wt in L2(μht ),
+
+∥vht ∥2  
+
+> L2(μht)
+
+= ∥ vtan  
+
+> t
+
+∥2  
+
+> L2(μht)
+
++ ∥ wt∥2 
+
+> L2(μht)
+
+. (117) 
+
+vtan  
+
+> t
+
+still solves the continuity equation, as ∇ ⋅ ( μtwt) = 0. By Theorem 6, the metric derivative coincides with the L2(μht )-norm of the tangent component: 
+
+∣μ′
+
+> h
+
+∣( t)2 = ∥ vtan  
+
+> t
+
+∥2 
+
+> L2(μht)
+
+. (118) Combining (117) and (118), and using ∥vht ∥2  
+
+> L2(μht)
+
+= h⊺Gθ+th (x) h from (95), 
+
+h⊺Gθ+th (x) h = ∣ μ′
+
+> h
+
+∣( t)2 + ∥ wt∥2 
+
+> L2(μht)
+
+. (119) The "if and only if" claim follows since ∥wt∥2 ≥ 0 with equality iff wt = 0.Lemma 4 suggests a refinement of Gθ (x): replacing vh 
+
+> 0
+
+with its tangent projection Π(vh 
+
+> 0
+
+) gives a quadratic form h⊺ ˜Gθ (x) h ∶= ∥ Π(vh 
+
+> 0
+
+)∥ 2  
+
+> L2(μh
+> 0)
+
+that exactly recovers the squared metric derivative 
+
+∣μ′
+
+> h
+
+∣( 0)2. We leave this as a future research direction. 28 C Exact metric tensor under the Knothe–Rosenblatt distance 
+
+Theorem 3 bounds the metric derivative on the Wasserstein-2 manifold of the probability curve 
+
+t ↦ μθ+th (x), evaluated at t = 0 by the quadratic form h⊺Gθ (x)h. We now show that for lower-triangular affine transport maps (e.g., obtained via Cholesky parameterization), this bound is exact under the Knothe–Rosenblatt (KR) distance [70, 71]. In this setting, Gθ (x) is the exact metric tensor, suggesting that the parameter sensitivity matrix has a precise geometric meaning beyond the loose Wasserstein-2 upper bound. 
+
+C.1 Background: KR rearrangement, KR distance, and metric derivative Definition 4 (Knothe–Rosenblatt rearrangement) . Let ν, μ be probability measures on Rd. A Knothe– Rosenblatt rearrangement from ν to μ is a triangular map T KR ∶ Rd → Rd that is component-wise monotone in its arguments and satisfies T KR # ν = μ.
+
+When ν is absolutely continuous with respect to the Lebesgue measure, the KR rearrangement from 
+
+ν to any target μ exists and is ν-a.e. unique [70, 71]. 
+
+Definition 5 (Knothe–Rosenblatt distance) . Let ν be a probability measure on Rd absolutely con-tinuous with respect to the Lebesgue measure, and let μ1, μ 2 be probability measures on Rd with finite second moments. Let T KR 1 , T KR 2 be the KR rearrangements from ν to μ1, μ 2 respectively. The squared Knothe–Rosenblatt distance between μ1 and μ2 is 
+
+W 2KR (μ1, μ 2) ∶= ∫ ∥T KR 1 (y) − T KR 2 (y)∥ 22 dν (y). (120) 
+
+Definition 6 (Metric derivative under WKR ). For the curve t ↦ μtθ along a perturbation direction 
+
+h ∈ Rp, the KR metric derivative at t = 0 is 
+
+∣μ′
+
+> h
+
+∣KR (0) ∶= lim 
+
+> t→0
+
+WKR (μtθ , μ 0 
+
+> θ
+
+)∣t∣ , (121) 
+
+when the limit exists. 
+
+C.2 KR metric derivative for lower-triangular affine pushforwards 
+
+We first specialize the KR distance to the family of lower-triangular affine pushforwards relevant to our setting. 
+
+Lemma 5 (KR distance for lower-triangular affine pushforwards) . Let ν be a probability measure on Rd absolutely continuous with respect to the Lebesgue measure, with finite second moments. Let 
+
+T1, T 2 be lower-triangular affine maps Ti(y) = bi + Liy with Li having strictly positive diagonals. Then Ti is the KR rearrangement from ν to Ti#ν, and 
+
+W 2KR (T1# ν, T 2# ν) = ∫ ∥T1(y) − T2(y)∥ 22 dν (y). (122) 
+
+Proof. By the discussion following Definition 4, Ti is triangular and component-wise monotone (since Li has positive diagonal entries), hence Ti is a KR rearrangement from ν to Ti#ν. By the 
+
+ν-a.e. uniqueness of the KR rearrangement under the absolute continuity assumption on ν, Ti is the unique such map. Substituting into Definition 5 gives the claimed formula. We now show that in contrast to the Wasserstein-2 bound (Theorem 3), Gθ exactly captures the squared metric derivative under the KR distance for lower-triangular affine pushforwards. 
+
+Theorem 4 (Exact metric tensor for lower-triangular affine maps) . Let Tθ (y) = bθ + Lθ y be a lower-triangular affine transport map with Lθ having strictly positive diagonals, and assume θ ↦ ( bθ , L θ )
+
+is differentiable. Assume an absolutely continuous measure ν has zero mean and identity covariance. Then for any perturbation direction h ∈ Rp,
+
+∣μ′(θ, h )∣ 2KR = h⊺Gθ h, where Gθ = ∫ Dθ Tθ (y)⊺Dθ Tθ (y) dν (y). (123) 29 Proof. By Lemma 5, for any two affine maps Ti(y) = bi + Liy:
+
+W 2KR (T1# ν, T 2# ν) = ∫ ∥T1(y) − T2(y)∥ 2 dν (y). (124) Expanding T1(y) − T2(y) = ( b1 − b2) + ( L1 − L2)y and using Eν [y] = 0 and Eν [yy ⊺] = I, the cross-term vanishes and the integral evaluates to 
+
+W 2KR (T1# ν, T 2# ν) = ∥ b1 − b2∥2 + ∥ L1 − L2∥2 
+
+> F
+
+. (125) Applying (125) to the parameter curve Tθ+th vs. Tθ ,
+
+W 2KR (μ(θ + th ), μ (θ)) = ∥ bθ+th − bθ ∥2 + ∥ Lθ+th − Lθ ∥2 
+
+> F
+
+. (126) A first-order Taylor expansion of bθ and Lθ in θ gives, as t → 0,
+
+∥bθ+th − bθ ∥2 = t2∥Dθ bθ h∥2 + o(t2), (127) 
+
+∥Lθ+th − Lθ ∥2 
+
+> F
+
+= t2∥Dθ Lθ h∥2 
+
+> F
+
++ o(t2). (128) Dividing by t2 and taking the limit, 
+
+∣μ′(θ, h )∣ 2KR = ∥ Dθ bθ h∥2 + ∥ Dθ Lθ h∥2 
+
+> F
+
+. (129) By Lemma 2, this equals h⊺Gθ h where Gθ = ∫ Dθ Tθ (y)⊺Dθ Tθ (y) dν (y).30 D Experimental details 
+
+D.1 Conditional Histogram Experimental Details D.1.1 Data Simulation 
+
+The input space is X = [ 0, 1]. For each x, the conditional distribution μx is a symmetric two-component Gaussian mixture 
+
+μx = 12 N ( m(x) − d(x), σ 2(x)) + 12 N ( m(x) + d(x), σ 2(x)) , (130) with conditional mean m(x) = x, mode half-separation d(x) = exp (− 20 (x − 0.5)2), and component standard deviation σ(x) = 0.2 (1 + x)2.This design is chosen so that m(x) is smooth while the quantile functions are localized. With this setting, we anticipate that a mean-based active learning method will sample the space evenly while a quantile-based active learning method will be sensitive to areas of X where the variance changes. 
+
+D.1.2 Gaussian Process Regression 
+
+We fit a quantile function x ↦ F −1 
+
+> x
+
+(τj ) with F −1 
+
+> x
+
+(τj ) = mθ (x) + gθ (x; τj ) for each quantile 
+
+τj ∈ { τ1, . . . , τ M } on a uniform grid ( M = 30 , splitting [0.03 , 0.97 ] for stability, boundaries included) independently with a Gaussian process. We estimate posterior expected variance in (40) by integrating the variance across the quantiles. For the mean strategy, we fit a Gaussian process predicting the mean and obtain the posterior expected variance. Kernel hyperparameters (amplitude and bandwidth of an RBF kernel) are pre-fitted by maximum likelihood on a dense ground-truth grid and then fixed throughout the active learning loop; this isolates the effect of the acquisition strategy from hyperparameter estimation artifacts. 
+
+D.1.3 Active Learning Strategies Wasserstein AL Select 
+
+xnew = arg min x′∈X cand Ex∗∼ptest ∫
+
+> 10
+
+Var [F −1 
+
+> x∗
+
+(τ ) ∣ D ∪ { x′}] dτ, (131) targeting the full distributional risk. 
+
+Mean AL Select 
+
+xnew = arg min 
+
+> x′∈X cand
+
+Ex∗∼ptest Var [m(x∗) ∣ D ∪ { x′}] , (132) targeting only the first term (mean) of the risk decomposition. 
+
+Random Select xnew uniformly at random. 
+
+D.1.4 Experiments 
+
+Each strategy starts from Ninit = 5 shared initial observations (including the boundary points 
+
+x = 0.005 and x = 0.995 ) and acquires 5 additional points sequentially. Mean Wasserstein loss (35), mean squared error between the predicted mean mθ (x) = ∫ F −1 
+
+> θ
+
+(x)dτ 
+
+and the true mean, and the mean shape error (37) across conditions are reported. 
+
+D.2 Baselines 
+
+The NTK baseline benchmarked throughout Section 5 is the standard finite-width NTK (4) for last-layer parameters, applied to the mean-fitting network that is trained to predict the sample mean. The size of the mean-fitting network is set as identical to the transport map trained. The NTK kernels are paired with the same acquisition rule (18) as tNTK. For the conditional quantile prediction, we have two additional baselines that use NTK of networks that each predict mean and variance, and quartiles. We also apply BALSA EMD from Werner and 31 Schmidt-Thieme [56], which is the only work that takes the distribution into account to the best of our knowledge. BALSA EMD was benchmarked only for conditional quantile prediction, as it is only designed for 1-dimensional distributions. 
+
+D.3 Affine transport of 2D Gaussian 
+
+In this section, we derive a fully analytic expression for tNTK when the conditional generative model is a two-dimensional affine map whose covariance factor is parameterized via a Cholesky decomposition, along with the experimental details for the results presented in Section 5.1. The resulting kernel requires no Monte Carlo integration over the base measure and no automatic differentiation—only inner products of intermediate features and pointwise sigmoid evaluations. We then describe the details about training and data. 
+
+D.3.1 Affine Cholesky Parameterization 
+
+We first show the general result on the affine map with Cholesky decomposition on a d-dimensional Gaussian, with experimental details deferred to Appendix D.3.2. Let x ∈ X denote the conditioning variable and y = ( y1, . . . , y d)⊺ ∼ ν a sample from the base measure ν = N ( 0, I d). We consider a conditional transport map of the form 
+
+Tθ (x)( y) = bθ (x) + Lθ (x) y ∈ Rd, (133) where bθ (x) ∈ Rd is the predicted mean and Lθ (x) ∈ Rd×d is a lower-triangular matrix with strictly positive diagonal entries, so that Σθ (x) = Lθ (x) Lθ (x)⊺ is a valid covariance matrix. The pushforward distribution is μ(θ, x ) = N( bθ (x), Σθ (x)) .Both bθ (x) and Lθ (x) are produced by a neural network with the following last-layer structure. 
+
+Backbones. Two feature extractors (which may or may not share parameters) map the input to representations 
+
+hθ (x) ∈ RH , gθ (x) ∈ RH , (134) where hθ feeds the mean head and gθ feeds the Cholesky head. Their parameters are part of θ but are held fixed when defining the last-layer kernel. 
+
+Mean head. A linear layer with weight rows m⊺ 
+
+> j
+
+, ∈ RH , j = 1, . . . , d produces the mean vector: 
+
+bjθ (x) = m⊺ 
+
+> j
+
+hθ (x) + bj . (135) 
+
+Cholesky head. A linear layer with weight rows ℓ⊺ 
+
+> ji
+
+∈ RH and biases kji ∈ R for j = 1, . . . , d, i =
+
+1, . . . , j produces the elements of the lower-triangular factor, where the softplus function σ(t) = 
+
+log (1 + et) is applied to the diagonal entries ( i = j). 
+
+Lθ (x) = ⎡⎢⎢⎢⎢⎢⎢⎢⎢⎣
+
+σ(ℓ⊺
+
+> 11
+
+gθ (x) + k11 ) 0 . . . 0
+
+ℓ⊺
+
+> 21
+
+gθ (x) + k21 σ(ℓ⊺
+
+> 22
+
+gθ (x) + k22 ) . . . 0
+
+⋮ ⋮
+
+ℓ⊺
+
+> d1
+
+gθ (x) + kd1 . . . σ(ℓ⊺
+
+> dd
+
+gθ (x) + kdd )⎤⎥⎥⎥⎥⎥⎥⎥⎥⎦
+
+. (136) 
+
+Last-layer gradients. Conditional transport can be written as 
+
+T jθ (x)( y) = m⊺ 
+
+> j
+
+h(x) + bj +
+
+> j−1
+
+∑
+
+> i=1
+
+(ℓ⊺
+
+> ji
+
+gθ (x) + kji )yi + σ (l⊺ 
+
+> jj
+
+gθ (x) + kjj ) yj (137) where T jθ (x)( y) denotes j-th dimension of the output. We compute the gradient of T jθ (x)( y) with respect to the last-layer parameters θ = { m, b, ℓ, k }. Let σ′ denote the sigmoid function (the derivative 32 of softplus). 
+
+∇mj T jθ (x)( y) = hθ (x) (138) 
+
+∇bj T jθ (x)( y) = 1 (139) 
+
+∇ℓji T jθ (x)( y) = gθ (x)yi, i = 1, . . . , j − 1 (140) 
+
+∇kji T jθ (x)( y) = yi, i = 1, . . . , j − 1 (141) 
+
+∇ℓjj T jθ (x)( y) = σ′ (ℓ⊺ 
+
+> jj
+
+gθ (x) + kjj ) yj gθ (x) (142) 
+
+∇kjj T jθ (x)( y) = σ′ (ℓ⊺ 
+
+> jj
+
+gθ (x) + kjj ) yj (143) (144) and we have the closed-form tNTK: 
+
+kθ (x, x ′) = ∫ Tr [DwTθ (x)( y)⊺ DwTθ (x′)( y)] dν (y), (145) 
+
+= ∫ 
+
+> d
+
+∑
+
+> j=1
+
+(hθ (x)⊺hθ (x′) + 1 +
+
+> j−1
+
+∑
+
+> i=1
+
+(gθ (x)⊺gθ (x′) + 1) y2
+
+> i
+
++σ′(ℓ⊺ 
+
+> jj
+
+gθ (x) + kjj )σ′(ℓ⊺ 
+
+> jj
+
+gθ (x′) + kjj ) ( gθ (x)⊺gθ (x′) + 1) y2 
+
+> j
+
+) dν (y) (146) 
+
+= d (h⊺ 
+
+> θ
+
+hθ (x′) + 1) + (147) 
+
+⎛⎝⎛⎝
+
+d(d − 1)
+
+2 + ∑ 
+
+> j
+
+σ′(ℓ⊺ 
+
+> jj
+
+gθ (x) + kjj )σ′(ℓ⊺ 
+
+> jj
+
+gθ (x′) + kjj )⎞⎠ (gθ (x)⊺gθ (x′) + 1)⎞⎠
+
+(148) 
+
+D.3.2 Training 
+
+We use a training pool of 200 conditions and 100 test conditions, with active learning batches of size 
+
+B = 2 over 5 rounds starting from B0 = 5 initial conditions. The mean and covariance heads are separate MLPs, each with 2 hidden layers and ReLU activations followed by a linear output layer of dimension 2 (mean) and 3 (Cholesky factor entries), respectively. We train both networks jointly using the analytical KL divergence between the predicted and ground-truth Gaussian as the loss: 
+
+DKL (N ( μt, Σt) ∥ N ( μp, Σp)) = 12 [tr (Σ−1 
+
+> p
+
+Σt) + ( μp − μt)⊺Σ−1 
+
+> p
+
+(μp − μt) − d + log det Σ p
+
+det Σ t
+
+]
+
+(149) 
+
+= 12 [∥ L−1 
+
+> p
+
+Lt∥2 
+
+> F
+
++ ∥ L−1 
+
+> p
+
+(μp − μt)∥ 22 − d + 2
+
+> d
+
+∑
+
+> i=1
+
+log (Lp)ii − 2
+
+> d
+
+∑
+
+> i=1
+
+log (Lt)ii ] .
+
+(150) The loss is optimized with Adam using a learning rate of 0.001 for 2000 steps. For the evaluation, the Wasserstein-2 distance between predicted and ground truth Gaussian distributions was calculated with its closed form [72]. 
+
+D.3.3 Data 
+
+Data is generated with condition covariates x = ( x1, x 2) that specifies bθ (x) and Σθ (x):
+
+bθ (x) = 2.0[e−6x1x2 , e −6x1(1−x2)]⊺ (151) 
+
+Σθ (x) = [ λ21 cos 2 φ + λ22 sin 2 φ (λ21 − λ22) sin φ cos φ
+
+(λ21 − λ22) sin φ cos φ λ21 sin 2 φ + λ22 cos 2 φ ] (152) with φ = πx 2, λ1 = 0.2 + 2e−10 (1−x1), and λ2 = 0.2. We construct 196 training conditions on a 
+
+14 × 14 Cartesian grid in [0, 1]2, and 100 test conditions on a 10 × 10 grid uniformly spaced in 
+
+[1/28 , 1 − 1/28 ]2 to avoid overlap with the training grid. The Cholesky factor Lθ (x) is computed from Σθ (x).33 D.4 Conditional quantile prediction D.4.1 Model and training 
+
+We train MLPs that produce 32 quantile values per condition following Moon et al. [54]. The MLP outputs a vector z ∈ RH from its last hidden layer. Two linear heads then produce: (i) the smallest predicted quantile value ˆF −1 
+
+> θ
+
+(τ1) = h⊺
+
+> min
+
+z + bmin ∈ R, and (ii) 31 non-negative increments 
+
+δ = softplus (W z + b) ∈ R31 
+
+> ≥0
+
+. The full vector of 32 predicted quantiles is then 
+
+ˆF −1 
+
+> θ
+
+(τk) = ˆF −1 
+
+> θ
+
+(τ1) + 
+
+> k−1
+
+∑
+
+> j=1
+
+δj , k = 1, . . . , 32 , (153) ensuring monotonicity by construction ( non-crossing quantiles ). The targeted quantile levels are 
+
+τk = ( 2k − 1)/ 64 for k = 1, . . . , 32 , i.e., 32 uniformly spaced points in [1/64 , 1 − 1/64 ]. Empirical quantiles at these levels are computed from the per-condition samples and used as training targets. The model is trained with squared Wasserstein-2 loss with the Adam optimizer for 200 minimum and 3000 maximum epochs with early stopping patience of 10 with validation loss. Validation loss is calculated as the loss with empirical quantile values calculated from 20% of held-out per-condition validation samples. For each dataset, we select the model configuration and weight decay by 5-fold cross-validation over 10 conditions, choosing the combination that minimizes the squared Wasserstein-2 distance on held-out conditions. The search grid is: • Model configurations (width , depth ): (64 , 2), (32 , 3), (128 , 3).• Weight decay: {0.1, 0.01 , 10 −3, 10 −4}.The selected hyperparameters are reported in Table S1. Table S1: Selected hyperparameters for the conditional quantile network, per dataset. Dataset B0 (width , depth ) # bins Weight decay Simulated Gaussian mixture 5 (128 , 3) 32 10 −4
+
+10 (32 , 3) 32 10 −3
+
+Temperature 5 (64 , 2) 32 10 −3
+
+10 (32 , 3) 32 10 −2
+
+Dew Point 5 (64 , 2) 32 10 −4
+
+10 (64 , 2) 32 10 −1
+
+Active learning loops of iterations 0-5 over 5 folds are run on CPU with 10 GB memory within 2 hours on an internal cluster. 
+
+D.4.2 Data Simulated 1D mixture Gaussian We simulate 1000 1-dimensional Gaussian mixture distribu-tion with 3 components, where parameters are randomly selected with μi ∼ Unif (− 5, 5), σ i ∼
+
+Unif (1.0, 1.5) , i ∈ ( 1, 2, 3) and π ∼ Dirichlet (0.25 , 0.25 , 0.25 ). 600 samples are generated from each distribution. Condition embedding of (μ1, σ 1, π 1, . . . , μ 3, σ 3, π 3) is generated by ordering components so that μ1 ≤ μ2 ≤ μ3 for identifiability. 
+
+Temperature We take the daily surface temperature measurements between 2023 and 2025 mea-sured across 11396 stations from NOAA National Centers for Environmental Information [55](CC0-1.0 license). 1000 stations with no less than 256 days of measurements, with non-NaN station locations, and with the highest Wasserstein distance from the control distribution of a random Gaus-sian with mean and standard deviation of all measurements were selected. The distance is calculated from 256 random samples from each station and 1000 random samples from the control distribution. The resulting station had 967-971 days of measurements. (longitude , latitude , elevation ) was used as 3-dimensional condition embedding for each station. Yearly temperature and each of the condition embedding dimensions were globally scaled to unit variance and 0 mean before training. 34 Dew point We take the daily dew point measurements from the same data source as in the Temper-ature dataset. 1000 stations with no less than 512 days of measurements and with non-NaN station locations were randomly selected, resulting in 515-970 days of measurements. The same condition embedding and data scaling were used as in the Temperature dataset. 
+
+D.5 Conditional flow matching D.5.1 Model and training 
+
+We adapted the source code of Klein et al. [37] 2 with linear interpolant: 
+
+ϕ0,x (yi) = y ∼ N ( 0, I ) (154) 
+
+ut,x i (ϕt,x (yi)) = ddt ϕt,x (yi) = yxi − ϕt,x (yi)
+
+1 − t (155) where yxi is a sample of condition x. We learn vθ (t, x, ϕ t,x (yi)) to approximate ut,x i (ϕt,x (yi)) [32]. The flow ODE is parameterised by a velocity field 
+
+vθ (t, x, ϕ t,x (yi)) = gθ (concat (f time  
+
+> θ
+
+(t), f sample  
+
+> θ
+
+(ϕt,x (yi)) , f cond  
+
+> θ
+
+(x), )) , (156) where f sample  
+
+> θ
+
+, f cond  
+
+> θ
+
+, and gθ are MLPs with SiLU activation [73], f time  
+
+> θ
+
+is a Fourier-feature time encoder, and the condition embedding is mean-pooled before f cond  
+
+> θ
+
+. A combination of dropout rates among (0.0, 0.5) and one of three model configurations in Table S2 for each dataset is selected to be the one with the least Sinkhorn divergence in validation conditions from the 5-fold CV of 10 randomly selected conditions. Table S2: CellFlow model configurations Config f sample  
+
+> θ
+
+f cond  
+
+> θ
+
+gθ Time frequencies f time 
+
+> θ
+
+1 [64 , 64 ] [64 , 64 ] [128 , 128 , 128 , 32 ] 32 [128, 32] 
+
+2 [64 , 64 ] [64 , 64 ] [128 , 128 , 128 , 128 ] 128 [128, 128] 
+
+3 [256 , 256 ] [64 , 64 ] [512 , 512 , 512 , 64 ] 64 [512, 64] For a given set of training conditions, we hold out 20% of samples per condition as validation samples. At each training step, a 256 -cell batch is sampled per condition across 128 time samples of t; one optimization step processes all training conditions jointly. The model is trained with Adam (per-dataset learning rate, Table S3) for up to neval steps; validation is run every 1000 steps on Sinkhorn divergence ( ϵ = 0.1σ, where σ is the standard deviation of cost matrix entries) over the held-out validation samples. We additionally apply a plateau-based learning-rate scheduler (patience 5, factor 
+
+0.5, lr min = 0.1lr) to CLINC 150 dataset and early stopping with validation loss. Model parameters from the best validation step are restored when early stopping is triggered before kernel computation and test evaluation. Table S3: Per-dataset CellFlow hyperparameters Dataset lr Config dropout rate neval early-stopping patience Radial flow 5×10 −6 1 0 30 ,000 5Van der Pol oscillation 5×10 −5 1 0 30 ,000 5CLINC 150 5×10 −5 1 0.5 300 ,000 30 Active learning uses 5-fold cross-validation over conditions: each fold holds out 1/5 of conditions for test evaluation, and the remaining train/validation conditions are revealed in batches across 3 AL iterations. Iteration 0 uses random initial conditions and is therefore strategy-independent; we train it once per (fold, seed) to eliminate GPU non-determinism drift across strategies. Sinkhorn divergence for validation samples and test conditions is evaluated by integrating the flow ODE with adaptive Tsit5(rtol = atol = 10 −5) from 256 standard-normal source samples (sampled  
+
+> 2https://github.com/theislab/CellFlow ,v0.0.6 , MIT license
+
+35 with replacement if the number of available samples per condition is less than 256) to t = 1, with 
+
+ϵ = 0.05 σ, where σ is the standard deviation of cost matrix entries. For the kernel calculation, M = 4096 random samples from the standard normal distribution are integrated with the flow ODE with adaptive Tsit5(rtol = atol = 10 −5). Active learning loops of iterations 0-3 over 5 folds are run on L40S GPUs with 30GB of memory within 48 hours per seed on an internal cluster. 
+
+D.5.2 Data Simulated radial flow We simulated radial flow in R2 with a global attractor of concentric circles centered at the origin with radius √α/β, and the steepness of the attraction is controlled by α, where 
+
+y ∼ N ( 0, I ).
+
+ddt ϕt,x (y) = ( α − β∣∣ ϕt,x (y)∣∣ 2)ϕt,x (y), α, β > 0 (157) The pool comprises 100 conditions: 50 sampled with jitter around a nominal point, 
+
+α ∼ Unif (0.98 , 1.02 ) and β ∼ Unif (2.48 , 2.52 ), and 50 from the Cartesian prod-uct of α ∈ {0.1, 0.31 , 0.52 , . . . , 2.0} (10 uniformly spaced points in [0.1, 2.0]) and β ∈{0.5, 1.625 , 2.75 , 3.875 , 5.0} (5 uniformly spaced points in [0.5, 5.0]). For each condition, we generate 1000 particle trajectories by Euler integration of the radial flow ODE for 100 steps with 
+
+∆t = 0.01 , yielding the empirical distribution at t = 1. The conditioning input is (α, β ) ∈ R2.
+
+Simulated Van der Pol oscillation We simulated Van der Pol oscillation for varying starting particle locations y ∼ N ([ c1, c 2]⊺, σ 2I) and parameter μ.
+
+dx 1
+
+dt = x2 (158) 
+
+dx 2
+
+dt = μ(1 − x21) x2 − x1 (159) Random direction and radius in the 4-sphere were sampled, where r = min (Exp (2.5), 1), Exp denotes samples from exponential distribution, u is the uniformly randomly selected unit vector in 4-sphere, and h is the vector of half ranges for each parameter. Parameter: θ = ( μ, c 1, c 2, σ ) = clip (θ0 + r(u ⊙ h), θ min , θ max ) (160) 
+
+θ0 = ( μ0, c 1,0, c 2,0, σ ) = ( 2.0, 0.0, 0.0, 0.5) (161) 
+
+θmin = (− 0.5, −1.5, −1.5, 0.2) (162) 
+
+θmax = ( 3.0, 1.5, 1.5, 1.0) (163) 
+
+hi = max (θ0,i − θmin ,i , θ max ,i − θ0,i ) (164) 
+
+ϕ3,x (y) for 1000 particles per condition is calculated with Euler integration with 300 steps ( ∆t =0.01). θ was used as the condition embedding. 
+
+CLINC 150 CLINC 150 is an intent classification dataset with 150 intentions and 100 sentences per intention [59, 60] (CC BY 4.0 license). We embedded sentences with the BART [62] base-sized pretrained model, then embedded them into an 8-dimensional PC embedding. The label for each intent class was embedded with the fine-tuned MINILM [61] 3 text encoder into 64 latent dimensions with truncate_dim=64 , then scaled to have unit variance per dimension. 
+
+D.6 Conditional Monge gap D.6.1 Model and training 
+
+We adapted the source code of Driessen et al. [31] 4. For each train condition, 1/5 of the samples are held out as validation samples. We train the model for 100 epochs, with one condition per batch, selecting 256 random samples for the condition with replacement. The network was trained with the     
+
+> 3all-MiniLM-L6-v2, https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2 under Apache-2.0 license
+> 4Source code at https://github.com/AI4SCR/conditional-monge-gap under MIT license, accessed Nov 1st, 2025
+
+36 Adam optimizer with weight decay of 10 −5. Monge gap regularization parameter was set to 1.0. OT regularization parameter was set to ϵσ with ϵ = 0.05 for Sinkhorn divergence and ϵ = 0.1 for Monge gap, where σ is the standard deviation of all values in the cost matrix for OT matching. The learning rate was decayed with a cosine decay schedule with constant decay per step until 50 epochs, down to 
+
+1/10 of the initial learning rate. Parameters of the epoch with the least validation loss were selected for test condition evaluation and kernel calculation. The model separately encodes condition and sample, and concatenated results are fed to a shared MLP to predict the transported particle: 
+
+Tθ (x, y ) = gθ (concat (f cond  
+
+> θ
+
+(x), f sample  
+
+> θ
+
+(y))) (165) where f cond  
+
+> θ
+
+, f sample  
+
+> θ
+
+, gθ are MLPs with GELU activation layer [74] and f cond  
+
+> θ
+
+and f sample  
+
+> θ
+
+has last layer activation. Model configuration and learning rate combination are selected based on the lowest Sinkhorn divergence on the validation conditions from the 5-fold CV of n conditions, where n = 10 is the minimum initial batch size. Hyperparameter sweep was across 3 model configurations and 3 learning rates (0.01 , 0.001 , 0.0001 ).Table S4: Conditional Monge Gap model configurations Config f sample  
+
+> θ
+
+f cond  
+
+> θ
+
+gθ
+
+1 [64 , 64 ] [64 , 64 ] [128 , 128 , 128 , 32 ]
+
+2 [128 , 128 ] [128 , 128 ] [256 , 256 , 256 , 64 ]
+
+3 [256 , 256 ] [256 , 256 ] [512 , 512 , 512 , 64 ]
+
+Table S5: Selected model configurations for Conditional Monge map datasets Dataset Model configuration Learning rate K562-Chemical 3 0.0001 BMDM-Genetic 3 0.001 Test conditions are evaluated with 3 random samples with replacement of 256 samples per condition, both from the source and target samples. 
+
+M = 4096 samples were used to obtain Monte Carlo estimates of kernels. Active learning loops of iterations 0-5 over 5 folds are run on CPU with 100GB of memory within 48 hours on an internal cluster. 
+
+D.6.2 Datasets K562-Chemical K562 cells and MCF7 cells from the Sciplex3 dataset [75, 64] (CC BY 4.0 license) are separately embedded into scVI [76] 10-dimensional embeddings with default parameters, and then the mean response embedding in MCF7 is used as the condition covariates. 436 kinase-dose conditions are selected that have at least 80 cells profiled in K562 and are present in MCF7, yielding 64,971 cells, with 3,359 unperturbed cells (80-255 per condition; median 138). 
+
+BMDM-Genetic We take the subset of Perturb-seq outcomes that targeted 514 genes in mouse bone marrow-derived macrophages (BMDMs) from Kudo et al. [77]. 3000 highly variable genes are selected, and a 50-dimensional salient representation [78] is obtained. The imaging outcome of the optical pooled screen [79] with matched perturbations was processed and embedded into 70 principal components and pseudo-bulked per perturbation. The top 198 perturbations that diverge the most from the control cells with the largest Wasserstein distance in the 50-dimensional latent space are selected for the experiment in this paper, leading to 73,161 cells with 25,952 unperturbed cells and 256-1,963 cells for each of the 198 selected perturbations. The response of all cells, including the 37 unperturbed cells, was projected onto the first 10-dimensional principal components. Further details of the dataset and preprocessing are described in the original manuscript Kudo et al. [77] 5. 
+
+> 5Public repository appears at https://github.com/Genentech/MoCAVI/blob/main/demos/tutorial_mocavi_ kinase_screen.ipynb
+
+38 E Additional Results 
+
+E.1 Empirical analysis of gap in Theorem 1 
+
+We assessed how loose the upper bound becomes as the dimension grows by analyzing the transport of 
+
+d-dimensional Gaussian distributions. We compute the analytical kernel as described in Appendix D.3. We compute the Fréchet variance by obtaining the barycenter of the posterior distribution with randomly sampled parameters θ = { m, b, ℓ, k } with θ ∼ N ( ˆθ, σ 2Ip).
+
+Barycenter computation. Barycenters of M = 1000 random parameter samples are obtained with a fixed-point method in Álvarez Esteban et al. [80], until the relative Frobenius norm F rel =∥Σ(k+1) − Σ(k)∥F /∥ Σ(k)∥F converges ( F rel ≤ 1e−10 ). For a condition x, write Σi, i = 1, . . . , M , for the covariances of the M jittered pushforward Gaussians at that condition. The Fréchet mean (μF , ΣF ) is computed as follows. The mean component is closed form, 
+
+μF = 1
+
+M
+
+> M
+
+∑
+
+> i=1
+
+μi. (166) The covariance is the Álvarez-Esteban fixed point, initialized at the arithmetic mean, and iterated as 
+
+Σ(0) 
+
+> F
+
+= 1
+
+M
+
+> M
+
+∑
+
+> i=1
+
+Σi, (167) 
+
+¯T (k) = 1
+
+M
+
+> M
+
+∑
+
+> i=1
+
+(Σ(k) 
+
+> F
+
+)−1/2[( Σ(k) 
+
+> F
+
+)1/2 Σi (Σ(k) 
+
+> F
+
+)1/2]1/2
+
+(Σ(k) 
+
+> F
+
+)−1/2, (168) 
+
+Σ(k+1) 
+
+> F
+
+= ¯T (k) Σ(k) 
+
+> F
+
+¯T (k). (169) Every matrix square root is evaluated spectrally on the symmetrized argument, with eigenvalues clamped before the root is taken: 
+
+S1/2 = U diag (√max (λj , 0)) U⊺, S−1/2 = U diag ( max (λj , 10 −10 )−1/2) U⊺, (170) where U diag (λ) U⊺ is the eigendecomposition of 12 (S + S⊺).The iteration stops at the first k with 
+
+∥Σ(k+1) 
+
+> F
+
+− Σ(k) 
+
+> F
+
+∥F
+
+∥Σ(k) 
+
+> F
+
+∥F
+
+< τ, τ = 10 −10 , (171) The fixed-point iteration converged within 40 iterations across all settings. The norms are Frobenius norms taken over the stacked tensor of all conditions, so the criterion is a single pooled residual rather than one test per condition. The accepted iterate is symmetrized and factorized with a small jitter, 
+
+ΣF ← 12 (ΣF + Σ⊺ 
+
+> F
+
+), LF L⊺ 
+
+> F
+
+= ΣF + 10 −14 I. (172) For each dimension d, we calculate Tr (Gˆθ (x)) and V σ2 
+
+> F
+
+(x) per condition. We calculate Fréchet variance from a Monte-Carlo sampling over M = 1000 draws of the last-layer perturbation. A single set of M draws is shared across all conditions and across σ ∈ { 3×10 −4, 10 −3, 3×
+
+10 −3, 10 −2} (common random numbers), and is redrawn independently for each of the three seeds of 
+
+σ. For each σ and x, we independently fit the ordinary least squares regression 
+
+V σ2 
+
+> F
+
+(x)/ σ2 = a(x) + b(x) σ2 (173) and report Tr (Gˆθ (x))/ ˆa(x) − 1.We find that the leading-order of the bound grows from 1 to 1.7 fold of the Fréchet variance as dimension d grows from 1 to 50 (Figure S1). 39 1 2 5 10 25 50 
+
+> d
+> 0.0 0.2 0.4 0.6
+> Tr( Ĝθ(x)) /  a(x) − 1
+
+Figure S1: Per-dimension gap in the leading order. Bars are one standard deviation over conditions (x). 
+
+E.2 Multi-dimensional Gaussian affine transport 
+
+To test the impact of bound looseness in higher dimensions, we examined active learning performance in the affine transport of higher-dimensional Gaussians in d ∈ { 5, 10 , 25 , 50 }.
+
+Mean field. For k = 0, . . . , d − 1,
+
+μk(x) = α e −βx 1 cos ( 2πk d + πx 2), α = 2, β = 6.
+
+All d coordinates are driven by the same two scalars, so the mean field stays intrinsically two-dimensional at every d.
+
+Covariance field. The covariance is a smooth, full-rank random field built from r = d random Fourier features: 
+
+Σ(x) = s2
+
+> d
+
+(A(x)A(x)⊺ + εI d), A(x) = Id +
+
+> d
+
+∑
+
+> j=1
+
+fj (x) Bj ,fj (x) = √2/d cos (ω⊺ 
+
+> j
+
+x + ϕj ),
+
+with ε = 10 −3 and 
+
+(Bj )ab 
+
+> iid
+
+∼ N ( 0, 1/d), ωj ∼ N ( 0, (2πκ )2I2), ϕj ∼ U[ 0, 2π), κ = 1.
+
+The parameters {Bj , ω j , ϕ j }dj=1 are drawn once per d, in that order, from a dedicated random generator seeded with d. They are independent of the experiment seed, so every seed sees the same ground-truth field. The scale sd is calibrated so that the average per-coordinate variance is σ20 = 1.Concretely, we draw M = 2000 calibration conditions x(m) ∼ U[ 0, 1]2 from a generator with a fixed seed and set 
+
+s2 
+
+> d
+
+= σ20 /( 1
+
+M d 
+
+> M
+
+∑
+
+> m=1
+
+tr (A(x(m))A(x(m))⊺ + εI d)) .
+
+With this normalization, the mean and covariance contribute comparably to the variability of the data at every d: the covariance accounts for 41%, 55%, 54% and 51% of the pool’s Bures–Wasserstein variability at d = 5, 10 , 25 , 50 . The condition number of Σ(x) grows with d, reaching about 3 × 10 3
+
+at d = 50 .
+
+Pool, test set and initial set. Let npool = max (200 , 40 d), ntest = max (100 , 40 d) and m =
+
+round (√npool ).• Pool. Take the one-dimensional grid ti = i/( m − 1), i = 0, . . . , m − 1, and perturb each node independently by U(− 0.05 /m, 0.05 /m). The pool is the Cartesian product of this perturbed grid with itself ( m2 conditions). If m2 exceeds npool , npool of them are kept uniformly at random. The perturbation and the subsample depend on the experiment seed. 40 • Test set. A fixed, unperturbed mt × mt grid with mt = round (√ntest ) and nodes equally spaced on [ 12m , 1 − 12m ], i.e. offset from the pool by half a cell. It is the same for every seed. • Initial labelled set. b0 = 3d pool conditions drawn uniformly at random without replacement, depending on the experiment seed. The resulting sizes are: 
+
+d 5 10 25 50 pool 196 400 1000 2000 test 196 400 1024 2025 initial b0 15 30 75 150 
+
+Model, training and selection. The model has the same two-network structure as in 2D: a mean network with d outputs and a Cholesky network with d(d + 1)/ 2 outputs (softplus on the d diagonal entries). Both are ReLU MLPs with 2 hidden layers of width 64 at d = 5 and 3 hidden layers of width 256 for d ≥ 10 . In each round, the networks are re-initialized and trained full-batch on the labeled conditions with the Bures–Wasserstein loss 1 
+
+> ∣S∣
+
+∑x∈S W 22 (N ( μ(x), Σ(x)) , N ( ˆμ(x), ˆΣ(x))) .Training uses Adam (learning rate 10 −3, weight decay 10 −2, gradient-norm clipping at 1) for at most 2000 steps, with early stopping allowed after step 1000 once the training loss has not improved for 10 consecutive steps. Each d is run with 50 seeds, which set the pool perturbation and subsample, the initial set, the network initializations and the random baseline. Within a seed, all methods share the pool, test set, and initial set. 
+
+Results With B0 = 3d, B = 4, we see the advantage of tNTK over NTK up to d = 50 (Table S6). Table S6: d-dimensional Gaussian benchmark with a full-rank covariance field: test W 22 (total) after the final active-learning round, starting from b0 = 3d labeled conditions and acquiring 5 rounds of 
+
+b = 4; mean ± standard error over 50 seeds; lower is better, best per column in bold. Method d = 5 d = 10 d = 25 d = 50 
+
+tNTK 0.1164 ± 0.0014 0.7457 ± 0.0163 1.1017 ± 0.0169 1.3109 ± 0.0123 
+
+NTK 0.1469 ± 0.0028 0.7942 ± 0.0141 1.1346 ± 0.0157 1.4449 ± 0.0141 
+
+Random 0.2082 ± 0.0131 0.7763 ± 0.0287 1.1150 ± 0.0222 1.4214 ± 0.0163 
+
+E.3 Results on tNTK computation 
+
+In this section, we report compute time and the Monte Carlo stability of the tNTK. 
+
+E.3.1 Kernel compute time 
+
+We report the compute time for the tNTK calculation for the conditional Monge gap and flow matching models reported in the main text in Table S7. 
+
+E.3.2 Kernel stability to the number of Monte Carlo samples 
+
+We tested the Monte Carlo stability of tNTK with varying numbers of samples. We measured the stability metric of the relative Frobenius error ( ∥Kfull − Kdownsampled ∥F /∥ Kfull ∥F ) and overlap in the selected samples over 20 independent draws and report the mean in Table S8. Specifically, among the reported runs in the main paper, the MC stability is measured from the fold 0, seed 0, AL iteration 1 model. For conditional Monge gap, the reference uses all control cells (K562 3,359, BMDM 25,952), which is also what the reported runs use. Draws are without replacement, so N ≥ 3,359 
+
+is not available for K562 (–). For conditional flow matching, the source samples are fresh N ( 0, I )
+
+draws, the reference uses N = 65 ,536 , and the reported runs use N = 4,096 .41 Table S7: Wall-clock cost of the tNTK kernel in the reported active-learning runs. Per AL iteration 
+
+≥ 1: kernel construction time (median, with 10th–90th percentile), selection time and model-fit time (medians, seconds), and the kernel’s share of the iteration, tkernel /( tkernel + tselect + tfit ) (median, %). 
+
+N is the number of source samples the kernel averages over (conditional Monge: all control cells; CellFlow: fresh N ( 0, I ) draws). n is the number of AL iterations measured (fit and share use only iterations that trained the model, excluding ones restored from a checkpoint). Times come from the production runs’ own instrumentation on shared GPU nodes, including JIT compilation on the first iteration. 
+
+Dataset B0 + B N Kernel (s) Select (s) Fit (s) Kernel (%) n
+
+Conditional Monge 
+
+K562-Chemical 10 + 1 3,359 16.4 [11.6, 31.3] 0.2 1686 1.0 247 10 + 5 3,359 21.1 [12.5, 29.9] 1.5 2380 0.8 177 20 + 5 3,359 15.7 [12.5, 28.2] 1.3 2747 0.6 153 20 + 10 3,359 37.6 [34.2, 45.1] 0.6 4320 0.9 250 30 + 5 3,359 45.7 [36.8, 51.8] 0.3 4151 1.1 250 30 + 10 3,359 44.0 [35.4, 51.6] 0.7 5192 0.7 250 BMDM-Genetic 10 + 1 25,952 167.1 [120.3, 199.1] 1.1 1678 8.5 250 10 + 5 25,952 160.8 [117.3, 222.1] 6.3 3548 4.3 250 20 + 5 25,952 129.1 [97.5, 179.2] 6.1 4160 3.0 250 20 + 10 25,952 193.5 [150.7, 232.9] 0.6 4699 3.8 250 30 + 5 25,952 213.7 [186.7, 251.9] 0.3 4593 4.4 250 30 + 10 25,952 253.7 [146.2, 361.3] 0.8 6209 4.0 272 
+
+CellFlow 
+
+Radial flow 5 + 1 4,096 30.9 [28.3, 39.6] 1.3 299 9.5 150 5 + 5 4,096 31.5 [28.4, 42.1] 7.7 380 7.6 120 10 + 5 4,096 31.8 [27.8, 45.0] 6.2 359 8.2 150 Van der Pol oscillator 5 + 1 4,096 31.6 [26.2, 44.8] 1.2 229 13.1 150 5 + 5 4,096 30.7 [25.5, 42.9] 6.4 278 10.1 150 10 + 5 4,096 27.7 [24.8, 33.8] 6.6 255 10.1 150 CLINC 150 5 + 1 4,096 40.9 [34.6, 49.1] 1.5 922 4.1 150 5 + 5 4,096 36.8 [30.1, 51.5] 7.6 1338 2.7 150 10 + 5 4,096 39.2 [29.1, 59.6] 6.2 1725 2.2 196 
+
+42 Table S8: Monte Carlo stability of the tNTK kernel. For each N , the kernel is rebuilt from N source samples and compared with a reference kernel. Err. is the relative Frobenius error (%). Selection % 
+
+is the percentage of conditions in the selected batch of size B that also appear in the batch selected with the reference kernel (out of B). Mean over 20 independent draws. 
+
+N = 256 N = 1,024 N = 4,096 N = 16 ,384 
+
+Dataset B0 + B Err. Selection % Err. Selection % Err. Selection % Err. Selection % 
+
+Conditional Monge 
+
+K562-Chemical 10 + 1 2.52 100.0 1.16 100.0 – – – –10 + 5 2.52 70.0 1.16 82.0 – – – –20 + 5 4.04 100.0 1.56 100.0 – – – –20 + 10 4.04 99.5 1.56 99.5 – – – –30 + 5 4.84 97.0 2.01 100.0 – – – –30 + 10 4.84 96.0 2.01 100.0 – – – –BMDM-Genetic 10 + 1 2.54 50.0 1.25 75.0 0.44 100.0 0.17 100.0 10 + 5 2.54 33.0 1.25 73.0 0.44 97.0 0.17 100.0 20 + 5 3.18 90.0 1.88 98.0 0.72 100.0 0.27 100.0 20 + 10 3.18 86.5 1.88 91.5 0.72 100.0 0.27 100.0 30 + 5 3.38 86.0 1.80 99.0 0.94 100.0 0.29 100.0 30 + 10 3.38 88.0 1.80 94.5 0.94 99.5 0.29 100.0 
+
+CellFlow 
+
+Radial flow 5 + 1 2.53 30.0 1.90 20.0 1.06 45.0 0.71 30.0 5 + 5 2.68 78.0 2.02 83.0 1.24 80.0 1.03 84.0 10 + 5 3.68 85.0 2.52 85.0 1.55 82.0 0.87 80.0 Van der Pol oscillator 5 + 1 3.62 100.0 2.72 100.0 1.47 100.0 0.99 100.0 5 + 5 3.62 87.0 2.71 92.0 1.47 98.0 0.99 97.0 10 + 5 3.50 92.0 2.44 89.0 1.44 89.0 0.87 88.0 CLINC 150 5 + 1 1.82 100.0 1.13 100.0 0.55 100.0 0.27 100.0 5 + 5 1.85 74.0 1.16 87.0 0.56 92.0 0.27 98.0 10 + 5 1.58 71.0 0.90 91.0 0.41 100.0 0.26 100.0 
+
+43 E.4 Additional baselines 
+
+We present additional baselines for the results presented in the main text. For affine transport of 2D Gaussian distributions, we also benchmarked against BatchBALD (NTK with greedy maximum determinant selection) and BADGE-style (NTK with k-means++ selection) adapted for the regression as in Holzmüller et al. [25] (Table S9). tNTK, with minimization of total posterior variance selection, outperforms all NTK-based baselines. Table S9: 2D Gaussian: NTK-based batch-selection baselines. Decrease of W 22 relative to the initial training set, averaged over AL iterations 1–5 (units 10 −3; more negative is better), mean ± s.e.m. over 30 seeds. Method ∆W 22 (↓)tNTK −431 .58 ± 26 .68 
+
+NTK (BAIT; NTK + total posterior variance minimization) −364 .15 ± 26 .59 
+
+BatchBALD (NTK + maximum determinant) −360 .94 ± 26 .30 
+
+BADGE-style (NTK + k-means++) −405 .88 ± 27 .09 
+
+Random −363 .93 ± 26 .09 
+
+We also benchmark tNTK in a larger-batch regime with LCMD selection, which Holzmüller et al. [25] has shown to perform the best in a large-batch scenario of B0 = 5, B = 20 with 1 active learning iteration. In this scenario, the LCMD selection outperformed total posterior variance minimization, while tNTK outperformed NTK (Table S10). The result shows the importance of choosing the right selection algorithm in various active learning settings, as has been shown before [81]. We defer the investigation of the synergy between the tNTK and selection algorithms to future studies. Table S10: 2D Gaussian: LCMD versus minimum total posterior variance (BAIT) as the batch-selection rule. Mean ± standard error over 50 seeds is shown. The two rules are matched runs (same seeds, initial set, and round-0 model). Random ignores the kernel and the selection rule, so its row is shared. Kernel LCMD Min. total posterior variance tNTK 0.0573 ± 0.0021 0.0788 ± 0.0026 
+
+NTK 0.0643 ± 0.0025 0.2153 ± 0.0072 
+
+Random – 0.1234 ± 0.0061 
+
+The experimental settings are identical to those presented in the main text unless otherwise mentioned, and are described in detail in Appendix D.3. 44 F Supplementary Figures 0 1 2 3 4 5
+
+AL iteration 
+
+> 0.8 1.0 1.2
+> Simulated Gaussian mixture
+> W2 distance ( ↓ )
+
+5 + 1      
+
+> 012345
+
+AL iteration 
+
+> 0.6 0.8 1.0 1.2 1.4
+> W2 distance ( ↓ )
+
+5 + 5      
+
+> 012345
+
+AL iteration 
+
+> 0.8 0.9 1.0
+> W2 distance ( ↓ )
+
+10 + 1      
+
+> 012345
+
+AL iteration 
+
+> 0.30 0.35 0.40 0.45 0.50
+> Temperature
+> W2 distance ( ↓ )
+
+5 + 1      
+
+> 012345
+
+AL iteration 
+
+> 0.2 0.3 0.4 0.5
+> W2 distance ( ↓ )
+
+5 + 5      
+
+> 012345
+
+AL iteration 
+
+> 0.250 0.275 0.300 0.325 0.350
+> W2 distance ( ↓ )
+
+10 + 1      
+
+> 012345
+
+AL iteration 
+
+> 0.6 0.7 0.8
+> Dew Point
+> W2 distance ( ↓ )
+
+5 + 1      
+
+> 012345
+
+AL iteration 
+
+> 0.3 0.4 0.5 0.6 0.7 0.8
+> W2 distance ( ↓ )
+
+5 + 5      
+
+> 012345
+
+AL iteration 
+
+> 0.5 0.6 0.7
+> W2 distance ( ↓ )
+
+10 + 1      
+
+> Random NTK NTK (mean-var) NTK (quartile) BALSA-EMD tNTK
+
+Figure S2: Wasserstein-2 distance over active learning iterations for the conditional quantile regression experiment. Rows correspond to datasets (Simulated Gaussian mixture, Temperature, Dew Point); columns correspond to budget configurations B0 + B (initial training set size + per-round batch size). Lines show mean across 50 runs ( 5 folds × 10 seeds), with shaded bands showing ± standard error. Random in black, NTK in blue, tNTK in red. 45 0 1 2 3
+
+AL iteration 
+
+> 0.05 0.06 0.07 0.08 0.09
+> Radial flow Sinkhorn div. ( ↓ )
+
+5 + 1    
+
+> 0123
+
+AL iteration 
+
+> 0.04 0.06 0.08
+> Sinkhorn div. ( ↓ )
+
+5 + 5    
+
+> 0123
+
+AL iteration 
+
+> 0.03 0.04 0.05 0.06 0.07
+> Sinkhorn div. ( ↓ )
+
+10 + 5    
+
+> 0123
+
+AL iteration    
+
+> 1.0 1.1 1.2
+> Van der Pol oscillator Sinkhorn div. ( ↓ )
+> 0123
+
+AL iteration    
+
+> 0.8 1.0 1.2
+> Sinkhorn div. ( ↓ )
+> 0123
+
+AL iteration    
+
+> 0.7 0.8 0.9 1.0
+> Sinkhorn div. ( ↓ )
+> 0123
+
+AL iteration    
+
+> 6.8 7.0 7.2 7.4 7.6 7.8
+> CLINC 150 Sinkhorn div. ( ↓ )
+> 0123
+
+AL iteration    
+
+> 6.50 6.75 7.00 7.25 7.50 7.75
+> Sinkhorn div. ( ↓ )
+> 0123
+
+AL iteration   
+
+> 6.4 6.6 6.8 7.0 7.2
+> Sinkhorn div. ( ↓ )
+> Random NTK tNTK
+
+Figure S3: Sinkhorn divergence over active learning iterations for conditional flow matching. Rows correspond to datasets (radial flow, Van der Pol oscillator, CLINC150); columns correspond to budget configurations B0 + B (initial training set size + per-round batch size). Lines show mean across 50 
+
+runs ( 5 folds × 10 seeds), with shaded bands showing ± standard error. Random in black, NTK in blue, tNTK in red. 46 0 1 2 3 4 5
+
+AL iteration 
+
+> 2.215 2.220 2.225 2.230
+> K562-Chemical Sinkhorn div. ( ↓ )
+
+10 + 1      
+
+> 012345
+
+AL iteration 
+
+> 2.20 2.22
+> Sinkhorn div. ( ↓ )
+
+10 + 5      
+
+> 012345
+
+AL iteration 
+
+> 2.18 2.19 2.20 2.21
+> Sinkhorn div. ( ↓ )
+
+20 + 5      
+
+> 012345
+
+AL iteration 
+
+> 2.17 2.18 2.19 2.20 2.21
+> K562-Chemical Sinkhorn div. ( ↓ )
+
+20 + 10      
+
+> 012345
+
+AL iteration 
+
+> 2.17 2.18 2.19
+> Sinkhorn div. ( ↓ )
+
+30 + 5      
+
+> 012345
+
+AL iteration 
+
+> 2.16 2.17 2.18 2.19
+> Sinkhorn div. ( ↓ )
+
+30 + 10      
+
+> 012345
+
+AL iteration 
+
+> 2.46 2.48 2.50 2.52 2.54
+> BMDM-Genetic Sinkhorn div. ( ↓ )
+
+10 + 1      
+
+> 012345
+
+AL iteration 
+
+> 2.35 2.40 2.45 2.50
+> Sinkhorn div. ( ↓ )
+
+10 + 5      
+
+> 012345
+
+AL iteration 
+
+> 2.30 2.35 2.40 2.45
+> Sinkhorn div. ( ↓ )
+
+20 + 5      
+
+> 012345
+
+AL iteration 
+
+> 2.25 2.30 2.35 2.40 2.45
+> BMDM-Genetic Sinkhorn div. ( ↓ )
+
+20 + 10      
+
+> 012345
+
+AL iteration 
+
+> 2.300 2.325 2.350 2.375 2.400
+> Sinkhorn div. ( ↓ )
+
+30 + 5      
+
+> 012345
+
+AL iteration 
+
+> 2.25 2.30 2.35 2.40
+> Sinkhorn div. ( ↓ )
+
+30 + 10   
+
+> Random NTK tNTK
+
+Figure S4: Sinkhorn divergence over active learning iterations for the conditional Monge gap. Rows correspond to datasets (K562-Chemical, BMDM-Genetic); columns correspond to budget configurations B0 + B (initial training set size + per-round batch size). Lines show mean across 50 
+
+runs ( 5 folds × 10 seeds), with shaded bands showing ± standard error. Random in black, NTK in blue, tNTK in red. 47
